@@ -51,7 +51,7 @@ When writing or modifying code in this codebase, you MUST adhere to the followin
 | :--- | :--- | :--- |
 | **State Management** | Keep state close to the leaf components. Use immutable CodeMirror 6 transactions and Yjs docs. | Do not create massive monolithic React context providers that cause whole-page re-renders. |
 | **Canvas Integration** | Use Excalidraw's official MIT component. Save raw `.excalidraw` scenes alongside headless-rendered vector SVGs. | Do not pull in proprietary or source-available canvas SDKs that require commercial licenses or inject watermarks. |
-| **Styling & Assets** | Use Tailwind CSS with CSS variable design tokens and accessible `radix-ui` / `shadcn/ui` primitives. | Do not hardcode arbitrary hex colors or inject unstyled inline CSS blocks. |
+| **Styling & Assets** | Strictly adhere to the **Fundaments.work Design System** (`/run/media/sapiens/Development/Fundaments/design-system`): `--radius: 0` everywhere, 1px hairlines (`#3d3d42`), DM Sans (300/400), DM Mono (400), dark base (`#141416`), and state accent Cerulean (`#38bdf8`). | NEVER introduce rounded corners (`rounded-*`), drop shadows, arbitrary hex codes, or font weights outside 300 and 400. Depth is strictly tonal. |
 | **Bundle Size** | Keep frontend dependencies minimal. Leverage Vite code-splitting and dynamic imports for heavy viewers. | Do not import large JS libraries (e.g. Monaco, Moment.js, heavy MathJax bundles) when lighter alternatives exist. |
 
 ---

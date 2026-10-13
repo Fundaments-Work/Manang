@@ -112,28 +112,53 @@ pub struct Diagnostic {
 
 ## 3. UI/UX Design System & Layout Geometry
 
-### 3.1. Layout Philosophy: Ergonomic 3-Column Split
-* **Left Column (Collapsible, 240px default):**
+Manang is strictly governed by the **Fundaments.work Design System** (`/run/media/sapiens/Development/Fundaments/design-system/tokens.md` and `guidelines.md`): *"Square, quiet, and set in two weights."*
+
+### 3.1. Absolute Visual Invariants
+* **Zero Corner Radius (`--radius: 0`):** Every element terminates in sharp 90-degree right angles without exception. No rounded rectangles, no pill buttons, no circular avatars or indicators.
+* **Hairline Dividers (`--hairline: 1px`):** Depth is communicated strictly via 1px hairline boundaries (`#3d3d42` dark, `#d4d3ce` light) and tonal surface steps, never via drop shadows, blurs, or ambient glows.
+* **Two Typefaces, Two Weights:**
+  - **DM Sans (300 Light & 400 Regular):** Interface chrome, section headers, dialogs, and narrative body copy.
+    - Display: Sans 300, tracking `-3%` (`-0.03em`)
+    - Headline: Sans 300, tracking `-2%` (`-0.02em`)
+    - Body: Sans 400, tracking `-1%` (`-0.01em`)
+  - **DM Mono (400 Regular):** Anything that is data—code editors, line numbers, status readouts, timestamps, file sizes, compiler metrics, and citekeys.
+* **Credit Line:** Every product carries `Made by Fundaments.work` set in DM Mono 400 at 0.35× the wordmark size, in the muted text token.
+
+### 3.2. Color Tokens (Base Layer & State Accent)
+* **Dark Base (`:root`, Default):**
+  - Background: `#141416`
+  - Surface: `#1c1c20`
+  - Surface Raised (`--surface-hi`): `#28282c`
+  - Line / Hairline: `#3d3d42`
+  - Primary Text: `#e8e6e1`
+  - Secondary Text (`--text-60`): `#9a9a9a`
+  - Muted Text: `#7a7a7a`
+  - Hover: `#454549`
+* **Light Theme Override (`.theme-light`):**
+  - Page Background (`--bg`): `#faf9f7`
+  - Surface: `#f4f3f0`
+  - Line / Hairline: `#d4d3ce`
+  - Primary Text (`--text`): `#1c1c1c`
+  - Secondary Text (`--text-60`): `#6b6b6b`
+  - Muted (disabled only): `#9c9c9c`
+* **Manang Product State Accent:**
+  - **Cerulean (`#38bdf8`):** Assigned strictly to compilation status, live cursor synchronization, and active document state. Carries a DM Mono text label alongside it (never color alone).
+
+### 3.3. Layout Geometry: Ergonomic 3-Column Split
+* **Left Column (Collapsible, 240px default, `#141416`):**
   - Project file tree with clean icons.
   - Document outline / symbol hierarchy (sections, subsections, figures, tables).
-  - Bibliography references panel.
-* **Center Column (Flexible, ~50% viewport):**
-  - **Code Editor (CodeMirror 6):** Line numbers, folding, inline error badges, and breadcrumb bar.
-  - **Canvas Tab / Modal:** Instantly switch to embedded Excalidraw or the CeTZ/TikZ visual sandbox.
-* **Right Column (Collapsible, ~50% viewport):**
-  - **Live Preview:** High-framerate PDF.js / SVG viewer.
+  - Bibliography references panel with citekey counters.
+* **Center Column (Flexible, ~50% viewport, `#141416`):**
+  - **Code Editor (CodeMirror 6):** Line numbers in DM Mono muted, syntax highlighting (Cerulean `#38bdf8`, Lime `#c6f135`, warm amber), inline hairline diagnostic error badges.
+  - **Breadcrumbs:** `workspace / papers / 2026-q1 / document.typ`.
+* **Right Column (Collapsible, ~50% viewport, `#1c1c20`):**
+  - **Multi-Mode Studio:** Tabbed switcher between **Rendered PDF (Academic 2-Column)**, **CeTZ Visual Sandbox**, **Excalidraw Vector Canvas**, and **Touying Slides**.
   - Synchronized scrolling and **SyncTeX click-to-jump** navigation.
   - Sidekick Agent drawer (Prompt-to-Doc co-author, citation checker).
 
-### 3.2. Visual Styling & Color Tokens
-* **Dark Theme (Default):** Deep Slate/Obsidian palette (`#090D16` background, `#131B2E` panels, `#1E293B` borders). High-contrast syntax highlighting optimized for mathematical equations.
-* **Light Theme:** Natural Paper/Ivory palette (`#FDFCF9` background, `#F4F1EA` panels, `#E5E0D8` borders) simulating high-quality academic paper stock.
-* **Typography:**
-  - UI Prose: `Inter`, `Geist Sans`, or system sans-serif.
-  - Code Editor: `JetBrains Mono` or `Fira Code` (with ligature support for `->`, `=>`, `!=`, `<=`).
-  - Document Typesetting: `New Computer Modern` (LaTeX), `Linux Libertine` / `Libertinus` (Typst).
-
-### 3.3. Command Palette & Navigation
+### 3.4. Command Palette & Navigation
 * Global Command Palette accessible via `Cmd+K` / `Ctrl+K`.
 * First-class keyboard modes: Standard GUI, **Vim Mode** (via `@replit/codemirror-vim`), and Emacs keymaps.
 
