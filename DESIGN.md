@@ -288,3 +288,22 @@ Triggered via `Cmd+\` or `F11`.
 | **Error Handling** | Margin Whispers | Low-cognitive-load gutter squares with 1-click fixes, replacing intimidating terminal dumps. |
 | **Drawing** | Natural `/draw` sheet | Eliminates file management friction; drawings are vector ink embedded directly in prose. |
 | **Typography** | DM Sans (300/400), DM Mono (400) | Strictly two typefaces and two weights for maximum typographic calm. |
+
+---
+
+## 11. Stitch Visual Design Registry
+
+All visual interface screens are generated and maintained in **Stitch** with the Fundaments.work design system:
+* **Stitch Project:** `projects/7899994353617269987` (*"Manang — Scientific Authoring Suite"*)
+* **Design System Asset:** `assets/8ca45d90e49b4955b6ef73467bbe29d6`
+
+| # | Screen Name | Screen ID | Visual Specification & Assets |
+| :-: | :--- | :--- | :--- |
+| **01** | **The Desk (Daily Writing Home)** | `b6a3393188ab4d1cbcc1ac487481dead` | [Screenshot](https://lh3.googleusercontent.com/aida/AEtjO1VR7FmouwmB1d0r1BUlzpeWRWeogZ6Q-QX5eWBGR-jJTo04AEOsxLqPJckqPU1KE4EjcA_EZ-RgcnNmbCGecxHtJUfSzpNKeH4ZqLZcbbZymnMj5ToNc2B4sriHWBSXqZQOJ5zrS3YKXooU9g-qu57FNBwPUHXUTydeEk8Hs-5vrEySJRKiDc688q3B9v2dVGbP8TXBSktzNtGdgyvBIUa1T3pHKZ0lBXvZffqP2P3rqsOwnkCQCcDtOX8) |
+| **02** | **The Canvas (Natural Sketching & Vector Studio)** | `8b360943874044bc88b045f89123cdd6` | [Screenshot](https://lh3.googleusercontent.com/aida/AEtjO1XcUPE-rCIBX02x-CboBsxejXkbsYHzNQQsYBwoKpHUUgp9gdqH7X27tHBC2ZjAYxGY7ut9PZmWDGC5ODW7U4YIHrEN9NgBrhSo9mo5oqD7SrzPQXIGvaFAHZOXDu67sum--KwQ7RPwqSCvO98hWPhMwT9tjZyW3BbDbPkckw6YDSVAOrACZVgAbo4U_h_u8Nq6pw0w1uAIOTIjzWalpyHlbkHJlpvKVmZxL486D_si4XUSJWm7Ma5UyBQ) |
+| **03** | **The Library Shelf (Document Organization)** | `d98f3a7e335b4bcf8a1079b8aee8ff97` | [Screenshot](https://lh3.googleusercontent.com/aida/AEtjO1VsVVYTAuxp3I2U_ukZ_6TI7wsUPIMWSWq-VhvakLd_y5pBrPpTsTSsgz93vNOXbk6o0J2EhaWMRALTIu3o0TuMankiVdE-N-Xsduf5xxtZLlNeP4YwPjhxGo1SRdSDxQLnSy5y4Rzawlq0-tnAdwHDvgRwD_R_TGTEGymg77D751EjHF4AC2r6AXWVql2pqOaGVsSjGbVNT5maR4JnU6fweZuBdK4zk5uTEGA59mRsexgpxwA) |
+| **04** | **The Instrument Shelf (Plugin Manager)** | `89fbcb9156624f4e8ce2c928457cdc40` | [Screenshot](https://lh3.googleusercontent.com/aida/AEtjO1VfqyblCt5n9u4czwbliKh7DyPf1AHxzfacWA4uLaJe_xYbXBwuosozLNh1AqQrk3OUkz_SNgLZ5Uruqgs9EBuPQiunGJdlX557lUr8pcZt1OZZuIqddKLqAlisMijOTHpWarIpe6B9A_WZFtmeFzP-dm6D5j_fAG4nZhOeHYGbrIr985HogPdLIsrUlTJSgas-P7Gg6X8RzRWazbUqNUo_w8FHq4dmI142VZ65de8MaaxLV0k4C4jSTQ) |
+| **05** | **The Command & Co-Pilot Palette (Cmd+K)** | `aeb2ea662f9640dca492a2518ce3b000` | [Screenshot](https://lh3.googleusercontent.com/aida/AEtjO1XvX0Kd6QdCQhw7wFwz7rNnBGrYgyoBha_FsTWoiXjZdP7rq_u-gcm-58LtGnKU_NvePU2l4Kcd3gPAgaidlATkOYgqcsieoizejSQpZUPCooXqSMg-6MYwCUzapws9H1MonVzu63pzzjQcy_5dQXzP5QDko4YOeGDvVxfQhiqKMkA2Fhuo15SoSqnd9J8_lnQc1XMXuxUbmcqqsZdNN9ur4B9-sdbLvaIAYY4tfqeC-ZAWWQ4dXenJ8mY) |
+| **06** | **The Presentation Studio (Slide Mode)** | `48ce6f2de0924c71b80f22079ab141cd` | [Screenshot](https://lh3.googleusercontent.com/aida/AEtjO1UdTB9zb-m5NKCGu3oV70FfarJE6A7LfVmUggx0vytddwaNa-r2WLHxCASfYFey0X8jBWncvYSHbMMnIMiUuoRw7XtotfTYzBqV8vALRaUgV0M1j6yKc5yhgphjnOvi_XDCV4rSvpWuU448D2SQWSvZDms0_RDFcNH9x-x7y_rSvECGTgCXbX74ZfutgEf_ilNJ6fjNGQPYsTxyWFtOXIDmspSe1j26T0OUC3A33exQne7mnJJP3AAZHw) |
+| **07** | **Zen Mode (Distraction-Free Deep Focus)** | `f4158b6a4087440cbbeed265dbcdc9e4` | [Screenshot](https://lh3.googleusercontent.com/aida/AEtjO1XV8HKsPZxF8FlMBQ5z7FpEc3RHh6FOIqcY1jcfEgeIUlWjnwQ6neW8rqTeFjrntQDIVn1CfWi_g-ng9WEJwnenp4HRY3RTiairXDNAsWvmPHQZXFfhHid8pHuDlcXvPhHMiabU-GvQTyjX_WOfL0G1Olnk0Dl8WdFtX-1kuYobx66F5zvZf7Tikvfjbq6a3NUxz9B12pb98simm3Xm851OsTmtIvEFcTf0feqLCLhiGOfm5C_QZ88rHJU) |
+
