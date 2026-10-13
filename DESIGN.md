@@ -1,303 +1,290 @@
-# DESIGN.md — Technical Architecture & System Design Document
+# DESIGN.md — Visual Design & UI/UX Master Specification
 
 **Project:** Manang  
-**Document Status:** Approved & Canonical  
-**Version:** 1.0.0  
-**Target Architecture:** Tauri v2 + Rust Core + React 19 / CodeMirror 6 + Excalidraw (MIT)  
+**Role:** Canonical Visual Design & UI/UX System Specification  
+**Design System Authority:** [Fundaments.work Design System](file:///run/media/sapiens/Development/Fundaments/design-system)  
+**Version:** 2.0.0 (Visual Master Plan)  
 
 ---
 
-## 1. High-Level Architecture & Domain Model
+## 1. Product Thesis: "Paper & Pen" Immediacy
 
-Manang is partitioned into two primary boundaries:
-1. **Presentation Boundary (Tauri v2 Webview):** Handles user interactions, editor viewports, visual canvases, and DOM rendering.
-2. **Native Core Boundary (Rust Daemon):** Manages file system persistence, buffer trees, incremental compilation, WASM plugin execution, and agentic workflows.
+Manang is designed to be the tool people instinctively open whenever they think of document preparation—academic papers, conference slide decks, technical reports, mathematical notes, or books.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        PRESENTATION BOUNDARY                           │
-│                                                                        │
-│  ┌───────────────────┐  ┌───────────────────┐  ┌────────────────────┐  │
-│  │   File Explorer   │  │   CodeMirror 6    │  │   PDF / SVG Viewer │  │
-│  │   & Symbol Tree   │  │  (Rope Viewport)  │  │  (PDF.js & WebGL)  │  │
-│  └───────────────────┘  └─────────┬─────────┘  └──────────▲─────────┘  │
-│                                   │                       │            │
-│  ┌───────────────────┐            │                       │            │
-│  │  Excalidraw (MIT) │            │                       │            │
-│  │   Vector Canvas   │────────────┼───────────────────────┤            │
-│  └───────────────────┘            │                       │            │
-│                                   │                       │            │
-│  ┌───────────────────┐            │                       │            │
-│  │ CeTZ/TikZ Sandbox │────────────┘                       │            │
-│  │ Visual Primitives │                                    │            │
-│  └───────────────────┘                                    │            │
-└───────────────────────────────────┬───────────────────────┼────────────┘
-                                    │ Low-latency IPC       │ Binary Stream
-┌───────────────────────────────────▼───────────────────────┴────────────┐
-│                         NATIVE CORE BOUNDARY                           │
-│                                                                        │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ Workspace Manager (File Watcher + Git `gix` + Config Resolver)   │  │
-│  └──────────────────────────────────┬───────────────────────────────┘  │
-│                                     │                                  │
-│  ┌──────────────────────────────────▼───────────────────────────────┐  │
-│  │ Document Buffer Engine (`ropey::Rope` + Tree-sitter Parser)      │  │
-│  └──────────────────────────────────┬───────────────────────────────┘  │
-│                                     │                                  │
-│         ┌───────────────────────────┼───────────────────────────┐      │
-│         ▼                           ▼                           ▼      │
-│  [Typst Engine]              [Tectonic Engine]          [WASM Plugins] │
-│  • Memory AST Cache          • CTAN Resolver            • Extism Host  │
-│  • Sub-50ms Incremental      • XeTeX Direct Stream      • Sandboxed ABI│
-│         │                           │                           │      │
-│         └───────────────────────────┼───────────────────────────┘      │
-│                                     ▼                                  │
-│                         [Agentic Orchestrator]                         │
-│                         • LLM Multi-Provider Gateway                   │
-│                         • Crossref/arXiv/OpenAlex Client               │
-│                         • Autonomous Compiler Auto-Fixer               │
-└────────────────────────────────────────────────────────────────────────┘
-```
+Traditional authoring tools bury the writer in technical friction: arcane LaTeX package errors, shifting margins, multi-button toolbars, and laggy compilation loops.
+
+**Manang's core design promise is radical simplicity:** writing in Manang feels as immediate, natural, and calm as opening a blank notebook and writing with a fountain pen. Under the hood, a high-performance Rust core and WebAssembly plugin architecture do all the heavy lifting, but the user interface remains completely quiet, focused, and frictionless.
 
 ---
 
-## 2. Core Domain Entities
+## 2. Visual Identity & Design Tokens
 
-```rust
-// Core Domain Entities (Rust Core)
+Manang is strictly governed by the **Fundaments.work Design System**: *"Square, quiet, and set in two weights."*
 
-pub struct Workspace {
-    pub root_path: PathBuf,
-    pub config: ProjectConfig,
-    pub active_document: Option<DocumentId>,
-    pub documents: HashMap<DocumentId, Document>,
-    pub canvases: HashMap<CanvasId, CanvasScene>,
-    pub crdt_session: Arc<CrdtSession>,
-}
+### 2.1. The Mark & Identity
+* **The Mark (`[⩓]`):** Constructed on a strict 24-unit geometric grid with zero corner radius. Two upright pilasters bridged by an apex chevron, evoking both an open book and an ink nib.
+* **The Wordmark:** Set cleanly in **DM Sans 300** (`font-light`, tracking `-0.02em`, 15px). Unadorned, self-contained, confident.
+* **Credit Attribution:** Placed respectfully in settings and about dialogues as `Made by Fundaments.work` in DM Mono 400.
 
-pub struct Document {
-    pub id: DocumentId,
-    pub path: PathBuf,
-    pub format: DocumentFormat, // Typst | LaTeX | Markdown
-    pub buffer: ropey::Rope,
-    pub syntax_tree: tree_sitter::Tree,
-    pub dirty: bool,
-    pub diagnostics: Vec<Diagnostic>,
-}
-
-pub enum DocumentFormat {
-    Typst,
-    Latex,
-    Markdown,
-}
-
-pub struct CanvasScene {
-    pub id: CanvasId,
-    pub path: PathBuf,
-    pub kind: CanvasKind, // Excalidraw | CetzSandbox | TikzSandbox
-    pub raw_json: Vec<u8>,
-    pub exported_svg_path: PathBuf,
-    pub exported_pdf_path: PathBuf,
-}
-
-pub struct Diagnostic {
-    pub range: SourceRange,
-    pub severity: DiagnosticSeverity, // Error | Warning | Info
-    pub message: String,
-    pub suggestion: Option<DiffSuggestion>,
-}
-```
-
----
-
-## 3. UI/UX Design System & Layout Geometry
-
-Manang is strictly governed by the **Fundaments.work Design System** (`/run/media/sapiens/Development/Fundaments/design-system/tokens.md` and `guidelines.md`): *"Square, quiet, and set in two weights."*
-
-### 3.1. Absolute Visual Invariants
-* **Zero Corner Radius (`--radius: 0`):** Every element terminates in sharp 90-degree right angles without exception. No rounded rectangles, no pill buttons, no circular avatars or indicators.
-* **Hairline Dividers (`--hairline: 1px`):** Depth is communicated strictly via 1px hairline boundaries (`#3d3d42` dark, `#d4d3ce` light) and tonal surface steps, never via drop shadows, blurs, or ambient glows.
-* **Two Typefaces, Two Weights:**
-  - **DM Sans (300 Light & 400 Regular):** Interface chrome, section headers, dialogs, and narrative body copy.
+### 2.2. Foundational Tokens & Invariants
+* **Zero Corner Radius (`--radius: 0`):** Every element terminates in sharp 90-degree right angles without exception. No rounded rectangles, no pills, no circles.
+* **Hairline Dividers (`--hairline: 1px`):** Depth is created exclusively via 1px hairline boundaries (`#3d3d42` dark, `#d4d3ce` light) and tonal surface steps, rejecting all drop shadows, ambient glows, or dimensional blurring.
+* **Typography (Two Families, Two Weights):**
+  - **DM Sans (300 Light & 400 Regular):** Interface chrome, headings, dialogs, and narrative prose.
     - Display: Sans 300, tracking `-3%` (`-0.03em`)
     - Headline: Sans 300, tracking `-2%` (`-0.02em`)
     - Body: Sans 400, tracking `-1%` (`-0.01em`)
-  - **DM Mono (400 Regular):** Anything that is data—code editors, line numbers, status readouts, timestamps, file sizes, compiler metrics, and citekeys.
-* **Credit Line:** Every product carries `Made by Fundaments.work` set in DM Mono 400 at 0.35× the wordmark size, in the muted text token.
-
-### 3.2. Color Tokens (Base Layer & State Accent)
-* **Dark Base (`:root`, Default):**
-  - Background: `#141416`
-  - Surface: `#1c1c20`
-  - Surface Raised (`--surface-hi`): `#28282c`
-  - Line / Hairline: `#3d3d42`
-  - Primary Text: `#e8e6e1`
-  - Secondary Text (`--text-60`): `#9a9a9a`
-  - Muted Text: `#7a7a7a`
-  - Hover: `#454549`
-* **Light Theme Override (`.theme-light`):**
-  - Page Background (`--bg`): `#faf9f7`
-  - Surface: `#f4f3f0`
-  - Line / Hairline: `#d4d3ce`
-  - Primary Text (`--text`): `#1c1c1c`
-  - Secondary Text (`--text-60`): `#6b6b6b`
-  - Muted (disabled only): `#9c9c9c`
-* **Manang Product State Accent:**
-  - **Cerulean (`#38bdf8`):** Assigned strictly to compilation status, live cursor synchronization, and active document state. Carries a DM Mono text label alongside it (never color alone).
-
-### 3.3. Layout Geometry: Ergonomic 3-Column Split
-* **Left Column (Collapsible, 240px default, `#141416`):**
-  - Project file tree with clean icons.
-  - Document outline / symbol hierarchy (sections, subsections, figures, tables).
-  - Bibliography references panel with citekey counters.
-* **Center Column (Flexible, ~50% viewport, `#141416`):**
-  - **Code Editor (CodeMirror 6):** Line numbers in DM Mono muted, syntax highlighting (Cerulean `#38bdf8`, Lime `#c6f135`, warm amber), inline hairline diagnostic error badges.
-  - **Breadcrumbs:** `workspace / papers / 2026-q1 / document.typ`.
-* **Right Column (Collapsible, ~50% viewport, `#1c1c20`):**
-  - **Multi-Mode Studio:** Tabbed switcher between **Rendered PDF (Academic 2-Column)**, **CeTZ Visual Sandbox**, **Excalidraw Vector Canvas**, and **Touying Slides**.
-  - Synchronized scrolling and **SyncTeX click-to-jump** navigation.
-  - Sidekick Agent drawer (Prompt-to-Doc co-author, citation checker).
-
-### 3.4. Command Palette & Navigation
-* Global Command Palette accessible via `Cmd+K` / `Ctrl+K`.
-* First-class keyboard modes: Standard GUI, **Vim Mode** (via `@replit/codemirror-vim`), and Emacs keymaps.
+  - **DM Mono (400 Regular):** Data, code editor buffers, line numbers, coordinate readouts, citations, and metadata.
+* **Color Hierarchy:**
+  - **Dark Base (Default):** Background `#141416`, Surface `#1c1c20`, Surface-Hi `#28282c`, Line `#3d3d42`, Text Primary `#e8e6e1`, Text Secondary `#9a9a9a`.
+  - **Light Paper Override:** Page `#faf9f7`, Surface `#f4f3f0`, Line `#d4d3ce`, Ink `#1c1c1c`, Ink-60 `#6b6b6b`.
+  - **State Accent:** **Cerulean (`#38bdf8`)** used strictly for active selection, focus indicators, and state changes. Always paired with a text label or icon.
+  - **Math Highlight:** **Sage/Lime (`#c6f135`)** for mathematical equation delimiters and coordinates.
 
 ---
 
-## 4. IPC Interface & Binary Protocol Specification
+## 3. Screen 1: The Desk (The Daily Writing Home)
 
-To prevent serialization lag, all IPC calls adhere to strict schemas:
+The Desk is the primary workspace where authors spend 90% of their time. It balances a distraction-free writing surface with a live rendered paper sheet.
 
-### 4.1. Tauri Commands (Frontend to Rust)
-
-```typescript
-// TypeScript IPC Definitions
-interface CompileRequest {
-  documentId: string;
-  sourceText?: string; // Optional if syncing via Rope buffer
-  targetFormat: "pdf" | "svg";
-  syncTexTarget?: { line: number; column: number };
-}
-
-interface CompileResponse {
-  success: boolean;
-  diagnostics: Diagnostic[];
-  pageCount: number;
-  compilationDurationMs: number;
-}
-
-// PDF bytes are transferred via raw streaming ArrayBuffers:
-// invokeBinary("get_rendered_pdf", { documentId }) -> Promise<ArrayBuffer>
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ [⩓] Manang     papers / quantum_entropy.typ      [✎ Draw]  [◫ Split]   │
+├───────────────────────────────────┬────────────────────────────────────┤
+│ 140  // Non-equilibrium Entropy   │ 2. Quantum Thermodynamic Bounds    │
+│ 141  = Irreversible Dynamics      │                                    │
+│ 142  Under unitary coupling, the  │ Under unitary coupling, the        │
+│ 143  rate $Sigma$ satisfies:      │ entropy production rate satisfies: │
+│ 144                               │                                    │
+│ 145  $ Delta S_text("irr") >=     │      ΔS_irr ≥ ∫ (δQ / T) + k_B D   │
+│ 146    integral_0^t (delta Q)/T $ │                                    │
+│  ·   [p.14 missing in @penrose]   │ [1] Landauer, R. IBM J. (1961)     │
+│ 148  This generalizes Landauer.   │                                    │
+└───────────────────────────────────┴────────────────────────────────────┘
 ```
 
-### 4.2. Tauri Events (Rust to Frontend)
+### 3.1. Header Bar (h-10, px-4, Border-b 1px `#3d3d42`)
+* **Left:** Mark `[⩓]` + Wordmark `Manang` (DM Sans 300).
+* **Center:** Breadcrumb trail (`papers / quantum_entropy.typ`) in DM Mono text-xs text `#9a9a9a`.
+* **Right (Responsive Actions):**
+  - `[✎ Draw]` — Toggles the Canvas overlay.
+  - `[◫ Split]` — Toggles single-pane vs. dual-pane paper preview.
+  - `[⛶ Zen]` — Fullscreen distraction-free mode.
+  - When screen width drops below 1024px, buttons collapse automatically to icon-only buttons (`[✎]`, `[◫]`, `[⛶]`) with instant tooltips.
 
-* `manang://buffer-updated`: Emitted when an external file watcher or agent patch updates the buffer.
-* `manang://compile-progress`: Streams compilation status (`idle` -> `evaluating` -> `rendering` -> `ready`).
-* `manang://diagnostic-emitted`: Pushes compiler errors and linter alerts with exact line/column spans.
-* `manang://agent-token-stream`: Real-time streaming chunks for AI generation and diff suggestions.
+### 3.2. Left Pane: The Writing Surface
+* **Editor Core:** Virtualized CodeMirror 6 text buffer in DM Mono 400 (13px, 1.6 line height).
+* **Quiet Syntax Highlighting:**
+  - Prose: High-contrast `#e8e6e1`.
+  - Math Delimiters (`$ ... $`): Highlighted in calm Sage/Lime (`#c6f135`).
+  - Headings (`= Section`): Clean DM Sans 300 warm ivory.
+  - Functions & Commands: Cerulean (`#38bdf8`).
+  - Comments: Low-contrast `#7a7a7a` italic.
+* **Margin Whispers (Diagnostics):**
+  - Missing brackets, broken references, or warnings never trigger modal popups or terminal dumps.
+  - A subtle 4px square dot appears in the line number gutter.
+  - Hovering reveals a quiet one-line callout: `Missing page locator in @penrose` with a 1-click `[Auto-Fix]` action.
+
+### 3.3. Right Pane: The Live Paper Sheet
+* **Real-Time Rendering:** The document updates in real time as ink dries on paper.
+* **Bidirectional Sync (SyncTeX):**
+  - Clicking any sentence or equation in the paper instantly jumps the cursor to that line in the manuscript.
+  - Typing in the manuscript smoothly aligns the preview page.
 
 ---
 
-## 5. Visual Studio & Dual Illustration Engine
+## 4. Screen 2: The Canvas (Natural Sketching & Vector Studio)
+
+Triggered instantly by typing `/draw` anywhere in the manuscript or clicking `[✎ Draw]`. The canvas overlay glides in over the writing pane.
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                 VISUAL ASSET PIPELINE                  │
-├────────────────────────────────────────────────────────┤
-│ 1. Freeform Sketching (Excalidraw MIT)                 │
-│    • User draws on canvas -> scene saved to .excalidraw│
-│    • Headless worker parses scene -> generates:        │
-│      ├── figures/my_sketch.svg                         │
-│      └── figures/my_sketch.pdf                         │
-│    • Auto-inserts snippet into document                │
-├────────────────────────────────────────────────────────┤
-│ 2. Mathematical Vector Studio (CeTZ & TikZ)            │
-│    • Live isolated sandbox compiles snippet in <20ms   │
-│    • Interactive coordinate & geometry sliders         │
-│    • Library of scientific templates:                  │
-│      - State machines, Petri nets, Markov chains       │
-│      - Deep learning architectures (CNN, Transformer)  │
-│      - Commutative algebraic diagrams                  │
-└────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│ [⩓] Manang     figures / vectors / state_lattice.svg      [Done ↵] [✕] │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│               ┌──────────┐                                             │
+│               │ State |0⟩│ ───(Hamiltonian H)───► [ State |1⟩ ]        │
+│               └──────────┘                                             │
+│                                                                        │
+│  [ ✎ Freehand ]   [ □ Geometry ]   [ → Arrow ]   [ T Math ]   [ ⌫ ]    │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 4.1. Design & Interaction Affordances
+* **The Overlay Transition:** Glides smoothly into view without modal borders or backdrop darkness.
+* **The Pen Tray (Bottom Floating HUD):**
+  - Centered floating bar (h-9, bg `#141416`, 1px hairline `#3d3d42`, zero radius).
+  - **`[ ✎ Freehand ]`:** Natural sketching powered by the Excalidraw plugin.
+  - **`[ □ Geometry ]`:** Sharp mathematical shapes (rectangles, ellipses, coordinate grids).
+  - **`[ → Arrow ]`:** Directional connectors that magnetically snap to node boundaries.
+  - **`[ T Math ]`:** Type any LaTeX/Typst formula (`$|\psi\rangle$`) to stamp rendered mathematical text directly onto the figure.
+* **Embedding the Ink:**
+  - Pressing `Enter` or clicking `[Done ↵]` quietly closes the canvas.
+  - The drawing is automatically saved as a vector `.svg` / `.pdf` in the project's `figures/` folder and embedded into the manuscript:
+    ```typst
+    #figure(image("figures/state_lattice.svg", width: 80%))
+    ```
+  - Double-clicking the figure in the document re-opens the canvas at any time for editing.
 
 ---
 
-## 6. Scientific Generative Agent Architecture
+## 5. Screen 3: The Library Shelf (Document Organization)
 
-The built-in agent runs as an autonomous multi-stage pipeline:
+Accessible via `Cmd+P` or clicking the shelf icon `[≡]`. A clean, quiet rail sliding out from the left.
 
 ```
-[ Natural Language Request ]
-            │
-            ▼
-┌───────────────────────┐
-│     Planner Agent     │ -> Selects template (IEEE / Nature / Touying Slides)
-└───────────┬───────────┘
-            │
-            ▼
-┌───────────────────────┐
-│    Authoring Agent    │ -> Generates Typst / LaTeX / CeTZ content
-└───────────┬───────────┘
-            │
-            ▼
-┌───────────────────────┐
-│ Compilation Validator │ -> Compiles code with Typst / Tectonic crate
-└───────────┬───────────┘
-            │
-      ┌─────┴─────────────────────────┐
-      │ Clean                         │ Compiler Error
-      ▼                               ▼
-[ Stream Result ]           ┌───────────────────┐
-                            │ Self-Healing Loop │ -> Analyzes diagnostic
-                            └─────────┬─────────┘    generates 1-click diff patch
-                                      │
-                                      └──► (Re-evaluates)
+┌──────────────────────────────────────┐
+│ [≡] LIBRARY SHELF                [✕] │
+├──────────────────────────────────────┤
+│ ▾ papers                             │
+│   📄 01_formalism.typ       (Active) │
+│   📄 02_entropy_bounds.typ           │
+│   📄 03_numerical_sim.typ            │
+│ ▾ figures                            │
+│   🎨 state_lattice.svg               │
+│   🎨 dissipation_curve.svg           │
+│ ▾ bibliography                       │
+│   📚 references.bib        (3 items) │
+├──────────────────────────────────────┤
+│ [+ New Document]     [+ New Diagram] │
+└──────────────────────────────────────┘
 ```
 
-### 6.1. Scholarly Citation Verification Engine
-* Extracts citation identifiers (`\cite{Smith2024}`, `@smith_quantum_2024`).
-* Connects asynchronously to **OpenAlex**, **Crossref**, and **arXiv** via Tokio.
-* Verifies:
-  1. Does the DOI / paper exist?
-  2. Does the title, author, and year match?
-  3. Does the text claim align with the paper's indexed abstract? Flags potential hallucinations.
+### 5.1. Design Affordances
+* **Spatial Layout:** 260px wide, dark background (`#141416`), 1px right border (`#3d3d42`).
+* **Active State:** The active document is highlighted with a 2px Cerulean left boundary and surface fill (`#1c1c20`).
+* **Instant Filter:** Type immediately to fuzzy-search across files, sections, and figures.
 
 ---
 
-## 7. WASM Plugin Architecture (Extism Host)
+## 6. Screen 4: The Instrument Shelf (Plugin Manager)
 
-Plugins are isolated WebAssembly modules compiled to `.wasm`:
+Manang is **plugin-first**. Everything—compilers, drawing engines, citation verifiers, slide frameworks—is an isolated WebAssembly instrument. The Instrument Shelf makes extensions approachable and clean.
 
-```rust
-// Plugin Manifest Definition (manifest.toml)
-[plugin]
-name = "vale-linter"
-version = "0.1.0"
-entrypoint = "plugin.wasm"
-
-[capabilities]
-read_buffer = true
-write_diagnostics = true
-network_whitelist = []
-filesystem_whitelist = []
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ [⩓] Manang     INSTRUMENT SHELF (PLUGINS)                          [✕] │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│  ┌──────────────────────────────┐    ┌──────────────────────────────┐  │
+│  │ [✓] Typst Compiler Engine    │    │ [✓] Excalidraw Freehand Ink  │  │
+│  │ Native in-memory compilation │    │ Infinite vector sketch pad   │  │
+│  │ v0.12.0 · Core Instrument    │    │ v1.4.0 · Drawing Plugin      │  │
+│  └──────────────────────────────┘    └──────────────────────────────┘  │
+│  ┌──────────────────────────────┐    ┌──────────────────────────────┐  │
+│  │ [✓] CeTZ Mathematical Vectors│    │ [✓] Touying Slide Decks      │  │
+│  │ Precise coordinate geometry  │    │ 16:9 presentation studio     │  │
+│  │ v0.3.1 · Graphic Plugin      │    │ v0.5.2 · Presentation Plugin │  │
+│  └──────────────────────────────┘    └──────────────────────────────┘  │
+│                                                                        │
+│  [+ Install WASM Plugin (.wasm)]              [Browse Curated Lab]     │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.1. Plugin Host Hooks
-* `init(config: &str) -> Result<()>`
-* `on_lint_document(document_text: &str, format: &str) -> Vec<Diagnostic>`
-* `on_transform_ast(ast_json: &str) -> String`
-* `register_tools() -> Vec<McpToolDefinition>`
+### 6.1. Design Affordances
+* **Clean Instrument Cards:** 1px hairline border (`#3d3d42`), surface `#1c1c20`, zero radius.
+* **Toggle Controls:** Square zero-radius checkboxes. Checking or unchecking enables or sandboxes capabilities instantly.
+* **Capability Transparency:** Hovering over any plugin card reveals its permissions in clean DM Mono: `Buffer: read | Net: none | FS: figures/`.
 
 ---
 
-## 8. Failure Modes, Fault Tolerance & Recovery
+## 7. Screen 5: The Command & Co-Pilot Palette (`Cmd+K`)
 
-| Failure Scenario | Mitigation & Architectural Defense |
-| :--- | :--- |
-| **Plugin Infinite Loop or Crash** | Sandboxed in Extism with execution fuel/memory limits. Panics are trapped; plugin resets without affecting the host editor. |
-| **Compiler Timeout (Heavy LaTeX Pass)** | Tectonic runs in a dedicated Rayon worker with a 10-second timeout. Cancels safely if packages loop infinitely. |
-| **Unsaved Edits on Sudden Power Failure** | All Rope mutations write to an append-only Write-Ahead Log (`.manang/wal.log`) on every keystroke debounce (50ms). Instant crash recovery on startup. |
-| **Malformed Typst / LaTeX Syntax** | Tree-sitter error recovery preserves unaffected AST branches; the editor displays the last successfully rendered preview while showing inline diagnostic lenses on the broken line. |
-| **Offline Sync Conflicts** | Yjs CRDT mathematically guarantees eventual consistency. Reconnecting clients merge concurrent changes deterministically without losing data. |
+The single, universal keyboard launcher uniting navigation, plugin tools, and AI actions into one quiet dialog.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  > Ask or type a command...                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│  AI ACTIONS                                                            │
+│  ✨ Verify citations against Crossref & OpenAlex                       │
+│  ✨ Generate 6 Touying presentation slides from Section 2              │
+│  ✨ Add commutative diagram in CeTZ                                    │
+│                                                                        │
+│  PLUGINS & COMMANDS                                                    │
+│  ✎ Open Drawing Canvas (/draw)                                         │
+│  ◫ Toggle Split Screen (/split)                                        │
+│  ⬇ Export Publication PDF (/export)                                    │
+│  ⚙ Open Instrument Shelf (/plugins)                                    │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 7.1. Design Affordances
+* **Placement:** Centered floating modal (600px wide, zero radius, 1px border `#3d3d42`, bg `#1c1c20`).
+* **Keyboard-First:** Navigate with `↑` and `↓`, execute with `Enter`, dismiss with `Esc`.
+* **Zero Jargon:** Prompts read as direct human actions (*"Verify citations"*, *"Generate slides"*).
+
+---
+
+## 8. Screen 6: The Presentation Studio (Slide Mode)
+
+When authoring slides using Typst **Touying** or **Polylux**, the live sheet adapts into a 16:9 presentation studio.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ [⩓] Manang     slides / quantum_talk.typ           [Present F5]  [✕]   │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│   ┌────────────────────────────────────────────────────────────────┐   │
+│   │  QUANTUM THERMODYNAMICS · §2                      SLIDE 3 / 6  │   │
+│   │                                                                │   │
+│   │  Landauer Bound in Quantum Regimes                             │   │
+│   │                                                                │   │
+│   │  Minimal heat dissipated per erased bit of physical entropy:   │   │
+│   │                                                                │   │
+│   │          ΔQ_diss ≥ k_B · T · ln 2 + D(ρ || ρ_eq)               │   │
+│   │                                                                │   │
+│   │  [1] Landauer, R. (1961) IBM J. Res. Dev.                      │   │
+│   └────────────────────────────────────────────────────────────────┘   │
+│                                                                        │
+│   [ 01. Title ]  [ 02. Formalism ]  [ 03. Landauer ]  [ 04. Data ]     │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 8.1. Design Affordances
+* **16:9 Canvas:** Framed in a clean `#141416` dark background with a 1px border `#3d3d42`.
+* **Bottom Slide Carousel:** Miniature cards for rapid jumping across slides with an active Cerulean hairline indicator.
+* **One-Click Presentation:** Pressing `F5` launches distraction-free full-screen presentation mode with instant keyboard slide navigation.
+
+---
+
+## 9. Screen 7: Zen Mode (Distraction-Free Deep Focus)
+
+Triggered via `Cmd+\` or `F11`.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                                                                        │
+│                                                                        │
+│        = Quantum Thermodynamic Bounds                                  │
+│                                                                        │
+│        Under unitary coupling to a heat reservoir at inverse           │
+│        temperature β = (k_B T)⁻¹, the irreversible entropy             │
+│        production rate Σ satisfies the finite-time lower bound:        │
+│                                                                        │
+│        $ Delta S_text("irr") >= integral_0^t (delta Q) / T $           │
+│                                                                        │
+│        This confirms that quantum coherence retains finite             │
+│        work capacity even under thermal dissipation.                   │
+│                                                                        │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 9.1. Design Affordances
+* **Zero UI Chrome:** Header, file rails, status indicators, and preview panes smoothly dissolve away.
+* **Centered Paper Column:** 680px optimal reading column width, keeping lines within comfortable 70–80 character measure.
+* **Instant Reversibility:** Pressing `Esc` or `Cmd+\` seamlessly brings back the Desk view.
+
+---
+
+## 10. Summary of UI/UX Invariants & Quality Standards
+
+| Dimension | Rule | Rationale |
+| :--- | :--- | :--- |
+| **Corner Radius** | `0px` universally (`--radius: 0`) | Strictly complies with Fundaments.work identity. Architectural, quiet, and serious. |
+| **Borders** | `1px` hairlines (`#3d3d42`) | Structural containment without visual weight or fuzzy shadows. |
+| **Speed Indicators** | **Hidden** (no millisecond counters) | Speed is an invisible reality. Users care about flow, not benchmark telemetry. |
+| **Error Handling** | Margin Whispers | Low-cognitive-load gutter squares with 1-click fixes, replacing intimidating terminal dumps. |
+| **Drawing** | Natural `/draw` sheet | Eliminates file management friction; drawings are vector ink embedded directly in prose. |
+| **Typography** | DM Sans (300/400), DM Mono (400) | Strictly two typefaces and two weights for maximum typographic calm. |
