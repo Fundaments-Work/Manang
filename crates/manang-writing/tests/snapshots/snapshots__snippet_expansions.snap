@@ -1,0 +1,956 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: out
+---
+[
+  {
+    "expansion": {
+      "final_cursor": 109,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "name",
+          "ranges": [
+            {
+              "end": 80,
+              "start": 76
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "Statement.",
+          "ranges": [
+            {
+              "end": 94,
+              "start": 84
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 107,
+              "start": 102
+            }
+          ]
+        }
+      ],
+      "text": "#block(width: 100%, inset: (left: 1em), stroke: (left: 0.5pt))[\n  *Theorem (name).* Statement.\n] <thm:label>\n"
+    },
+    "syntax": "typst",
+    "trigger": "theorem"
+  },
+  {
+    "expansion": {
+      "final_cursor": 66,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "name",
+          "ranges": [
+            {
+              "end": 20,
+              "start": 16
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 37,
+              "start": 32
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "Statement.",
+          "ranges": [
+            {
+              "end": 51,
+              "start": 41
+            }
+          ]
+        }
+      ],
+      "text": "\\begin{theorem}[name]\\label{thm:label}\n  Statement.\n\\end{theorem}\n"
+    },
+    "syntax": "latex",
+    "trigger": "theorem"
+  },
+  {
+    "expansion": {
+      "final_cursor": 34,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "name",
+          "ranges": [
+            {
+              "end": 17,
+              "start": 13
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "Statement.",
+          "ranges": [
+            {
+              "end": 32,
+              "start": 22
+            }
+          ]
+        }
+      ],
+      "text": "> **Theorem (name).** Statement.\n\n"
+    },
+    "syntax": "markdown",
+    "trigger": "theorem"
+  },
+  {
+    "expansion": {
+      "final_cursor": 26,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "expression",
+          "ranges": [
+            {
+              "end": 12,
+              "start": 2
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 24,
+              "start": 19
+            }
+          ]
+        }
+      ],
+      "text": "$ expression $ <eq:label>\n"
+    },
+    "syntax": "typst",
+    "trigger": "equation"
+  },
+  {
+    "expansion": {
+      "final_cursor": 64,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "expression",
+          "ranges": [
+            {
+              "end": 29,
+              "start": 19
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 47,
+              "start": 42
+            }
+          ]
+        }
+      ],
+      "text": "\\begin{equation}\n  expression\n  \\label{eq:label}\n\\end{equation}\n"
+    },
+    "syntax": "latex",
+    "trigger": "equation"
+  },
+  {
+    "expansion": {
+      "final_cursor": 18,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "expression",
+          "ranges": [
+            {
+              "end": 13,
+              "start": 3
+            }
+          ]
+        }
+      ],
+      "text": "$$\nexpression\n$$\n\n"
+    },
+    "syntax": "markdown",
+    "trigger": "equation"
+  },
+  {
+    "expansion": {
+      "final_cursor": 88,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "path/to/image.png",
+          "ranges": [
+            {
+              "end": 35,
+              "start": 18
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "80%",
+          "ranges": [
+            {
+              "end": 48,
+              "start": 45
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "Caption.",
+          "ranges": [
+            {
+              "end": 71,
+              "start": 63
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 86,
+              "start": 81
+            }
+          ]
+        }
+      ],
+      "text": "#figure(\n  image(\"path/to/image.png\", width: 80%),\n  caption: [Caption.],\n) <fig:label>\n"
+    },
+    "syntax": "typst",
+    "trigger": "figure"
+  },
+  {
+    "expansion": {
+      "final_cursor": 143,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "htbp",
+          "ranges": [
+            {
+              "end": 19,
+              "start": 15
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "0.8\\linewidth",
+          "ranges": [
+            {
+              "end": 72,
+              "start": 59
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "path/to/image",
+          "ranges": [
+            {
+              "end": 87,
+              "start": 74
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "placeholder": "Caption.",
+          "ranges": [
+            {
+              "end": 108,
+              "start": 100
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 128,
+              "start": 123
+            }
+          ]
+        }
+      ],
+      "text": "\\begin{figure}[htbp]\n  \\centering\n  \\includegraphics[width=0.8\\linewidth]{path/to/image}\n  \\caption{Caption.}\n  \\label{fig:label}\n\\end{figure}\n"
+    },
+    "syntax": "latex",
+    "trigger": "figure"
+  },
+  {
+    "expansion": {
+      "final_cursor": 32,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "Caption.",
+          "ranges": [
+            {
+              "end": 10,
+              "start": 2
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "path/to/image.png",
+          "ranges": [
+            {
+              "end": 29,
+              "start": 12
+            }
+          ]
+        }
+      ],
+      "text": "![Caption.](path/to/image.png)\n\n"
+    },
+    "syntax": "markdown",
+    "trigger": "figure"
+  },
+  {
+    "expansion": {
+      "final_cursor": 122,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "3",
+          "ranges": [
+            {
+              "end": 32,
+              "start": 31
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "A",
+          "ranges": [
+            {
+              "end": 52,
+              "start": 51
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "B",
+          "ranges": [
+            {
+              "end": 55,
+              "start": 54
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "placeholder": "C",
+          "ranges": [
+            {
+              "end": 58,
+              "start": 57
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "placeholder": "1",
+          "ranges": [
+            {
+              "end": 67,
+              "start": 66
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "placeholder": "2",
+          "ranges": [
+            {
+              "end": 72,
+              "start": 71
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "placeholder": "3",
+          "ranges": [
+            {
+              "end": 77,
+              "start": 76
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "placeholder": "Caption.",
+          "ranges": [
+            {
+              "end": 105,
+              "start": 97
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 120,
+              "start": 115
+            }
+          ]
+        }
+      ],
+      "text": "#figure(\n  table(\n    columns: 3,\n    table.header[A][B][C],\n    [1], [2], [3],\n  ),\n  caption: [Caption.],\n) <tab:label>\n"
+    },
+    "syntax": "typst",
+    "trigger": "table"
+  },
+  {
+    "expansion": {
+      "final_cursor": 201,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "htbp",
+          "ranges": [
+            {
+              "end": 18,
+              "start": 14
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "Caption.",
+          "ranges": [
+            {
+              "end": 52,
+              "start": 44
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 72,
+              "start": 67
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "placeholder": "lll",
+          "ranges": [
+            {
+              "end": 95,
+              "start": 92
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "placeholder": "A",
+          "ranges": [
+            {
+              "end": 115,
+              "start": 114
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "placeholder": "B",
+          "ranges": [
+            {
+              "end": 119,
+              "start": 118
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "placeholder": "C",
+          "ranges": [
+            {
+              "end": 123,
+              "start": 122
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "placeholder": "1",
+          "ranges": [
+            {
+              "end": 145,
+              "start": 144
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "placeholder": "2",
+          "ranges": [
+            {
+              "end": 149,
+              "start": 148
+            }
+          ]
+        },
+        {
+          "index": 10,
+          "placeholder": "3",
+          "ranges": [
+            {
+              "end": 153,
+              "start": 152
+            }
+          ]
+        }
+      ],
+      "text": "\\begin{table}[htbp]\n  \\centering\n  \\caption{Caption.}\n  \\label{tab:label}\n  \\begin{tabular}{lll}\n    \\toprule\n    A & B & C \\\\\n    \\midrule\n    1 & 2 & 3 \\\\\n    \\bottomrule\n  \\end{tabular}\n\\end{table}\n"
+    },
+    "syntax": "latex",
+    "trigger": "table"
+  },
+  {
+    "expansion": {
+      "final_cursor": 66,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "A",
+          "ranges": [
+            {
+              "end": 3,
+              "start": 2
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "B",
+          "ranges": [
+            {
+              "end": 7,
+              "start": 6
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "C",
+          "ranges": [
+            {
+              "end": 11,
+              "start": 10
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "placeholder": "1",
+          "ranges": [
+            {
+              "end": 37,
+              "start": 36
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "placeholder": "2",
+          "ranges": [
+            {
+              "end": 41,
+              "start": 40
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "placeholder": "3",
+          "ranges": [
+            {
+              "end": 45,
+              "start": 44
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "placeholder": "Caption.",
+          "ranges": [
+            {
+              "end": 64,
+              "start": 56
+            }
+          ]
+        }
+      ],
+      "text": "| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n\nTable: Caption.\n\n"
+    },
+    "syntax": "markdown",
+    "trigger": "table"
+  },
+  {
+    "expansion": {
+      "final_cursor": 4,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "key",
+          "ranges": [
+            {
+              "end": 4,
+              "start": 1
+            }
+          ]
+        }
+      ],
+      "text": "@key"
+    },
+    "syntax": "typst",
+    "trigger": "cite"
+  },
+  {
+    "expansion": {
+      "final_cursor": 10,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "key",
+          "ranges": [
+            {
+              "end": 9,
+              "start": 6
+            }
+          ]
+        }
+      ],
+      "text": "\\cite{key}"
+    },
+    "syntax": "latex",
+    "trigger": "cite"
+  },
+  {
+    "expansion": {
+      "final_cursor": 6,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "key",
+          "ranges": [
+            {
+              "end": 5,
+              "start": 2
+            }
+          ]
+        }
+      ],
+      "text": "[@key]"
+    },
+    "syntax": "markdown",
+    "trigger": "cite"
+  },
+  {
+    "expansion": {
+      "final_cursor": 288,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "Caption.",
+          "ranges": [
+            {
+              "end": 77,
+              "start": 69
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "input",
+          "ranges": [
+            {
+              "end": 152,
+              "start": 147
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "output",
+          "ranges": [
+            {
+              "end": 175,
+              "start": 169
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "placeholder": "Initialise.",
+          "ranges": [
+            {
+              "end": 193,
+              "start": 182
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "placeholder": "each item",
+          "ranges": [
+            {
+              "end": 215,
+              "start": 206
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "placeholder": "Process the item.",
+          "ranges": [
+            {
+              "end": 246,
+              "start": 229
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "placeholder": "result",
+          "ranges": [
+            {
+              "end": 268,
+              "start": 262
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 286,
+              "start": 281
+            }
+          ]
+        }
+      ],
+      "text": "#figure(\n  kind: \"algorithm\",\n  supplement: [Algorithm],\n  caption: [Caption.],\n  block(width: 100%, inset: 8pt, stroke: (y: 0.5pt))[\n    *Input:* input \\\n    *Output:* output\n    + Initialise.\n    + *for* each item *do*\n      + Process the item.\n    + *return* result\n  ],\n) <alg:label>\n"
+    },
+    "syntax": "typst",
+    "trigger": "algorithm"
+  },
+  {
+    "expansion": {
+      "final_cursor": 273,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "htbp",
+          "ranges": [
+            {
+              "end": 22,
+              "start": 18
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "Caption.",
+          "ranges": [
+            {
+              "end": 43,
+              "start": 35
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "end": 60,
+              "start": 55
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "placeholder": "input",
+          "ranges": [
+            {
+              "end": 105,
+              "start": 100
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "placeholder": "output",
+          "ranges": [
+            {
+              "end": 124,
+              "start": 118
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "placeholder": "Initialise.",
+          "ranges": [
+            {
+              "end": 147,
+              "start": 136
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "placeholder": "each item",
+          "ranges": [
+            {
+              "end": 166,
+              "start": 157
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "placeholder": "Process the item.",
+          "ranges": [
+            {
+              "end": 198,
+              "start": 181
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "placeholder": "result",
+          "ranges": [
+            {
+              "end": 236,
+              "start": 230
+            }
+          ]
+        }
+      ],
+      "text": "\\begin{algorithm}[htbp]\n  \\caption{Caption.}\\label{alg:label}\n  \\begin{algorithmic}[1]\n    \\Require input\n    \\Ensure output\n    \\State Initialise.\n    \\For{each item}\n      \\State Process the item.\n    \\EndFor\n    \\State \\Return result\n  \\end{algorithmic}\n\\end{algorithm}\n"
+    },
+    "syntax": "latex",
+    "trigger": "algorithm"
+  },
+  {
+    "expansion": {
+      "final_cursor": 130,
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "name",
+          "ranges": [
+            {
+              "end": 17,
+              "start": 13
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "input",
+          "ranges": [
+            {
+              "end": 35,
+              "start": 30
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "placeholder": "output",
+          "ranges": [
+            {
+              "end": 52,
+              "start": 46
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "placeholder": "Initialise.",
+          "ranges": [
+            {
+              "end": 68,
+              "start": 57
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "placeholder": "item",
+          "ranges": [
+            {
+              "end": 85,
+              "start": 81
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "placeholder": "Process the item.",
+          "ranges": [
+            {
+              "end": 110,
+              "start": 93
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "placeholder": "result",
+          "ranges": [
+            {
+              "end": 127,
+              "start": 121
+            }
+          ]
+        }
+      ],
+      "text": "**Algorithm: name**\n\n*Input:* input\n*Output:* output\n\n1. Initialise.\n2. For each item:\n   1. Process the item.\n3. Return result.\n\n"
+    },
+    "syntax": "markdown",
+    "trigger": "algorithm"
+  }
+]

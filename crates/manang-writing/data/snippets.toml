@@ -1,0 +1,482 @@
+# Built-in scientific snippets.
+#
+# Body syntax: `${1:placeholder}` is a tab stop with default text, `${2}` or
+# `$2` an empty one, a repeated index mirrors the first, `$0` is the final
+# cursor position. A literal `$` followed by `{` or a digit is written `\$`.
+
+# ---------------------------------------------------------------- theorem
+
+[[snippet]]
+trigger = "theorem"
+aliases = ["thm"]
+syntax = "typst"
+name = "Theorem"
+description = "Theorem block with a name and a label"
+body = '''
+#block(width: 100%, inset: (left: 1em), stroke: (left: 0.5pt))[
+  *Theorem (${1:name}).* ${2:Statement.}
+] <thm:${3:label}>
+$0'''
+
+[[snippet]]
+trigger = "theorem"
+aliases = ["thm"]
+syntax = "latex"
+name = "Theorem"
+description = "Theorem environment (needs amsthm and \\newtheorem{theorem}{Theorem})"
+requires = "amsthm"
+body = '''
+\begin{theorem}[${1:name}]\label{thm:${2:label}}
+  ${3:Statement.}
+\end{theorem}
+$0'''
+
+[[snippet]]
+trigger = "theorem"
+aliases = ["thm"]
+syntax = "markdown"
+name = "Theorem"
+description = "Theorem as a block quote"
+body = '''
+> **Theorem (${1:name}).** ${2:Statement.}
+
+$0'''
+
+[[snippet]]
+trigger = "lemma"
+aliases = ["lem"]
+syntax = "typst"
+name = "Lemma"
+description = "Lemma block with a label"
+body = '''
+#block(width: 100%, inset: (left: 1em), stroke: (left: 0.5pt))[
+  *Lemma.* ${1:Statement.}
+] <lem:${2:label}>
+$0'''
+
+[[snippet]]
+trigger = "lemma"
+aliases = ["lem"]
+syntax = "latex"
+name = "Lemma"
+description = "Lemma environment (needs amsthm and \\newtheorem{lemma}{Lemma})"
+requires = "amsthm"
+body = '''
+\begin{lemma}\label{lem:${1:label}}
+  ${2:Statement.}
+\end{lemma}
+$0'''
+
+[[snippet]]
+trigger = "lemma"
+aliases = ["lem"]
+syntax = "markdown"
+name = "Lemma"
+description = "Lemma as a block quote"
+body = '''
+> **Lemma.** ${1:Statement.}
+
+$0'''
+
+[[snippet]]
+trigger = "definition"
+aliases = ["def"]
+syntax = "typst"
+name = "Definition"
+description = "Definition block with a label"
+body = '''
+#block(width: 100%, inset: (left: 1em), stroke: (left: 0.5pt))[
+  *Definition (${1:term}).* ${2:Statement.}
+] <def:${3:label}>
+$0'''
+
+[[snippet]]
+trigger = "definition"
+aliases = ["def"]
+syntax = "latex"
+name = "Definition"
+description = "Definition environment (needs amsthm and \\newtheorem{definition}{Definition})"
+requires = "amsthm"
+body = '''
+\begin{definition}[${1:term}]\label{def:${2:label}}
+  ${3:Statement.}
+\end{definition}
+$0'''
+
+[[snippet]]
+trigger = "definition"
+aliases = ["def"]
+syntax = "markdown"
+name = "Definition"
+description = "Definition as a block quote"
+body = '''
+> **Definition (${1:term}).** ${2:Statement.}
+
+$0'''
+
+[[snippet]]
+trigger = "proof"
+syntax = "typst"
+name = "Proof"
+description = "Proof ending with a square"
+body = '''
+_Proof._ ${1:Argument.} #h(1fr) $square$
+$0'''
+
+[[snippet]]
+trigger = "proof"
+syntax = "latex"
+name = "Proof"
+description = "Proof environment (needs amsthm)"
+requires = "amsthm"
+body = '''
+\begin{proof}
+  ${1:Argument.}
+\end{proof}
+$0'''
+
+[[snippet]]
+trigger = "proof"
+syntax = "markdown"
+name = "Proof"
+description = "Proof ending with a square"
+body = '''
+*Proof.* ${1:Argument.} $\square$
+
+$0'''
+
+# --------------------------------------------------------------- equation
+
+[[snippet]]
+trigger = "equation"
+aliases = ["eq"]
+syntax = "typst"
+name = "Numbered equation"
+description = "Display equation with a label"
+body = '''
+$ ${1:expression} $ <eq:${2:label}>
+$0'''
+
+[[snippet]]
+trigger = "equation"
+aliases = ["eq"]
+syntax = "latex"
+name = "Numbered equation"
+description = "equation environment with a label"
+body = '''
+\begin{equation}
+  ${1:expression}
+  \label{eq:${2:label}}
+\end{equation}
+$0'''
+
+[[snippet]]
+trigger = "equation"
+aliases = ["eq"]
+syntax = "markdown"
+name = "Display equation"
+description = "Display math block"
+body = '''
+$$
+${1:expression}
+$$
+
+$0'''
+
+[[snippet]]
+trigger = "align"
+syntax = "typst"
+name = "Aligned equations"
+description = "Equations aligned at the first &"
+body = '''
+$ ${1:a} &= ${2:b} \
+  &= ${3:c} $
+$0'''
+
+[[snippet]]
+trigger = "align"
+syntax = "latex"
+name = "Aligned equations"
+description = "align environment (needs amsmath)"
+requires = "amsmath"
+body = '''
+\begin{align}
+  ${1:a} &= ${2:b} \\
+  &= ${3:c}
+\end{align}
+$0'''
+
+[[snippet]]
+trigger = "align"
+syntax = "markdown"
+name = "Aligned equations"
+description = "Aligned display math"
+body = '''
+$$
+\begin{aligned}
+${1:a} &= ${2:b} \\
+&= ${3:c}
+\end{aligned}
+$$
+
+$0'''
+
+# ----------------------------------------------------------------- figure
+
+[[snippet]]
+trigger = "figure"
+aliases = ["fig"]
+syntax = "typst"
+name = "Figure"
+description = "Captioned, labelled figure"
+body = '''
+#figure(
+  image("${1:path/to/image.png}", width: ${2:80%}),
+  caption: [${3:Caption.}],
+) <fig:${4:label}>
+$0'''
+
+[[snippet]]
+trigger = "figure"
+aliases = ["fig"]
+syntax = "latex"
+name = "Figure"
+description = "figure environment with graphicx"
+requires = "graphicx"
+body = '''
+\begin{figure}[${1:htbp}]
+  \centering
+  \includegraphics[width=${2:0.8\linewidth}]{${3:path/to/image}}
+  \caption{${4:Caption.}}
+  \label{fig:${5:label}}
+\end{figure}
+$0'''
+
+[[snippet]]
+trigger = "figure"
+aliases = ["fig"]
+syntax = "markdown"
+name = "Figure"
+description = "Image with a caption"
+body = '''
+![${1:Caption.}](${2:path/to/image.png})
+
+$0'''
+
+# ------------------------------------------------------------------ table
+
+[[snippet]]
+trigger = "table"
+aliases = ["tab"]
+syntax = "typst"
+name = "Table"
+description = "Captioned, labelled table with a header row"
+body = '''
+#figure(
+  table(
+    columns: ${1:3},
+    table.header[${2:A}][${3:B}][${4:C}],
+    [${5:1}], [${6:2}], [${7:3}],
+  ),
+  caption: [${8:Caption.}],
+) <tab:${9:label}>
+$0'''
+
+[[snippet]]
+trigger = "table"
+aliases = ["tab"]
+syntax = "latex"
+name = "Table"
+description = "table environment with booktabs rules"
+requires = "booktabs"
+body = '''
+\begin{table}[${1:htbp}]
+  \centering
+  \caption{${2:Caption.}}
+  \label{tab:${3:label}}
+  \begin{tabular}{${4:lll}}
+    \toprule
+    ${5:A} & ${6:B} & ${7:C} \\
+    \midrule
+    ${8:1} & ${9:2} & ${10:3} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+$0'''
+
+[[snippet]]
+trigger = "table"
+aliases = ["tab"]
+syntax = "markdown"
+name = "Table"
+description = "Pipe table"
+body = '''
+| ${1:A} | ${2:B} | ${3:C} |
+| --- | --- | --- |
+| ${4:1} | ${5:2} | ${6:3} |
+
+Table: ${7:Caption.}
+
+$0'''
+
+# ------------------------------------------------------------------- cite
+
+[[snippet]]
+trigger = "cite"
+syntax = "typst"
+name = "Citation"
+description = "Cite a bibliography key"
+body = "@${1:key}$0"
+
+[[snippet]]
+trigger = "cite"
+syntax = "latex"
+name = "Citation"
+description = "Cite a bibliography key"
+body = "\\cite{${1:key}}$0"
+
+[[snippet]]
+trigger = "cite"
+syntax = "markdown"
+name = "Citation"
+description = "Pandoc citation"
+body = "[@${1:key}]$0"
+
+# -------------------------------------------------------------- algorithm
+
+[[snippet]]
+trigger = "algorithm"
+aliases = ["alg"]
+syntax = "typst"
+name = "Algorithm"
+description = "Captioned algorithm as a numbered step list"
+body = '''
+#figure(
+  kind: "algorithm",
+  supplement: [Algorithm],
+  caption: [${1:Caption.}],
+  block(width: 100%, inset: 8pt, stroke: (y: 0.5pt))[
+    *Input:* ${2:input} \
+    *Output:* ${3:output}
+    + ${4:Initialise.}
+    + *for* ${5:each item} *do*
+      + ${6:Process the item.}
+    + *return* ${7:result}
+  ],
+) <alg:${8:label}>
+$0'''
+
+[[snippet]]
+trigger = "algorithm"
+aliases = ["alg"]
+syntax = "latex"
+name = "Algorithm"
+description = "algorithm with algpseudocode"
+requires = "algorithm, algpseudocode"
+body = '''
+\begin{algorithm}[${1:htbp}]
+  \caption{${2:Caption.}}\label{alg:${3:label}}
+  \begin{algorithmic}[1]
+    \Require ${4:input}
+    \Ensure ${5:output}
+    \State ${6:Initialise.}
+    \For{${7:each item}}
+      \State ${8:Process the item.}
+    \EndFor
+    \State \Return ${9:result}
+  \end{algorithmic}
+\end{algorithm}
+$0'''
+
+[[snippet]]
+trigger = "algorithm"
+aliases = ["alg"]
+syntax = "markdown"
+name = "Algorithm"
+description = "Algorithm as a numbered list"
+body = '''
+**Algorithm: ${1:name}**
+
+*Input:* ${2:input}
+*Output:* ${3:output}
+
+1. ${4:Initialise.}
+2. For each ${5:item}:
+   1. ${6:Process the item.}
+3. Return ${7:result}.
+
+$0'''
+
+# ------------------------------------------------------------------ lists
+
+[[snippet]]
+trigger = "itemize"
+aliases = ["ul"]
+syntax = "typst"
+name = "Bullet list"
+description = "Unordered list"
+body = '''
+- ${1:item}
+- ${2:item}
+$0'''
+
+[[snippet]]
+trigger = "itemize"
+aliases = ["ul"]
+syntax = "latex"
+name = "Bullet list"
+description = "itemize environment"
+body = '''
+\begin{itemize}
+  \item ${1:item}
+  \item ${2:item}
+\end{itemize}
+$0'''
+
+[[snippet]]
+trigger = "itemize"
+aliases = ["ul"]
+syntax = "markdown"
+name = "Bullet list"
+description = "Unordered list"
+body = '''
+- ${1:item}
+- ${2:item}
+
+$0'''
+
+[[snippet]]
+trigger = "enumerate"
+aliases = ["ol"]
+syntax = "typst"
+name = "Numbered list"
+description = "Ordered list"
+body = '''
++ ${1:item}
++ ${2:item}
+$0'''
+
+[[snippet]]
+trigger = "enumerate"
+aliases = ["ol"]
+syntax = "latex"
+name = "Numbered list"
+description = "enumerate environment"
+body = '''
+\begin{enumerate}
+  \item ${1:item}
+  \item ${2:item}
+\end{enumerate}
+$0'''
+
+[[snippet]]
+trigger = "enumerate"
+aliases = ["ol"]
+syntax = "markdown"
+name = "Numbered list"
+description = "Ordered list"
+body = '''
+1. ${1:item}
+2. ${2:item}
+
+$0'''

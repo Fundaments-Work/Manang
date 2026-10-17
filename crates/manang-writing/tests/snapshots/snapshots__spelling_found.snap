@@ -1,0 +1,20 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: found
+---
+[
+  {
+    "word": "Intoduction",
+    "range": {
+      "start": 2,
+      "end": 13
+    },
+    "line": 1,
+    "column": 3,
+    "suggestions": [
+      "Introduction",
+      "Induction",
+      "Production"
+    ]
+  }
+]

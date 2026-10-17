@@ -1,0 +1,38 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: "lint(&masked, &LintConfig::default(), Some(\"/notes.md\"))"
+---
+[
+  {
+    "severity": "info",
+    "message": "Possible passive voice: `was heated`",
+    "file": "/notes.md",
+    "line": 3,
+    "column": 12,
+    "range": {
+      "start": 22,
+      "end": 32
+    },
+    "hints": [
+      "Consider rewriting in the active voice."
+    ],
+    "trace": [],
+    "code": "passive-voice"
+  },
+  {
+    "severity": "warning",
+    "message": "Repeated word `and`",
+    "file": "/notes.md",
+    "line": 3,
+    "column": 24,
+    "range": {
+      "start": 34,
+      "end": 41
+    },
+    "hints": [
+      "Remove the duplicated word."
+    ],
+    "trace": [],
+    "code": "repeated-word"
+  }
+]

@@ -1,0 +1,86 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: "lint(&masked, &LintConfig::default(), Some(\"/main.tex\"))"
+---
+[
+  {
+    "severity": "warning",
+    "message": "Repeated word `the`",
+    "file": "/main.tex",
+    "line": 2,
+    "column": 12,
+    "range": {
+      "start": 28,
+      "end": 35
+    },
+    "hints": [
+      "Remove the duplicated word."
+    ],
+    "trace": [],
+    "code": "repeated-word"
+  },
+  {
+    "severity": "info",
+    "message": "Multiple spaces in a row",
+    "file": "/main.tex",
+    "line": 2,
+    "column": 73,
+    "range": {
+      "start": 89,
+      "end": 91
+    },
+    "hints": [
+      "Use a single space."
+    ],
+    "trace": [],
+    "code": "double-space"
+  },
+  {
+    "severity": "info",
+    "message": "Possible passive voice: `was determined`",
+    "file": "/main.tex",
+    "line": 3,
+    "column": 1,
+    "range": {
+      "start": 101,
+      "end": 115
+    },
+    "hints": [
+      "Consider rewriting in the active voice."
+    ],
+    "trace": [],
+    "code": "passive-voice"
+  },
+  {
+    "severity": "info",
+    "message": "Vague wording: `very`",
+    "file": "/main.tex",
+    "line": 7,
+    "column": 7,
+    "range": {
+      "start": 193,
+      "end": 197
+    },
+    "hints": [
+      "Be specific, or cut it."
+    ],
+    "trace": [],
+    "code": "weasel-words"
+  },
+  {
+    "severity": "info",
+    "message": "Vague wording: `obviously`",
+    "file": "/main.tex",
+    "line": 7,
+    "column": 12,
+    "range": {
+      "start": 198,
+      "end": 207
+    },
+    "hints": [
+      "Be specific, or cut it."
+    ],
+    "trace": [],
+    "code": "weasel-words"
+  }
+]
