@@ -1,0 +1,69 @@
+[plugin]
+name = "git"
+version = "0.1.0"
+description = "Git status, diffs, history and safe write operations"
+tier = "native"
+
+[permissions]
+filesystem = ["write:project"]
+
+[contributes]
+[[contributes.commands]]
+id = "git.status"
+title = "Git status"
+
+[[contributes.commands]]
+id = "git.diff"
+title = "Structured diff hunks"
+
+[[contributes.commands]]
+id = "git.diff-text"
+title = "Unified diff text"
+
+[[contributes.commands]]
+id = "git.log"
+title = "Commit log"
+
+[[contributes.commands]]
+id = "git.blame"
+title = "Blame file"
+
+[[contributes.commands]]
+id = "git.branches"
+title = "List branches"
+
+[[contributes.commands]]
+id = "git.show"
+title = "File content at revision"
+
+[[contributes.commands]]
+id = "git.stage"
+title = "Stage files"
+
+[[contributes.commands]]
+id = "git.unstage"
+title = "Unstage files"
+
+[[contributes.commands]]
+id = "git.discard"
+title = "Discard changes (recoverable)"
+
+[[contributes.commands]]
+id = "git.commit"
+title = "Commit staged changes"
+
+[[contributes.commands]]
+id = "git.checkout-branch"
+title = "Switch or create branch"
+
+[[contributes.commands]]
+id = "git.init"
+title = "Initialise repository"
+
+[[contributes.commands]]
+id = "git.sync"
+title = "Fetch, pull or push"
+
+[[contributes.commands]]
+id = "git.open"
+title = "Set the git project root"
