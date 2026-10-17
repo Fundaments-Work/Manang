@@ -595,3 +595,37 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
 3. **Tests:**
    - 3 proptests in `tests/fuzz_proptest.rs` verifying arbitrary string inputs to BibTeX, CSL-JSON, and key extraction never panic.
    - 7 kernel integration tests in `tests/kernel.rs` covering commands, search ranking, citation formatting, mock network verification, and 4 `insta` snapshots for formatted output and parse errors with line/column coordinates.
+
+## UI Wiring - Task A: Search View -> `search.*`
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added typed interfaces: `SearchFilesRequest`, `SearchFilesResponse`, `SearchTextRequest`, `SearchTextResponse`, `SearchLineMatch`, `SearchRange`, `SearchContextLine`, `SearchFileMatches`, `SearchStats`, `SearchPreviewRequest`, `SearchPreviewResponse`, `SearchPreviewFile`, `SearchPreviewEdit`, `SearchApplyRequest`, `SearchApplyResponse`, `SearchApplyFileResult`, `SearchInTextRequest`.
+   - Added `searchApi(kernel)` wrapper with methods for `files`, `text`, `cancel`, `replacePreview`, `replaceApply`, `inText`.
+2. **Browser Mock Plugin (`src/lib/kernel/mockSearch.ts`):**
+   - Replicated exact command shapes and signatures from `crates/manang-search`:
+     - `search.files`: fuzzy rank across current project's files using `fuzzyRank`.
+     - `search.text`: regex / literal search line-by-line with case sensitivity, whole word, regex, include/exclude glob patterns, scalar ranges and 1-based columns, context lines before/after.
+     - `search.cancel`: sets cancelled flag and returns `{ cancelled: 1 }`.
+     - `search.replace-preview`: plans replacements across matching files with content hash checking and `plan_id`.
+     - `search.replace-apply`: verifies content hashes, performs atomic updates in `MockProjectHost`, emits `project.changed`.
+     - `search.in-text`: in-document text search.
+   - Registered `searchPlugin(host)` in `src/lib/kernel/dev.ts`.
+3. **Pure Workbench Utilities (`src/lib/workbench/search.ts`):**
+   - Implemented `splitLineByRanges` to cleanly divide matched line text into matching/non-matching segments for exact highlight rendering.
+   - Implemented `parsePatternList` for glob filtering.
+   - Implemented `formatMatchCount`.
+4. **Search Panel UI (`src/lib/components/panels/SearchPanel.svelte`):**
+   - Connected directly to `searchApi(kernel)` for both file-name (`search.files`) and content search (`search.text`).
+   - Integrated match case (`Aa`), whole word (`\b`), regex (`.*`), and collapsible include/exclude glob filter controls.
+   - 200 ms debounce with automatic cancellation of previous in-flight search (`api.cancel()`).
+   - Integrated replace controls: replace input field, "Replace all" button via `search.replace-preview` and `search.replace-apply` with per-file status reports and error handling.
+   - Collapsible per-file match groups with line numbers and match highlighting via `<mark class="bg-math/25 text-text">`.
+   - Result truncation notification when limits are reached.
+   - Match clicks navigate to file, line, and column via `goToMatch`.
+5. **Testing & Verification:**
+   - Unit tests in `src/lib/kernel/mockSearch.test.ts` (4 tests) and `src/lib/workbench/search.test.ts` (6 tests).
+   - Updated plugin count and groups in `src/lib/workbench/plugins.test.ts`.
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (22 test suites, 209 tests all green).
+   - Passed end-to-end headless verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
