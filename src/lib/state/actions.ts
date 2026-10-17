@@ -1,0 +1,409 @@
+/**
+ * Workbench actions: the operations that touch more than one store.
+ *
+ * The stores (workspace, tabs, documents, figures, build) each know one thing
+ * and none imports another's actions, so cross-cutting behaviour such as "close
+ * this tab, asking about unsaved changes" lives here. Components and commands
+ * call these; they are the workbench's vocabulary.
+ */
+
+import { kernel, errorMessage } from "$lib/kernel";
+import type { KernelEvent } from "$lib/kernel";
+import type { Engine, ProjectChanged } from "$lib/kernel/types";
+import type { Problem } from "$lib/workbench/problems";
+import { SESSION_KEY, loadJson } from "$lib/workbench/persist";
+import {
+  basename,
+  dirname,
+  fileKind,
+  isOpenable,
+  join,
+  nameProblem,
+  newFileName,
+  uniqueName,
+} from "$lib/workbench/paths";
+import { citationFor, type BibEntry } from "$lib/workbench/references";
+import { sanitizeSession } from "$lib/workbench/tabs";
+
+import { build } from "./build.svelte";
+import { dialog } from "./dialog.svelte";
+import { documents } from "./documents.svelte";
+import { blankFigure } from "./figure.svelte";
+import { figures } from "./figures.svelte";
+import { layout } from "./layout.svelte";
+import { notice } from "./notice.svelte";
+import { preview } from "./preview.svelte";
+import { slides } from "./slides.svelte";
+import { tabs } from "./tabs.svelte";
+import { workspace } from "./workspace.svelte";
+
+/* -------------------------------------------------------------------------- */
+/* Files and tabs                                                              */
+/* -------------------------------------------------------------------------- */
+
+export interface OpenOptions {
+  /** Move keyboard focus into the editor afterwards. Default true. */
+  readonly focus?: boolean;
+  readonly view?: "text" | "slides";
+}
+
+/** Open a file in a tab, or focus the tab it already has. */
+export async function openFile(
+  path: string,
+  options: OpenOptions = {},
+): Promise<boolean> {
+  if (!isOpenable(path)) {
+    notice.error(
+      `${basename(path)} is not a text file, so it cannot be opened in a tab.`,
+    );
+    return false;
+  }
+  const isFigure = fileKind(path) === "figure";
+  const ok = isFigure
+    ? (await figures.open(path)) !== null
+    : (await documents.open(path)) !== null;
+  if (!ok) return false;
+  tabs.open(path, isFigure ? undefined : options.view);
+  if (layout.narrow) layout.closeSide();
+  if (options.focus !== false && !isFigure) documents.focusEditor();
+  return true;
+}
+
+export function isTabDirty(path: string): boolean {
+  return documents.isDirty(path) || figures.isDirty(path);
+}
+
+async function save(path: string): Promise<boolean> {
+  return fileKind(path) === "figure" ? figures.save(path) : documents.save(path);
+}
+
+export async function saveActive(): Promise<void> {
+  const active = tabs.active;
+  if (active === undefined) return;
+  if (!isTabDirty(active.path)) return;
+  if (await save(active.path)) notice.show(`Saved ${basename(active.path)}.`);
+}
+
+export async function saveAll(): Promise<void> {
+  await documents.saveAll();
+  for (const figure of figures.all()) if (figure.dirty) await figures.save(figure.path);
+  notice.show("Saved all changes.");
+}
+
+/** Close a tab, asking first when it has unsaved changes. Returns false if cancelled. */
+export async function closeTab(id: string): Promise<boolean> {
+  const tab = tabs.tabs.find((t) => t.id === id);
+  if (tab === undefined) return true;
+  if (isTabDirty(tab.path)) {
+    const choice = await dialog.ask({
+      title: `Save changes to ${basename(tab.path)}?`,
+      message: "Your changes will be lost if you close without saving.",
+      actions: [
+        { id: "save", label: "Save" },
+        { id: "discard", label: "Don't save" },
+      ],
+    });
+    if (choice === "cancel") return false;
+    if (choice === "save" && !(await save(tab.path))) return false;
+  }
+  tabs.close(id);
+  documents.drop(tab.path);
+  figures.drop(tab.path);
+  return true;
+}
+
+export async function closeOtherTabs(id: string): Promise<void> {
+  for (const tab of [...tabs.tabs])
+    if (tab.id !== id && !(await closeTab(tab.id))) return;
+}
+
+export async function closeTabsToRight(id: string): Promise<void> {
+  const index = tabs.tabs.findIndex((t) => t.id === id);
+  for (const tab of tabs.tabs.slice(index + 1)) if (!(await closeTab(tab.id))) return;
+}
+
+export function closeActiveTab(): void {
+  const active = tabs.active;
+  if (active !== undefined) void closeTab(active.id);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Projects                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** True when it is safe to discard every open document. */
+async function confirmDiscard(): Promise<boolean> {
+  const dirty = tabs.tabs.filter((t) => isTabDirty(t.path));
+  if (dirty.length === 0) return true;
+  const choice = await dialog.ask({
+    title: `Save changes to ${dirty.length} ${dirty.length === 1 ? "file" : "files"}?`,
+    message: "Your changes will be lost if you leave without saving.",
+    actions: [
+      { id: "save", label: "Save all" },
+      { id: "discard", label: "Don't save" },
+    ],
+  });
+  if (choice === "cancel") return false;
+  if (choice === "save") await saveAll();
+  return true;
+}
+
+function resetEditors(): void {
+  for (const tab of tabs.tabs) {
+    documents.drop(tab.path);
+    figures.drop(tab.path);
+  }
+  tabs.clear();
+  preview.release();
+}
+
+async function startProject(
+  open: () => Promise<{ main: string } | null>,
+): Promise<boolean> {
+  if (!(await confirmDiscard())) return false;
+  resetEditors();
+  const project = await open();
+  if (project === null) return false;
+  if (!layout.narrow) layout.showSide("files");
+  await openFile(project.main, { focus: false });
+  build.schedule();
+  return true;
+}
+
+export function openProject(path: string): Promise<boolean> {
+  return startProject(() => workspace.open(path));
+}
+
+export function createProject(
+  path: string,
+  name: string,
+  engine: Engine,
+): Promise<boolean> {
+  return startProject(() => workspace.create(path, name, engine));
+}
+
+export async function closeProject(): Promise<void> {
+  if (!(await confirmDiscard())) return;
+  resetEditors();
+  await workspace.close();
+  workspace.error = "";
+  tabs.remember();
+  void build.compile();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Creating, renaming, deleting                                                */
+/* -------------------------------------------------------------------------- */
+
+const TEMPLATE: Record<string, (stem: string) => string> = {
+  typst: (stem) => `= ${stem}\n\n`,
+  latex: () => "",
+  markdown: (stem) => `# ${stem}\n\n`,
+};
+
+/** Create a file in `dir` and open it. Returns an error sentence, or null on success. */
+export async function createFile(dir: string, name: string): Promise<string | null> {
+  const problem = nameProblem(name, workspace.namesIn(dir));
+  if (problem !== null) return problem;
+  const clean = name.trim();
+  const kind = fileKind(clean);
+  const stem = clean.replace(/\.[^.]+$/, "");
+  const content = kind === "figure" ? blankFigure() : (TEMPLATE[kind]?.(stem) ?? "");
+  try {
+    const path = await workspace.createFile(dir, clean, content);
+    await workspace.reveal(path);
+    await openFile(path);
+    return null;
+  } catch (error) {
+    return errorMessage(error);
+  }
+}
+
+export async function createFolder(dir: string, name: string): Promise<string | null> {
+  const problem = nameProblem(name, workspace.namesIn(dir));
+  if (problem !== null) return problem;
+  try {
+    await workspace.createFolder(dir, name.trim());
+    return null;
+  } catch (error) {
+    return errorMessage(error);
+  }
+}
+
+/** A new, empty figure in `figures/`, opened for drawing. */
+export async function newFigure(): Promise<void> {
+  if (workspace.project === null) {
+    notice.error("Open a folder before creating a figure.");
+    return;
+  }
+  await workspace.loadDir("figures").catch(() => undefined);
+  const name = uniqueName("untitled.figure.json", workspace.namesIn("figures"));
+  const problem = await createFile("figures", name);
+  if (problem !== null) notice.error(`Could not create the figure: ${problem}`);
+}
+
+export async function newFileHere(): Promise<void> {
+  if (workspace.project === null) {
+    notice.error("Open a folder before creating a file.");
+    return;
+  }
+  layout.showSide("files");
+  const dir = "";
+  const name = uniqueName(newFileName(workspace.engine), workspace.namesIn(dir));
+  const problem = await createFile(dir, name);
+  if (problem !== null) notice.error(`Could not create the file: ${problem}`);
+}
+
+/** Rename an entry. Returns an error sentence, or null on success. */
+export async function renameEntry(
+  path: string,
+  newName: string,
+): Promise<string | null> {
+  const dir = dirname(path);
+  const problem = nameProblem(newName, workspace.namesIn(dir), basename(path));
+  if (problem !== null) return problem;
+  const to = join(dir, newName.trim());
+  if (to === path) return null;
+  try {
+    await workspace.rename(path, to);
+  } catch (error) {
+    return errorMessage(error);
+  }
+  tabs.renamed(path, to);
+  documents.renamed(path, to);
+  figures.renamed(path, to);
+  return null;
+}
+
+export async function trashEntry(path: string): Promise<void> {
+  const lost = tabs.tabs.filter(
+    (t) => (t.path === path || t.path.startsWith(`${path}/`)) && isTabDirty(t.path),
+  );
+  try {
+    await workspace.trash(path);
+  } catch (error) {
+    notice.error(
+      `Could not move ${basename(path)} to the trash: ${errorMessage(error)}`,
+    );
+    return;
+  }
+  tabs.removed(path);
+  documents.dropUnder(path);
+  figures.dropUnder(path);
+  notice.show(
+    lost.length > 0
+      ? `Moved ${basename(path)} to the trash. Unsaved changes in it were discarded.`
+      : `Moved ${basename(path)} to the trash.`,
+  );
+  build.schedule();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Editor helpers                                                              */
+/* -------------------------------------------------------------------------- */
+
+export async function goToProblem(problem: Problem): Promise<void> {
+  if (problem.file === "") return;
+  if (!(await openFile(problem.file, { focus: false }))) return;
+  documents.revealAt(problem.file, problem.line ?? 1, problem.column ?? 1);
+  // The shown document may already be the right one; apply right away.
+  documents.applyReveal();
+}
+
+export async function goToMatch(
+  path: string,
+  line: number,
+  column: number,
+): Promise<void> {
+  if (!(await openFile(path, { focus: false }))) return;
+  documents.revealAt(path, line, column);
+  documents.applyReveal();
+}
+
+export function insertCitation(entry: BibEntry): void {
+  const active = tabs.active;
+  const engine = active === undefined ? null : workspace.engineFor(active.path);
+  const text = citationFor(entry.key, engine);
+  if (
+    active?.kind === "document" &&
+    active.view === "text" &&
+    documents.insertAtCursor(text)
+  ) {
+    notice.show(`Inserted ${text}.`);
+  } else {
+    notice.error("Open a document and place the caret where the citation should go.");
+  }
+}
+
+export function toggleSlides(): void {
+  const active = tabs.active;
+  if (active === undefined || active.kind !== "document") return;
+  tabs.setView(active.id, active.view === "slides" ? "text" : "slides");
+  slides.stop();
+}
+
+export function exportPdf(): void {
+  const target = build.previewTarget() ?? tabs.active?.path ?? "document";
+  void preview.exportPdf(basename(target));
+}
+
+/** Run a kernel command picked from the palette. */
+export async function runKernelCommand(id: string): Promise<void> {
+  try {
+    await kernel.run(id);
+    notice.show(`${id} finished.`);
+  } catch (error) {
+    notice.error(`${id} could not run: ${errorMessage(error)}`);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Start-up and kernel events                                                  */
+/* -------------------------------------------------------------------------- */
+
+function onKernelEvent(event: KernelEvent): void {
+  const project = workspace.project;
+  if (event.topic === "project.watch-error") {
+    const message = (event.payload as { message?: unknown } | null)?.message;
+    notice.error(
+      `File watching stopped: ${typeof message === "string" ? message : "unknown error"}`,
+    );
+    return;
+  }
+  if (event.topic !== "project.changed" || project === null) return;
+  const payload = event.payload as ProjectChanged | null;
+  if (payload === null || payload.root !== project.root) return;
+  workspace.scheduleRefresh();
+  const touched = payload.changes
+    .filter((c) => c.kind === "modified" || c.kind === "created")
+    .map((c) => c.path);
+  void documents.externalChange(touched);
+  build.schedule();
+}
+
+let booted = false;
+
+/** Restore layout, the last project and its tabs, and start listening to the kernel. */
+export async function boot(): Promise<void> {
+  if (booted) return;
+  booted = true;
+  layout.restore();
+  documents.onEdit(() => build.schedule());
+  void kernel.onEvent(onKernelEvent);
+  await workspace.loadRecent();
+
+  const session = sanitizeSession(loadJson(SESSION_KEY));
+  if (session.project === null) return;
+  if ((await workspace.open(session.project)) === null) {
+    // The folder moved or was deleted; fall back to the welcome screen.
+    workspace.error = "";
+    return;
+  }
+  for (const entry of session.tabs) {
+    await openFile(entry.path, { focus: false, view: entry.view });
+  }
+  if (session.active !== null) tabs.activate(session.active);
+  else if (tabs.tabs.length === 0)
+    await openFile(workspace.project?.main ?? "", { focus: false });
+  build.schedule();
+}

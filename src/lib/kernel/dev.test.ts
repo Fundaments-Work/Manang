@@ -24,7 +24,9 @@ describe("dev kernel: project plugin", () => {
 
   it("refuses commands until a project is open", async () => {
     const project = projectApi(createDevKernel());
-    await expect(project.tree()).rejects.toMatchObject({ message: "no project is open" });
+    await expect(project.tree()).rejects.toMatchObject({
+      message: "no project is open",
+    });
   });
 
   it("opens a project and answers with the Rust summary shape", async () => {
@@ -103,13 +105,19 @@ describe("dev kernel: project plugin", () => {
     const result = await project.trash("notes.md");
     expect(result.trashed_to).toContain("notes.md");
     await expect(project.readFile("notes.md")).rejects.toBeDefined();
-    expect((await project.gitStatus()).changes.find((c) => c.path === "notes.md")).toBeUndefined();
+    expect(
+      (await project.gitStatus()).changes.find((c) => c.path === "notes.md"),
+    ).toBeUndefined();
   });
 
   it("creates a project and lists it first among recents", async () => {
     const kernel = createDevKernel();
     const project = projectApi(kernel);
-    const created = await project.create("/home/author/new-paper", "New paper", "latex");
+    const created = await project.create(
+      "/home/author/new-paper",
+      "New paper",
+      "latex",
+    );
     expect(created.main).toBe("main.tex");
     const recent = await project.recent();
     expect(recent[0]).toMatchObject({ path: "/home/author/new-paper", exists: true });
@@ -141,7 +149,9 @@ describe("dev kernel: typst plugin", () => {
       line: 3,
     });
     expect(report.diagnostics[0]?.column).toBeGreaterThan(1);
-    expect(report.diagnostics[0]?.range?.end).toBeGreaterThan(report.diagnostics[0]?.range?.start ?? 0);
+    expect(report.diagnostics[0]?.range?.end).toBeGreaterThan(
+      report.diagnostics[0]?.range?.start ?? 0,
+    );
   });
 
   it("names a missing include and unknown citation, in the file they occur in", async () => {
@@ -191,7 +201,10 @@ describe("dev kernel: typst plugin", () => {
   it("keeps the last good document when a compile fails", async () => {
     const { typst } = await opened();
     await typst.compile({ main: "main.typ" });
-    const failed = await typst.compile({ main: "main.typ", sources: { "main.typ": "$oops" } });
+    const failed = await typst.compile({
+      main: "main.typ",
+      sources: { "main.typ": "$oops" },
+    });
     expect(failed.ok).toBe(false);
     expect(failed.pages).toBeGreaterThanOrEqual(1);
     await expect(typst.render(0)).resolves.toBeInstanceOf(Uint8Array);

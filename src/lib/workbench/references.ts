@@ -8,8 +8,6 @@
  * `@string` macros or cross-references.
  */
 
-import { fuzzyRank } from "$lib/commands/fuzzy";
-
 import type { Engine } from "./paths";
 
 export interface BibEntry {
@@ -78,7 +76,9 @@ function splitAuthors(raw: string): string[] {
     .map((name) => {
       const cleaned = clean(name);
       const comma = cleaned.indexOf(",");
-      return comma === -1 ? cleaned : `${cleaned.slice(comma + 1).trim()} ${cleaned.slice(0, comma).trim()}`;
+      return comma === -1
+        ? cleaned
+        : `${cleaned.slice(comma + 1).trim()} ${cleaned.slice(0, comma).trim()}`;
     })
     .filter((name) => name.length > 0);
 }
@@ -108,20 +108,43 @@ export function parseBibtex(text: string, file = ""): BibEntry[] {
       title: clean(fields.get("title") ?? ""),
       authors: splitAuthors(fields.get("author") ?? ""),
       year: clean(fields.get("year") ?? fields.get("date") ?? "").slice(0, 4),
-      venue: clean(fields.get("journal") ?? fields.get("booktitle") ?? fields.get("publisher") ?? ""),
+      venue: clean(
+        fields.get("journal") ??
+          fields.get("booktitle") ??
+          fields.get("publisher") ??
+          "",
+      ),
       file,
     });
   }
   return entries;
 }
 
-/** Fuzzy filter across key, authors, title and year. */
-export function filterReferences(entries: readonly BibEntry[], query: string): BibEntry[] {
-  return fuzzyRank(
-    entries,
-    query,
-    (e) => `${e.key} ${e.authors.join(" ")} ${e.title} ${e.year}`,
-  ).map((ranked) => ranked.item);
+const fold = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+/**
+ * Filter across key, authors, title and year. Every word you type must appear
+ * somewhere in the entry; this is stricter than the palette's fuzzy match on
+ * purpose, because a reference list is read, not guessed at.
+ */
+export function filterReferences(
+  entries: readonly BibEntry[],
+  query: string,
+): BibEntry[] {
+  const words = fold(query)
+    .split(/\s+/)
+    .filter((w) => w.length > 0);
+  if (words.length === 0) return [...entries];
+  return entries.filter((e) => {
+    const haystack = fold(
+      `${e.key} ${e.authors.join(" ")} ${e.title} ${e.year} ${e.venue}`,
+    );
+    return words.every((word) => haystack.includes(word));
+  });
 }
 
 /** "Landauer", "Bérut and Arakelyan", "Nielsen et al." */
@@ -129,7 +152,8 @@ export function authorSummary(authors: readonly string[]): string {
   const last = (name: string): string => name.split(" ").pop() ?? name;
   if (authors.length === 0) return "Unknown author";
   if (authors.length === 1) return last(authors[0] ?? "");
-  if (authors.length === 2) return `${last(authors[0] ?? "")} and ${last(authors[1] ?? "")}`;
+  if (authors.length === 2)
+    return `${last(authors[0] ?? "")} and ${last(authors[1] ?? "")}`;
   return `${last(authors[0] ?? "")} et al.`;
 }
 

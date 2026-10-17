@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
+const { invoke, listen } = vi.hoisted(() => ({ invoke: vi.fn(), listen: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 
 import { isKernelError, kernel } from "./client";
 
@@ -33,6 +34,34 @@ describe("kernel client", () => {
 
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect([...bytes]).toEqual([1, 2, 3]);
+  });
+
+  it("forwards kernel://event payloads to the handler and returns an unlisten", async () => {
+    const unlisten = vi.fn();
+    listen.mockImplementation(
+      (_name: string, cb: (m: { payload: unknown }) => void) => {
+        cb({
+          payload: { topic: "project.changed", payload: { root: "/p", changes: [] } },
+        });
+        return Promise.resolve(unlisten);
+      },
+    );
+    const seen: unknown[] = [];
+
+    const stop = await kernel.onEvent((event) => seen.push(event));
+
+    expect(listen).toHaveBeenCalledWith("kernel://event", expect.any(Function));
+    expect(seen).toEqual([
+      { topic: "project.changed", payload: { root: "/p", changes: [] } },
+    ]);
+    stop();
+    expect(unlisten).toHaveBeenCalled();
+  });
+
+  it("is a quiet no-op when there is no event channel (a plain browser)", async () => {
+    listen.mockRejectedValue(new Error("no tauri"));
+    const stop = await kernel.onEvent(() => undefined);
+    expect(() => stop()).not.toThrow();
   });
 
   it("recognises structured kernel errors", () => {

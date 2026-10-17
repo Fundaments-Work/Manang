@@ -29,6 +29,8 @@ export const manangTheme = EditorView.theme({
   ".cm-content": {
     fontFamily: "var(--font-mono)",
     fontWeight: "400",
+    // Source code: `fi` and `ff` stay two letters, so columns and carets line up.
+    fontVariantLigatures: "none",
     lineHeight: "1.6",
     caretColor: "var(--mng-accent)",
     padding: "12px 0",
@@ -196,7 +198,7 @@ export function manangTypstHighlight(
     // so only `typ-emph` is distinguished.
     { tag: tag("typ-emph"), fontStyle: "italic" },
 
-    // Parse errors are a whisper, not an alarm: the gutter carries the signal
+    // Parse errors are quiet, not an alarm: the gutter carries the signal
     // and the prose stays readable rather than flooding the line with colour.
     {
       tag: tag("typ-error"),

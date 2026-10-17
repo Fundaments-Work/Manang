@@ -13,13 +13,24 @@ import {
   visibleRows,
 } from "./tree";
 
-const file = (path: string): TreeEntry => ({ path, name: basename(path), kind: "file" });
+const file = (path: string): TreeEntry => ({
+  path,
+  name: basename(path),
+  kind: "file",
+});
 const dir = (path: string): TreeEntry => ({ path, name: basename(path), kind: "dir" });
 
 const listings = new Map<string, TreeEntry[]>([
   [
     "",
-    [file("main.typ"), dir("figures"), dir("sections"), file(".gitkeep"), file("10.typ"), file("2.typ")],
+    [
+      file("main.typ"),
+      dir("figures"),
+      dir("sections"),
+      file(".gitkeep"),
+      file("10.typ"),
+      file("2.typ"),
+    ],
   ],
   ["figures", [file("figures/b.svg"), file("figures/a.svg")]],
 ]);
@@ -46,7 +57,12 @@ describe("visible rows", () => {
       "10.typ",
       "main.typ",
     ]);
-    expect(rows[0]).toMatchObject({ depth: 0, expanded: false, position: 1, setSize: 5 });
+    expect(rows[0]).toMatchObject({
+      depth: 0,
+      expanded: false,
+      position: 1,
+      setSize: 5,
+    });
   });
 
   it("inlines expanded folders with depth and ARIA counts", () => {
@@ -131,8 +147,14 @@ describe("keyboard navigation (APG tree)", () => {
       path: "figures/a.svg",
     });
     expect(navigate(rows, "figures", "ArrowUp")).toEqual({ action: "none" });
-    expect(navigate(rows, "sections", "Home")).toEqual({ action: "focus", path: "figures" });
-    expect(navigate(rows, "figures", "End")).toEqual({ action: "focus", path: "main.typ" });
+    expect(navigate(rows, "sections", "Home")).toEqual({
+      action: "focus",
+      path: "figures",
+    });
+    expect(navigate(rows, "figures", "End")).toEqual({
+      action: "focus",
+      path: "main.typ",
+    });
   });
 
   it("Right opens a closed folder, then enters it; Left closes, then goes to the parent", () => {
@@ -156,7 +178,10 @@ describe("keyboard navigation (APG tree)", () => {
   });
 
   it("starts at the first row when nothing is focused", () => {
-    expect(navigate(rows, "gone", "ArrowDown")).toEqual({ action: "focus", path: "figures" });
+    expect(navigate(rows, "gone", "ArrowDown")).toEqual({
+      action: "focus",
+      path: "figures",
+    });
   });
 
   it("type-ahead finds the next row by prefix, wrapping", () => {
@@ -180,15 +205,17 @@ describe("paths", () => {
     const siblings = new Set(["a.typ"]);
     expect(nameProblem("", siblings)).toBe("Enter a name.");
     expect(nameProblem("x/y", siblings)).toBe("Names cannot contain slashes.");
-    expect(nameProblem("a.typ", siblings)).toBe('"a.typ" already exists in this folder.');
+    expect(nameProblem("a.typ", siblings)).toBe(
+      '"a.typ" already exists in this folder.',
+    );
     expect(nameProblem("a.typ", siblings, "a.typ")).toBeNull();
     expect(nameProblem("b.typ", siblings)).toBeNull();
   });
 
   it("finds the next free untitled name", () => {
     expect(uniqueName("untitled.typ", new Set())).toBe("untitled.typ");
-    expect(uniqueName("untitled.typ", new Set(["untitled.typ", "untitled 2.typ"]))).toBe(
-      "untitled 3.typ",
-    );
+    expect(
+      uniqueName("untitled.typ", new Set(["untitled.typ", "untitled 2.typ"])),
+    ).toBe("untitled 3.typ");
   });
 });

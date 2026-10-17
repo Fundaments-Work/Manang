@@ -54,7 +54,11 @@ describe("sanitizeLayout", () => {
   });
 
   it("clamps persisted sizes into range", () => {
-    const layout = sanitizeLayout({ sideWidth: 9999, panelHeight: 99999, splitRatio: 5 });
+    const layout = sanitizeLayout({
+      sideWidth: 9999,
+      panelHeight: 99999,
+      splitRatio: 5,
+    });
     expect(layout.sideWidth).toBe(SIDE_MAX);
     expect(layout.panelHeight).toBe(PANEL_MAX);
     expect(layout.splitRatio).toBe(SPLIT_MAX);

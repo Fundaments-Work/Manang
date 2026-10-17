@@ -6,7 +6,8 @@
  * from an older build can be validated before it reaches the UI.
  */
 
-export type SideView = "files" | "search" | "figures" | "references" | "plugins" | "settings";
+export type SideView =
+  "files" | "search" | "figures" | "references" | "plugins" | "settings";
 export type PanelTab = "problems" | "output";
 export type PreviewMode = "split" | "editor" | "preview";
 export type Theme = "dark" | "light";
@@ -59,7 +60,8 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export const clampSide = (width: number): number => clamp(Math.round(width), SIDE_MIN, SIDE_MAX);
+export const clampSide = (width: number): number =>
+  clamp(Math.round(width), SIDE_MIN, SIDE_MAX);
 export const clampPanel = (height: number): number =>
   clamp(Math.round(height), PANEL_MIN, PANEL_MAX);
 export const clampSplit = (ratio: number): number => clamp(ratio, SPLIT_MIN, SPLIT_MAX);
@@ -72,7 +74,10 @@ export function isNarrow(viewportWidth: number): boolean {
  * Split needs room for two readable columns. When the window is narrow it
  * degrades to the editor alone; an explicit "preview" choice is kept.
  */
-export function effectivePreview(mode: PreviewMode, viewportWidth: number): PreviewMode {
+export function effectivePreview(
+  mode: PreviewMode,
+  viewportWidth: number,
+): PreviewMode {
   return mode === "split" && isNarrow(viewportWidth) ? "editor" : mode;
 }
 
@@ -100,6 +105,17 @@ export function cyclePreview(mode: PreviewMode): PreviewMode {
   return PREVIEW_CYCLE[(at + 1) % PREVIEW_CYCLE.length] ?? "split";
 }
 
+/**
+ * Whether the side panel for `view` can be shown. Panels that browse the
+ * project need one open; Plugins and Settings work without.
+ */
+export function sidePanelVisible(
+  view: SideView | null,
+  hasProject: boolean,
+): view is SideView {
+  return view !== null && (hasProject || view === "plugins" || view === "settings");
+}
+
 function isOneOf<T extends string>(value: unknown, options: readonly T[]): value is T {
   return typeof value === "string" && (options as readonly string[]).includes(value);
 }
@@ -122,8 +138,12 @@ export function sanitizeLayout(raw: unknown): LayoutModel {
           : d.sideView,
     sideWidth: finite(r["sideWidth"]) ? clampSide(r["sideWidth"]) : d.sideWidth,
     panelOpen: typeof r["panelOpen"] === "boolean" ? r["panelOpen"] : d.panelOpen,
-    panelHeight: finite(r["panelHeight"]) ? clampPanel(r["panelHeight"]) : d.panelHeight,
-    panelTab: isOneOf(r["panelTab"], ["problems", "output"] as const) ? r["panelTab"] : d.panelTab,
+    panelHeight: finite(r["panelHeight"])
+      ? clampPanel(r["panelHeight"])
+      : d.panelHeight,
+    panelTab: isOneOf(r["panelTab"], ["problems", "output"] as const)
+      ? r["panelTab"]
+      : d.panelTab,
     preview: isOneOf(r["preview"], PREVIEW_CYCLE) ? r["preview"] : d.preview,
     splitRatio: finite(r["splitRatio"]) ? clampSplit(r["splitRatio"]) : d.splitRatio,
     theme: isOneOf(r["theme"], ["dark", "light"] as const) ? r["theme"] : d.theme,

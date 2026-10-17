@@ -35,7 +35,8 @@ export function projectApi(kernel: Kernel) {
     readFile: (path: string) => kernel.run<string>("project.read-file", { path }),
     writeFile: (path: string, content: string) =>
       kernel.run<{ bytes: number }>("project.write-file", { path, content }),
-    rename: (from: string, to: string) => kernel.run<null>("project.rename", { from, to }),
+    rename: (from: string, to: string) =>
+      kernel.run<null>("project.rename", { from, to }),
     trash: (path: string) =>
       kernel.run<{ trashed_to: string }>("project.delete", { path }),
     recent: () => kernel.run<RecentProject[]>("project.recent"),

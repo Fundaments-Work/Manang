@@ -15,7 +15,11 @@ import { searchText, type Command, type CommandGroup } from "./registry";
 
 export type PaletteMode = "commands" | "files";
 
-export const GROUP_ORDER: readonly CommandGroup[] = ["Workbench", "Files", "Plugin commands"];
+export const GROUP_ORDER: readonly CommandGroup[] = [
+  "Workbench",
+  "Files",
+  "Plugin commands",
+];
 
 export function fileCommand(path: string, open: (path: string) => void): Command {
   return {
@@ -46,7 +50,10 @@ export function paletteCandidates(input: PaletteInput): Command[] {
   return input.query.trim() === "" ? commands : [...commands, ...files];
 }
 
-export function rankCandidates(candidates: readonly Command[], query: string): Ranked<Command>[] {
+export function rankCandidates(
+  candidates: readonly Command[],
+  query: string,
+): Ranked<Command>[] {
   return fuzzyRank(candidates, query, searchText);
 }
 
