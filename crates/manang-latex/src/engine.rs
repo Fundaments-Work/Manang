@@ -135,7 +135,9 @@ pub fn run(request: &WorkerRequest) -> WorkerOutcome {
         },
         Err(e) => {
             let message = format!("{e:#}");
-            let kind = if request.only_cached && message.contains("cache") {
+            let kind = if request.only_cached
+                && (message.contains("cache") || message.contains("tectonic-format"))
+            {
                 FailureKind::Bundle
             } else {
                 FailureKind::Tex

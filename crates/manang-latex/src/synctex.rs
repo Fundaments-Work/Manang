@@ -235,7 +235,24 @@ impl Synctex {
                 x >= l && x <= rt && y >= t && y <= b
             })
             .min_by(|a, b| area(a).total_cmp(&area(b)));
-        let chosen = containing
+        // Inside that box, the glue/kern/math nodes know which file the text
+        // came from (a paragraph box is tagged with where it was closed, not
+        // where its words were read), so prefer the nearest of those.
+        let nearest_child = containing.and_then(|outer| {
+            let (l, t, rt, b) = outer.rect();
+            on_page
+                .clone()
+                .filter(|r| {
+                    matches!(r.kind, Kind::Point | Kind::VoidH)
+                        && r.x >= l
+                        && r.x <= rt
+                        && r.y >= t
+                        && r.y <= b
+                })
+                .min_by(|p, q| (p.x - x).abs().total_cmp(&(q.x - x).abs()))
+        });
+        let chosen = nearest_child
+            .or(containing)
             .or_else(|| on_page.min_by(|a, b| distance(a, x, y).total_cmp(&distance(b, x, y))));
         let record = chosen.ok_or_else(|| {
             LatexError::SynctexNoMatch(format!("page {page} has no mapped content"))
@@ -393,6 +410,18 @@ Count:33
                 line: 7
             }
         );
+    }
+
+    #[test]
+    fn reverse_credits_text_to_the_file_it_was_read_from() {
+        // A paragraph box closed in main.tex:6 holding glue read from one.tex:1.
+        let text = "Input:1:/work/main.tex\nInput:2:/work/one.tex\nContent:\n{1\n\
+                    (1,6:6553600,6553600:6553600,655360,0\n\
+                    g2,1:7000000,6553600\ng2,1:9000000,6553600\n)\n}1\n";
+        let s = Synctex::parse(text).expect("parses");
+        let at = s.reverse(1, 105.0, 99.0, "/work").expect("hit");
+        assert_eq!(at.file, "one.tex");
+        assert_eq!(at.line, 1);
     }
 
     #[test]
