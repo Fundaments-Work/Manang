@@ -184,6 +184,7 @@ describe("KernelSync", () => {
         commands: () => Promise.resolve([]),
         run: () => Promise.reject({ message: "gone" }),
         runBinary: () => Promise.reject({ message: "gone" }),
+        onEvent: () => Promise.resolve(() => undefined),
       },
       { applyText: () => undefined },
     );

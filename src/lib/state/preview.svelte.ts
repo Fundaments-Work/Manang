@@ -1,104 +1,121 @@
 /**
- * Preview state: the latest rendered artefact for the active document.
+ * Preview state: the rendered page the preview pane shows.
  *
- * `command` is configurable. Left unset, the first of `typst.render` /
- * `latex.export-pdf` that the kernel offers is used, so the pane lights up as
- * soon as such a plugin is installed and stays on its empty state until then.
+ * Pages come from `typst.render` as raw SVG bytes and become a Blob URL; they
+ * are never base64-encoded. A render follows each successful compile, and the
+ * previous page stays visible until the next one is ready, so the pane never
+ * flashes empty while typing.
  */
 
-import { kernel } from "$lib/kernel";
-import { ArtifactUrl, type ArtifactKind } from "$lib/kernel/artifact";
-import {
-  DEFAULT_PREVIEW_COMMANDS,
-  pickPreviewCommand,
-  renderPreview,
-} from "$lib/kernel/preview";
-import { session } from "$lib/state/session.svelte";
+import { kernel, errorMessage } from "$lib/kernel";
+import { typstApi } from "$lib/kernel/api";
+import { ArtifactUrl, sniffArtifact } from "$lib/kernel/artifact";
 
-export type PreviewStatus = "empty" | "loading" | "ready" | "error";
+import { build } from "./build.svelte";
+import { notice } from "./notice.svelte";
 
-const RENDER_DEBOUNCE_MS = 400;
+export const ZOOM_STEPS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const api = typstApi(kernel);
 
 export class PreviewState {
-  /** Explicit command id; `null` means auto-detect from the defaults. */
-  command = $state<string | null>(null);
-
-  /** Whether any producing command exists. Drives whether the pane is offered. */
-  available = $state(false);
-
-  status = $state<PreviewStatus>("empty");
-  kind = $state<ArtifactKind | null>(null);
+  /** 0-based. */
+  page = $state(0);
+  /** `null` fits the pane's width. */
+  zoom = $state<number | null>(null);
   url = $state<string | null>(null);
-  message = $state("");
+  error = $state("");
+  rendering = $state(false);
+  exporting = $state(false);
 
   readonly #holder = new ArtifactUrl();
   #generation = 0;
-  #timer: ReturnType<typeof setTimeout> | undefined;
 
-  /** Probe the kernel for a producing command. */
-  async detect(): Promise<void> {
-    const candidates =
-      this.command === null ? DEFAULT_PREVIEW_COMMANDS : [this.command];
-    this.available = (await pickPreviewCommand(kernel, candidates)) !== null;
+  get pageCount(): number {
+    return build.pages;
   }
 
-  /** Debounced render, for use while typing. */
-  schedule(): void {
-    clearTimeout(this.#timer);
-    this.#timer = setTimeout(() => void this.render(), RENDER_DEBOUNCE_MS);
-  }
-
+  /** Render the current page of the latest successful compile. */
   async render(): Promise<void> {
-    const generation = ++this.#generation;
-    const candidates =
-      this.command === null ? DEFAULT_PREVIEW_COMMANDS : [this.command];
-    const command = await pickPreviewCommand(kernel, candidates);
-    this.available = command !== null;
-    if (command === null) {
-      this.#show({ status: "empty" });
-      return;
-    }
-
-    this.status = "loading";
-    // Let queued edits reach the kernel so the render sees what is on screen.
-    await session.sync.idle();
-    const result = await renderPreview(kernel, command, {
-      id: session.sync.docId,
-    });
-    // A newer render superseded this one while it was in flight.
-    if (generation !== this.#generation) return;
-
-    if (result.state === "ready") {
-      const url = this.#holder.set(result.bytes, result.artifact.mime);
-      this.#show({ status: "ready", kind: result.artifact.kind, url });
-    } else if (result.state === "error") {
-      this.#show({ status: "error", message: result.message });
-    } else {
-      this.#show({ status: "empty" });
+    if (build.generation === 0 || build.pages === 0) return;
+    const run = ++this.#generation;
+    this.page = Math.min(this.page, Math.max(0, build.pages - 1));
+    this.rendering = true;
+    try {
+      const bytes = await api.render(this.page);
+      if (run !== this.#generation) return;
+      const artifact = sniffArtifact(bytes);
+      if (artifact === null) {
+        this.error = "The compiler returned a page the preview cannot read.";
+        return;
+      }
+      this.url = this.#holder.set(bytes, artifact.mime);
+      this.error = "";
+    } catch (error) {
+      if (run !== this.#generation) return;
+      this.error = errorMessage(error);
+    } finally {
+      if (run === this.#generation) this.rendering = false;
     }
   }
 
-  /** Free the Blob URL, e.g. when the pane is closed. */
+  go(page: number): void {
+    const last = Math.max(0, build.pages - 1);
+    const next = Math.max(0, Math.min(page, last));
+    if (next === this.page) return;
+    this.page = next;
+    void this.render();
+  }
+
+  zoomIn(): void {
+    const current = this.zoom ?? 1;
+    this.zoom =
+      ZOOM_STEPS.find((s) => s > current + 0.001) ??
+      ZOOM_STEPS[ZOOM_STEPS.length - 1] ??
+      2;
+  }
+
+  zoomOut(): void {
+    const current = this.zoom ?? 1;
+    this.zoom =
+      [...ZOOM_STEPS].reverse().find((s) => s < current - 0.001) ??
+      ZOOM_STEPS[0] ??
+      0.5;
+  }
+
+  fit(): void {
+    this.zoom = null;
+  }
+
+  /** Ask the compiler for a PDF and hand it to the browser as a download. */
+  async exportPdf(name: string): Promise<void> {
+    this.exporting = true;
+    try {
+      await build.compile();
+      if (build.status === "failed") {
+        notice.error("Fix the errors in the Problems panel before exporting a PDF.");
+        return;
+      }
+      const bytes = await api.exportPdf();
+      const url = URL.createObjectURL(
+        new Blob([new Uint8Array(bytes)], { type: "application/pdf" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name.replace(/\.[^.]+$/, "") + ".pdf";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      notice.show(`Exported ${link.download}.`);
+    } catch (error) {
+      notice.error(`Could not export a PDF: ${errorMessage(error)}`);
+    } finally {
+      this.exporting = false;
+    }
+  }
+
   release(): void {
-    clearTimeout(this.#timer);
     this.#generation += 1;
     this.#holder.release();
     this.url = null;
-  }
-
-  #show(next: {
-    status: PreviewStatus;
-    kind?: ArtifactKind;
-    url?: string;
-    message?: string;
-  }): void {
-    if (next.status !== "ready") {
-      this.#holder.release();
-    }
-    this.status = next.status;
-    this.kind = next.kind ?? null;
-    this.url = next.url ?? null;
-    this.message = next.message ?? "";
   }
 }
 
