@@ -38,8 +38,8 @@ Manang is strictly governed by the **Fundaments.work Design System**: *"Square, 
 * **Color Hierarchy:**
   - **Dark Base (Default):** Background `#141416`, Surface `#1c1c20`, Surface-Hi `#28282c`, Line `#3d3d42`, Text Primary `#e8e6e1`, Text Secondary `#9a9a9a`.
   - **Light Paper Override:** Page `#faf9f7`, Surface `#f4f3f0`, Line `#d4d3ce`, Ink `#1c1c1c`, Ink-60 `#6b6b6b`.
-  - **State Accent:** **Cerulean (`#38bdf8`)** used strictly for active selection, focus indicators, and state changes. Always paired with a text label or icon.
-  - **Math Highlight:** **Sage/Lime (`#c6f135`)** for mathematical equation delimiters and coordinates.
+  - **Accent:** **Acid lime (`#c6f135`)** is the mark and one action per view (one signal per frame), used for active selection and focus. Brand page is the source of truth. Always paired with a text label or icon.
+  - **Secondary:** **Sage (`#b3d17a`)**, used sparingly for math for mathematical equation delimiters and coordinates.
 
 ---
 
@@ -76,9 +76,9 @@ The Desk is the primary workspace where authors spend 90% of their time. It bala
 * **Editor Core:** Virtualized CodeMirror 6 text buffer in DM Mono 400 (13px, 1.6 line height).
 * **Quiet Syntax Highlighting:**
   - Prose: High-contrast `#e8e6e1`.
-  - Math Delimiters (`$ ... $`): Highlighted in calm Sage/Lime (`#c6f135`).
+  - Math Delimiters (`$ ... $`): Highlighted in Sage (`#b3d17a`).
   - Headings (`= Section`): Clean DM Sans 300 warm ivory.
-  - Functions & Commands: Cerulean (`#38bdf8`).
+  - Functions & Commands: Acid lime (`#c6f135`).
   - Comments: Low-contrast `#7a7a7a` italic.
 * **Margin Whispers (Diagnostics):**
   - Missing brackets, broken references, or warnings never trigger modal popups or terminal dumps.
@@ -152,7 +152,7 @@ Accessible via `Cmd+P` or clicking the shelf icon `[≡]`. A clean, quiet rail s
 
 ### 5.1. Design Affordances
 * **Spatial Layout:** 260px wide, dark background (`#141416`), 1px right border (`#3d3d42`).
-* **Active State:** The active document is highlighted with a 2px Cerulean left boundary and surface fill (`#1c1c20`).
+* **Active State:** The active document is highlighted with a 2px lime left boundary and surface fill (`#1c1c20`).
 * **Instant Filter:** Type immediately to fuzzy-search across files, sections, and figures.
 
 ---
@@ -243,7 +243,7 @@ When authoring slides using Typst **Touying** or **Polylux**, the live sheet ada
 
 ### 8.1. Design Affordances
 * **16:9 Canvas:** Framed in a clean `#141416` dark background with a 1px border `#3d3d42`.
-* **Bottom Slide Carousel:** Miniature cards for rapid jumping across slides with an active Cerulean hairline indicator.
+* **Bottom Slide Carousel:** Miniature cards for rapid jumping across slides with an active lime hairline indicator.
 * **One-Click Presentation:** Pressing `F5` launches distraction-free full-screen presentation mode with instant keyboard slide navigation.
 
 ---

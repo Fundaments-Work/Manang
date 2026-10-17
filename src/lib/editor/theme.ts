@@ -130,7 +130,7 @@ export const manangTheme = EditorView.theme({
  *   prose              text primary
  *   math delimiters    the maths token (sage/lime)
  *   headings           DM Sans 300, warm ivory
- *   functions, keys    cerulean
+ *   functions, keys    lime
  *   comments           low-contrast, italic
  */
 export function manangTypstHighlight(

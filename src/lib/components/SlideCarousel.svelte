@@ -5,7 +5,7 @@
    * Slide carousel — DESIGN.md §8.1.
    *
    * Miniature cards for rapid jumping. The active slide is marked by a
-   * cerulean hairline along its top edge: a 1px line, because depth is tonal
+   * lime hairline along its top edge: a 1px line, because depth is tonal
    * and the system has no shadows to lean on.
    */
 </script>

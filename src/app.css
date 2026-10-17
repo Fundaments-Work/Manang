@@ -1,11 +1,11 @@
 /* Manang design tokens — Fundaments.work design system.
  *
- * Authority: /run/media/sapiens/Development/Fundaments/design-system/tokens.md
- * Visual spec: DESIGN.md §2
+ * Authority: https://fundaments.work/brand/ (brand page wins over the local
+ * design-system folder). Visual spec: DESIGN.md §2
  *
- * Two layers, per the system: a Base that never varies per product, and one
- * Accent. Manang's accent is Cerulean (#38bdf8) for state only; Acid Lime
- * (#c6f135) is reserved exclusively for mathematics (DESIGN.md §2.2).
+ * Two layers, per the brand: a Base shared by every product, and the Accent.
+ * The accent is Acid lime (#c6f135): the mark and one action per view, one
+ * signal per frame. Sage (#b3d17a) is the secondary, used sparingly.
  *
  * Runtime theming uses `@theme inline` so utilities resolve through the
  * custom properties and the light override swaps without a rebuild.
@@ -40,14 +40,13 @@
   --mng-text-60: #9a9a9a;
   --mng-text-muted: #7a7a7a; /* never text — decorative rules and disabled only */
 
-  /* Accent: state, selection, focus. Always paired with a text label or icon. */
-  --mng-accent: #38bdf8;
-  --mng-accent-ink: #141416; /* ink set on cerulean — the base, not a new hue */
+  /* Accent: one action per view, selection, focus. Always paired with a text
+   * label or icon. Lime scores 14.16:1 on carbon but 1.24:1 on paper. */
+  --mng-accent: #c6f135;
+  --mng-accent-ink: #141416; /* ink set on lime — the base, not a new hue */
 
-  /* Mathematics only: delimiters and coordinate readouts.
-   * Lime scores 14.16:1 on carbon but 1.24:1 on paper, so the light theme
-   * must never reuse it — see .theme-light below. */
-  --mng-math: #c6f135;
+  /* Secondary accent, sparingly: mathematics delimiters and coordinates. */
+  --mng-math: #b3d17a;
 }
 
 .theme-light {
@@ -66,15 +65,14 @@
   --mng-text-60: #6b6b6b;
   --mng-text-muted: #9c9c9c;
 
-  /* Cerulean fails on paper the same way lime does, so the light theme darkens
-   * it by mixing it toward ink. Derived from the token rather than introducing a
-   * new hue: 4.24:1 on paper, which clears the 3:1 floor for UI components and
-   * borders. Accent text always ships beside it. */
-  --mng-accent: color-mix(in srgb, #38bdf8 62%, #1c1c1c);
+  /* Lime fails on paper, so the light theme darkens it by mixing it toward
+   * ink. The brand page defines no light theme; contrast must be re-verified
+   * before this ships. Accent text always ships beside it. */
+  --mng-accent: color-mix(in srgb, #c6f135 40%, #1c1c1c);
   --mng-accent-ink: #faf9f7;
 
-  /* Lime is unusable on paper (1.24:1). Mathematics falls back to ink with a
-   * hairline rule rather than inventing a second accent hue. */
+  /* Sage is unusable on paper. Mathematics falls back to ink with a hairline
+   * rule rather than inventing a second accent hue. */
   --mng-math: #1c1c1c;
 }
 

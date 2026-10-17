@@ -62,7 +62,7 @@ function seedScene(): FigureScene {
     id: formatNodeId(3),
     from: { x: 310, y: 242 },
     to: { x: 640, y: 242 },
-    color: "#38bdf8",
+    color: "#c6f135",
     label: "H",
   };
   const math: FigureNode = {
@@ -72,7 +72,7 @@ function seedScene(): FigureScene {
     y: 120,
     tex: "|0⟩  ⟶  |1⟩",
     size: 28,
-    color: "#c6f135",
+    color: "#b3d17a",
   };
 
   return {
@@ -236,7 +236,7 @@ export class InkState {
       y: point.y,
       tex: "|ψ⟩",
       size: 26,
-      color: "#c6f135",
+      color: "#b3d17a",
     });
   }
 

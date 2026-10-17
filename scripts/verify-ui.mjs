@@ -349,7 +349,7 @@ async function main() {
     );
 
     check(
-      "active document carries a 2px cerulean left boundary",
+      "active document carries a 2px lime left boundary",
       await library.evaluate(`(() => {
         const active = document.querySelector('[aria-current="true"]');
         if (!active) return false;
