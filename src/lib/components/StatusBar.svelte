@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "$lib/components/ui/Icon.svelte";
   import { inTauri } from "$lib/kernel";
-  import { build, formatMs } from "$lib/state/build.svelte";
+  import { build } from "$lib/state/build.svelte";
   import { documents } from "$lib/state/documents.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { notice } from "$lib/state/notice.svelte";
@@ -30,19 +30,7 @@
   );
   const showsCompile = $derived(workspace.project !== null && build.status !== "idle");
 
-  const compileText = $derived(
-    build.status === "compiling"
-      ? "Compiling"
-      : build.status === "ok"
-        ? `Compiled in ${formatMs(build.durationMs)}`
-        : build.status === "failed"
-          ? countLabel(build.counts)
-          : build.status === "unsupported"
-            ? "No compiler for this file"
-            : build.status === "unavailable"
-              ? "No compiler available"
-              : "",
-  );
+  const compileText = $derived(build.summary);
   const warnings = $derived(build.status === "ok" && build.counts.warnings > 0);
 
   // The writing plugin's count (prose only) once it has answered, else the

@@ -15,9 +15,10 @@
    * zoom, refresh and export. The page is paper: it keeps the paper tokens in
    * every theme so what is on screen matches what prints.
    *
-   * States: compiling (with the last page kept visible), ready, failed (last
-   * good page plus a way to the errors), and the two cases where there is
-   * nothing to show because the engine is missing.
+   * Typst shows one SVG page at a time, LaTeX a scrollable PDF (pdf.js, loaded on
+   * first use), Markdown the sanitised HTML. States: compiling (the last page
+   * stays visible), ready, failed (last good page plus a way to the errors), and
+   * engine trouble (a message that says how to fix it, never a crash).
    */
 
   const engine = $derived(
@@ -36,6 +37,20 @@
     untrack(() => void preview.render());
   });
 
+  const kind = $derived(preview.kind);
+  const paged = $derived(kind === "svg" || kind === "pdf");
+  const settled = $derived(
+    build.status === "ok" || build.status === "failed" || build.status === "compiling",
+  );
+  const shown = $derived(
+    settled &&
+      (kind === "html"
+        ? build.html !== ""
+        : kind === "pdf"
+          ? preview.pdf !== null && preview.shownTarget === build.target
+          : preview.url !== null && preview.shownTarget === build.target),
+  );
+
   const widthStyle = $derived(
     preview.zoom === null
       ? "width: 100%; max-width: 920px"
@@ -43,13 +58,20 @@
   );
 
   function onkeydown(event: KeyboardEvent): void {
+    if (!paged) return;
     if (event.key === "PageDown") preview.go(preview.page + 1);
     else if (event.key === "PageUp") preview.go(preview.page - 1);
     else return;
     event.preventDefault();
   }
 
-  const exportable = $derived(build.status === "ok" || build.status === "failed");
+  const exportable = $derived(
+    kind !== "html" && (build.status === "ok" || build.status === "failed"),
+  );
+  const pages = $derived(preview.pageCount);
+  const banner = $derived(
+    build.failure !== null ? build.failure.title : countLabel(build.counts),
+  );
 </script>
 
 <section class="flex h-full min-h-0 min-w-0 flex-col bg-bg" aria-label="Preview">
@@ -58,58 +80,80 @@
     role="toolbar"
     aria-label="Preview controls"
   >
-    <button
-      type="button"
-      class="mng-icon-btn"
-      aria-label="Previous page"
-      disabled={preview.page <= 0 || build.pages === 0}
-      onclick={() => preview.go(preview.page - 1)}
-    >
-      <Icon name="arrowUp" size={14} />
-    </button>
-    <button
-      type="button"
-      class="mng-icon-btn"
-      aria-label="Next page"
-      disabled={preview.page >= build.pages - 1}
-      onclick={() => preview.go(preview.page + 1)}
-    >
-      <Icon name="arrowDown" size={14} />
-    </button>
-    <span class="px-1.5 font-mono text-[11px] text-text-60" aria-live="polite">
-      {#if build.pages > 0}Page {preview.page + 1} of {build.pages}{:else}No pages{/if}
-    </span>
+    {#if paged}
+      <button
+        type="button"
+        class="mng-icon-btn"
+        aria-label="Previous page"
+        disabled={preview.page <= 0 || pages === 0}
+        onclick={() => preview.go(preview.page - 1)}
+      >
+        <Icon name="arrowUp" size={14} />
+      </button>
+      <button
+        type="button"
+        class="mng-icon-btn"
+        aria-label="Next page"
+        disabled={preview.page >= pages - 1}
+        onclick={() => preview.go(preview.page + 1)}
+      >
+        <Icon name="arrowDown" size={14} />
+      </button>
+      <span class="px-1.5 font-mono text-[11px] text-text-60" aria-live="polite">
+        {#if pages > 0}Page {preview.page + 1} of {pages}{:else}No pages{/if}
+      </span>
 
-    <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
+      <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
 
-    <button
-      type="button"
-      class="mng-icon-btn"
-      aria-label="Zoom out"
-      disabled={(preview.zoom ?? 1) <= 0.5}
-      onclick={() => preview.zoomOut()}
-    >
-      <Icon name="clear" size={14} />
-    </button>
-    <button
-      type="button"
-      class="mng-btn h-6 min-w-12 justify-center border-transparent bg-transparent px-1.5 font-mono text-[11px] text-text-60"
-      aria-label={preview.zoom === null
-        ? "Zoom: fit width. Select to reset"
-        : `Zoom ${Math.round(preview.zoom * 100)} percent. Select to fit width`}
-      onclick={() => preview.fit()}
-    >
-      {preview.zoom === null ? "Fit" : `${Math.round(preview.zoom * 100)}%`}
-    </button>
-    <button
-      type="button"
-      class="mng-icon-btn"
-      aria-label="Zoom in"
-      disabled={(preview.zoom ?? 1) >= 2}
-      onclick={() => preview.zoomIn()}
-    >
-      <Icon name="plus" size={14} />
-    </button>
+      <button
+        type="button"
+        class="mng-icon-btn"
+        aria-label="Zoom out"
+        disabled={(preview.zoom ?? 1) <= 0.5}
+        onclick={() => preview.zoomOut()}
+      >
+        <Icon name="clear" size={14} />
+      </button>
+      <button
+        type="button"
+        class="mng-btn h-6 min-w-12 justify-center border-transparent bg-transparent px-1.5 font-mono text-[11px] text-text-60"
+        aria-label={preview.zoom === null
+          ? "Zoom: fit width. Select to reset"
+          : `Zoom ${Math.round(preview.zoom * 100)} percent. Select to fit width`}
+        onclick={() => preview.fit()}
+      >
+        {preview.zoom === null ? "Fit" : `${Math.round(preview.zoom * 100)}%`}
+      </button>
+      <button
+        type="button"
+        class="mng-icon-btn"
+        aria-label="Zoom in"
+        disabled={(preview.zoom ?? 1) >= 2}
+        onclick={() => preview.zoomIn()}
+      >
+        <Icon name="plus" size={14} />
+      </button>
+    {:else if kind === "html"}
+      <span class="px-1.5 font-mono text-[11px] text-text-60">Markdown preview</span>
+    {/if}
+
+    {#if build.viaMain && build.target !== ""}
+      <span
+        class="ml-2 min-w-0 truncate font-mono text-[11px] text-text-muted"
+        title="This file is compiled through the project's main file"
+      >
+        via {build.target}
+      </span>
+    {/if}
+
+    {#if kind === "pdf" && build.backend !== ""}
+      <span
+        class="ml-2 min-w-0 truncate font-mono text-[11px] text-text-muted"
+        title="The TeX engine that compiled this document"
+      >
+        {build.backend}
+      </span>
+    {/if}
 
     <span class="ml-auto"></span>
 
@@ -119,7 +163,7 @@
       aria-label="Refresh preview"
       title="Compile now"
       disabled={build.status === "unsupported" || build.status === "unavailable"}
-      onclick={() => void build.compile()}
+      onclick={() => void build.compile(true)}
     >
       <Icon name="refresh" size={14} />
     </button>
@@ -137,14 +181,43 @@
 
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div
-    class="relative min-h-0 flex-1 overflow-auto"
+    class="relative min-h-0 flex-1 {kind === 'pdf' && shown ? '' : 'overflow-auto'}"
     tabindex="0"
     role="region"
     aria-label="Rendered page"
     aria-busy={build.status === "compiling"}
     {onkeydown}
   >
-    {#if preview.url !== null && (build.status === "ok" || build.status === "failed" || build.status === "compiling")}
+    {#if shown && kind === "pdf" && preview.pdf !== null}
+      {#await import("./PdfViewer.svelte") then viewer}
+        <viewer.default
+          data={preview.pdf}
+          zoom={preview.zoom}
+          jump={preview.jump}
+          page={preview.page}
+          onpage={(page: number) => (preview.page = page)}
+          onpages={(count: number) => (preview.pdfPages = count)}
+          onerror={(message: string) => (preview.error = message)}
+        />
+      {:catch}
+        <p class="m-0 px-6 pt-16 text-center text-xs text-text-60" role="alert">
+          The PDF viewer could not be loaded. Restart Manang and try again.
+        </p>
+      {/await}
+    {:else if shown && kind === "html"}
+      <div class="flex min-h-full justify-center px-6 py-6">
+        <article
+          class="mng-paper-prose block self-start border border-line bg-paper px-10 py-9 text-paper-ink"
+          style="width: 100%; max-width: 760px"
+          aria-label="Markdown preview"
+        >
+          <!-- The HTML is sanitised in Rust (`markdown.render-html`): raw HTML is
+               filtered to an allow-list and URLs are checked there. -->
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          {@html build.html}
+        </article>
+      </div>
+    {:else if shown}
       <div class="flex min-h-full justify-center px-6 py-6">
         <img
           class="block h-auto self-start border border-line bg-paper"
@@ -153,25 +226,43 @@
           alt="Page {preview.page + 1} of {build.pages}"
         />
       </div>
+    {:else if build.failure !== null}
+      <div class="mx-auto max-w-sm px-6 pt-16 text-xs leading-relaxed text-text-60">
+        <p class="m-0 text-text">{build.failure.title}</p>
+        {#if build.failure.fix !== null}
+          <p class="mt-2">{build.failure.fix}</p>
+        {/if}
+        <div class="mt-3 flex gap-2">
+          {#if build.failure.code === "no_tex"}
+            <button type="button" class="mng-btn" disabled title="Not available yet"
+              >Download the optional built-in engine</button
+            >
+          {/if}
+          {#if build.failure.code === "bundle_unavailable"}
+            <button type="button" class="mng-btn" onclick={() => build.allowNetwork()}
+              >Download TeX files</button
+            >
+          {/if}
+          <button type="button" class="mng-btn" onclick={() => void build.compile(true)}
+            >Try again</button
+          >
+        </div>
+      </div>
     {:else if build.status === "unsupported"}
       <div class="mx-auto max-w-sm px-6 pt-16 text-xs leading-relaxed text-text-60">
         <p class="m-0 text-text">No preview for this file</p>
         <p class="mt-2">
-          {#if workspace.project !== null && tabs.active !== undefined && (engine === "latex" || engine === "markdown")}
-            {ENGINE_NAMES[engine]} documents can be edited and saved, but there is no {ENGINE_NAMES[
-              engine
-            ]} compiler plugin installed yet. Typst files preview here.
-          {:else}
-            Open a Typst document to see it rendered here.
-          {/if}
+          Open a Typst, LaTeX or Markdown document to see it rendered here.
         </p>
       </div>
     {:else if build.status === "unavailable"}
       <div class="mx-auto max-w-sm px-6 pt-16 text-xs leading-relaxed text-text-60">
-        <p class="m-0 text-text">The Typst compiler is not available</p>
+        <p class="m-0 text-text">
+          The {ENGINE_NAMES[build.engine ?? engine]} compiler is not available
+        </p>
         <p class="mt-2">
-          The kernel has no <span class="font-mono text-[11px]">typst.compile</span> command.
-          Check the Plugins panel, then restart Manang.
+          The kernel has no compile command for it. Check the Plugins panel, then
+          restart Manang.
         </p>
       </div>
     {:else if build.status === "failed"}
@@ -186,20 +277,24 @@
           onclick={() => layout.showPanel("problems")}>Show problems</button
         >
       </div>
+    {:else if preview.error !== ""}
+      <p class="m-0 px-6 pt-16 text-center text-xs text-text-60" role="alert">
+        {preview.error}
+      </p>
     {:else}
       <p class="m-0 px-6 pt-16 text-center text-xs text-text-muted" role="status">
         {build.status === "compiling" ? "Compiling" : "Waiting for the first compile"}
       </p>
     {/if}
 
-    {#if build.status === "failed" && preview.url !== null}
+    {#if build.status === "failed" && shown}
       <button
         type="button"
-        class="absolute top-2 left-1/2 flex -translate-x-1/2 items-center gap-2 border border-line bg-surface px-3 py-1.5 text-xs text-text hover:bg-surface-hi"
+        class="absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 border border-line bg-surface px-3 py-1.5 text-xs text-text hover:bg-surface-hi"
         onclick={() => layout.showPanel("problems")}
       >
         <Icon name="warning" size={13} />
-        {countLabel(build.counts)}. Showing the last good page.
+        {banner}. Showing the last good page. Show problems
       </button>
     {:else if build.status === "ok"}
       <span class="sr-only" role="status">Compiled in {formatMs(build.durationMs)}</span
@@ -207,3 +302,104 @@
     {/if}
   </div>
 </section>
+
+<style>
+  /* Typography for the Markdown page: DM Sans 400 for text, DM Mono for code,
+     size and colour (never weight) carry the hierarchy. Tokens only. */
+  .mng-paper-prose {
+    font-family: var(--font-sans, "DM Sans", sans-serif);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+  .mng-paper-prose :global(strong),
+  .mng-paper-prose :global(b) {
+    font-weight: 400;
+    color: var(--mng-paper-ink);
+  }
+  .mng-paper-prose :global(h1),
+  .mng-paper-prose :global(h2),
+  .mng-paper-prose :global(h3),
+  .mng-paper-prose :global(h4),
+  .mng-paper-prose :global(h5),
+  .mng-paper-prose :global(h6) {
+    font-weight: 400;
+    line-height: 1.25;
+    margin: 1.6em 0 0.5em;
+  }
+  .mng-paper-prose :global(h1) {
+    font-size: 28px;
+    font-weight: 300;
+    margin-top: 0;
+  }
+  .mng-paper-prose :global(h2) {
+    font-size: 20px;
+    border-bottom: 1px solid var(--mng-paper-ink-60);
+    padding-bottom: 0.2em;
+  }
+  .mng-paper-prose :global(h3) {
+    font-size: 16px;
+  }
+  .mng-paper-prose :global(h4),
+  .mng-paper-prose :global(h5),
+  .mng-paper-prose :global(h6) {
+    font-size: 14px;
+    color: var(--mng-paper-ink-60);
+  }
+  .mng-paper-prose :global(p),
+  .mng-paper-prose :global(ul),
+  .mng-paper-prose :global(ol),
+  .mng-paper-prose :global(blockquote),
+  .mng-paper-prose :global(pre),
+  .mng-paper-prose :global(table) {
+    margin: 0 0 1em;
+  }
+  .mng-paper-prose :global(ul),
+  .mng-paper-prose :global(ol) {
+    padding-left: 1.5em;
+  }
+  .mng-paper-prose :global(a) {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .mng-paper-prose :global(code),
+  .mng-paper-prose :global(pre),
+  .mng-paper-prose :global(kbd) {
+    font-family: var(--font-mono, "DM Mono", monospace);
+    font-size: 12px;
+  }
+  .mng-paper-prose :global(pre) {
+    padding: 12px 14px;
+    border: 1px solid var(--mng-paper-ink-60);
+    overflow-x: auto;
+  }
+  .mng-paper-prose :global(blockquote) {
+    padding-left: 14px;
+    border-left: 1px solid var(--mng-paper-ink-60);
+    color: var(--mng-paper-ink-60);
+  }
+  .mng-paper-prose :global(table) {
+    border-collapse: collapse;
+  }
+  .mng-paper-prose :global(th),
+  .mng-paper-prose :global(td) {
+    border: 1px solid var(--mng-paper-ink-60);
+    padding: 4px 10px;
+    text-align: left;
+    font-weight: 400;
+  }
+  .mng-paper-prose :global(hr) {
+    border: 0;
+    border-top: 1px solid var(--mng-paper-ink-60);
+    margin: 1.6em 0;
+  }
+  .mng-paper-prose :global(img) {
+    max-width: 100%;
+    height: auto;
+  }
+  .mng-paper-prose :global(:last-child) {
+    margin-bottom: 0;
+  }
+</style>

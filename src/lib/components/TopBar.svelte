@@ -39,7 +39,8 @@
   );
   const canExport = $derived(
     tabs.active !== undefined &&
-      engineOf(tabs.active.path) === "typst" &&
+      (engineOf(tabs.active.path) === "typst" ||
+        engineOf(tabs.active.path) === "latex") &&
       (build.status === "ok" || build.status === "failed"),
   );
 

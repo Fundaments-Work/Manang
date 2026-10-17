@@ -71,12 +71,12 @@
     build.status === "ok"
       ? "No problems. The document compiled cleanly."
       : build.status === "unsupported"
-        ? "Problems appear here for Typst documents. This file has no compiler yet."
+        ? "Problems appear here for Typst, LaTeX and Markdown documents. This file has nothing to compile."
         : build.status === "unavailable"
           ? "No compiler is available, so there is nothing to check."
           : build.status === "compiling"
             ? "Compiling"
-            : "Nothing has been compiled yet. Open a Typst document and problems appear here.",
+            : "Nothing has been compiled yet. Open a document and problems appear here.",
   );
 </script>
 

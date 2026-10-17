@@ -36,7 +36,7 @@ export type MockPluginFactory = (emit: Emit) => MockPlugin;
 export interface MockOptions {
   /** Whole plugins; each contributes its commands like a registered plugin. */
   readonly plugins?: readonly MockPluginFactory[];
-  /** Extra commands, e.g. `lint.diagnostics`, keyed by id. */
+  /** Extra commands keyed by id. */
   readonly handlers?: Readonly<Record<string, MockHandler>>;
   /** Extra commands that return binary artefacts, keyed by id. */
   readonly binaryHandlers?: Readonly<Record<string, (args: Args) => Uint8Array>>;

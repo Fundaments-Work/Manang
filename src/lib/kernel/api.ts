@@ -10,6 +10,8 @@ import type { Kernel } from "./client";
 import type {
   CompileReport,
   Engine,
+  LatexReport,
+  MarkdownRender,
   GitStatus,
   ProjectEntry,
   ProjectListQuery,
@@ -210,3 +212,29 @@ export function writingApi(kernel: Kernel) {
 }
 
 export type WritingApi = ReturnType<typeof writingApi>;
+
+export interface LatexCompileRequest {
+  /** Absolute path of the main file; the plugin compiles what is on disk. */
+  readonly main: string;
+  /** Let the engine fetch missing TeX files once (needs the network). */
+  readonly allow_network?: boolean;
+}
+
+export function latexApi(kernel: Kernel) {
+  return {
+    compile: (request: LatexCompileRequest) =>
+      kernel.run<LatexReport>("latex.compile", { ...request }),
+    /** The PDF of the latest build of `main`, as raw bytes. */
+    exportPdf: (main: string) => kernel.runBinary("latex.export-pdf", { main }),
+  };
+}
+
+export function markdownApi(kernel: Kernel) {
+  return {
+    renderHtml: (source: string) =>
+      kernel.run<MarkdownRender>("markdown.render-html", { source }),
+  };
+}
+
+export type LatexApi = ReturnType<typeof latexApi>;
+export type MarkdownApi = ReturnType<typeof markdownApi>;

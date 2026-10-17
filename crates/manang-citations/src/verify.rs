@@ -7,21 +7,24 @@ use serde_json::Value;
 pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResult {
     // 1. Try DOI resolution (Crossref -> OpenAlex)
     if let Some(doi) = &local.doi
-        && let Ok(result) = verify_by_doi(local, doi, client) {
-            return result;
-        }
+        && let Ok(result) = verify_by_doi(local, doi, client)
+    {
+        return result;
+    }
 
     // 2. Try arXiv resolution (export.arxiv.org -> OpenAlex)
     if let Some(arxiv_id) = &local.arxiv_id
-        && let Ok(result) = verify_by_arxiv(local, arxiv_id, client) {
-            return result;
-        }
+        && let Ok(result) = verify_by_arxiv(local, arxiv_id, client)
+    {
+        return result;
+    }
 
     // 3. Try bibliographic title search (Crossref search -> OpenAlex search)
     if let Some(title) = &local.title
-        && let Ok(result) = verify_by_title_search(local, title, client) {
-            return result;
-        }
+        && let Ok(result) = verify_by_title_search(local, title, client)
+    {
+        return result;
+    }
 
     VerificationResult {
         status: VerificationStatus::NotFound,
@@ -49,20 +52,22 @@ fn verify_by_doi(
     let crossref_url = format!("https://api.crossref.org/works/{clean_doi}");
     if let Ok(resp) = client.get(&crossref_url, &[("Accept", "application/json")])
         && resp.status == 200
-            && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
-                && let Some(msg) = val.get("message")
-                    && let Some(remote) = parse_crossref_work(msg, local.key.clone()) {
-                        return Ok(compare_entries(local, remote));
-                    }
+        && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
+        && let Some(msg) = val.get("message")
+        && let Some(remote) = parse_crossref_work(msg, local.key.clone())
+    {
+        return Ok(compare_entries(local, remote));
+    }
 
     // Try OpenAlex fallback: https://api.openalex.org/works/https://doi.org/{clean_doi}
     let openalex_url = format!("https://api.openalex.org/works/https://doi.org/{clean_doi}");
     if let Ok(resp) = client.get(&openalex_url, &[("Accept", "application/json")])
         && resp.status == 200
-            && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
-                && let Some(remote) = parse_openalex_work(&val, local.key.clone()) {
-                    return Ok(compare_entries(local, remote));
-                }
+        && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
+        && let Some(remote) = parse_openalex_work(&val, local.key.clone())
+    {
+        return Ok(compare_entries(local, remote));
+    }
 
     Err(CitationsError::Http(
         "DOI not found in Crossref or OpenAlex".to_string(),
@@ -83,21 +88,23 @@ fn verify_by_arxiv(
     let arxiv_url = format!("https://export.arxiv.org/api/query?id_list={clean_id}");
     if let Ok(resp) = client.get(&arxiv_url, &[])
         && resp.status == 200
-            && let Ok(xml_str) = std::str::from_utf8(&resp.body)
-                && let Some(remote) = parse_arxiv_atom(xml_str, clean_id, local.key.clone()) {
-                    return Ok(compare_entries(local, remote));
-                }
+        && let Ok(xml_str) = std::str::from_utf8(&resp.body)
+        && let Some(remote) = parse_arxiv_atom(xml_str, clean_id, local.key.clone())
+    {
+        return Ok(compare_entries(local, remote));
+    }
 
     // Try OpenAlex fallback: https://api.openalex.org/works?filter=ids.arxiv:{clean_id}
     let openalex_url = format!("https://api.openalex.org/works?filter=ids.arxiv:{clean_id}");
     if let Ok(resp) = client.get(&openalex_url, &[("Accept", "application/json")])
         && resp.status == 200
-            && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
-                && let Some(results) = val.get("results").and_then(|v| v.as_array())
-                    && let Some(first) = results.first()
-                        && let Some(remote) = parse_openalex_work(first, local.key.clone()) {
-                            return Ok(compare_entries(local, remote));
-                        }
+        && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
+        && let Some(results) = val.get("results").and_then(|v| v.as_array())
+        && let Some(first) = results.first()
+        && let Some(remote) = parse_openalex_work(first, local.key.clone())
+    {
+        return Ok(compare_entries(local, remote));
+    }
 
     Err(CitationsError::Http("arXiv ID not found".to_string()))
 }
@@ -114,26 +121,28 @@ fn verify_by_title_search(
         format!("https://api.crossref.org/works?query.bibliographic={encoded}&rows=1");
     if let Ok(resp) = client.get(&crossref_url, &[("Accept", "application/json")])
         && resp.status == 200
-            && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
-                && let Some(items) = val
-                    .get("message")
-                    .and_then(|m| m.get("items"))
-                    .and_then(|it| it.as_array())
-                    && let Some(first) = items.first()
-                        && let Some(remote) = parse_crossref_work(first, local.key.clone()) {
-                            return Ok(compare_entries(local, remote));
-                        }
+        && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
+        && let Some(items) = val
+            .get("message")
+            .and_then(|m| m.get("items"))
+            .and_then(|it| it.as_array())
+        && let Some(first) = items.first()
+        && let Some(remote) = parse_crossref_work(first, local.key.clone())
+    {
+        return Ok(compare_entries(local, remote));
+    }
 
     // OpenAlex query: https://api.openalex.org/works?search={encoded}&per_page=1
     let openalex_url = format!("https://api.openalex.org/works?search={encoded}&per_page=1");
     if let Ok(resp) = client.get(&openalex_url, &[("Accept", "application/json")])
         && resp.status == 200
-            && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
-                && let Some(results) = val.get("results").and_then(|v| v.as_array())
-                    && let Some(first) = results.first()
-                        && let Some(remote) = parse_openalex_work(first, local.key.clone()) {
-                            return Ok(compare_entries(local, remote));
-                        }
+        && let Ok(val) = serde_json::from_slice::<Value>(&resp.body)
+        && let Some(results) = val.get("results").and_then(|v| v.as_array())
+        && let Some(first) = results.first()
+        && let Some(remote) = parse_openalex_work(first, local.key.clone())
+    {
+        return Ok(compare_entries(local, remote));
+    }
 
     Err(CitationsError::Http(
         "Title search yielded no authoritative matches".to_string(),
@@ -173,13 +182,14 @@ fn compare_entries(local: &Entry, remote: Entry) -> VerificationResult {
 
     // 3. Compare publication year
     if let (Some(loc_y), Some(rem_y)) = (local.year, remote.year)
-        && loc_y != rem_y {
-            differences.push(Difference {
-                field: "year".to_string(),
-                local: loc_y.to_string(),
-                remote: rem_y.to_string(),
-            });
-        }
+        && loc_y != rem_y
+    {
+        differences.push(Difference {
+            field: "year".to_string(),
+            local: loc_y.to_string(),
+            remote: rem_y.to_string(),
+        });
+    }
 
     let status = if differences.is_empty() {
         VerificationStatus::Verified
@@ -236,10 +246,11 @@ fn parse_crossref_work(msg: &Value, fallback_key: String) -> Option<Entry> {
         .or_else(|| msg.get("published-print"))
         .or_else(|| msg.get("published-online"))
         && let Some(parts) = issued.get("date-parts").and_then(|v| v.as_array())
-            && let Some(first_arr) = parts.first().and_then(|v| v.as_array())
-                && let Some(y) = first_arr.first().and_then(|v| v.as_u64()) {
-                    year = Some(y as u32);
-                }
+        && let Some(first_arr) = parts.first().and_then(|v| v.as_array())
+        && let Some(y) = first_arr.first().and_then(|v| v.as_u64())
+    {
+        year = Some(y as u32);
+    }
 
     let container = msg
         .get("container-title")

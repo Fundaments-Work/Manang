@@ -508,7 +508,7 @@ async function main() {
       await page.evaluate(`(() => {
       const names = [...document.querySelectorAll("[data-project]")].map((c) => c.dataset.project.split("/").pop());
       const missing = document.querySelector('[data-project$="old-thesis"] button');
-      return names.join() === "entropy-paper,lecture-notes,thesis-chapter-3,old-thesis" && missing?.disabled === true && missing.textContent.includes("Folder not found");
+      return names.join() === "entropy-paper,lecture-notes,thesis-chapter-3,thesis-draft,old-thesis" && missing?.disabled === true && missing.textContent.includes("Folder not found");
     })()`),
     );
     check(
@@ -534,7 +534,7 @@ async function main() {
       ),
     );
     await clickText(page, "button", "Clear search");
-    check("clearing the search restores the list", (await cards(page)).length === 4);
+    check("clearing the search restores the list", (await cards(page)).length === 5);
 
     await clickText(page, 'nav[aria-label="Home sections"] button', "Pinned");
     check(
@@ -564,13 +564,13 @@ async function main() {
     check(
       "sort by name orders within pinned and unpinned",
       (await cards(page)).join() ===
-        "entropy-paper,lecture-notes,old-thesis,thesis-chapter-3",
+        "entropy-paper,lecture-notes,old-thesis,thesis-chapter-3,thesis-draft",
       (await cards(page)).join(),
     );
     await click(page, 'button[role="radio"][aria-label="List"]');
     check(
       "list view keeps every project",
-      (await cards(page)).length === 4 &&
+      (await cards(page)).length === 5 &&
         (await exists(
           page,
           'button[role="radio"][aria-label="List"][aria-checked="true"]',
@@ -1694,7 +1694,7 @@ async function main() {
     check(
       "it lists other projects, the open one last",
       await page.evaluate(
-        `(() => { const o = [...document.querySelectorAll('[role="listbox"][aria-label="Projects"] [role="option"]')].map((e) => e.innerText); return o.length === 3 && o[2].includes("Lecture notes") && o[2].includes("Open now") && !o.join().includes("Conference poster") && !o.join().includes("Old thesis"); })()`,
+        `(() => { const o = [...document.querySelectorAll('[role="listbox"][aria-label="Projects"] [role="option"]')].map((e) => e.innerText); return o.length === 4 && o[3].includes("Lecture notes") && o[3].includes("Open now") && !o.join().includes("Conference poster") && !o.join().includes("Old thesis"); })()`,
       ),
     );
     await shoot(page, "24-switcher");
@@ -1746,6 +1746,142 @@ async function main() {
       `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
       { label: "back in Entropy paper" },
     );
+
+    section("LaTeX and Markdown preview");
+    const doc = await newPage(browser);
+    current = doc;
+    await press(doc, "h", { ctrl: true, shift: true, wait: 400 });
+    await waitFor(doc, `!!document.querySelector('[data-project$="thesis-draft"]')`, {
+      label: "Home lists the LaTeX demo project",
+    });
+    await click(doc, '[data-project$="thesis-draft"] button');
+    await expectEventually(
+      doc,
+      "a LaTeX project compiles with latex.compile and shows the PDF in the viewer",
+      `document.querySelector('[data-pdf-viewer] canvas') !== null`,
+      { timeout: 20000 },
+    );
+    await expectEventually(
+      doc,
+      "status bar reports the LaTeX compile time",
+      `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    );
+    check(
+      "the toolbar says which page of how many",
+      await doc.evaluate(
+        `/Page 1 of \\d+/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
+      ),
+    );
+    check(
+      "the preview header names the TeX backend",
+      await doc.evaluate(
+        `document.querySelector('section[aria-label="Preview"]').innerText.includes("pdflatex, system TeX")`,
+      ),
+    );
+    await shoot(doc, "22-latex-preview");
+
+    // A chapter compiles through the main file, not by itself.
+    await press(doc, "p", { ctrl: true, wait: 300 });
+    await insertText(doc, "methods");
+    await press(doc, "Enter", { wait: 500 });
+    await expectEventually(
+      doc,
+      "a chapter is compiled through main.tex",
+      `document.querySelector('section[aria-label="Preview"]').innerText.includes("via main.tex")`,
+    );
+
+    // Saving a broken chapter reaches Problems and keeps the last good PDF.
+    await focusEditor(doc);
+    await caretToEnd(doc);
+    await insertText(doc, "\\input{missing}\n");
+    await press(doc, "s", { ctrl: true, wait: 600 });
+    await expectEventually(
+      doc,
+      "after the save the status bar counts the LaTeX error",
+      `/1 error/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+      { timeout: 8000 },
+    );
+    await expectEventually(
+      doc,
+      "the error banner names the problem and keeps the last good page",
+      `document.querySelector('section[aria-label="Preview"]').innerText.includes("last good page") && document.querySelector('[data-pdf-viewer] canvas') !== null`,
+    );
+    await clickText(doc, 'section[aria-label="Preview"] button', "Show problems");
+    check(
+      "Show problems opens the panel with the TeX message",
+      await doc.evaluate(
+        `document.querySelector("#bottom-panel")?.innerText.includes("not found") ?? false`,
+      ),
+    );
+    await shoot(doc, "23-latex-error");
+
+    // Many pages: page navigation and scroll position across a recompile.
+    await focusEditor(doc);
+    await press(doc, "a", { ctrl: true });
+    await insertText(
+      doc,
+      Array.from({ length: 140 }, (_, i) => `Line ${i + 1} of the methods.`).join(
+        "\n\n",
+      ) + "\n",
+    );
+    await press(doc, "s", { ctrl: true, wait: 800 });
+    await expectEventually(
+      doc,
+      "a long document reports several pages",
+      `/Page 1 of ([2-9]|\\d\\d)/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
+      { timeout: 8000 },
+    );
+    await click(doc, 'button[aria-label="Next page"]');
+    await expectEventually(
+      doc,
+      "Next page scrolls the viewer to page 2",
+      `/Page 2 of/.test(document.querySelector('section[aria-label="Preview"]').innerText) && document.querySelector('[data-pdf-viewer]').scrollTop > 100`,
+    );
+    const scrollBefore = await doc.evaluate(
+      `document.querySelector('[data-pdf-viewer]').scrollTop`,
+    );
+    await insertText(doc, "One more line.\n");
+    await press(doc, "s", { ctrl: true, wait: 1200 });
+    const scrollAfter = await doc.evaluate(
+      `document.querySelector('[data-pdf-viewer]').scrollTop`,
+    );
+    check(
+      "scroll position survives a recompile",
+      Math.abs(scrollAfter - scrollBefore) < 4,
+      `${scrollBefore} vs ${scrollAfter}`,
+    );
+    check(
+      "only the pages near the viewport own a canvas",
+      await doc.evaluate(
+        `document.querySelectorAll('[data-pdf-viewer] canvas').length <= 4`,
+      ),
+    );
+
+    // Markdown.
+    await press(doc, "k", { ctrl: true, wait: 300 });
+    await insertText(doc, "close project");
+    await press(doc, "Enter", { wait: 600 });
+    if (await exists(doc, '[role="dialog"]')) {
+      await clickText(doc, '[role="dialog"] button', "Don't save");
+      await sleep(300);
+    }
+    await waitFor(doc, `!!document.querySelector('[data-project$="lecture-notes"]')`, {
+      label: "Home lists the Markdown demo project",
+    });
+    await click(doc, '[data-project$="lecture-notes"] button');
+    await expectEventually(
+      doc,
+      "Markdown renders the sanitised HTML from markdown.render-html on the paper page",
+      `(() => { const a = document.querySelector('article[aria-label="Markdown preview"]'); return !!a && a.querySelector("h1")?.textContent === "Lecture notes" && getComputedStyle(a).backgroundColor === "rgb(250, 249, 247)"; })()`,
+    );
+    await shoot(doc, "24-markdown-preview");
+    check(
+      "no page errors during LaTeX and Markdown preview",
+      doc.errors.length === 0,
+      doc.errors.slice(0, 2).join(" | "),
+    );
+    doc.close();
+    current = page;
 
     /* ------------------------------------------------------------------ */
     section("Brand invariants");

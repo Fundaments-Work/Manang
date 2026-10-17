@@ -112,10 +112,11 @@ fn csl_item_to_entry(item: &Value, idx: usize) -> Option<Entry> {
         } else if let Some(raw) = issued.get("raw").and_then(|v| v.as_str()) {
             for word in raw.split(|c: char| !c.is_ascii_digit()) {
                 if word.len() == 4
-                    && let Ok(y) = word.parse::<u32>() {
-                        year = Some(y);
-                        break;
-                    }
+                    && let Ok(y) = word.parse::<u32>()
+                {
+                    year = Some(y);
+                    break;
+                }
             }
         }
     }
@@ -179,14 +180,16 @@ fn csl_item_to_entry(item: &Value, idx: usize) -> Option<Entry> {
         })
         .or_else(|| {
             if let Some(d) = &doi
-                && let Some(stripped) = d.strip_prefix("10.48550/arXiv.") {
-                    return Some(stripped.to_string());
-                }
+                && let Some(stripped) = d.strip_prefix("10.48550/arXiv.")
+            {
+                return Some(stripped.to_string());
+            }
             if let Some(u) = &url
-                && let Some(pos) = u.find("arxiv.org/abs/") {
-                    let id = &u[pos + 14..];
-                    return Some(id.trim_end_matches('/').to_string());
-                }
+                && let Some(pos) = u.find("arxiv.org/abs/")
+            {
+                let id = &u[pos + 14..];
+                return Some(id.trim_end_matches('/').to_string());
+            }
             None
         });
 

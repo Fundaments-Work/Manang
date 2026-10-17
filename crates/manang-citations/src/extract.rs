@@ -97,18 +97,19 @@ pub fn extract_latex_keys(source: &str) -> Vec<String> {
                 }
 
                 if cursor.starts_with('{')
-                    && let Some(close_brace) = cursor.find('}') {
-                        let inner = &cursor[1..close_brace];
-                        for raw_key in inner.split(',') {
-                            let key = raw_key.trim();
-                            if !key.is_empty() && seen.insert(key.to_string()) {
-                                keys.push(key.to_string());
-                            }
+                    && let Some(close_brace) = cursor.find('}')
+                {
+                    let inner = &cursor[1..close_brace];
+                    for raw_key in inner.split(',') {
+                        let key = raw_key.trim();
+                        if !key.is_empty() && seen.insert(key.to_string()) {
+                            keys.push(key.to_string());
                         }
-                        rest = &cursor[close_brace + 1..];
-                        matched_cmd = true;
-                        break;
                     }
+                    rest = &cursor[close_brace + 1..];
+                    matched_cmd = true;
+                    break;
+                }
             }
         }
 
