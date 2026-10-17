@@ -2,7 +2,7 @@
 
 **Project:** Manang (The High-Performance Scientific Authoring & Illustration Suite)  
 **Target:** AI Coding Agents (Antigravity, Cursor, Claude Code, Copilot, etc.) and Human Engineers  
-**Version:** 1.1.0  
+**Version:** 1.2.0  
 **Last Updated:** 2026-10-17
 
 ---
@@ -146,3 +146,43 @@ If any step fails, diagnose and fix the root cause. **Never disable lints or use
   - `test(crdt): add property test for concurrent cross-client edits`
   - `docs(agents): update testing harness specifications`
 * Every commit must be self-contained and leave the test suite passing.
+
+---
+
+## 7. Operational Hygiene (Leave No Mess Behind)
+
+Agents (and humans) work in parallel on one machine with limited CPU and disk. A Rust build of this repo is 5-17 GB; abandoned worktrees and stray dev servers have cost hours. Follow these rules every time.
+
+### 7.1. Processes and ports
+* **Never leave a dev server, watcher, browser or fuzzer running** when you finish. Stop what you started.
+* Before starting a server, check the port (`lsof -iTCP:<port> -sTCP:LISTEN`). The app's dev server is fixed at **1420** (Tauri `devUrl`); if something holds it, find out who. Never silently pick another port for `tauri dev`.
+* Stop by **PID you started or by port listener** (`lsof -ti:1420 -sTCP:LISTEN | xargs -r kill`). Never `pkill -f` with a broad pattern: it can kill other sessions. Never kill processes you did not start.
+* Fuzzers (`cargo-fuzz`) run with a hard cap (`-max_total_time=60` per target); longer runs belong in CI.
+* Headless UI runs: `pnpm dev` then `node scripts/verify-ui.mjs`, then stop the server.
+
+### 7.2. Worktrees and branches
+* Parallel agents work in a **git worktree on their own branch** (`.claude/worktrees/<id>` or a sibling directory), owning disjoint files. `.claude/` is git-ignored and eslint/prettier-ignored.
+* **When a branch is merged into `main`: remove the worktree and delete the branch**, in this order:
+  `git worktree remove --force <path>` then `git branch -d <branch>` then `git worktree prune`.
+  Only remove branches with `git rev-list --count main..<branch>` equal to 0.
+* Never run `git add -A` before checking `git status`: embedded worktrees must stay untracked, build output must stay ignored.
+* A worktree must start from the **current `main`** (`git merge main` or fast-forward first). Stale worktrees miss crates and cause conflicts.
+* Merge conflicts in `Cargo.toml` (workspace `members`) and `Cargo.lock` are expected: keep the union of members and let Cargo regenerate the lockfile.
+
+### 7.3. Builds and disk
+* Do **not** run several heavy Rust builds at once (`cargo test --workspace`, `tauri dev`, and another agent's build share one `target/` lock and one CPU). Prefer `-p <crate>` while developing and the full workspace gate once at the end.
+* Long commands run in the background with a timeout; wait for completion notifications instead of polling or sleeping.
+* Delete build output you created in disposable worktrees (`cargo clean` or remove the worktree). Do not commit `target/`, `dist/`, `artifacts/` or fuzz corpora beyond minimal regression seeds.
+* Scratch files go in the session scratchpad directory, never in the repo root or `/tmp`.
+
+### 7.4. Dependencies and toolchain
+* The npm `@tauri-apps/*` packages and the Rust `tauri*` crates must be on the **same major.minor**. Upgrade both together; `tauri dev` refuses to start on a mismatch.
+* The workspace MSRV is `rust-version = "1.90"` (required by current Tauri). Crates inherit it with `rust-version.workspace = true`; do not pin lower values per crate, they force the resolver to older versions.
+* Verify a crate version exists on crates.io before pinning it; prefer stable releases over release candidates.
+
+### 7.5. Plugin and UI conventions (so work merges cleanly)
+* Every feature is a plugin crate under `crates/manang-<name>` exposing `manifest()` and `plugin(..)`, registered in `src-tauri/src/lib.rs`, with kernel-driven integration tests. Third-party plugins are WASM components (ADR 0003).
+* Command ids are `<plugin>.<command>`; a plugin may only provide commands under its own name.
+* UI vocabulary is fixed: **Files, Search, Figures, References, Plugins, Problems, Output, Settings**. Do not reintroduce Desk / Library Shelf / Instrument Shelf / Whispers.
+* Clippy runs with let-chains enabled (edition 2024, MSRV 1.90): write `if let .. && ..` instead of nested `if let`.
+
