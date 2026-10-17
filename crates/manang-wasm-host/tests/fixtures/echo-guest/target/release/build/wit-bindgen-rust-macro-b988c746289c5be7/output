@@ -1,2 +1,0 @@
-cargo:rerun-if-changed=build.rs
-cargo:rustc-env=DEBUG_OUTPUT_DIR=/run/media/sapiens/Development/Manang/crates/manang-wasm-host/tests/fixtures/echo-guest/target/release/build/wit-bindgen-rust-macro-b988c746289c5be7/out
