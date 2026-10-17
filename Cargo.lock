@@ -1923,6 +1923,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "manang-kernel"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml 0.8.2",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
