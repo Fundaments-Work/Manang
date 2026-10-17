@@ -9,6 +9,7 @@
 import type { KernelCommand } from "$lib/kernel/client";
 import { basename, dirname } from "$lib/workbench/paths";
 
+import { paletteKernelCommands } from "./allowlist";
 import { fuzzyRank, type Ranked } from "./fuzzy";
 import { mergeCommands } from "./kernel";
 import { searchText, type Command, type CommandGroup } from "./registry";
@@ -46,7 +47,11 @@ export interface PaletteInput {
 export function paletteCandidates(input: PaletteInput): Command[] {
   const files = input.files.map((path) => fileCommand(path, input.openFile));
   if (input.mode === "files") return files;
-  const commands = mergeCommands(input.workbench, input.kernel, input.runKernel);
+  const commands = mergeCommands(
+    input.workbench,
+    paletteKernelCommands(input.kernel, new Set(input.workbench.map((c) => c.id))),
+    input.runKernel,
+  );
   return input.query.trim() === "" ? commands : [...commands, ...files];
 }
 

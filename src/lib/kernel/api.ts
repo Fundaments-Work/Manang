@@ -56,3 +56,141 @@ export function typstApi(kernel: Kernel) {
 
 export type ProjectApi = ReturnType<typeof projectApi>;
 export type TypstApi = ReturnType<typeof typstApi>;
+
+/* -------------------------------------------------------------------------- */
+/* Writing tools (`writing.*`). Offsets are Unicode scalars, like the rest.   */
+/* -------------------------------------------------------------------------- */
+
+export type WritingSyntax = "typst" | "latex" | "markdown" | "plain" | "auto";
+
+/** Half-open range of Unicode scalar values. */
+export interface ScalarRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+export interface Misspelling {
+  readonly word: string;
+  readonly range: ScalarRange;
+  readonly line: number;
+  readonly column: number;
+  readonly suggestions: readonly string[];
+}
+
+export interface SpellCheckResult {
+  readonly language: string;
+  readonly count: number;
+  readonly misspelled: readonly Misspelling[];
+}
+
+export interface WritingDiagnostic {
+  readonly severity: "error" | "warning" | "info";
+  readonly message: string;
+  readonly file: string | null;
+  readonly line: number | null;
+  readonly column: number | null;
+  readonly range: ScalarRange | null;
+  readonly hints: readonly string[];
+  readonly trace: readonly string[];
+  readonly code?: string;
+}
+
+export interface ProseLintResult {
+  readonly source: "writing";
+  readonly diagnostics: readonly WritingDiagnostic[];
+}
+
+export interface FormatResult {
+  readonly formatted: string;
+  readonly changed: boolean;
+  readonly skipped?: string;
+}
+
+export interface SymbolHit {
+  readonly name: string;
+  /** Exact text to insert for the requested syntax. */
+  readonly insert: string;
+  readonly typst: string | null;
+  readonly latex: string | null;
+  readonly preview: string;
+  readonly unicode: string | null;
+  readonly category: string;
+  readonly requires: string | null;
+  readonly keywords: readonly string[];
+  readonly score: number;
+}
+
+export interface SnippetInfo {
+  readonly trigger: string;
+  readonly aliases: readonly string[];
+  readonly syntax: WritingSyntax;
+  readonly name: string;
+  readonly description: string;
+  readonly body: string;
+  readonly requires: string | null;
+}
+
+export interface TabStop {
+  readonly index: number;
+  readonly placeholder: string;
+  readonly ranges: readonly ScalarRange[];
+}
+
+export interface SnippetExpansion {
+  readonly text: string;
+  readonly tab_stops: readonly TabStop[];
+  readonly final_cursor: number;
+  readonly trigger: string;
+  readonly name: string;
+  readonly requires: string | null;
+}
+
+export interface TextStats {
+  readonly words: number;
+  readonly characters: number;
+  readonly characters_no_spaces: number;
+  readonly sentences: number;
+  readonly paragraphs: number;
+  readonly reading_time_seconds: number;
+  readonly reading_time_minutes: number;
+  readonly speaking_time_seconds: number;
+}
+
+export function writingApi(kernel: Kernel) {
+  return {
+    spellCheck: (text: string, syntax: WritingSyntax) =>
+      kernel.run<SpellCheckResult>("writing.spell.check", {
+        text,
+        syntax,
+        max_suggestions: 0,
+      }),
+    suggest: (word: string, limit = 5) =>
+      kernel.run<{ language: string; word: string; suggestions: string[] }>(
+        "writing.spell.suggest",
+        { word, limit },
+      ),
+    addWord: (word: string) =>
+      kernel.run<{ added: boolean; count: number }>("writing.spell.add-word", { word }),
+    lint: (text: string, syntax: WritingSyntax) =>
+      kernel.run<ProseLintResult>("writing.lint.prose", { text, syntax }),
+    format: (source: string, language: "typst" | "latex" | "markdown") =>
+      kernel.run<FormatResult>("writing.format.document", { source, language }),
+    symbols: (query: string, syntax: "typst" | "latex", limit = 20) =>
+      kernel.run<{ symbols: SymbolHit[] }>("writing.symbols.search", {
+        query,
+        syntax,
+        limit,
+      }),
+    snippets: (syntax: "typst" | "latex" | "markdown") =>
+      kernel.run<{ snippets: SnippetInfo[]; errors: unknown[] }>(
+        "writing.snippets.list",
+        { syntax },
+      ),
+    expand: (trigger: string, syntax: "typst" | "latex" | "markdown") =>
+      kernel.run<SnippetExpansion>("writing.snippets.expand", { trigger, syntax }),
+    stats: (text: string, syntax: WritingSyntax) =>
+      kernel.run<TextStats>("writing.stats.count", { text, syntax }),
+  };
+}
+
+export type WritingApi = ReturnType<typeof writingApi>;

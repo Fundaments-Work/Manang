@@ -52,6 +52,7 @@ import {
 import { fileKind } from "$lib/workbench/paths";
 
 import { problemMarkers } from "./gutter";
+import { writing } from "./writing";
 import { manangMarkdownHighlight, manangTheme, manangTypstHighlight } from "./theme";
 
 export type EditorLanguage = "typst" | "latex" | "markdown" | "plain";
@@ -132,6 +133,7 @@ export function createEditorState(text: string, extra: Extension): EditorState {
       languageCompartment.of([]),
       manangTheme,
       problemMarkers(),
+      writing(),
       extra,
     ],
   });

@@ -1,4 +1,7 @@
+import { Text } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
+
+import type { LintFinding } from "$lib/editor/writing/bus";
 
 import type { WireDiagnostic } from "$lib/kernel/types";
 
@@ -6,6 +9,8 @@ import {
   countLabel,
   countProblems,
   fromWire,
+  fromWriting,
+  sortProblems,
   groupByFile,
   problemsIn,
   projectPath,
@@ -81,5 +86,60 @@ describe("problems model", () => {
     expect(gutter).toHaveLength(1);
     expect(text.slice(gutter[0]?.from, gutter[0]?.to)).toBe("$x");
     expect(gutter[0]?.severity).toBe("error");
+  });
+});
+
+describe("writing findings in Problems", () => {
+  const doc = Text.of(["= Title", "😀 this is is odd", "fine"]);
+  const finding = (over: Partial<LintFinding>): LintFinding => ({
+    from: 0,
+    to: 1,
+    severity: "warning",
+    message: "Repeated word",
+    code: "repeated-word",
+    hints: [],
+    ...over,
+  });
+
+  it("places a finding by line and scalar column, tagged with its source", () => {
+    const from = doc.line(2).from + 8; // "is is": after "😀 this " (UTF-16 offset)
+    const [problem] = fromWriting("a.typ", doc, [finding({ from, to: from + 5 })]);
+    expect(problem).toMatchObject({
+      file: "a.typ",
+      line: 2,
+      column: 8, // the emoji is one scalar, so one less than its UTF-16 offset
+      source: "writing",
+      code: "repeated-word",
+      severity: "warning",
+    });
+  });
+
+  it("sits next to compiler diagnostics, ranked below them, none dropped", () => {
+    const compiler = fromWire([
+      wire({ severity: "warning", line: 1 }),
+      wire({ line: 5 }),
+    ]);
+    const prose = fromWriting("main.typ", doc, [
+      finding({ severity: "info", from: 0 }),
+      finding({ severity: "warning", from: 2 }),
+    ]);
+    const merged = sortProblems([...prose, ...compiler]);
+    expect(merged).toHaveLength(4);
+    expect(merged.map((p) => p.severity)).toEqual([
+      "error",
+      "warning",
+      "warning",
+      "info",
+    ]);
+    expect(merged[0]?.source).toBeUndefined();
+  });
+
+  it("does not count advice as errors or warnings, and keeps it out of the gutter", () => {
+    const prose = fromWriting("main.typ", doc, [
+      finding({ severity: "info" }),
+      finding({ severity: "warning" }),
+    ]);
+    expect(countProblems(prose)).toEqual({ errors: 0, warnings: 1 });
+    expect(toGutter("= Title\n", prose)).toEqual([]);
   });
 });
