@@ -10,8 +10,13 @@ rust-version.workspace = true
 
 [dependencies]
 manang-kernel = { path = "../manang-kernel" }
+blake3 = "1.8"
+cap-std = "4"
+getrandom = "0.4"
+parking_lot = "0.12"
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 wasmtime = { version = "49", default-features = false, features = [
     "std",
     "runtime",
@@ -22,3 +27,11 @@ wasmtime = { version = "49", default-features = false, features = [
 
 [dev-dependencies]
 wit-component = "0.262"
+wit-parser = "0.262"
+wat = "1"
+criterion = { version = "0.8", default-features = false }
+tempfile = "3"
+
+[[bench]]
+name = "call_overhead"
+harness = false
