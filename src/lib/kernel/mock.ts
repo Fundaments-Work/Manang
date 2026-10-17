@@ -8,11 +8,34 @@
  * with `crates/manang-editor/manifest.toml`.
  */
 
-import type { Args, Kernel, KernelCommand, KernelError } from "./client";
+import type {
+  Args,
+  Kernel,
+  KernelCommand,
+  KernelError,
+  KernelEvent,
+  Unlisten,
+} from "./client";
 
 export type MockHandler = (args: Args) => unknown;
+export type MockBinaryHandler = (args: Args) => Uint8Array;
+export type Emit = (topic: string, payload: unknown) => void;
+
+/** A first-party plugin reproduced in memory. */
+export interface MockPlugin {
+  readonly name: string;
+  /** `[id, title]` pairs, copied from the plugin's `manifest.toml`. */
+  readonly commands: readonly (readonly [string, string])[];
+  readonly handlers: Readonly<Record<string, MockHandler>>;
+  readonly binaryHandlers?: Readonly<Record<string, MockBinaryHandler>>;
+}
+
+/** Builds a plugin once the kernel's event bus exists. */
+export type MockPluginFactory = (emit: Emit) => MockPlugin;
 
 export interface MockOptions {
+  /** Whole plugins; each contributes its commands like a registered plugin. */
+  readonly plugins?: readonly MockPluginFactory[];
   /** Extra commands, e.g. `lint.diagnostics`, keyed by id. */
   readonly handlers?: Readonly<Record<string, MockHandler>>;
   /** Extra commands that return binary artefacts, keyed by id. */
@@ -63,8 +86,28 @@ function str(args: Args, key: string): string {
 export function createMockKernel(options: MockOptions = {}): Kernel & {
   /** Edit a document as if the kernel itself changed it (test hook). */
   mutate(id: number | null, at: number, deleteCount: number, insert: string): number;
+  /** Publish an event on the bus, as a plugin would (delivered asynchronously). */
+  emit: Emit;
 } {
   const docs = new Map<number, Doc>();
+  const listeners = new Set<(event: KernelEvent) => void>();
+  const emit: Emit = (topic, payload) => {
+    // Asynchronous, like the real bus's hop from a watcher thread.
+    setTimeout(() => {
+      for (const listener of [...listeners]) listener({ topic, payload });
+    }, 0);
+  };
+  const pluginCommands: KernelCommand[] = [];
+  const pluginHandlers: Record<string, MockHandler> = {};
+  const pluginBinary: Record<string, MockBinaryHandler> = {};
+  for (const factory of options.plugins ?? []) {
+    const plugin = factory(emit);
+    Object.assign(pluginHandlers, plugin.handlers);
+    Object.assign(pluginBinary, plugin.binaryHandlers ?? {});
+    for (const [id, title] of plugin.commands) {
+      pluginCommands.push({ id, title, plugin: plugin.name });
+    }
+  }
   const files = new Map(Object.entries(options.files ?? {}));
   let nextId = 0;
   let active: number | null = null;
@@ -157,10 +200,14 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
         dirty: doc.revision !== doc.savedRevision,
       };
     },
+    ...pluginHandlers,
     ...options.handlers,
   };
 
-  const binary = options.binaryHandlers ?? {};
+  const binary: Record<string, MockBinaryHandler> = {
+    ...pluginBinary,
+    ...options.binaryHandlers,
+  };
 
   return {
     commands(): Promise<KernelCommand[]> {
@@ -169,9 +216,10 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
         title,
         plugin: "editor",
       }));
+      list.push(...pluginCommands);
       for (const id of [
         ...Object.keys(options.handlers ?? {}),
-        ...Object.keys(binary),
+        ...Object.keys(options.binaryHandlers ?? {}),
       ]) {
         list.push({
           id,
@@ -207,6 +255,15 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
         return Promise.reject(error);
       }
     },
+
+    onEvent(handler): Promise<Unlisten> {
+      listeners.add(handler);
+      return Promise.resolve(() => {
+        listeners.delete(handler);
+      });
+    },
+
+    emit,
 
     mutate(id, at, deleteCount, insert): number {
       const [, doc] = resolve({ id });
