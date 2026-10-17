@@ -1,7 +1,7 @@
 //! The LaTeX plugin: compiles documents with an embedded Tectonic engine.
 //!
 //! Tectonic runs in a short-lived `manang-latex-worker` process (see
-//! [`engine`]) so a runaway document can be killed on timeout, its global
+//! [`engine`] for the protocol) so a runaway document can be killed on timeout, its global
 //! state cannot leak between compiles, and all CPU work stays off the host's
 //! async runtime. The plugin turns TeX and BibTeX logs into structured
 //! [`diagnostics`] and answers [`synctex`] queries from the build's
@@ -24,6 +24,8 @@ pub mod engine;
 mod error;
 mod plugin;
 pub mod synctex;
+#[cfg(feature = "engine")]
+pub mod worker;
 
 pub use driver::{Build, CompileSpec, LatexConfig, compile, resolve_cache_dir};
 pub use error::LatexError;

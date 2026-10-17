@@ -14,11 +14,22 @@ manang-kernel = { path = "../manang-kernel" }
 parking_lot = "0.12"
 serde = { workspace = true }
 serde_json = { workspace = true }
-tectonic = "=0.17.0"
-tectonic_bundles = "=0.4.2"
+tectonic = { version = "=0.17.0", optional = true }
+tectonic_bundles = { version = "=0.4.2", optional = true }
 tempfile = "3"
 thiserror = { workspace = true }
 wait-timeout = "0.2"
+
+[features]
+# Links Tectonic (and its bundled HarfBuzz). Enabled only to build the
+# `manang-latex-worker` sidecar; the host app must not enable it, or the static
+# HarfBuzz overrides the system one and crashes GTK/WebKit at startup.
+engine = ["dep:tectonic", "dep:tectonic_bundles"]
+
+[[bin]]
+name = "manang-latex-worker"
+path = "src/bin/manang-latex-worker.rs"
+required-features = ["engine"]
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false }
