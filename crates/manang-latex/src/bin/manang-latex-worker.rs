@@ -10,7 +10,7 @@ fn main() -> ExitCode {
         eprintln!("usage: manang-latex-worker <request.json>");
         return ExitCode::from(2);
     };
-    match manang_latex::engine::run_from_file(&request) {
+    match manang_latex::worker::run_from_file(&request) {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             eprintln!("{message}");
