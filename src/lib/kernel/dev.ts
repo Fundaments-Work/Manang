@@ -11,6 +11,7 @@ import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject"
 import { figurePlugin } from "./mockFigure";
 import { gitPlugin } from "./mockGit";
 import { searchPlugin } from "./mockSearch";
+import { settingsPlugin } from "./mockSettings";
 import { typstPlugin } from "./mockTypst";
 
 export const DEMO_ROOT = "/home/author/entropy-paper";
@@ -258,6 +259,7 @@ export function createDevKernel(
       figurePlugin(),
       gitPlugin(host),
       searchPlugin(host),
+      settingsPlugin(host),
     ],
   });
   return Object.assign(kernel, { host });
