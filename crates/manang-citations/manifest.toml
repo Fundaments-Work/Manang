@@ -1,0 +1,34 @@
+[plugin]
+name = "citations"
+version = "0.1.0"
+description = "Bibliography management, CSL-JSON & BibTeX index, formatting, and Crossref/OpenAlex/arXiv verification"
+tier = "native"
+
+[permissions]
+network = ["api.crossref.org", "api.openalex.org", "export.arxiv.org"]
+filesystem = ["read:project"]
+
+[contributes]
+[[contributes.commands]]
+id = "citations.load"
+title = "Load bibliography files into index"
+
+[[contributes.commands]]
+id = "citations.search"
+title = "Search citations index"
+
+[[contributes.commands]]
+id = "citations.get"
+title = "Get entry by key"
+
+[[contributes.commands]]
+id = "citations.format"
+title = "Format citation entry"
+
+[[contributes.commands]]
+id = "citations.extract-keys"
+title = "Extract citation keys from source text"
+
+[[contributes.commands]]
+id = "citations.verify"
+title = "Verify citation against authoritative registries"

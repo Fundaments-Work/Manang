@@ -1,0 +1,24 @@
+[package]
+name = "manang-citations"
+description = "Manang's first-party citations plugin: BibTeX, CSL-JSON, searchable index, formatting, and verification"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+biblatex = "0.12.0"
+parking_lot = "0.12"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+url = "2"
+
+[dev-dependencies]
+insta = { version = "1", features = ["json"] }
+proptest = "1"
+tempfile = "3"
