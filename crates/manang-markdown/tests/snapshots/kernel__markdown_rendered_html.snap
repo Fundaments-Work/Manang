@@ -1,0 +1,13 @@
+---
+source: crates/manang-markdown/tests/kernel.rs
+expression: "html_res[\"html\"].as_str().unwrap()"
+---
+<h1>Quantum Formalism</h1>
+<p>A state vector <span class="math math-inline">$|psi rangle$</span> satisfies:</p>
+<p><div class="math math-display">$$
+i hbar \frac{d}{dt} |\psi\rangle = \hat{H} |\psi\rangle
+$$</div>
+</p>
+<table><thead><tr><th style="text-align: left">Observable</th><th style="text-align: left">Operator</th></tr></thead><tbody>
+<tr><td style="text-align: left">Momentum</td><td style="text-align: left"><span class="math math-inline">$-i \hbar \nabla$</span></td></tr>
+</tbody></table>
