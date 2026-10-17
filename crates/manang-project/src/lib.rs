@@ -6,7 +6,11 @@
 
 mod config;
 mod error;
+pub mod fsops;
 mod paths;
+pub mod recent;
+pub mod scaffold;
+pub mod tree;
 
 pub use config::{
     Bibliography, CONFIG_FILE, Engine, ProjectConfig, ProjectSection, TemplateBinding,
