@@ -42,3 +42,25 @@ pub enum LatexError {
     #[error("no SyncTeX match: {0}")]
     SynctexNoMatch(String),
 }
+
+impl LatexError {
+    /// A stable machine-readable code, used as the `[code]` prefix of
+    /// plugin error messages so the UI can branch without parsing prose.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::BadArgument(..) => "bad_argument",
+            Self::UnsafePath(_) => "unsafe_path",
+            Self::Io { .. } => "io",
+            Self::WorkerMissing(_) => "worker_missing",
+            Self::WorkerSpawn(_) => "worker_spawn",
+            Self::WorkerCrashed(_) => "worker_crashed",
+            Self::Timeout(_) => "timeout",
+            Self::BundleUnavailable(_) => "bundle_unavailable",
+            Self::Engine(_) => "engine",
+            Self::NoBuild => "no_build",
+            Self::NoSynctex => "synctex_unavailable",
+            Self::BadSynctex(_) => "synctex_malformed",
+            Self::SynctexNoMatch(_) => "synctex_no_match",
+        }
+    }
+}
