@@ -34,7 +34,6 @@ import {
   foldGutter,
   foldKeymap,
   indentOnInput,
-  syntaxHighlighting,
 } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -49,18 +48,12 @@ import {
   rectangularSelection,
 } from "@codemirror/view";
 
-import { fileKind } from "$lib/workbench/paths";
-
 import { problemMarkers } from "./gutter";
 import { writing } from "./writing";
-import { manangMarkdownHighlight, manangTheme, manangTypstHighlight } from "./theme";
+import { languageFor, loadLanguageExtension, type EditorLanguage } from "./languages";
+import { manangTheme } from "./theme";
 
-export type EditorLanguage = "typst" | "latex" | "markdown" | "plain";
-
-export function languageFor(path: string): EditorLanguage {
-  const kind = fileKind(path);
-  return kind === "typst" || kind === "latex" || kind === "markdown" ? kind : "plain";
-}
+export { languageFor, type EditorLanguage };
 
 /** Shared by every state: each state holds its own content for it. */
 export const languageCompartment = new Compartment();
@@ -78,23 +71,10 @@ const loaded = new Map<EditorLanguage, Promise<Extension>>();
 export function loadLanguage(language: EditorLanguage): Promise<Extension> {
   let promise = loaded.get(language);
   if (promise === undefined) {
-    promise = importLanguage(language);
+    promise = loadLanguageExtension(language);
     loaded.set(language, promise);
   }
   return promise;
-}
-
-async function importLanguage(language: EditorLanguage): Promise<Extension> {
-  if (language === "plain") return [];
-  if (language === "markdown") {
-    const { markdown } = await import("@codemirror/lang-markdown");
-    return [markdown(), syntaxHighlighting(manangMarkdownHighlight)];
-  }
-  // Typst, and LaTeX until a dedicated grammar lands. LaTeX reuses the Typst
-  // grammar for the shared `$…$` math and markup; the buffer lives in Rust
-  // either way, so this only affects highlighting.
-  const { typst, typstHighlightTag } = await import("codemirror-lang-typst");
-  return [typst(), syntaxHighlighting(manangTypstHighlight(typstHighlightTag))];
 }
 
 /** A fresh editor state for one document. `extra` carries the per-document hooks. */

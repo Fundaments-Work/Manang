@@ -34,6 +34,8 @@
       icon: "search",
       shortcut: formatShortcut({ key: "f", mod: true, shift: true }, platform),
     },
+    { view: "source-control", label: "Source control", icon: "source-control" },
+    { view: "outline", label: "Outline", icon: "outline" },
     { view: "figures", label: "Figures", icon: "figures" },
     { view: "references", label: "References", icon: "references" },
     {

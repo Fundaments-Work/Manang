@@ -9,6 +9,7 @@
 
 import { paletteAction } from "$lib/commands/allowlist";
 import { recheckWriting, runFormat } from "$lib/editor/writing";
+import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
 import { kernel, errorMessage } from "$lib/kernel";
 import type { KernelEvent } from "$lib/kernel";
 import { writingApi } from "$lib/kernel/api";
@@ -433,7 +434,7 @@ export function formatDocument(): void {
     notice.error("Open a document to format it.");
     return;
   }
-  void runFormat(view, undefined, documents.shown.language);
+  void runFormat(view, undefined, writingSyntaxFor(documents.shown.language));
 }
 
 /** Forget cached spelling and lint answers and check the visible text again. */
@@ -455,7 +456,10 @@ export async function showStats(): Promise<void> {
     return;
   }
   try {
-    const stats = await writingApi(kernel).stats(session.text(), session.language);
+    const stats = await writingApi(kernel).stats(
+      session.text(),
+      writingSyntaxFor(session.language),
+    );
     notice.show(
       `${stats.words} words, ${stats.characters} characters, ${stats.sentences} sentences.`,
     );

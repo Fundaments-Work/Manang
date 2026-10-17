@@ -9,6 +9,7 @@
  */
 
 import { subscribeWriting, type FormatReport } from "$lib/editor/writing/bus";
+import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
 import { setSyntaxResolver } from "$lib/editor/writing/syntax";
 import type { TextStats } from "$lib/kernel/api";
 import { fromWriting, type Problem } from "$lib/workbench/problems";
@@ -27,7 +28,9 @@ export class WritingState {
   constructor() {
     // The shown view's language comes from its file's extension.
     setSyntaxResolver((state) =>
-      documents.view?.state === state ? (documents.shown?.language ?? null) : null,
+      documents.view?.state === state && documents.shown !== undefined
+        ? writingSyntaxFor(documents.shown.language)
+        : null,
     );
     subscribeWriting({
       lint: (view, findings) => {
