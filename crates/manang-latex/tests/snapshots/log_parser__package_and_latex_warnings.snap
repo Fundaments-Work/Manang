@@ -1,0 +1,20 @@
+---
+source: crates/manang-latex/tests/log_parser.rs
+expression: diagnostics
+---
+[
+  {
+    "severity": "warning",
+    "message": "Package mypkg Warning: Something looks odd on input line 8.",
+    "file": "main.tex",
+    "line": 8,
+    "hint": null
+  },
+  {
+    "severity": "warning",
+    "message": "LaTeX Warning: Custom LaTeX warning on input line 8.",
+    "file": "main.tex",
+    "line": 8,
+    "hint": null
+  }
+]

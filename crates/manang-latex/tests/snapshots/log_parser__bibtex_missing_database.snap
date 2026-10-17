@@ -1,0 +1,27 @@
+---
+source: crates/manang-latex/tests/log_parser.rs
+expression: "parse_bibtex_log(&fixture(\"refs.blg\"), \"main.aux\")"
+---
+[
+  {
+    "severity": "error",
+    "message": "I couldn't open database file refs.bib",
+    "file": "main.aux",
+    "line": 4,
+    "hint": "create the .bib file next to your document or fix the `\\bibliography{...}` name"
+  },
+  {
+    "severity": "error",
+    "message": "I found no database files",
+    "file": "main.aux",
+    "line": null,
+    "hint": "create the .bib file next to your document or fix the `\\bibliography{...}` name"
+  },
+  {
+    "severity": "warning",
+    "message": "I didn't find a database entry for \"ghost\"",
+    "file": "main.aux",
+    "line": null,
+    "hint": "check the citation key and that the .bib file defines it"
+  }
+]
