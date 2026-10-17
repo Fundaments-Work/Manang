@@ -1,0 +1,24 @@
+[package]
+name = "manang-buffer"
+description = "Rope-based document buffer with transaction history for Manang"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Fundaments.work"]
+repository = "https://github.com/Fundaments-Work/Manang"
+rust-version = "1.85"
+
+[workspace]
+
+[dependencies]
+ropey = "1.6"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+proptest = "1"
+
+[[bench]]
+name = "buffer_throughput"
+harness = false
