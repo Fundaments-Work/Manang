@@ -11,10 +11,12 @@ describe("plugins panel model", () => {
     expect(groups.map((g) => g.name)).toEqual([
       "editor",
       "figure",
+      "git",
       "project",
       "search",
       "typst",
     ]);
+    expect(groups.find((g) => g.name === "git")?.commands.length).toBe(15);
     expect(groups.find((g) => g.name === "search")?.commands.map((c) => c.id)).toEqual([
       "search.cancel",
       "search.files",
@@ -28,7 +30,7 @@ describe("plugins panel model", () => {
       "typst.export-pdf",
       "typst.render",
     ]);
-    expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(8 + 1 + 12 + 6 + 3);
+    expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(8 + 1 + 15 + 12 + 6 + 3);
   });
 
   it("is empty, not invented, when the kernel lists nothing", () => {
