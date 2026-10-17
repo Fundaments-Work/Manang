@@ -123,6 +123,27 @@ mod tests {
         );
     }
 
+    /// Found by `fuzz/payload_boundary`: without serde_json's `float_roundtrip`
+    /// feature a number can come back one ULP off after crossing the boundary.
+    #[test]
+    fn json_numbers_round_trip_exactly() {
+        let limits = Limits::default();
+        for text in [
+            "1.1171171171171711e21",
+            "0.1",
+            "1e-320",
+            "9007199254740993",
+            "-0.0",
+        ] {
+            let once = decode_output(RawPayload::Json(text.into()), &limits).expect("valid");
+            let RawPayload::Json(lowered) = encode_input(&once, &limits).expect("lowers") else {
+                panic!("json lowers to json");
+            };
+            let twice = decode_output(RawPayload::Json(lowered), &limits).expect("valid");
+            assert_eq!(once, twice, "{text}");
+        }
+    }
+
     #[test]
     fn deeply_nested_json_is_an_error_not_a_stack_overflow() {
         let deep = format!("{}{}", "[".repeat(100_000), "]".repeat(100_000));
