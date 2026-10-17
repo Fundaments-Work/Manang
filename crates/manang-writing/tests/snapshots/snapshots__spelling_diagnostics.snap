@@ -1,0 +1,22 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: "spell::diagnostics(Some(\"/main.typ\"), &masked, &found)"
+---
+[
+  {
+    "severity": "warning",
+    "message": "Unknown word `Intoduction`",
+    "file": "/main.typ",
+    "line": 1,
+    "column": 3,
+    "range": {
+      "start": 2,
+      "end": 13
+    },
+    "hints": [
+      "Did you mean: Introduction, Induction, Production?"
+    ],
+    "trace": [],
+    "code": "spelling"
+  }
+]

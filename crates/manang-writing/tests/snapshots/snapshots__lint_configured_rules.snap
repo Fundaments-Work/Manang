@@ -1,0 +1,150 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: "lint(&masked, &config, None)"
+---
+[
+  {
+    "severity": "warning",
+    "message": "Repeated word `is`",
+    "file": null,
+    "line": 2,
+    "column": 6,
+    "range": {
+      "start": 19,
+      "end": 24
+    },
+    "hints": [
+      "Remove the duplicated word."
+    ],
+    "trace": [],
+    "code": "repeated-word"
+  },
+  {
+    "severity": "info",
+    "message": "Multiple spaces in a row",
+    "file": null,
+    "line": 2,
+    "column": 30,
+    "range": {
+      "start": 43,
+      "end": 45
+    },
+    "hints": [
+      "Use a single space."
+    ],
+    "trace": [],
+    "code": "double-space"
+  },
+  {
+    "severity": "warning",
+    "message": "Sentence has 17 words (limit 8)",
+    "file": null,
+    "line": 2,
+    "column": 32,
+    "range": {
+      "start": 45,
+      "end": 132
+    },
+    "hints": [
+      "Consider splitting it into shorter sentences."
+    ],
+    "trace": [],
+    "code": "long-sentence"
+  },
+  {
+    "severity": "error",
+    "message": "Possible passive voice: `was written`",
+    "file": null,
+    "line": 2,
+    "column": 35,
+    "range": {
+      "start": 48,
+      "end": 59
+    },
+    "hints": [
+      "Name the actor as the subject and use an active verb."
+    ],
+    "trace": [],
+    "code": "passive-voice"
+  },
+  {
+    "severity": "warning",
+    "message": "Repeated word `the`",
+    "file": null,
+    "line": 2,
+    "column": 50,
+    "range": {
+      "start": 63,
+      "end": 70
+    },
+    "hints": [
+      "Remove the duplicated word."
+    ],
+    "trace": [],
+    "code": "repeated-word"
+  },
+  {
+    "severity": "error",
+    "message": "Possible passive voice: `were obtained`",
+    "file": null,
+    "line": 3,
+    "column": 9,
+    "range": {
+      "start": 111,
+      "end": 124
+    },
+    "hints": [
+      "Consider rewriting in the active voice."
+    ],
+    "trace": [],
+    "code": "passive-voice"
+  },
+  {
+    "severity": "error",
+    "message": "Possible passive voice: `are ignored`",
+    "file": null,
+    "line": 3,
+    "column": 76,
+    "range": {
+      "start": 178,
+      "end": 189
+    },
+    "hints": [
+      "Consider rewriting in the active voice."
+    ],
+    "trace": [],
+    "code": "passive-voice"
+  },
+  {
+    "severity": "warning",
+    "message": "Sentence has 15 words (limit 8)",
+    "file": null,
+    "line": 5,
+    "column": 19,
+    "range": {
+      "start": 210,
+      "end": 332
+    },
+    "hints": [
+      "Consider splitting it into shorter sentences."
+    ],
+    "trace": [],
+    "code": "long-sentence"
+  },
+  {
+    "severity": "info",
+    "message": "Inconsistent hyphenation: `well known` is also written `well-known`",
+    "file": null,
+    "line": 5,
+    "column": 45,
+    "range": {
+      "start": 236,
+      "end": 246
+    },
+    "hints": [
+      "Use `well-known` consistently."
+    ],
+    "trace": [],
+    "code": "hyphenation"
+  }
+]

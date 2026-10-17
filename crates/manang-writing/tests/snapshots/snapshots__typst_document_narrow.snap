@@ -1,0 +1,17 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: narrow.formatted
+---
+#let f(x, y) = x + y
+#import "a.typ": a, b, z
+
+
+
+= Title
+Text   here  with *bold*.
+#table(
+    columns: 2,
+    [a], [b],
+    [c], [d],
+)
+#f(1, 2)

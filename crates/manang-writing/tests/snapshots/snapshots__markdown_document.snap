@@ -1,0 +1,28 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: out.formatted
+---
+# Title
+
+Some text with trailing space
+hard break  
+next
+
+```
+code   
+
+
+
+more
+```
+
+$$
+x   
+
+
+y
+$$
+
+    indented code   
+
+- item
