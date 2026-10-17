@@ -1,7 +1,10 @@
 [workspace]
 resolver = "3"
 members = ["src-tauri", "crates/manang-kernel", "crates/manang-wasm-host", "crates/manang-editor"]
-exclude = ["crates/manang-wasm-host/tests/fixtures/echo-guest"]
+exclude = [
+    "crates/manang-wasm-host/tests/fixtures/echo-guest",
+    "crates/manang-wasm-host/tests/fixtures/io-guest",
+]
 
 [workspace.package]
 version = "0.1.0"

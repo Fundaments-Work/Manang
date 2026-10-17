@@ -3,40 +3,15 @@
 //! Needs the `wasm32-unknown-unknown` target (`rustup target add
 //! wasm32-unknown-unknown`).
 
-use std::path::Path;
-use std::process::Command;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use manang_kernel::{Kernel, KernelError, Manifest, Payload};
 use manang_wasm_host::{BufferService, Limits, WasmError, WasmRuntime};
 use serde_json::json;
 
-fn guest_component() -> &'static [u8] {
-    static COMPONENT: OnceLock<Vec<u8>> = OnceLock::new();
-    COMPONENT.get_or_init(|| {
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/echo-guest");
-        let target_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("echo-guest");
-        let status = Command::new(env!("CARGO"))
-            .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
-            .arg("--manifest-path")
-            .arg(fixture.join("Cargo.toml"))
-            .arg("--target-dir")
-            .arg(&target_dir)
-            .status()
-            .expect("cargo runs");
-        assert!(status.success(), "building the echo guest failed");
-        let module =
-            std::fs::read(target_dir.join("wasm32-unknown-unknown/release/echo_guest.wasm"))
-                .expect("guest module exists");
-        wit_component::ComponentEncoder::default()
-            .validate(true)
-            .module(&module)
-            .expect("module carries a component type")
-            .encode()
-            .expect("encodes as a component")
-    })
-}
+mod common;
+use common::echo_guest as guest_component;
 
 const BASE: &str = r#"
 [plugin]
