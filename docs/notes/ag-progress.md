@@ -813,3 +813,40 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - Vitest suite passing with 30 test suites (257 tests passing).
    - Passed `pnpm run typecheck && pnpm run lint`.
    - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
+## UI Wiring - Task G: App Polish (Shortcuts Reference & About/Licences)
+
+### Summary of Changes
+1. **Shortcut Reference Overlay (`src/lib/workbench/shortcuts.ts`, `shortcuts.test.ts`, and `src/lib/components/ShortcutOverlay.svelte`):**
+   - Pure model extracting, formatting, and categorizing workbench shortcuts into stable sections: "General", "Document & Files", "Views & Panels", and "Tabs & Navigation".
+   - Search filter matching across title, shortcut key combination, description, and category.
+   - Built modal overlay triggered globally via `Ctrl+/` (or `Cmd+/` on macOS) and dismissible via `Escape` or backdrop click.
+   - Read-only: inspects commands from `src/lib/commands/workbench` without modifying command definitions.
+   - Clean Fundaments styling: 1px hairlines, `--radius: 0`, DM Sans and DM Mono typography, no shadows.
+   - 4 unit tests validating Linux and macOS key formatting, category grouping, search filtering, and global accelerators.
+2. **About and Licences View (`src/lib/components/settings/AboutView.svelte` & `src/lib/components/SettingsPanel.svelte`):**
+   - Built dedicated About & Licences view in Settings displaying:
+     - App version (`0.1.0`), git commit (`7df53d9`), runtime kernel, frontend stack, and design system.
+     - Open-source software licenses overview (CodeMirror 6, Svelte 5, Typst, Wasmtime, DM Sans/Mono, Perfect Freehand).
+     - Mandatory SCOWL word-list license text from `crates/manang-writing/dict/` (copied to static assets `public/licenses/` and `src/assets/licenses/` and displayed in an expandable code viewer).
+3. **Testing & Quality Gates:**
+   - Vitest suite passing with 31 test suites (261 tests passing).
+   - `svelte-check` and `eslint` clean with 0 warnings and 0 errors.
+   - Headless visual verification harness (`verify-ui.mjs` on port 1431) passing all 122/122 checks.
+   - Zero ports or processes left running.
+
+---
+
+## Final UI Wiring Summary
+
+All tasks from Batches 1 and 2 have been completed, verified against the strict quality gates, and committed to `antigravity/ui-wiring`:
+
+- **Batch 1:**
+  - **Task A (`search.*` - Commit `d7263a7`):** Search panel with file-name and text content modes, regex/case/word options, include/exclude glob filters, match highlighting, and replace preview/apply.
+  - **Task B (`git.*` - Commit `acc3dce`):** Source control panel with staging/unstaging, diff viewer, commit/amend, branch switcher, sync, and commit history.
+  - **Task C (`settings.*`, `keybindings.*`, `theme.*` - Commit `9501f52`): Settings panel with schema-driven form, live search, keybindings table with shortcut recording/conflict detection, theme toggle.
+  - **Task D (`citations.*` - Commit `b0b003a`):** References panel with multi-format bibliography loader, ranked search, citation insertion, registry verification with difference detection, and APA/IEEE formatted generator.
+  - **Task E (LaTeX & BibTeX highlighting - Commit `33fe035`):** CodeMirror 6 language support for LaTeX (stex) and custom BibTeX parser with theme highlights.
+- **Batch 2:**
+  - **Task F (Outline view - Commit `7df53d9`):** Pure TS outline parsers for Typst (`=` headings and `<labels>`), LaTeX (`\section`..`\subsubsection` and `\label`), and Markdown (via `markdown.outline` kernel call + fallback) with 300 ms debounced live updates and click-to-jump.
+  - **Task G (App polish):** Read-only shortcut reference overlay (`Ctrl+/`), About view with app version, git commit, and SCOWL word-list license text.
