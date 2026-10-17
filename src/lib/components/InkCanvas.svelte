@@ -5,9 +5,9 @@
     nodeBounds,
     polygonToPath,
     strokeToPath,
-  } from "$lib/ink/geometry";
-  import { ink, type PenTool } from "$lib/state/ink.svelte";
-  import type { FigureNode } from "$lib/ink/scene";
+  } from "$lib/figure/geometry";
+  import { ink, type PenTool } from "$lib/state/figure.svelte";
+  import type { FigureNode } from "$lib/figure/scene";
 
   /**
    * The vector ink canvas — DESIGN.md §4.

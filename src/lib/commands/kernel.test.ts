@@ -10,7 +10,7 @@ const statics: Command[] = [
   {
     id: "toggle-split",
     title: "Toggle Split Screen",
-    group: "Plugins & Commands",
+    group: "Plugin commands",
     run: noop,
   },
   { id: "verify", title: "Verify citations", group: "AI Actions", run: noop },
@@ -23,7 +23,7 @@ const kernelList = [
 ];
 
 describe("mergeCommands", () => {
-  it("appends kernel commands after the static ones, in group Plugins & Commands", () => {
+  it("appends kernel commands after the static ones, in group Plugin commands", () => {
     const merged = mergeCommands(statics, kernelList, noop);
 
     expect(merged.map((c) => c.id)).toEqual([
@@ -32,7 +32,7 @@ describe("mergeCommands", () => {
       "kernel:editor.new",
       "kernel:typst.render",
     ]);
-    expect(merged.slice(2).every((c) => c.group === "Plugins & Commands")).toBe(true);
+    expect(merged.slice(2).every((c) => c.group === "Plugin commands")).toBe(true);
   });
 
   it("does not mutate the static list and tolerates an empty kernel", () => {
