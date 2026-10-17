@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use manang_kernel::{Hook, Kernel, KernelError, Payload, PluginError};
-use manang_latex::{LatexConfig, manifest, plugin, resolve_cache_dir};
+use manang_latex::{BackendChoice, LatexConfig, manifest, plugin, resolve_cache_dir};
 use serde_json::{Value, json};
 
 const WORKER: &str = env!("CARGO_BIN_EXE_manang-latex-worker");
@@ -21,6 +21,9 @@ const CHAPTER: &str = "A second paragraph, $E=mc^2$.\n";
 fn config(cache: Option<PathBuf>) -> LatexConfig {
     LatexConfig {
         worker: Some(PathBuf::from(WORKER)),
+        // These tests exercise the optional Tectonic worker specifically;
+        // the system backend has its own suite (tests/system.rs).
+        backend: BackendChoice::Tectonic,
         cache_dir: cache,
         timeout: Duration::from_secs(120),
         allow_network: std::env::var_os("MANANG_LATEX_TEST_NETWORK").is_some(),

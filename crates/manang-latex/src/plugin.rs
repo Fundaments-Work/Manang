@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use manang_kernel::{Access, Capability, Context, Hook, Manifest, Payload, Plugin, PluginError};
@@ -7,8 +7,9 @@ use parking_lot::Mutex;
 use serde_json::{Value, json};
 
 use crate::diagnostics::{Diagnostic, parse_bibtex_log, parse_tex_log};
-use crate::driver::{Build, CompileSpec, LatexConfig, compile};
+use crate::driver::{BackendChoice, Build, CompileSpec, LatexConfig, compile_with};
 use crate::error::LatexError;
+use crate::system::{Engine, TexTools};
 
 const MANIFEST: &str = include_str!("../manifest.toml");
 
@@ -30,10 +31,14 @@ struct Builds {
     last: Option<Arc<Build>>,
 }
 
-/// Compiles LaTeX with an embedded Tectonic engine.
+/// Compiles LaTeX with the system TeX installation, or the optional
+/// Tectonic worker when no TeX is installed.
 pub struct LatexPlugin {
     config: LatexConfig,
     builds: Mutex<Builds>,
+    /// Detected once, on first use: the installed TeX does not change while
+    /// the app runs (a restart picks up a new installation).
+    tools: OnceLock<TexTools>,
 }
 
 impl LatexPlugin {
@@ -41,7 +46,57 @@ impl LatexPlugin {
         Self {
             config,
             builds: Mutex::new(Builds::default()),
+            tools: OnceLock::new(),
         }
+    }
+
+    /// Use already-detected tools (tests inject a fixed set).
+    pub fn with_tools(config: LatexConfig, tools: TexTools) -> Self {
+        let plugin = Self::new(config);
+        let _ = plugin.tools.set(tools);
+        plugin
+    }
+
+    fn tools(&self) -> &TexTools {
+        self.tools.get_or_init(TexTools::detect)
+    }
+
+    /// What can compile LaTeX on this machine, for `latex.status`.
+    fn status_json(&self) -> Value {
+        let tools = self.tools();
+        let engines: Vec<&str> = tools.engines.keys().map(|e| e.program()).collect();
+        let tectonic = crate::driver::worker_available(&self.config);
+        let default = match self.config.backend {
+            BackendChoice::System => "system",
+            BackendChoice::Tectonic => "tectonic",
+            BackendChoice::Auto if tools.is_available() => "system",
+            BackendChoice::Auto if tectonic => "tectonic",
+            BackendChoice::Auto => "none",
+        };
+        json!({
+            "backends": [
+                {
+                    "id": "system",
+                    "available": tools.is_available(),
+                    "version": tools.version,
+                    "engines": engines,
+                    "latexmk": tools.latexmk.is_some(),
+                    "bibtex": tools.bibtex.is_some(),
+                    "biber": tools.biber.is_some(),
+                },
+                {
+                    "id": "tectonic",
+                    "available": tectonic,
+                    "version": Value::Null,
+                    "engines": ["xelatex"],
+                    "latexmk": false,
+                    "bibtex": tectonic,
+                    "biber": false,
+                }
+            ],
+            "default": default,
+            "default_engine": self.config.engine.program(),
+        })
     }
 
     fn remember(&self, main: &str, build: Build) -> Arc<Build> {
@@ -64,7 +119,7 @@ impl LatexPlugin {
     fn run(&self, args: &Value) -> Result<(String, Arc<Build>), LatexError> {
         let spec = parse_spec(args, &self.config)?;
         let main = spec.main.clone();
-        let build = compile(&self.config, &spec)?;
+        let build = compile_with(&self.config, &spec, self.tools())?;
         Ok((main.clone(), self.remember(&main, build)))
     }
 }
@@ -104,6 +159,20 @@ fn parse_spec(args: &Value, config: &LatexConfig) -> Result<CompileSpec, LatexEr
         })?;
         spec.timeout = Duration::from_millis(ms);
     }
+    if let Some(v) = args.get("engine").filter(|v| !v.is_null()) {
+        let name = v
+            .as_str()
+            .ok_or_else(|| LatexError::BadArgument("engine", "must be a string".to_owned()))?;
+        spec.engine = Some(Engine::parse(name).ok_or_else(|| {
+            LatexError::BadArgument("engine", "must be pdflatex, xelatex or lualatex".to_owned())
+        })?);
+    }
+    if let Some(v) = args.get("latexmk").filter(|v| !v.is_null()) {
+        spec.latexmk =
+            Some(v.as_bool().ok_or_else(|| {
+                LatexError::BadArgument("latexmk", "must be a boolean".to_owned())
+            })?);
+    }
     if let Some(v) = args.get("build_epoch") {
         spec.build_epoch = v.as_u64().ok_or_else(|| {
             LatexError::BadArgument("build_epoch", "must be an unsigned integer".to_owned())
@@ -132,6 +201,9 @@ fn compile_json(build: &Build) -> Value {
         "diagnostics": build.diagnostics,
         "duration_ms": u64::try_from(build.duration.as_millis()).unwrap_or(u64::MAX),
         "synctex": build.synctex.is_some(),
+        "backend": build.backend,
+        "engine": build.engine.program(),
+        "tex_version": build.tex_version,
     })
 }
 
@@ -215,6 +287,7 @@ impl Plugin for LatexPlugin {
             scope: "project".to_owned(),
         };
         match command {
+            "latex.status" => Ok(Payload::Json(self.status_json())),
             "latex.compile" => {
                 ctx.require(&read_project)?;
                 let (_, build) = self.run(&args).map_err(|e| failed(&e))?;

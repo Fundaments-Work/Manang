@@ -1,7 +1,7 @@
 [plugin]
 name = "latex"
 version = "0.1.0"
-description = "LaTeX compilation (Tectonic), structured diagnostics and SyncTeX"
+description = "LaTeX compilation with the system TeX (optional Tectonic), structured diagnostics and SyncTeX"
 tier = "native"
 
 [permissions]
@@ -9,6 +9,10 @@ filesystem = ["read:project", "write:cache"]
 
 [contributes]
 hooks = ["on_lint"]
+
+[[contributes.commands]]
+id = "latex.status"
+title = "LaTeX engines available"
 
 [[contributes.commands]]
 id = "latex.compile"

@@ -14,6 +14,7 @@ use crate::diagnostics::{Diagnostic, Severity, parse_bibtex_log, parse_tex_log};
 use crate::engine::{FailureKind, WorkerOutcome, WorkerRequest};
 use crate::error::LatexError;
 use crate::synctex::Synctex;
+use crate::system::{self, Engine, SystemSpec, TexTools};
 
 /// The build date embedded in PDFs unless overridden, so identical input
 /// gives identical output. 2023-11-14T22:13:20Z.
@@ -36,6 +37,23 @@ pub struct LatexConfig {
     pub allow_network: bool,
     /// Hard wall-clock limit per compile.
     pub timeout: Duration,
+    /// Which backend compiles. `Auto` prefers the system TeX installation.
+    pub backend: BackendChoice,
+    /// Engine used when a request does not name one.
+    pub engine: Engine,
+    /// Use `latexmk` with the system backend when it is installed.
+    pub latexmk: bool,
+}
+
+/// Which backend compiles LaTeX (ADR 0004, amendment of 2026-10-18).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BackendChoice {
+    /// The system TeX installation when one is found, otherwise the optional
+    /// Tectonic worker when it is installed.
+    #[default]
+    Auto,
+    System,
+    Tectonic,
 }
 
 impl Default for LatexConfig {
@@ -46,6 +64,9 @@ impl Default for LatexConfig {
             bundle: None,
             allow_network: false,
             timeout: Duration::from_secs(60),
+            backend: BackendChoice::Auto,
+            engine: Engine::Pdflatex,
+            latexmk: true,
         }
     }
 }
@@ -61,6 +82,10 @@ pub struct CompileSpec {
     pub timeout: Duration,
     pub synctex: bool,
     pub build_epoch: u64,
+    /// Engine for the system backend; `None` uses the configured default.
+    pub engine: Option<Engine>,
+    /// Override the configured `latexmk` preference.
+    pub latexmk: Option<bool>,
 }
 
 impl CompileSpec {
@@ -75,6 +100,8 @@ impl CompileSpec {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(DEFAULT_BUILD_EPOCH),
+            engine: None,
+            latexmk: None,
         }
     }
 }
@@ -91,6 +118,11 @@ pub struct Build {
     pub diagnostics: Vec<Diagnostic>,
     pub pages: Option<u32>,
     pub duration: Duration,
+    /// `"system"` or `"tectonic"`.
+    pub backend: &'static str,
+    pub engine: Engine,
+    /// The TeX distribution's version line, when known.
+    pub tex_version: Option<String>,
 }
 
 fn io_err(path: &Path, source: std::io::Error) -> LatexError {
@@ -118,6 +150,11 @@ fn find_worker(config: &LatexConfig) -> Result<PathBuf, LatexError> {
         }
     }
     Err(LatexError::WorkerMissing(name))
+}
+
+/// Whether the optional Tectonic worker is installed.
+pub fn worker_available(config: &LatexConfig) -> bool {
+    find_worker(config).is_ok_and(|path| path.is_file())
 }
 
 /// Where bundles and formats live.
@@ -230,40 +267,184 @@ fn page_count(log: &str) -> Option<u32> {
     after.split_whitespace().next()?.parse().ok()
 }
 
-/// Compile in a private temp directory. Blocks until the worker exits or the
-/// timeout kills it; call from a CPU-bound thread (Rayon), never from Tokio.
+/// Compile with the tools found on `PATH` right now. The plugin caches the
+/// detection and calls [`compile_with`] instead.
 pub fn compile(config: &LatexConfig, spec: &CompileSpec) -> Result<Build, LatexError> {
+    compile_with(config, spec, &TexTools::detect())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Backend {
+    System,
+    Tectonic,
+}
+
+fn choose_backend(config: &LatexConfig, tools: &TexTools) -> Result<Backend, LatexError> {
+    match config.backend {
+        BackendChoice::System if tools.is_available() => Ok(Backend::System),
+        BackendChoice::System => Err(LatexError::NoTexInstallation),
+        BackendChoice::Tectonic => Ok(Backend::Tectonic),
+        BackendChoice::Auto if tools.is_available() => Ok(Backend::System),
+        BackendChoice::Auto if worker_available(config) => Ok(Backend::Tectonic),
+        BackendChoice::Auto => Err(LatexError::NoTexInstallation),
+    }
+}
+
+/// FNV-1a: a stable, dependency-free key for per-project build folders.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+
+/// A persistent build folder per project and engine, so warm builds reuse
+/// aux files (latexmk then only reruns what changed).
+fn build_dir_for(config: &LatexConfig, root: &Path, engine: Engine) -> Result<PathBuf, LatexError> {
+    let key = fnv1a(root.as_os_str().as_encoded_bytes());
+    Ok(resolve_cache_dir(config)?
+        .join("builds")
+        .join(format!("{key:016x}-{}", engine.program())))
+}
+
+/// What a backend run left behind.
+struct RunOutcome {
+    stem: String,
+    /// The document failed to compile (TeX errors), with a short reason.
+    failed: Option<String>,
+}
+
+/// Compile in a private directory. Blocks until TeX exits or the timeout
+/// kills it; call from a CPU-bound thread (Rayon), never from Tokio.
+pub fn compile_with(
+    config: &LatexConfig,
+    spec: &CompileSpec,
+    tools: &TexTools,
+) -> Result<Build, LatexError> {
     let started = Instant::now();
-    let worker = find_worker(config)?;
-    let cache_dir = resolve_cache_dir(config)?;
+    let backend = choose_backend(config, tools)?;
 
     let scratch = tempfile::Builder::new()
         .prefix("manang-latex-")
         .tempdir()
         .map_err(|e| io_err(&std::env::temp_dir(), e))?;
     let src_dir = scratch.path().join("src");
-    let out_dir = scratch.path().join("out");
-    for dir in [&src_dir, &out_dir] {
-        fs::create_dir_all(dir).map_err(|e| io_err(dir, e))?;
-    }
+    fs::create_dir_all(&src_dir).map_err(|e| io_err(&src_dir, e))?;
     let inputs = prepare_inputs(spec, &src_dir)?;
+
+    let (out_dir, outcome, engine, tex_version, backend_name) = match backend {
+        Backend::System => {
+            let engine = spec.engine.unwrap_or(config.engine);
+            let out_dir = if spec.sources.is_some() {
+                scratch.path().join("out")
+            } else {
+                build_dir_for(config, &inputs.root, engine)?
+            };
+            let run = system::run(
+                tools,
+                &inputs.main,
+                &inputs.root,
+                &out_dir,
+                &SystemSpec {
+                    engine,
+                    latexmk: spec.latexmk.unwrap_or(config.latexmk),
+                    synctex: spec.synctex,
+                    timeout: spec.timeout,
+                    build_epoch: spec.build_epoch,
+                },
+            )?;
+            let failed = run
+                .failure
+                .map(|status| format!("{} stopped ({status}); see the log", engine.program()));
+            let outcome = RunOutcome {
+                stem: run.stem,
+                failed,
+            };
+            (out_dir, outcome, engine, tools.version.clone(), "system")
+        }
+        Backend::Tectonic => {
+            let out_dir = scratch.path().join("out");
+            fs::create_dir_all(&out_dir).map_err(|e| io_err(&out_dir, e))?;
+            let outcome = run_tectonic(config, spec, &inputs, scratch.path(), &out_dir)?;
+            (out_dir, outcome, Engine::Xelatex, None, "tectonic")
+        }
+    };
+
+    let stem = &outcome.stem;
+    let log = read_optional(&out_dir.join(format!("{stem}.log")))
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    let blg = read_optional(&out_dir.join(format!("{stem}.blg")))
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+
+    let mut diagnostics = parse_tex_log(&log, &inputs.main_name);
+    diagnostics.extend(parse_bibtex_log(&blg, &format!("{stem}.aux")));
+    if let Some(reason) = &outcome.failed
+        && !diagnostics.iter().any(|d| d.severity == Severity::Error)
+    {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Error,
+            message: reason.clone(),
+            file: Some(inputs.main_name.clone()),
+            line: None,
+            hint: None,
+        });
+    }
+
+    let pdf = if outcome.failed.is_none() {
+        read_optional(&out_dir.join(format!("{stem}.pdf"))).map(Arc::<[u8]>::from)
+    } else {
+        None
+    };
+    let synctex = if pdf.is_some() && spec.synctex {
+        read_optional(&out_dir.join(format!("{stem}.synctex.gz")))
+            .and_then(|bytes| Synctex::from_gz(&bytes).ok())
+            .map(Arc::new)
+    } else {
+        None
+    };
+
+    Ok(Build {
+        ok: pdf.is_some(),
+        pages: page_count(&log),
+        pdf,
+        synctex,
+        root: inputs.root.to_string_lossy().into_owned(),
+        diagnostics,
+        duration: started.elapsed(),
+        backend: backend_name,
+        engine,
+        tex_version,
+    })
+}
+
+/// The optional Tectonic engine, in its separate worker process.
+fn run_tectonic(
+    config: &LatexConfig,
+    spec: &CompileSpec,
+    inputs: &Inputs,
+    scratch: &Path,
+    out_dir: &Path,
+) -> Result<RunOutcome, LatexError> {
+    let worker = find_worker(config)?;
+    let cache_dir = resolve_cache_dir(config)?;
 
     let request = WorkerRequest {
         main: inputs.main.clone(),
         root: inputs.root.clone(),
-        out_dir: out_dir.clone(),
+        out_dir: out_dir.to_path_buf(),
         bundle: config.bundle.clone(),
         cache_dir,
         only_cached: !spec.allow_network,
         synctex: spec.synctex,
         build_epoch: spec.build_epoch,
     };
-    let request_path = scratch.path().join("request.json");
+    let request_path = scratch.join("request.json");
     let json = serde_json::to_vec(&request)
         .map_err(|e| LatexError::Engine(format!("could not encode the request: {e}")))?;
     fs::write(&request_path, json).map_err(|e| io_err(&request_path, e))?;
 
-    let stderr_path = scratch.path().join("worker.stderr");
+    let stderr_path = scratch.join("worker.stderr");
     let stderr = fs::File::create(&stderr_path).map_err(|e| io_err(&stderr_path, e))?;
     let mut command = Command::new(&worker);
     if !spec.allow_network {
@@ -317,55 +498,17 @@ pub fn compile(config: &LatexConfig, spec: &CompileSpec) -> Result<Build, LatexE
         })?;
 
     match outcome.failure {
-        Some(FailureKind::Bundle) => {
-            return Err(LatexError::BundleUnavailable(outcome.message));
-        }
-        Some(FailureKind::Engine) => return Err(LatexError::Engine(outcome.message)),
-        Some(FailureKind::Tex) | None => {}
+        Some(FailureKind::Bundle) => Err(LatexError::BundleUnavailable(outcome.message)),
+        Some(FailureKind::Engine) => Err(LatexError::Engine(outcome.message)),
+        Some(FailureKind::Tex) => Ok(RunOutcome {
+            stem: outcome.stem,
+            failed: Some(outcome.message),
+        }),
+        None => Ok(RunOutcome {
+            stem: outcome.stem,
+            failed: None,
+        }),
     }
-
-    let stem = &outcome.stem;
-    let log = read_optional(&out_dir.join(format!("{stem}.log")))
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .unwrap_or_default();
-    let blg = read_optional(&out_dir.join(format!("{stem}.blg")))
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .unwrap_or_default();
-
-    let mut diagnostics = parse_tex_log(&log, &inputs.main_name);
-    diagnostics.extend(parse_bibtex_log(&blg, &format!("{stem}.aux")));
-    if outcome.failure.is_some() && !diagnostics.iter().any(|d| d.severity == Severity::Error) {
-        diagnostics.push(Diagnostic {
-            severity: Severity::Error,
-            message: outcome.message.clone(),
-            file: Some(inputs.main_name.clone()),
-            line: None,
-            hint: None,
-        });
-    }
-
-    let pdf = if outcome.failure.is_none() {
-        read_optional(&out_dir.join(format!("{stem}.pdf"))).map(Arc::<[u8]>::from)
-    } else {
-        None
-    };
-    let synctex = if pdf.is_some() && spec.synctex {
-        read_optional(&out_dir.join(format!("{stem}.synctex.gz")))
-            .and_then(|bytes| Synctex::from_gz(&bytes).ok())
-            .map(Arc::new)
-    } else {
-        None
-    };
-
-    Ok(Build {
-        ok: pdf.is_some(),
-        pages: page_count(&log),
-        pdf,
-        synctex,
-        root: inputs.root.to_string_lossy().into_owned(),
-        diagnostics,
-        duration: started.elapsed(),
-    })
 }
 
 #[cfg(test)]
@@ -382,6 +525,47 @@ mod tests {
                 "{bad}"
             );
         }
+    }
+
+    #[test]
+    fn auto_prefers_system_tex_and_reports_when_nothing_is_installed() {
+        let mut tools = TexTools::default();
+        let config = LatexConfig {
+            worker: Some(PathBuf::from("/nonexistent/manang-latex-worker")),
+            ..LatexConfig::default()
+        };
+        assert!(matches!(
+            choose_backend(&config, &tools),
+            Err(LatexError::NoTexInstallation)
+        ));
+        tools
+            .engines
+            .insert(Engine::Pdflatex, PathBuf::from("/usr/bin/pdflatex"));
+        assert_eq!(choose_backend(&config, &tools).ok(), Some(Backend::System));
+        let forced = LatexConfig {
+            backend: BackendChoice::Tectonic,
+            ..config
+        };
+        assert_eq!(
+            choose_backend(&forced, &tools).ok(),
+            Some(Backend::Tectonic)
+        );
+    }
+
+    #[test]
+    fn build_dirs_are_stable_per_project_and_engine() {
+        let config = LatexConfig {
+            cache_dir: Some(PathBuf::from("/cache")),
+            ..LatexConfig::default()
+        };
+        let a = build_dir_for(&config, Path::new("/p/one"), Engine::Pdflatex).expect("dir");
+        let b = build_dir_for(&config, Path::new("/p/one"), Engine::Pdflatex).expect("dir");
+        let c = build_dir_for(&config, Path::new("/p/one"), Engine::Xelatex).expect("dir");
+        let d = build_dir_for(&config, Path::new("/p/two"), Engine::Pdflatex).expect("dir");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(a, d);
+        assert!(a.starts_with("/cache/builds"));
     }
 
     #[test]
@@ -402,6 +586,7 @@ mod tests {
         let config = LatexConfig {
             worker: Some(PathBuf::from("/nonexistent/manang-latex-worker")),
             cache_dir: Some(std::env::temp_dir()),
+            backend: BackendChoice::Tectonic,
             ..LatexConfig::default()
         };
         let mut sources = BTreeMap::new();

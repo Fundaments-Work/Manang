@@ -24,9 +24,13 @@ pub mod engine;
 mod error;
 mod plugin;
 pub mod synctex;
+pub mod system;
 #[cfg(feature = "engine")]
 pub mod worker;
 
-pub use driver::{Build, CompileSpec, LatexConfig, compile, resolve_cache_dir};
+pub use driver::{
+    BackendChoice, Build, CompileSpec, LatexConfig, compile, compile_with, resolve_cache_dir,
+};
 pub use error::LatexError;
 pub use plugin::{LatexPlugin, manifest, plugin};
+pub use system::{Engine, TexTools};

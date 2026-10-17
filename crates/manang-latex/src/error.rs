@@ -33,6 +33,12 @@ pub enum LatexError {
     BundleUnavailable(String),
     #[error("the engine failed: {0}")]
     Engine(String),
+    #[error(
+        "no TeX installation was found: install TeX Live or MiKTeX (then restart Manang), or the optional built-in engine"
+    )]
+    NoTexInstallation,
+    #[error("the TeX installation has no `{0}`; choose another engine or install it")]
+    EngineMissing(String),
     #[error("no build is available; run `latex.compile` first")]
     NoBuild,
     #[error("SyncTeX data was not produced for this build")]
@@ -57,6 +63,8 @@ impl LatexError {
             Self::Timeout(_) => "timeout",
             Self::BundleUnavailable(_) => "bundle_unavailable",
             Self::Engine(_) => "engine",
+            Self::NoTexInstallation => "no_tex",
+            Self::EngineMissing(_) => "engine_missing",
             Self::NoBuild => "no_build",
             Self::NoSynctex => "synctex_unavailable",
             Self::BadSynctex(_) => "synctex_malformed",
