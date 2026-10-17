@@ -276,6 +276,7 @@ async function shoot(cdp, name) {
 /* -- Input --------------------------------------------------------------- */
 
 const KEYS = {
+  ".": ["Period", 190],
   Tab: ["Tab", 9],
   Enter: ["Enter", 13],
   Escape: ["Escape", 27],
@@ -341,6 +342,16 @@ async function press(
 
 async function insertText(cdp, text) {
   await cdp.send("Input.insertText", { text });
+  await sleep(150);
+}
+
+/** Types one character at a time, as keys, so typing-triggered features run. */
+async function typeChars(cdp, text) {
+  for (const ch of text) {
+    await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", text: ch, key: ch });
+    await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: ch });
+    await sleep(40);
+  }
   await sleep(150);
 }
 
@@ -1087,11 +1098,30 @@ async function main() {
       "Ctrl+Shift+P also opens it",
       await exists(page, '[role="dialog"] input[role="combobox"]'),
     );
-    await insertText(page, "typst.export");
+    await insertText(page, "export pdf");
     check(
-      "kernel commands are listed",
+      "export is listed once",
       await page.evaluate(
-        `document.querySelector('[role="dialog"]').innerText.includes("Export PDF")`,
+        `[...document.querySelectorAll('[role="dialog"] [role="option"]')].filter((o) => o.textContent.includes("Export PDF")).length === 1`,
+      ),
+    );
+    await press(page, "Escape");
+
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "format");
+    check(
+      "Format document is listed with its shortcut",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('[role="dialog"]').innerText; return t.includes("Format document") && /Alt\\+Shift\\+F|Shift\\+Alt\\+F/.test(t); })()`,
+      ),
+    );
+    await press(page, "Escape");
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "editor");
+    check(
+      "plugin internals are not offered (no editor.new, editor.insert...)",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('[role="dialog"]').innerText; return !t.includes("editor.new") && !t.includes("editor.insert") && !t.includes("project.rename"); })()`,
       ),
     );
     await press(page, "Escape");
@@ -1109,6 +1139,184 @@ async function main() {
       await page.evaluate(
         `document.querySelector("#panel-tab-output")?.getAttribute("aria-selected") === "true"`,
       ),
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Writing tools");
+    const wordCount = () =>
+      page.evaluate(
+        `Number(document.querySelector("[data-word-count]")?.textContent.match(/\\d+/)?.[0] ?? -1)`,
+      );
+
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(
+      page,
+      "\n\nI beleive teh data is is clear.  \nA broken $x + y\n\n\n\nLast line",
+    );
+    const baseWords = await wordCount();
+
+    await expectEventually(
+      page,
+      "misspelled words get a squiggle after typing stops",
+      `[...document.querySelectorAll(".cm-spell")].some((e) => e.textContent === "teh") && [...document.querySelectorAll(".cm-spell")].some((e) => e.textContent === "beleive")`,
+      { timeout: 8000 },
+    );
+    check(
+      "the squiggle is a wavy underline, not a rounded or coloured box",
+      await page.evaluate(
+        `(() => { const s = getComputedStyle(document.querySelector(".cm-spell")); return s.textDecorationStyle === "wavy" && s.borderRadius === "0px"; })()`,
+      ),
+    );
+    await shoot(page, "20-spell-squiggle");
+
+    await expectEventually(
+      page,
+      "prose lint underlines the repeated word, in a different style from spelling",
+      `(() => { const el = [...document.querySelectorAll(".cm-prose-warning")].find((e) => e.textContent.includes("is is")); return el !== undefined && getComputedStyle(el).textDecorationStyle === "dashed"; })()`,
+      { timeout: 8000 },
+    );
+    if (!(await exists(page, "#bottom-panel"))) await press(page, "j", { ctrl: true });
+    await click(page, "#panel-tab-problems");
+    check(
+      "Problems lists the prose finding (source writing) next to the compiler error",
+      await page.evaluate(
+        `(() => { const t = document.querySelector("#bottom-panel")?.innerText ?? ""; return t.includes("Repeated word") && t.includes("writing") && t.includes("Unclosed math delimiter"); })()`,
+      ),
+    );
+    await shoot(page, "21-problems-writing");
+    await focusEditor(page);
+
+    // Quick fix by clicking the squiggle.
+    const first = await page.evaluate(
+      `(() => { const el = [...document.querySelectorAll(".cm-spell")].find((e) => e.textContent === "beleive"); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+    );
+    await mouse(page, "mouseMoved", first.x, first.y);
+    await mouse(page, "mousePressed", first.x, first.y);
+    await mouse(page, "mouseReleased", first.x, first.y);
+    await expectEventually(
+      page,
+      "clicking a squiggle opens the quick-fix menu with suggestions and Add to dictionary",
+      `(() => { const m = document.querySelector(".cm-spell-menu"); return m !== null && m.innerText.includes("believe") && m.innerText.includes("Add to dictionary"); })()`,
+    );
+    await shoot(page, "22-quick-fix");
+    await click(page, '.cm-spell-item[data-fix="believe"]');
+    await expectEventually(
+      page,
+      "choosing a suggestion replaces the word",
+      `document.querySelector(".cm-content").innerText.includes("I believe teh data")`,
+    );
+
+    // Quick fix by keyboard: caret just after "teh", Ctrl+.
+    await expectEventually(
+      page,
+      "the fixed word loses its squiggle",
+      `![...document.querySelectorAll(".cm-spell")].some((e) => e.textContent === "believe")`,
+      { timeout: 8000 },
+    );
+    // Move the caret: Home of the line, then past "I believe teh".
+    await press(page, "Home");
+    for (let i = 0; i < "I believe teh".length; i += 1)
+      await press(page, "ArrowRight", { wait: 10 });
+    await press(page, ".", { ctrl: true, wait: 400 });
+    check("Ctrl+. opens the menu at the caret", await exists(page, ".cm-spell-menu"));
+    await press(page, "Enter", { wait: 300 });
+    await expectEventually(
+      page,
+      "Enter applies the highlighted suggestion",
+      `document.querySelector(".cm-content").innerText.includes("I believe the data")`,
+    );
+
+    // Add to dictionary.
+    await caretToEnd(page);
+    await insertText(page, "\nwich");
+    await expectEventually(
+      page,
+      "a new misspelling is flagged",
+      `[...document.querySelectorAll(".cm-spell")].some((e) => e.textContent === "wich")`,
+      { timeout: 8000 },
+    );
+    await press(page, ".", { ctrl: true, wait: 400 });
+    await click(page, '.cm-spell-item[data-action="add-word"]');
+    await expectEventually(
+      page,
+      "Add to dictionary clears the squiggle",
+      `![...document.querySelectorAll(".cm-spell")].some((e) => e.textContent === "wich")`,
+      { timeout: 8000 },
+    );
+
+    // Completions.
+    await insertText(page, "\n$ x = ");
+    await typeChars(page, "alph");
+    await expectEventually(
+      page,
+      "typing a symbol name in math offers it with its Unicode preview",
+      `(document.querySelector(".cm-tooltip-autocomplete")?.innerText ?? "").includes("α")`,
+    );
+    await shoot(page, "23-symbol-completion");
+    await press(page, "Escape");
+    await insertText(page, " $\n\n");
+    await typeChars(page, "theor");
+    await expectEventually(
+      page,
+      "typing a snippet trigger offers the snippet",
+      `(document.querySelector(".cm-tooltip-autocomplete")?.innerText ?? "").includes("Theorem")`,
+    );
+    await press(page, "Enter", { wait: 600 });
+    await expectEventually(
+      page,
+      "accepting it expands with tab stops",
+      `document.querySelector(".cm-content").innerText.includes("Theorem (name)") && document.querySelector(".cm-snippetField") !== null`,
+    );
+    await press(page, "Escape");
+
+    // Format document, one undo step.
+    const hasTrailing = `[...document.querySelectorAll(".cm-line")].some((l) => /[ \\t]$/.test(l.textContent))`;
+    check(
+      "the text has trailing whitespace before formatting",
+      await page.evaluate(hasTrailing),
+    );
+    await press(page, "f", { shift: true, alt: true, wait: 600 });
+    await expectEventually(
+      page,
+      "Shift+Alt+F formats the document",
+      `!(${hasTrailing})`,
+    );
+    check(
+      "the status says the document was formatted",
+      /Document formatted/.test(await statusText(page)),
+    );
+    await press(page, "z", { ctrl: true, wait: 300 });
+    check("one undo restores the whole formatting", await page.evaluate(hasTrailing));
+
+    // Word count.
+    await caretToEnd(page);
+    await sleep(2500);
+    const wordsBefore = await wordCount();
+    await insertText(page, "\n\nalpha beta gamma delta epsilon");
+    await expectEventually(
+      page,
+      "the word count updates after typing",
+      `Number(document.querySelector("[data-word-count]")?.textContent.match(/\\d+/)?.[0] ?? -1) >= ${wordsBefore + 5}`,
+      { timeout: 8000 },
+    );
+    check(
+      "the word count tooltip gives characters, sentences and reading time",
+      await page.evaluate(
+        `(() => { const t = document.querySelector("[data-word-count]")?.title ?? ""; return /characters/.test(t) && /sentences?/.test(t) && /to read/.test(t); })()`,
+      ),
+      `${baseWords} -> ${wordsBefore}`,
+    );
+    await shoot(page, "24-writing-status");
+
+    // Leave the document as found.
+    for (let i = 0; i < 80; i += 1) {
+      if (!(await dirtyTabs(page)).includes("talk.typ")) break;
+      await press(page, "z", { ctrl: true, wait: 30 });
+    }
+    check(
+      "undo returns talk.typ to its saved text",
+      !(await dirtyTabs(page)).includes("talk.typ"),
     );
 
     /* ------------------------------------------------------------------ */
