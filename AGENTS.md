@@ -29,7 +29,8 @@ When writing or modifying code in this codebase, you MUST adhere to the followin
    - **Rayon Thread Pool:** Used for CPU-bound tasks (Typst evaluation, Tectonic passes, image rendering, syntax tree re-parsing).
    - **UI Thread:** Must remain at 60/120 FPS at all times. Keystroke-to-screen latency must stay under 8ms.
 4. **WASM Sandboxing for Extensions:** Third-party plugins must NEVER be granted direct OS syscall access. They must execute inside **Wasmtime component-model** sandboxes (see ADR 0003) with explicit capability declarations in `manifest.toml`. Capabilities are linked as WIT imports; there are no ambient WASI syscalls.
-5. **Local-First & Git-Native:** Documents must remain human-readable UTF-8 files on disk. Never introduce proprietary binary database formats that trap user files.
+5. **Web-capable core:** a web version is planned after the desktop core. Plugin logic that does not inherently need the OS must compile to `wasm32-unknown-unknown`; filesystem, network, process spawning and clocks go behind small traits/services so a browser implementation can be swapped in. Do not add OS-only dependencies to such crates.
+6. **Local-First & Git-Native:** Documents must remain human-readable UTF-8 files on disk. Never introduce proprietary binary database formats that trap user files.
 
 ---
 
