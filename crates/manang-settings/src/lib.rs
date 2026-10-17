@@ -15,6 +15,7 @@ pub mod keys;
 pub mod layers;
 pub mod registry;
 pub mod store;
+pub mod theme;
 
 pub use error::{KeyError, SettingsError, ValidationError};
 pub use layers::{Resolved, Source, Warning};
