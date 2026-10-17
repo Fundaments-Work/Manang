@@ -1,0 +1,15 @@
+[package]
+name = "echo-guest"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# A standalone workspace: the fixture targets wasm32-unknown-unknown and must
+# not be built as part of the Manang workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.63"

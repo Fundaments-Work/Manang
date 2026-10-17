@@ -1,0 +1,60 @@
+package manang:plugin@0.1.0;
+
+/// Values that cross the plugin boundary.
+interface types {
+    variant payload {
+        empty,
+        json(string),
+        binary(list<u8>),
+    }
+
+    record failure {
+        message: string,
+    }
+
+    enum hook {
+        on-compile-pre,
+        on-compile-post,
+        on-lint,
+        register-agent-tool,
+    }
+}
+
+/// The active document buffer. Linked only when the manifest declares a
+/// `buffer` permission; a component importing it without that grant is
+/// rejected at load time.
+interface buffer {
+    use types.{failure};
+
+    /// Requires `read:active`.
+    read-active: func() -> result<string, failure>;
+    /// Requires `write:active`.
+    write-active: func(text: string) -> result<_, failure>;
+}
+
+/// What every plugin exports.
+interface handler {
+    use types.{payload, failure, hook};
+
+    invoke: func(command: string, input: payload) -> result<payload, failure>;
+    on-hook: func(hook: hook, input: payload) -> result<payload, failure>;
+}
+
+/// A plugin that needs nothing from the host. Third-party authors target this
+/// world by default. There are deliberately no WASI imports: a plugin has no
+/// ambient syscalls, only the interfaces below.
+world plugin {
+    export handler;
+}
+
+/// A plugin that also edits the active buffer.
+world plugin-buffer {
+    import buffer;
+    export handler;
+}
+
+/// Host-side superset used to generate bindings. Not a plugin target.
+world bindings {
+    import buffer;
+    export handler;
+}

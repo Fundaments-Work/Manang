@@ -28,7 +28,7 @@ When writing or modifying code in this codebase, you MUST adhere to the followin
    - **Tokio Runtime:** Reserved strictly for asynchronous I/O, network requests, agent streaming, and file watching. Never run CPU-intensive compiler passes inside Tokio worker threads.
    - **Rayon Thread Pool:** Used for CPU-bound tasks (Typst evaluation, Tectonic passes, image rendering, syntax tree re-parsing).
    - **UI Thread:** Must remain at 60/120 FPS at all times. Keystroke-to-screen latency must stay under 8ms.
-4. **WASM Sandboxing for Extensions:** Third-party plugins must NEVER be granted direct OS syscall access. They must execute inside **Extism / Wasmtime** sandboxes with explicit capability declarations in `manifest.toml`.
+4. **WASM Sandboxing for Extensions:** Third-party plugins must NEVER be granted direct OS syscall access. They must execute inside **Wasmtime component-model** sandboxes (see ADR 0003) with explicit capability declarations in `manifest.toml`. Capabilities are linked as WIT imports; there are no ambient WASI syscalls.
 5. **Local-First & Git-Native:** Documents must remain human-readable UTF-8 files on disk. Never introduce proprietary binary database formats that trap user files.
 
 ---
