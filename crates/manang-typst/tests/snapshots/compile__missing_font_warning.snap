@@ -1,0 +1,19 @@
+---
+source: crates/manang-typst/tests/compile.rs
+expression: report.diagnostics
+---
+[
+  {
+    "severity": "warning",
+    "message": "unknown font family: no such font family",
+    "file": "/main.typ",
+    "line": 2,
+    "column": 17,
+    "range": {
+      "start": 54,
+      "end": 75
+    },
+    "hints": [],
+    "trace": []
+  }
+]
