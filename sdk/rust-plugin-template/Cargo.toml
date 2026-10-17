@@ -1,0 +1,23 @@
+[package]
+name = "my-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Standalone workspace: the plugin targets wasm32-unknown-unknown.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.63"
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+# A panic traps the instance; the host reports it and stays healthy.
+panic = "abort"
