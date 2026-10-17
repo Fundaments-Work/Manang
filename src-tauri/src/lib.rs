@@ -284,7 +284,7 @@ pub fn run() -> Result<(), tauri::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppInfo, EventBus, app_info, build_kernel};
+    use super::{AppInfo, Arc, Dirs, Editor, EventBus, app_info, build_kernel};
     use manang_kernel::Payload;
     use serde_json::json;
 
