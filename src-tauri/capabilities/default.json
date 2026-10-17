@@ -3,5 +3,10 @@
   "identifier": "default",
   "description": "Capability for the main window. The shell is a presentation layer: it needs no filesystem, shell or HTTP capability until a feature actually requires one, per AGENTS.md's capability-based sandboxing rule.",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "dialog:allow-open",
+    "dialog:allow-save"
+  ]
 }

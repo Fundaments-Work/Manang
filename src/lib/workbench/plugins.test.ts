@@ -21,7 +21,7 @@ describe("plugins panel model", () => {
       "typst.render",
     ]);
     expect(groups[4]?.commands).toHaveLength(14);
-    expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(8 + 1 + 12 + 3 + 14);
+    expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(8 + 1 + 18 + 3 + 14);
   });
 
   it("is empty, not invented, when the kernel lists nothing", () => {

@@ -10,7 +10,8 @@
   import StatusBar from "./StatusBar.svelte";
   import TabStrip from "./TabStrip.svelte";
   import TopBar from "./TopBar.svelte";
-  import Welcome from "./Welcome.svelte";
+  import Home from "./Home.svelte";
+  import ProjectSwitcher from "./ProjectSwitcher.svelte";
   import ConfirmDialog from "./ui/ConfirmDialog.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import { matches } from "$lib/commands/shortcut";
@@ -20,12 +21,15 @@
     shortcutTable,
     workbenchCommands,
   } from "$lib/commands/workbench";
-  import { toggleSlides } from "$lib/state/actions";
+  import { goHome, toggleSlides } from "$lib/state/actions";
   import { build } from "$lib/state/build.svelte";
   import { dialog } from "$lib/state/dialog.svelte";
+  import { home } from "$lib/state/home.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { palette } from "$lib/state/palette.svelte";
   import { slides } from "$lib/state/slides.svelte";
+  import { switcher } from "$lib/state/switcher.svelte";
+  import { captureThumbnail } from "$lib/state/thumbnails";
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { engineOf } from "$lib/workbench/paths";
@@ -49,6 +53,26 @@
     untrack(() => build.schedule());
   });
 
+  // After a good compile of the main document, keep the project's Home
+  // thumbnail fresh (at most once a minute per project).
+  $effect(() => {
+    const generation = build.generation;
+    untrack(() => {
+      const project = workspace.project;
+      if (
+        generation > 0 &&
+        project !== null &&
+        project.engine === "typst" &&
+        build.status === "ok" &&
+        build.target === project.main
+      ) {
+        void captureThumbnail(project.root, Date.now(), (root) =>
+          home.noteThumbnail(root),
+        );
+      }
+    });
+  });
+
   const sideOverlay = $derived(
     layout.narrow && sidePanelVisible(layout.sideView, workspace.project !== null),
   );
@@ -58,15 +82,35 @@
       event.defaultPrevented ||
       dialog.request !== null ||
       palette.open ||
+      switcher.open ||
       slides.presenting
     )
       return;
     const mod = event.ctrlKey || event.metaKey;
 
+    // Project switcher and Home. Shortcuts live here, not in the command list,
+    // because they act on the workbench as a whole.
+    if (mod && !event.altKey && event.key.toLowerCase() === "o" && !event.shiftKey) {
+      event.preventDefault();
+      void switcher.show();
+      return;
+    }
+    if (mod && !event.altKey && event.key.toLowerCase() === "h" && event.shiftKey) {
+      event.preventDefault();
+      if (workspace.project !== null) {
+        if (home.visible) home.hide();
+        else goHome();
+      }
+      return;
+    }
+
     if (event.key === "Escape") {
       if (layout.zen) {
         event.preventDefault();
         layout.toggleZen();
+      } else if (home.visible && workspace.project !== null) {
+        event.preventDefault();
+        home.hide();
       } else if (sideOverlay) {
         event.preventDefault();
         layout.closeSide();
@@ -136,27 +180,33 @@
       {/if}
     {/if}
 
-    <main class="flex min-h-0 min-w-0 flex-1 flex-col">
-      {#if workspace.project === null}
-        <Welcome />
-      {:else}
-        {#if !layout.zen}
-          <TabStrip />
-        {/if}
-        <EditorArea />
-        {#if !layout.zen && layout.panelOpen}
-          <Resizer
-            orientation="horizontal"
-            label="Resize bottom panel"
-            value={layout.panelHeight}
-            min={PANEL_MIN}
-            max={PANEL_MAX}
-            reverse
-            onchange={(h) => layout.setPanelHeight(h)}
-            onreset={() => layout.setPanelHeight(DEFAULT_LAYOUT.panelHeight)}
-          />
-          <BottomPanel />
-        {/if}
+    <main class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      {#if workspace.project !== null}
+        <!-- Stays mounted under Home so the editor keeps its caret and scroll. -->
+        <div class="flex min-h-0 flex-1 flex-col" inert={home.visible}>
+          {#if !layout.zen}
+            <TabStrip />
+          {/if}
+          <EditorArea />
+          {#if !layout.zen && layout.panelOpen}
+            <Resizer
+              orientation="horizontal"
+              label="Resize bottom panel"
+              value={layout.panelHeight}
+              min={PANEL_MIN}
+              max={PANEL_MAX}
+              reverse
+              onchange={(h) => layout.setPanelHeight(h)}
+              onreset={() => layout.setPanelHeight(DEFAULT_LAYOUT.panelHeight)}
+            />
+            <BottomPanel />
+          {/if}
+        </div>
+      {/if}
+      {#if home.showing}
+        <div class="absolute inset-0 z-10 bg-bg">
+          <Home />
+        </div>
       {/if}
     </main>
   </div>
@@ -174,6 +224,7 @@
   {/if}
 
   <CommandPalette />
+  <ProjectSwitcher />
   <ConfirmDialog />
   {#if slides.presenting}
     <Presentation />

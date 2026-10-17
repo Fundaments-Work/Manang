@@ -11,6 +11,7 @@ pub mod git;
 mod paths;
 mod plugin;
 pub mod recent;
+pub mod registry;
 pub mod scaffold;
 pub mod tree;
 pub mod watch;

@@ -471,32 +471,152 @@ async function main() {
     const browser = await Cdp.open(version.webSocketDebuggerUrl);
 
     /* ------------------------------------------------------------------ */
-    section("Welcome");
+    section("Home");
     const page = await newPage(browser);
     current = page;
-    await shoot(page, "01-welcome");
+    await shoot(page, "01-home");
+
+    const cards = (cdp) =>
+      cdp.evaluate(
+        `[...document.querySelectorAll("[data-project]")].map((c) => c.dataset.project.split("/").pop())`,
+      );
+    const searchHome = async (cdp, text) => {
+      await click(cdp, 'input[aria-label="Search projects"]');
+      await cdp.evaluate(
+        `(() => { const i = document.querySelector('input[aria-label="Search projects"]'); i.select(); })()`,
+      );
+      if (text === "") await press(cdp, "Delete");
+      else await insertText(cdp, text);
+      await sleep(200);
+    };
 
     check(
-      "welcome offers open folder and new project",
+      "home is the no-project surface, with Open folder and New project",
       await page.evaluate(`(() => {
       const t = [...document.querySelectorAll("button")].map((b) => b.textContent.trim());
-      return t.includes("Open folder") && t.includes("New project");
+      return !!document.querySelector('section[aria-label="Home"]') && t.includes("Open folder") && t.includes("New project");
     })()`),
     );
     check(
-      "recent projects come from project.recent, missing folders are disabled",
+      "home nav lists Projects, Recent, Pinned, Archive, Templates and Settings",
+      await page.evaluate(
+        `[...document.querySelectorAll('nav[aria-label="Home sections"] button')].map((b) => b.getAttribute("aria-label")).join() === "Projects,Recent,Pinned,Archive,Templates,Settings"`,
+      ),
+    );
+    check(
+      "projects shows live projects, pinned first, missing folder flagged",
       await page.evaluate(`(() => {
-      const rows = [...document.querySelectorAll('section[aria-labelledby="recent-heading"] li button')];
-      const missing = rows.find((r) => r.textContent.includes("Old thesis"));
-      return rows.length === 3 && missing?.disabled === true && missing.textContent.includes("Folder not found");
+      const names = [...document.querySelectorAll("[data-project]")].map((c) => c.dataset.project.split("/").pop());
+      const missing = document.querySelector('[data-project$="old-thesis"] button');
+      return names.join() === "entropy-paper,lecture-notes,thesis-chapter-3,old-thesis" && missing?.disabled === true && missing.textContent.includes("Folder not found");
     })()`),
     );
     check(
-      "no project means no tab strip or panel yet",
-      !(await exists(page, '[role="tablist"][aria-label="Open files"]')),
+      "cards show engine, a relative time and tags",
+      await page.evaluate(`(() => {
+      const c = document.querySelector('[data-project$="entropy-paper"]').innerText;
+      return c.includes("Typst") && /ago|yesterday|just now|\\d{4}/.test(c) && c.includes("physics");
+    })()`),
+    );
+    await expectEventually(
+      page,
+      "a stored thumbnail loads lazily into its card",
+      `document.querySelector('[data-project$="thesis-chapter-3"] img[alt^="First page"]')?.src.startsWith("blob:")`,
     );
 
-    // A folder that is not a project explains what to do.
+    await searchHome(page, "lecture");
+    check("search narrows the list", (await cards(page)).join() === "lecture-notes");
+    await searchHome(page, "zzzz");
+    check(
+      "a search with no match says so and offers to clear it",
+      await page.evaluate(
+        `document.body.innerText.includes('No projects match "zzzz"') && [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Clear search")`,
+      ),
+    );
+    await clickText(page, "button", "Clear search");
+    check("clearing the search restores the list", (await cards(page)).length === 4);
+
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Pinned");
+    check(
+      "Pinned shows pinned projects only",
+      (await cards(page)).join() === "entropy-paper",
+    );
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Archive");
+    check(
+      "Archive shows archived projects",
+      (await cards(page)).join() === "conference-poster",
+    );
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Templates");
+    check(
+      "Templates lists a starter per engine",
+      await page.evaluate(
+        `[...document.querySelectorAll("main button, section[aria-label='Home'] button")].filter((b) => /(Typst|LaTeX) article|Markdown notes/.test(b.textContent)).length === 3`,
+      ),
+    );
+    await shoot(page, "02-templates");
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Projects");
+
+    // Sort and view.
+    await page.evaluate(
+      `(() => { const s = document.querySelector('select[aria-label="Sort projects"]'); s.value = "name"; s.dispatchEvent(new Event("change", { bubbles: true })); })()`,
+    );
+    await sleep(150);
+    check(
+      "sort by name orders within pinned and unpinned",
+      (await cards(page)).join() ===
+        "entropy-paper,lecture-notes,old-thesis,thesis-chapter-3",
+      (await cards(page)).join(),
+    );
+    await click(page, 'button[role="radio"][aria-label="List"]');
+    check(
+      "list view keeps every project",
+      (await cards(page)).length === 4 &&
+        (await exists(
+          page,
+          'button[role="radio"][aria-label="List"][aria-checked="true"]',
+        )),
+    );
+    await shoot(page, "03-home-list");
+    await click(page, 'button[role="radio"][aria-label="Grid"]');
+
+    // Pin and archive through the card, then the menu.
+    await click(page, '[data-project$="lecture-notes"] button[aria-label^="Pin"]');
+    check(
+      "pinning moves a project to the front and into Pinned",
+      (await cards(page))[0] !== undefined &&
+        (await exists(
+          page,
+          '[data-project$="lecture-notes"] button[aria-pressed="true"]',
+        )),
+    );
+    await click(page, '[data-project$="lecture-notes"] button[aria-pressed="true"]');
+    await page.evaluate(
+      `document.querySelector('[data-project$="lecture-notes"] > button, [data-project$="lecture-notes"] button').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 300 }))`,
+    );
+    await sleep(200);
+    check(
+      "the context menu offers open, rename, pin, archive, copy path and remove",
+      await page.evaluate(
+        `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((i) => i.textContent.trim()).join() === "Open,Rename,Edit tags,Pin,Archive,Copy path,Remove from list"`,
+      ),
+    );
+    await shoot(page, "04-card-menu");
+    await clickText(page, '[role="menuitem"]', "Archive");
+    check(
+      "archiving removes it from Projects",
+      !(await cards(page)).includes("lecture-notes"),
+    );
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Archive");
+    check("and lists it in the Archive", (await cards(page)).includes("lecture-notes"));
+    await page.evaluate(
+      `document.querySelector('[data-project$="lecture-notes"] button').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 300 }))`,
+    );
+    await sleep(200);
+    await clickText(page, '[role="menuitem"]', "Unarchive");
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Projects");
+    check("unarchiving brings it back", (await cards(page)).includes("lecture-notes"));
+
+    // A folder that is not a project explains what to do (typed path in a browser).
     await clickText(page, "button", "Open folder");
     await click(page, 'input[placeholder*="my-paper"]');
     await insertText(page, "/nowhere");
@@ -507,9 +627,9 @@ async function main() {
         `document.querySelector('[role="alert"]')?.textContent.includes("contains manang.toml") ?? false`,
       ),
     );
+    await clickText(page, "button", "Cancel");
 
-    // New project form, then back out.
-    await clickText(page, "button", "Back");
+    // New project dialog, then back out.
     await clickText(page, "button", "New project");
     check(
       "new project offers Typst, LaTeX and Markdown",
@@ -517,16 +637,17 @@ async function main() {
         `[...document.querySelectorAll('[role="radiogroup"][aria-label="Language"] [role="radio"]')].map((r) => r.textContent.trim().split(/\\s/)[0]).join() === "Typst,LaTeX,Markdown"`,
       ),
     );
-    await shoot(page, "02-new-project");
+    await shoot(page, "05-new-project");
+    await press(page, "Escape");
+    check(
+      "Esc closes the new project dialog",
+      !(await exists(page, '[role="dialog"]')),
+    );
 
     /* ------------------------------------------------------------------ */
     section("Workbench");
     await reload(page);
-    await clickText(
-      page,
-      'section[aria-labelledby="recent-heading"] button',
-      "Entropy paper",
-    );
+    await clickText(page, "[data-project] button", "Entropy paper");
     await waitFor(
       page,
       `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
@@ -1503,6 +1624,128 @@ async function main() {
       ),
     );
     await resize(page, 1280, 820);
+
+    /* ------------------------------------------------------------------ */
+    section("Home inside a project, and switching");
+    const crumb = (cdp) =>
+      cdp.evaluate(
+        `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.replace(/\\s+/g, " ") ?? ""`,
+      );
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Home"]');
+    await expectEventually(
+      page,
+      "the Home button shows Home over the open project",
+      `!!document.querySelector('section[aria-label="Home"]') && document.querySelector('button[aria-label="Home"]').getAttribute("aria-pressed") === "true"`,
+    );
+    check(
+      "the project stays open underneath, out of reach",
+      await page.evaluate(
+        `document.querySelector('[role="tablist"][aria-label="Open files"]')?.closest("[inert]") !== null`,
+      ),
+    );
+    await expectEventually(
+      page,
+      "the compiled first page became a thumbnail for the open project",
+      `document.querySelector('[data-project$="entropy-paper"] img[alt^="First page"]')?.src.startsWith("blob:")`,
+    );
+    await shoot(page, "22-home-in-project");
+    check(
+      "Back to the project closes Home",
+      await (async () => {
+        await clickText(page, "button", "Back to Entropy paper");
+        return !(await exists(page, 'section[aria-label="Home"]'));
+      })(),
+    );
+    await press(page, "h", { ctrl: true, shift: true, synthetic: true });
+    check("Ctrl+Shift+H opens Home", await exists(page, 'section[aria-label="Home"]'));
+    await press(page, "Escape");
+    check(
+      "Esc leaves Home for the project",
+      !(await exists(page, 'section[aria-label="Home"]')),
+    );
+
+    // Switch from Home.
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Home"]');
+    await clickText(page, "[data-project] button", "Lecture notes");
+    await waitFor(
+      page,
+      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Lecture notes")`,
+      { label: "switched to Lecture notes" },
+    );
+    check(
+      "switching opens the other project's main file",
+      (await crumb(page)).includes("Lecture notes / index.md"),
+      await crumb(page),
+    );
+    check(
+      "without leaving the app: no Home, no stale tabs",
+      !(await exists(page, 'section[aria-label="Home"]')) &&
+        (await tabNames(page)).join() === "index.md",
+      (await tabNames(page)).join(),
+    );
+    await shoot(page, "23-switched");
+
+    // Switch with Ctrl+O.
+    await press(page, "o", { ctrl: true, synthetic: true });
+    check(
+      "Ctrl+O opens the project switcher",
+      await exists(page, '[role="dialog"][aria-label="Switch project"]'),
+    );
+    check(
+      "it lists other projects, the open one last",
+      await page.evaluate(
+        `(() => { const o = [...document.querySelectorAll('[role="listbox"][aria-label="Projects"] [role="option"]')].map((e) => e.innerText); return o.length === 3 && o[2].includes("Lecture notes") && o[2].includes("Open now") && !o.join().includes("Conference poster") && !o.join().includes("Old thesis"); })()`,
+      ),
+    );
+    await shoot(page, "24-switcher");
+    await insertText(page, "entropy");
+    await press(page, "Enter", { wait: 500 });
+    await waitFor(
+      page,
+      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
+      { label: "switched back" },
+    );
+    check(
+      "the switcher opens the project and its earlier tabs come back",
+      (await tabNames(page)).length > 1 && (await tabNames(page)).includes("main.typ"),
+      (await tabNames(page)).join(),
+    );
+
+    // Unsaved changes ask first.
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(page, " unsaved");
+    await press(page, "o", { ctrl: true, synthetic: true });
+    await insertText(page, "lecture");
+    await press(page, "Enter", { wait: 400 });
+    check(
+      "switching with unsaved changes asks first",
+      await exists(page, '[role="alertdialog"]'),
+    );
+    await press(page, "Escape");
+    check(
+      "cancelling stays in the project with the edit intact",
+      (await crumb(page)).includes("Entropy paper") &&
+        (await dirtyTabs(page)).length === 1,
+    );
+    await press(page, "o", { ctrl: true, synthetic: true });
+    await insertText(page, "lecture");
+    await press(page, "Enter", { wait: 400 });
+    await clickText(page, '[role="alertdialog"] button', "Don't save");
+    await waitFor(
+      page,
+      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Lecture notes")`,
+      { label: "switched after discarding" },
+    );
+    check("discarding switches", (await crumb(page)).includes("Lecture notes"));
+    await press(page, "o", { ctrl: true, synthetic: true });
+    await insertText(page, "entropy");
+    await press(page, "Enter", { wait: 500 });
+    await waitFor(
+      page,
+      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
+      { label: "back in Entropy paper" },
+    );
 
     /* ------------------------------------------------------------------ */
     section("Brand invariants");
