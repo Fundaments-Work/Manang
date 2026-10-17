@@ -501,4 +501,99 @@ export function themeApi(kernel: Kernel) {
 
 export type ThemeApi = ReturnType<typeof themeApi>;
 
+export interface CitationAuthor {
+  readonly name: string;
+  readonly family?: string | undefined;
+  readonly given?: string | undefined;
+}
+
+export interface CitationEntry {
+  readonly key: string;
+  readonly entry_type: string;
+  readonly title?: string | undefined;
+  readonly authors?: readonly CitationAuthor[] | undefined;
+  readonly year?: number | undefined;
+  readonly month?: number | undefined;
+  readonly journal_or_publisher?: string | undefined;
+  readonly volume?: string | undefined;
+  readonly number?: string | undefined;
+  readonly pages?: string | undefined;
+  readonly doi?: string | undefined;
+  readonly url?: string | undefined;
+  readonly arxiv_id?: string | undefined;
+  readonly abstract_text?: string | undefined;
+  readonly raw_fields?: Readonly<Record<string, string>> | undefined;
+}
+
+export interface CitationDifference {
+  readonly field: string;
+  readonly local: string;
+  readonly remote: string;
+}
+
+export type CitationVerificationStatus =
+  | "verified"
+  | "mismatch"
+  | "not_found"
+  | "error";
+
+export interface CitationVerificationResult {
+  readonly status: CitationVerificationStatus;
+  readonly matched?: CitationEntry | null | undefined;
+  readonly differences: readonly CitationDifference[];
+  readonly message?: string | null | undefined;
+}
+
+export interface CitationParseDiagnostic {
+  readonly file?: string | null | undefined;
+  readonly line: number;
+  readonly column: number;
+  readonly message: string;
+}
+
+export interface CitationLoadResponse {
+  readonly loaded: number;
+  readonly total: number;
+  readonly errors: readonly CitationParseDiagnostic[];
+}
+
+export interface CitationSearchResultItem {
+  readonly key: string;
+  readonly score: number;
+  readonly entry: CitationEntry;
+}
+
+export interface CitationSearchResponse {
+  readonly results: readonly CitationSearchResultItem[];
+}
+
+export interface CitationFormatResponse {
+  readonly key: string;
+  readonly style: string;
+  readonly formatted: string;
+}
+
+export interface CitationExtractKeysResponse {
+  readonly keys: readonly string[];
+}
+
+export function citationsApi(kernel: Kernel) {
+  return {
+    load: (req: { paths: readonly string[] } | { path: string }) =>
+      kernel.run<CitationLoadResponse>("citations.load", { ...req }),
+    search: (req: { query: string; limit?: number | undefined }) =>
+      kernel.run<CitationSearchResponse>("citations.search", { ...req }),
+    get: (key: string) =>
+      kernel.run<CitationEntry>("citations.get", { key }),
+    format: (key: string, style: "apa" | "numeric" | "ieee" = "apa") =>
+      kernel.run<CitationFormatResponse>("citations.format", { key, style }),
+    extractKeys: (source: string, syntax: "typst" | "latex" | "markdown") =>
+      kernel.run<CitationExtractKeysResponse>("citations.extract-keys", { source, syntax }),
+    verify: (key: string) =>
+      kernel.run<CitationVerificationResult>("citations.verify", { key }),
+  };
+}
+
+export type CitationsApi = ReturnType<typeof citationsApi>;
+
 

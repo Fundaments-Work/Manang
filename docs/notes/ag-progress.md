@@ -709,5 +709,48 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (26 test suites, 232 tests passing).
    - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
 
+## UI Wiring - Task D: References View -> `citations.*`
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added typed interfaces matching `crates/manang-citations`: `CitationAuthor`, `CitationEntry`, `CitationDifference`, `CitationVerificationStatus`, `CitationVerificationResult`, `CitationParseDiagnostic`, `CitationLoadResponse`, `CitationSearchResultItem`, `CitationSearchResponse`, `CitationFormatResponse`, `CitationExtractKeysResponse`.
+   - Added `citationsApi(kernel)` exposing all 6 commands:
+     - `load`: `{ paths: string[] } | { path: string }` -> `CitationLoadResponse`
+     - `search`: `{ query: string, limit?: number }` -> `CitationSearchResponse`
+     - `get`: `key: string` -> `CitationEntry`
+     - `format`: `key: string, style?: "apa" | "numeric" | "ieee"` -> `CitationFormatResponse`
+     - `extractKeys`: `source: string, syntax: "typst" | "latex" | "markdown"` -> `CitationExtractKeysResponse`
+     - `verify`: `key: string` -> `CitationVerificationResult`
+2. **Browser Mock Plugin (`src/lib/kernel/mockCitations.ts`):**
+   - Replicated all 6 commands over `MockProjectHost`:
+     - Reads and parses `.bib` and `.json`/`.csl` files from in-memory project storage into normalized `CitationEntry` models.
+     - Performs multi-word ranked searching over citation key, title, authors, year, venue, and DOI.
+     - Formats entries in APA (e.g. `Author (Year). Title. Journal, Vol(No), Pages. DOI`) and IEEE/numeric (e.g. `[1] Author, "Title," Journal, vol. X, no. Y, pp. Z, Year. DOI`).
+     - Extracts keys from Typst (`@key`), LaTeX (`\cite{key}`, `\citep{key}`), and Markdown (`[@key]`).
+     - Simulates registry verification with support for verified, metadata mismatch (with difference tracking), not found, and error states.
+   - Registered `citationsPlugin(host)` in `src/lib/kernel/dev.ts`.
+3. **Pure Workbench Utilities (`src/lib/workbench/references.ts` & `references.test.ts`):**
+   - Updated `authorSummary` to handle both string authors and structured `CitationAuthor` objects, extracting surnames cleanly.
+   - Added `formatYear` and `formatVenue` (combining container, volume, issue, and pages).
+   - Added `verificationBadge` mapping verification states to Fundaments design tokens.
+   - Added `formatDifference` for displaying mismatched fields.
+   - Updated `filterReferences` generic signature to accept `BibEntry | CitationEntry`.
+   - Maintained `parseBibtex`, `BibEntry`, and `citationFor` for backwards compatibility with existing workspace code and tests.
+4. **References Panel UI (`src/lib/components/panels/ReferencesPanel.svelte`):**
+   - Wired directly to `citationsApi(kernel)`:
+     - On project load / open / `project.changed` kernel events, auto-discovers bibliography files (`.bib`, `.biblatex`, `.csl`, `.json`) and invokes `citations.load`.
+     - Live debounced search field calling `citations.search` with loading, count, and empty states.
+     - Reload button in header calling `citations.load`.
+     - Entry cards showing formatted author summary, year, title, venue in italics, key in DM Mono, and entry type tag.
+     - "Insert" action inserting citation into active document at cursor via `insertCitation`.
+     - "Verify" action calling `citations.verify` per entry, displaying verification badge and metadata differences (if mismatched).
+     - Expandable details view showing full authors, DOI (with link), URL, arXiv identifier, abstract, and formatted citation generator with APA/IEEE switcher and one-click copy button.
+5. **Testing & Verification:**
+   - 7 unit tests in `src/lib/kernel/mockCitations.test.ts` testing all 6 plugin commands.
+   - 5 unit tests in `src/lib/workbench/references.test.ts`.
+   - Updated `src/lib/workbench/plugins.test.ts` to expect 6 citation commands (65 total across 8 plugins).
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (28 test suites, 244 tests passing).
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
 
 
