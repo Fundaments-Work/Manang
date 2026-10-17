@@ -8,9 +8,13 @@
 import type { Kernel } from "./client";
 import { createMockKernel } from "./mock";
 import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject";
+import { citationsPlugin } from "./mockCitations";
 import { figurePlugin } from "./mockFigure";
 import { latexPlugin } from "./mockLatex";
 import { markdownPlugin } from "./mockMarkdown";
+import { gitPlugin } from "./mockGit";
+import { searchPlugin } from "./mockSearch";
+import { settingsPlugin } from "./mockSettings";
 import { typstPlugin } from "./mockTypst";
 import { writingPlugin } from "./mockWriting";
 
@@ -334,7 +338,11 @@ export function createDevKernel(
       typstPlugin(host),
       latexPlugin(host),
       markdownPlugin(),
+      citationsPlugin(host),
       figurePlugin(),
+      gitPlugin(host),
+      searchPlugin(host),
+      settingsPlugin(host),
       writingPlugin(),
     ],
   });

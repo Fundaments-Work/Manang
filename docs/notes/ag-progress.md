@@ -595,3 +595,258 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
 3. **Tests:**
    - 3 proptests in `tests/fuzz_proptest.rs` verifying arbitrary string inputs to BibTeX, CSL-JSON, and key extraction never panic.
    - 7 kernel integration tests in `tests/kernel.rs` covering commands, search ranking, citation formatting, mock network verification, and 4 `insta` snapshots for formatted output and parse errors with line/column coordinates.
+
+## UI Wiring - Task A: Search View -> `search.*`
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added typed interfaces: `SearchFilesRequest`, `SearchFilesResponse`, `SearchTextRequest`, `SearchTextResponse`, `SearchLineMatch`, `SearchRange`, `SearchContextLine`, `SearchFileMatches`, `SearchStats`, `SearchPreviewRequest`, `SearchPreviewResponse`, `SearchPreviewFile`, `SearchPreviewEdit`, `SearchApplyRequest`, `SearchApplyResponse`, `SearchApplyFileResult`, `SearchInTextRequest`.
+   - Added `searchApi(kernel)` wrapper with methods for `files`, `text`, `cancel`, `replacePreview`, `replaceApply`, `inText`.
+2. **Browser Mock Plugin (`src/lib/kernel/mockSearch.ts`):**
+   - Replicated exact command shapes and signatures from `crates/manang-search`:
+     - `search.files`: fuzzy rank across current project's files using `fuzzyRank`.
+     - `search.text`: regex / literal search line-by-line with case sensitivity, whole word, regex, include/exclude glob patterns, scalar ranges and 1-based columns, context lines before/after.
+     - `search.cancel`: sets cancelled flag and returns `{ cancelled: 1 }`.
+     - `search.replace-preview`: plans replacements across matching files with content hash checking and `plan_id`.
+     - `search.replace-apply`: verifies content hashes, performs atomic updates in `MockProjectHost`, emits `project.changed`.
+     - `search.in-text`: in-document text search.
+   - Registered `searchPlugin(host)` in `src/lib/kernel/dev.ts`.
+3. **Pure Workbench Utilities (`src/lib/workbench/search.ts`):**
+   - Implemented `splitLineByRanges` to cleanly divide matched line text into matching/non-matching segments for exact highlight rendering.
+   - Implemented `parsePatternList` for glob filtering.
+   - Implemented `formatMatchCount`.
+4. **Search Panel UI (`src/lib/components/panels/SearchPanel.svelte`):**
+   - Connected directly to `searchApi(kernel)` for both file-name (`search.files`) and content search (`search.text`).
+   - Integrated match case (`Aa`), whole word (`\b`), regex (`.*`), and collapsible include/exclude glob filter controls.
+   - 200 ms debounce with automatic cancellation of previous in-flight search (`api.cancel()`).
+   - Integrated replace controls: replace input field, "Replace all" button via `search.replace-preview` and `search.replace-apply` with per-file status reports and error handling.
+   - Collapsible per-file match groups with line numbers and match highlighting via `<mark class="bg-math/25 text-text">`.
+   - Result truncation notification when limits are reached.
+   - Match clicks navigate to file, line, and column via `goToMatch`.
+5. **Testing & Verification:**
+   - Unit tests in `src/lib/kernel/mockSearch.test.ts` (4 tests) and `src/lib/workbench/search.test.ts` (6 tests).
+## UI Wiring - Task B: Source Control View -> `git.*`
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added typed interfaces matching `crates/manang-git`: `GitStatusFile`, `GitStatusUpstream`, `GitStatusReport`, `GitDiffLine`, `GitDiffHunk`, `GitFileDiff`, `GitDiffResponse`, `GitCommitInfo`, `GitLogResponse`, `GitBranchInfo`, `GitCheckoutResult`, `GitBlameRange`, `GitBlameResponse`, `GitStageResult`, `GitUnstageResult`, `GitDiscardResult`, `GitSyncResult`.
+   - Added `gitApi(kernel)` wrapper with 15 commands: `status`, `diff`, `diffText`, `log`, `blame`, `branches`, `show`, `stage`, `unstage`, `discard`, `commit`, `checkoutBranch`, `init`, `sync`, `open`.
+2. **Browser Mock Plugin (`src/lib/kernel/mockGit.ts`):**
+   - Replicated all 15 commands from `crates/manang-git` over `MockProjectHost`:
+     - Tracks repository state, branches, staged paths, and commit log.
+     - Computes clean status files comparing memory files against baseline.
+     - Supports structured and unified diffs with line numbering and hunks.
+     - Supports discard with confirmation and safety checks.
+     - Supports amend toggle, empty commit message rejection, and author metadata.
+     - Automatically emits `git.changed` and `project.changed` events on mutations.
+   - Registered `gitPlugin(host)` in `src/lib/kernel/dev.ts`.
+3. **Pure Workbench Utilities (`src/lib/workbench/git.ts` & `git.test.ts`):**
+   - Pure helpers: `groupGitFiles` (staged, changes, untracked, conflicted), `formatRelativeTime`, `parseGitError` (parsing `{code, message}` inside error message strings), `gitActionableError` (turning error codes like `no-author` or `uncommitted-changes` into plain-language actionable directions), and `statusBadge` (`M`, `A`, `D`, `U`).
+   - 5 unit tests verifying grouping, status codes, relative time formatting, and error parsing.
+4. **Source Control Panel UI (`src/lib/components/SourceControlPanel.svelte` & `src/lib/components/panels/SourceControlPanel.svelte`):**
+   - Built full view conforming to Fundaments design system:
+     - Empty state when folder is not a repository with "Initialize repository" action.
+     - Staged / Changes / Untracked / Conflicts collapsible groups with counts and badges.
+     - File-level and group-level Stage, Unstage, and Discard (with confirmation warning).
+     - Commit section: message input, Commit button (`git.commit`), amend checkbox, disabled state with actionable explanation when staging is empty or author identity is missing.
+     - Branch header showing active branch, ahead/behind indicators, branch switcher dropdown with branch creation (`git.branches`, `git.checkout-branch`).
+     - "Sync" action (`git.sync`) with in-progress spinner and notification.
+     - Click-to-inspect diff viewer rendering structured diff hunks with line numbers, addition/deletion styling, and close button.
+     - Paged commit history list (`git.log`) with short hashes, subjects, authors, relative timestamps, and "Load more" button.
+     - Auto-refresh on `git.changed` and `project.changed` kernel events.
+5. **Activity Bar & Sidebar Integration:**
+   - Added `"source-control"` icon to `src/lib/components/ui/Icon.svelte`.
+   - Wired `"source-control"` into `SideView` and `SIDE_VIEWS` in `src/lib/workbench/layout.ts`.
+   - Wired into `src/lib/components/ActivityBar.svelte` (with icon and tooltip) and `src/lib/components/SideBar.svelte`.
+6. **Testing & Verification:**
+   - 4 tests in `src/lib/kernel/mockGit.test.ts` and 5 tests in `src/lib/workbench/git.test.ts`.
+   - Updated `src/lib/workbench/plugins.test.ts` to expect 15 git commands (45 total across 4 plugins).
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (24 test suites, 218 tests passing).
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
+## UI Wiring - Task C: Settings Page -> `settings.*`, `keybindings.*`, `theme.*`
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added typed interfaces matching `crates/manang-settings`: `SettingDef`, `SettingsSchema`, `SettingDescription`, `SettingsGetAllResponse`, `KeybindingItem`, `KeybindingConflict`, `KeybindingsListResponse`, `ThemeSummary`, `ThemeDetail`, `ThemeListResponse`.
+   - Added `settingsApi(kernel)` with overloads for `get` (single or all), `set`, `reset`, `schema`, `register`, `openFile`, `useProject`.
+   - Added `keybindingsApi(kernel)` with `list`, `resolve`, `set`, `reset`, `register`.
+   - Added `themeApi(kernel)` with `list`, `get`.
+2. **Browser Mock Plugin (`src/lib/kernel/mockSettings.ts`):**
+   - Replicated all 14 commands across the 3 namespaces (`settings.*`, `keybindings.*`, `theme.*`) over `MockProjectHost`:
+     - Registered core definitions matching `crates/manang-settings/src/defaults.rs` across `editor`, `preview`, `compile`, `files`, and `appearance`.
+     - Validates candidate values against type constraints (int/float bounds, enums, strings, booleans).
+     - Distinguishes user vs. project scope; handles project activation via `settings.use-project`.
+     - Tracks user keybinding overrides with conflict reporting.
+     - Serves built-in dark and light themes with accurate tokens from `src/app.css` / `theme.rs`.
+     - Publishes `settings.changed` and `keybindings.changed` events on the bus.
+   - Registered `settingsPlugin(host)` in `src/lib/kernel/dev.ts`.
+3. **Pure Workbench Utilities (`src/lib/workbench/settings.ts` & `settings.test.ts`):**
+   - Implemented `groupSettings` for stable grouping (Editor, Preview, Compile, Files, Appearance, and alphabetical plugins).
+   - Implemented `filterSettings` for fuzzy/containment search across IDs, humanized titles, and descriptions.
+   - Implemented `formatSettingTitle` and `formatCategoryLabel`.
+   - Implemented `isSettingModified` and `validateSettingValue`.
+   - Implemented `recordShortcutFromEvent`, `formatShortcutDisplay`, and `findCommandConflicts`.
+   - 9 unit tests covering grouping, search filtering, modified detection, type validation, and key recording.
+4. **Settings Panel UI (`src/lib/components/SettingsPanel.svelte`, `panels/SettingsPanel.svelte`, and `src/lib/components/settings/`):**
+   - Built full view conforming to Fundaments design system:
+     - Tabs for Settings, Keyboard shortcuts, and About.
+     - Search filter with live matching across setting ID, title, and description.
+     - User / Project scope toggle; Project scope disabled with tooltip when no project is open.
+     - Form dynamically generated from `settings.schema` with specialized controls:
+       - Boolean switch with accessibility label.
+       - Integer and float inputs with range sliders when bounds are present.
+       - Select dropdown for enum settings.
+       - Text and path inputs.
+     - Per-setting modified indicator and reset button calling `settings.reset`.
+     - Inline validation error alerts when invalid values are entered.
+     - Theme selector switching between Dark and Light via `settings.set` and `layout.setTheme`, applying `.theme-light` on document root.
+     - "Open file" button calling `settings.open-file` to reveal config file paths.
+     - Keybindings table view with shortcut display, "Press keys..." recording modal, conflict detection notifications, and reset action.
+5. **Testing & Verification:**
+   - 5 tests in `src/lib/kernel/mockSettings.test.ts` and 9 tests in `src/lib/workbench/settings.test.ts`.
+   - Updated `src/lib/workbench/plugins.test.ts` to expect 14 settings commands (59 total across 5 plugins).
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (26 test suites, 232 tests passing).
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
+## UI Wiring - Task D: References View -> `citations.*`
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added typed interfaces matching `crates/manang-citations`: `CitationAuthor`, `CitationEntry`, `CitationDifference`, `CitationVerificationStatus`, `CitationVerificationResult`, `CitationParseDiagnostic`, `CitationLoadResponse`, `CitationSearchResultItem`, `CitationSearchResponse`, `CitationFormatResponse`, `CitationExtractKeysResponse`.
+   - Added `citationsApi(kernel)` exposing all 6 commands:
+     - `load`: `{ paths: string[] } | { path: string }` -> `CitationLoadResponse`
+     - `search`: `{ query: string, limit?: number }` -> `CitationSearchResponse`
+     - `get`: `key: string` -> `CitationEntry`
+     - `format`: `key: string, style?: "apa" | "numeric" | "ieee"` -> `CitationFormatResponse`
+     - `extractKeys`: `source: string, syntax: "typst" | "latex" | "markdown"` -> `CitationExtractKeysResponse`
+     - `verify`: `key: string` -> `CitationVerificationResult`
+2. **Browser Mock Plugin (`src/lib/kernel/mockCitations.ts`):**
+   - Replicated all 6 commands over `MockProjectHost`:
+     - Reads and parses `.bib` and `.json`/`.csl` files from in-memory project storage into normalized `CitationEntry` models.
+     - Performs multi-word ranked searching over citation key, title, authors, year, venue, and DOI.
+     - Formats entries in APA (e.g. `Author (Year). Title. Journal, Vol(No), Pages. DOI`) and IEEE/numeric (e.g. `[1] Author, "Title," Journal, vol. X, no. Y, pp. Z, Year. DOI`).
+     - Extracts keys from Typst (`@key`), LaTeX (`\cite{key}`, `\citep{key}`), and Markdown (`[@key]`).
+     - Simulates registry verification with support for verified, metadata mismatch (with difference tracking), not found, and error states.
+   - Registered `citationsPlugin(host)` in `src/lib/kernel/dev.ts`.
+3. **Pure Workbench Utilities (`src/lib/workbench/references.ts` & `references.test.ts`):**
+   - Updated `authorSummary` to handle both string authors and structured `CitationAuthor` objects, extracting surnames cleanly.
+   - Added `formatYear` and `formatVenue` (combining container, volume, issue, and pages).
+   - Added `verificationBadge` mapping verification states to Fundaments design tokens.
+   - Added `formatDifference` for displaying mismatched fields.
+   - Updated `filterReferences` generic signature to accept `BibEntry | CitationEntry`.
+   - Maintained `parseBibtex`, `BibEntry`, and `citationFor` for backwards compatibility with existing workspace code and tests.
+4. **References Panel UI (`src/lib/components/panels/ReferencesPanel.svelte`):**
+   - Wired directly to `citationsApi(kernel)`:
+     - On project load / open / `project.changed` kernel events, auto-discovers bibliography files (`.bib`, `.biblatex`, `.csl`, `.json`) and invokes `citations.load`.
+     - Live debounced search field calling `citations.search` with loading, count, and empty states.
+     - Reload button in header calling `citations.load`.
+     - Entry cards showing formatted author summary, year, title, venue in italics, key in DM Mono, and entry type tag.
+     - "Insert" action inserting citation into active document at cursor via `insertCitation`.
+     - "Verify" action calling `citations.verify` per entry, displaying verification badge and metadata differences (if mismatched).
+     - Expandable details view showing full authors, DOI (with link), URL, arXiv identifier, abstract, and formatted citation generator with APA/IEEE switcher and one-click copy button.
+5. **Testing & Verification:**
+   - 7 unit tests in `src/lib/kernel/mockCitations.test.ts` testing all 6 plugin commands.
+   - 5 unit tests in `src/lib/workbench/references.test.ts`.
+   - Updated `src/lib/workbench/plugins.test.ts` to expect 6 citation commands (65 total across 8 plugins).
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (28 test suites, 244 tests passing).
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
+## UI Wiring - Task E: LaTeX and BibTeX Highlighting
+
+### Summary of Changes
+1. **Package Dependency:**
+   - Added `@codemirror/legacy-modes@6.5.5` (MIT license, published by Marijn Haverbeke / CodeMirror maintainer a week ago) providing the canonical `stex` stream parser for LaTeX/TeX.
+2. **Editor Languages Module (`src/lib/editor/languages.ts`):**
+   - Implemented `languageFor(path)` selecting language by extension:
+     - LaTeX: `.tex`, `.sty`, `.cls`, `.dtx`, `.ltx`
+     - BibTeX: `.bib`, `.biblatex`
+     - Typst: `.typ`
+     - Markdown: `.md`, `.markdown`
+     - Fallback: `"plain"`
+   - Implemented custom `bibtexParser` via `StreamParser<BibtexParserState>` and `bibtexLanguage` (`StreamLanguage.define(bibtexParser)`):
+     - Parses `@entryType{citationKey, field = value}` structures.
+     - Supports quoted strings (`"..."`), nested braced strings (`{...}`), integers, variable/macro references, and comment lines (`%` and `@comment{...}`).
+     - Maps tokens to Lezer tags using explicit `tokenTable`: `tags.keyword`, `tags.labelName`, `tags.propertyName`, `tags.string`, `tags.number`, `tags.comment`, `tags.bracket`, `tags.punctuation`, `tags.operator`.
+   - Implemented `loadLanguageExtension(language)` with lazy-loaded code-splitting for `markdown`, `typst`, `latex` (stex), `bibtex`, and `plain`.
+3. **Theme Highlight Style Mappings (`src/lib/editor/theme.ts`):**
+   - Added `manangLatexHighlight` styling commands, math delimiters, comments, numbers, brackets, and labels.
+   - Added `manangBibtexHighlight` styling entry types and property names (`var(--mng-text)`), citation keys (`var(--mng-math)` Sage tone), strings/numbers (`var(--mng-text-60)`), and comments (`var(--mng-text-muted)` in italic).
+4. **Editor View Swapping (`src/lib/editor/view.ts`):**
+   - Swapped language resolution lines to import and re-export `languageFor`, `EditorLanguage`, and delegate language loading to `loadLanguageExtension`.
+5. **Testing & Verification:**
+   - 9 unit tests in `src/lib/editor/languages.test.ts` verifying language selection across `.tex`, `.sty`, `.cls`, `.bib`, `.typ`, `.md`, tokenizing BibTeX entries/comments, and extension loading.
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (29 test suites, 253 tests passing).
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
+
+
+
+## UI Wiring - Task F: Outline View -> Typst, LaTeX, and Markdown
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added `MarkdownHeading` interface and `markdownApi(kernel)` with `outline(source: string)`.
+2. **Pure Outline Extractors (`src/lib/workbench/outline.ts` & `outline.test.ts`):**
+   - Implemented `parseTypstOutline(source: string)`:
+     - Extracts `= Heading` hierarchical structures (levels 1-6).
+     - Extracts both inline `<label>` tags and subsequent standalone `<label>` lines.
+     - Safely ignores line comments (`//`), block comments (`/* ... */`), and fenced code blocks (` ``` `).
+   - Implemented `parseLatexOutline(source: string)`:
+     - Extracts `\part`, `\chapter`, `\section`, `\subsection`, `\subsubsection`, `\paragraph`, `\subparagraph`.
+     - Handles balanced curly braces across multiline section arguments and cleans LaTeX markup commands.
+     - Extracts associated `\label{...}` declarations.
+     - Safely ignores comments (`%`) and verbatim environments (`\begin{verbatim}`, etc.).
+   - Implemented `parseMarkdownOutline(source: string, kernel?: Kernel)`:
+     - Calls `markdownApi(kernel).outline(...)` when kernel is present.
+     - Pure TypeScript fallback `parseMarkdownOutlineTS` for ATX headings (`# Heading`) and custom `{#id}` attributes outside fenced code blocks.
+   - Implemented `getDocumentOutline(source, engine, kernel)` routing according to engine.
+   - 4 unit tests covering Typst, LaTeX, Markdown TS fallback, and dispatch.
+3. **Outline Panel UI (`src/lib/components/OutlinePanel.svelte` & `src/lib/components/panels/OutlinePanel.svelte`):**
+   - Registered "Outline" side view in `layout.ts` (`SideView`, `SIDE_VIEWS`, `SIDE_VIEW_ICONS`), `Icon.svelte` (outline icon geometry), and `ActivityBar.svelte`.
+   - Connected `SideBar.svelte` to render `OutlinePanel`.
+   - Subscribes to active document (`tabs.active`) and updates while typing via `documents.onEdit(...)` with 300 ms debounce.
+   - Clear empty states: "No document open" and "No headings found" with contextual syntax instructions.
+   - Accessible heading list with level indentation, `H1`..`H6` indicators, title, `<label>` tags, and line numbers (`L${line}`).
+   - Click-to-jump navigates the editor caret directly via `goToMatch(path, line, column)`.
+4. **Testing & Verification:**
+   - Vitest suite passing with 30 test suites (257 tests passing).
+   - Passed `pnpm run typecheck && pnpm run lint`.
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
+## UI Wiring - Task G: App Polish (Shortcuts Reference & About/Licences)
+
+### Summary of Changes
+1. **Shortcut Reference Overlay (`src/lib/workbench/shortcuts.ts`, `shortcuts.test.ts`, and `src/lib/components/ShortcutOverlay.svelte`):**
+   - Pure model extracting, formatting, and categorizing workbench shortcuts into stable sections: "General", "Document & Files", "Views & Panels", and "Tabs & Navigation".
+   - Search filter matching across title, shortcut key combination, description, and category.
+   - Built modal overlay triggered globally via `Ctrl+/` (or `Cmd+/` on macOS) and dismissible via `Escape` or backdrop click.
+   - Read-only: inspects commands from `src/lib/commands/workbench` without modifying command definitions.
+   - Clean Fundaments styling: 1px hairlines, `--radius: 0`, DM Sans and DM Mono typography, no shadows.
+   - 4 unit tests validating Linux and macOS key formatting, category grouping, search filtering, and global accelerators.
+2. **About and Licences View (`src/lib/components/settings/AboutView.svelte` & `src/lib/components/SettingsPanel.svelte`):**
+   - Built dedicated About & Licences view in Settings displaying:
+     - App version (`0.1.0`), git commit (`7df53d9`), runtime kernel, frontend stack, and design system.
+     - Open-source software licenses overview (CodeMirror 6, Svelte 5, Typst, Wasmtime, DM Sans/Mono, Perfect Freehand).
+     - Mandatory SCOWL word-list license text from `crates/manang-writing/dict/` (copied to static assets `public/licenses/` and `src/assets/licenses/` and displayed in an expandable code viewer).
+3. **Testing & Quality Gates:**
+   - Vitest suite passing with 31 test suites (261 tests passing).
+   - `svelte-check` and `eslint` clean with 0 warnings and 0 errors.
+   - Headless visual verification harness (`verify-ui.mjs` on port 1431) passing all 122/122 checks.
+   - Zero ports or processes left running.
+
+---
+
+## Final UI Wiring Summary
+
+All tasks from Batches 1 and 2 have been completed, verified against the strict quality gates, and committed to `antigravity/ui-wiring`:
+
+- **Batch 1:**
+  - **Task A (`search.*` - Commit `d7263a7`):** Search panel with file-name and text content modes, regex/case/word options, include/exclude glob filters, match highlighting, and replace preview/apply.
+  - **Task B (`git.*` - Commit `acc3dce`):** Source control panel with staging/unstaging, diff viewer, commit/amend, branch switcher, sync, and commit history.
+  - **Task C (`settings.*`, `keybindings.*`, `theme.*` - Commit `9501f52`): Settings panel with schema-driven form, live search, keybindings table with shortcut recording/conflict detection, theme toggle.
+  - **Task D (`citations.*` - Commit `b0b003a`):** References panel with multi-format bibliography loader, ranked search, citation insertion, registry verification with difference detection, and APA/IEEE formatted generator.
+  - **Task E (LaTeX & BibTeX highlighting - Commit `33fe035`):** CodeMirror 6 language support for LaTeX (stex) and custom BibTeX parser with theme highlights.
+- **Batch 2:**
+  - **Task F (Outline view - Commit `7df53d9`):** Pure TS outline parsers for Typst (`=` headings and `<labels>`), LaTeX (`\section`..`\subsubsection` and `\label`), and Markdown (via `markdown.outline` kernel call + fallback) with 300 ms debounced live updates and click-to-jump.
+  - **Task G (App polish):** Read-only shortcut reference overlay (`Ctrl+/`), About view with app version, git commit, and SCOWL word-list license text.

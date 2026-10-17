@@ -10,6 +10,13 @@
 
 import type { Engine } from "./paths";
 
+import type {
+  CitationAuthor,
+  CitationDifference,
+  CitationEntry,
+  CitationVerificationStatus,
+} from "$lib/kernel/api";
+
 export interface BibEntry {
   readonly key: string;
   readonly type: string;
@@ -131,30 +138,53 @@ const fold = (value: string): string =>
  * somewhere in the entry; this is stricter than the palette's fuzzy match on
  * purpose, because a reference list is read, not guessed at.
  */
-export function filterReferences(
-  entries: readonly BibEntry[],
+export function filterReferences<T extends BibEntry | CitationEntry>(
+  entries: readonly T[],
   query: string,
-): BibEntry[] {
+): T[] {
   const words = fold(query)
     .split(/\s+/)
     .filter((w) => w.length > 0);
   if (words.length === 0) return [...entries];
   return entries.filter((e) => {
+    const authorText = "authors" in e && Array.isArray(e.authors)
+      ? e.authors.map((a) => (typeof a === "string" ? a : a.name)).join(" ")
+      : "";
+    const venueText = "venue" in e && typeof e.venue === "string"
+      ? e.venue
+      : "journal_or_publisher" in e && typeof e.journal_or_publisher === "string"
+        ? e.journal_or_publisher
+        : "";
+    const yearText = e.year !== undefined && e.year !== null ? String(e.year) : "";
+    const titleText = e.title ?? "";
+
     const haystack = fold(
-      `${e.key} ${e.authors.join(" ")} ${e.title} ${e.year} ${e.venue}`,
+      `${e.key} ${authorText} ${titleText} ${yearText} ${venueText}`,
     );
     return words.every((word) => haystack.includes(word));
   });
 }
 
+function extractSurname(author: string | CitationAuthor): string {
+  if (typeof author === "object" && author !== null) {
+    if (author.family && author.family.trim().length > 0) {
+      return author.family.trim();
+    }
+    return author.name.split(" ").pop() ?? author.name;
+  }
+  return author.split(" ").pop() ?? author;
+}
+
 /** "Landauer", "Bérut and Arakelyan", "Nielsen et al." */
-export function authorSummary(authors: readonly string[]): string {
-  const last = (name: string): string => name.split(" ").pop() ?? name;
-  if (authors.length === 0) return "Unknown author";
-  if (authors.length === 1) return last(authors[0] ?? "");
-  if (authors.length === 2)
-    return `${last(authors[0] ?? "")} and ${last(authors[1] ?? "")}`;
-  return `${last(authors[0] ?? "")} et al.`;
+export function authorSummary(
+  authors?: readonly (string | CitationAuthor)[] | null,
+): string {
+  if (!authors || authors.length === 0) return "Unknown author";
+  const first = extractSurname(authors[0] ?? "");
+  if (authors.length === 1) return first;
+  const second = extractSurname(authors[1] ?? "");
+  if (authors.length === 2) return `${first} and ${second}`;
+  return `${first} et al.`;
 }
 
 /** The text that cites `key` in the given engine's syntax. */
@@ -167,4 +197,81 @@ export function citationFor(key: string, engine: Engine | null): string {
     default:
       return `@${key}`;
   }
+}
+
+/** Formats entry year or returns empty string. */
+export function formatYear(year?: number | string | null): string {
+  if (year === undefined || year === null || year === "") return "";
+  return String(year);
+}
+
+/** Formats venue container string including volume, number, and pages. */
+export function formatVenue(
+  entry: Partial<CitationEntry> & { venue?: string },
+): string {
+  const base = entry.journal_or_publisher || entry.venue || "";
+  if (!base) return "";
+
+  const parts: string[] = [base];
+  if (entry.volume) {
+    let volStr = entry.volume;
+    if (entry.number) {
+      volStr += `(${entry.number})`;
+    }
+    parts.push(volStr);
+  } else if (entry.number) {
+    parts.push(`No. ${entry.number}`);
+  }
+  if (entry.pages) {
+    parts.push(entry.pages);
+  }
+  return parts.join(", ");
+}
+
+export interface VerificationBadgeInfo {
+  readonly label: string;
+  readonly colorClass: string;
+  readonly icon: "check" | "warning" | "error" | "references";
+  readonly description: string;
+}
+
+/** UI badge styling and accessible label for verification states. */
+export function verificationBadge(
+  status: CitationVerificationStatus,
+): VerificationBadgeInfo {
+  switch (status) {
+    case "verified":
+      return {
+        label: "Verified",
+        colorClass: "text-accent border-accent/40 bg-accent/10",
+        icon: "check",
+        description: "Verified against authoritative registries (Crossref, OpenAlex, arXiv)",
+      };
+    case "mismatch":
+      return {
+        label: "Mismatch",
+        colorClass: "text-amber-400 border-amber-400/40 bg-amber-400/10",
+        icon: "warning",
+        description: "Local metadata differs from authoritative registry records",
+      };
+    case "not_found":
+      return {
+        label: "Not found",
+        colorClass: "text-text-muted border-line bg-surface",
+        icon: "references",
+        description: "No matching record found in online registries",
+      };
+    case "error":
+      return {
+        label: "Error",
+        colorClass: "text-red-400 border-red-400/40 bg-red-400/10",
+        icon: "error",
+        description: "Verification request failed",
+      };
+  }
+}
+
+/** Formats a difference between local and remote metadata into readable text. */
+export function formatDifference(diff: CitationDifference): string {
+  return `${diff.field}: local "${diff.local}" vs remote "${diff.remote}"`;
 }

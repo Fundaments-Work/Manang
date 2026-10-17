@@ -14,6 +14,7 @@
   import ProjectSwitcher from "./ProjectSwitcher.svelte";
   import ConfirmDialog from "./ui/ConfirmDialog.svelte";
   import Resizer from "./ui/Resizer.svelte";
+  import ShortcutOverlay from "./ShortcutOverlay.svelte";
   import { matches } from "$lib/commands/shortcut";
   import {
     PALETTE_COMMANDS_SHORTCUTS,
@@ -226,6 +227,7 @@
   <CommandPalette />
   <ProjectSwitcher />
   <ConfirmDialog />
+  <ShortcutOverlay />
   {#if slides.presenting}
     <Presentation />
   {/if}

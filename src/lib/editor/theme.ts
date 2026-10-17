@@ -235,3 +235,30 @@ export const manangMarkdownHighlight = HighlightStyle.define([
   { tag: [tags.list, tags.processingInstruction], color: "var(--mng-text-60)" },
   { tag: tags.comment, color: "var(--mng-text-muted)", fontStyle: "italic" },
 ]);
+
+/**
+ * LaTeX highlight style for CodeMirror 6 stex stream parser.
+ */
+export const manangLatexHighlight = HighlightStyle.define([
+  { tag: tags.keyword, color: "var(--mng-text)" },
+  { tag: [tags.atom, tags.standard(tags.variableName)], color: "var(--mng-math)" },
+  { tag: tags.comment, color: "var(--mng-text-muted)", fontStyle: "italic" },
+  { tag: [tags.number, tags.string], color: "var(--mng-text-60)" },
+  { tag: [tags.bracket, tags.punctuation, tags.operator], color: "var(--mng-text-60)" },
+  { tag: tags.labelName, color: "var(--mng-math)" },
+]);
+
+/**
+ * BibTeX highlight style for the BibTeX stream parser.
+ */
+export const manangBibtexHighlight = HighlightStyle.define([
+  { tag: [tags.keyword, tags.typeName], color: "var(--mng-text)" },
+  { tag: tags.labelName, color: "var(--mng-math)" },
+  { tag: tags.propertyName, color: "var(--mng-text)" },
+  { tag: tags.string, color: "var(--mng-text-60)" },
+  { tag: tags.number, color: "var(--mng-text-60)" },
+  { tag: tags.comment, color: "var(--mng-text-muted)", fontStyle: "italic" },
+  { tag: [tags.bracket, tags.punctuation, tags.operator], color: "var(--mng-text-60)" },
+  { tag: tags.variableName, color: "var(--mng-math)" },
+]);
+

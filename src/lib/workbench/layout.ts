@@ -7,7 +7,14 @@
  */
 
 export type SideView =
-  "files" | "search" | "figures" | "references" | "plugins" | "settings";
+  | "files"
+  | "search"
+  | "source-control"
+  | "outline"
+  | "figures"
+  | "references"
+  | "plugins"
+  | "settings";
 export type PanelTab = "problems" | "output";
 export type PreviewMode = "split" | "editor" | "preview";
 export type Theme = "dark" | "light";
@@ -15,11 +22,24 @@ export type Theme = "dark" | "light";
 export const SIDE_VIEWS: readonly SideView[] = [
   "files",
   "search",
+  "source-control",
+  "outline",
   "figures",
   "references",
   "plugins",
   "settings",
 ];
+
+export const SIDE_VIEW_ICONS: Record<SideView, string> = {
+  files: "files",
+  search: "search",
+  "source-control": "source-control",
+  outline: "outline",
+  figures: "figures",
+  references: "references",
+  plugins: "plugins",
+  settings: "settings",
+};
 
 export interface LayoutModel {
   /** The open side panel, or null when collapsed. */

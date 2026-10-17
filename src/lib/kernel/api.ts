@@ -8,6 +8,7 @@
 
 import type { Kernel } from "./client";
 import type {
+  ChangeState,
   CompileReport,
   Engine,
   LatexReport,
@@ -233,8 +234,624 @@ export function markdownApi(kernel: Kernel) {
   return {
     renderHtml: (source: string) =>
       kernel.run<MarkdownRender>("markdown.render-html", { source }),
+    outline: (source: string) =>
+      kernel.run<{ headings: readonly MarkdownHeading[] }>("markdown.outline", {
+        source,
+      }),
   };
 }
 
 export type LatexApi = ReturnType<typeof latexApi>;
 export type MarkdownApi = ReturnType<typeof markdownApi>;
+
+export interface SearchFilesRequest {
+  readonly root: string;
+  readonly query: string;
+  readonly limit?: number | undefined;
+  readonly hidden?: boolean | undefined;
+}
+
+export interface SearchFileResult {
+  readonly path: string;
+  readonly name_start: number;
+  readonly score: number;
+  readonly indices: readonly number[];
+}
+
+export interface SearchFilesResponse {
+  readonly results: readonly SearchFileResult[];
+  readonly total_indexed: number;
+  readonly index_truncated: boolean;
+  readonly elapsed_ms: number;
+}
+
+export interface SearchTextRequest {
+  readonly root: string;
+  readonly query: string;
+  readonly regex?: boolean | undefined;
+  readonly case_sensitive?: boolean | undefined;
+  readonly whole_word?: boolean | undefined;
+  readonly include?: readonly string[] | undefined;
+  readonly exclude?: readonly string[] | undefined;
+  readonly limit?: number | undefined;
+  readonly context_lines?: number | undefined;
+  readonly hidden?: boolean | undefined;
+}
+
+export interface SearchRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+export interface SearchContextLine {
+  readonly line: number;
+  readonly text: string;
+}
+
+export interface SearchLineMatch {
+  readonly line: number;
+  readonly column: number;
+  readonly byte_offset: number;
+  readonly text: string;
+  readonly text_offset?: number | undefined;
+  readonly ranges: readonly SearchRange[];
+  readonly before: readonly SearchContextLine[];
+  readonly after: readonly SearchContextLine[];
+}
+
+export interface SearchFileMatches {
+  readonly path: string;
+  readonly matches: readonly SearchLineMatch[];
+  readonly truncated: boolean;
+}
+
+export interface SearchStats {
+  readonly bytes_scanned: number;
+  readonly files_searched: number;
+  readonly files_matched: number;
+  readonly files_binary: number;
+  readonly files_unreadable: number;
+  readonly files_too_large: number;
+  readonly duration_ms: number;
+}
+
+export interface SearchTextResponse {
+  readonly id: number;
+  readonly files: readonly SearchFileMatches[];
+  readonly total_matches: number;
+  readonly total_ranges: number;
+  readonly truncated: boolean;
+  readonly cancelled: boolean;
+  readonly stopped: string | null;
+  readonly stats: SearchStats;
+}
+
+export interface SearchPreviewRequest {
+  readonly root: string;
+  readonly query: string;
+  readonly replacement: string;
+  readonly regex?: boolean | undefined;
+  readonly case_sensitive?: boolean | undefined;
+  readonly whole_word?: boolean | undefined;
+  readonly include?: readonly string[] | undefined;
+  readonly exclude?: readonly string[] | undefined;
+  readonly limit?: number | undefined;
+  readonly hidden?: boolean | undefined;
+}
+
+export interface SearchPreviewEdit {
+  readonly line: number;
+  readonly column: number;
+  readonly start: number;
+  readonly end: number;
+  readonly offset_start: number;
+  readonly offset_end: number;
+  readonly matched: string;
+  readonly replacement: string;
+  readonly line_text: string;
+}
+
+export interface SearchPreviewFile {
+  readonly path: string;
+  readonly hash: string;
+  readonly edits: readonly SearchPreviewEdit[];
+}
+
+export interface SearchPreviewResponse {
+  readonly id: number;
+  readonly plan_id: string;
+  readonly files: readonly SearchPreviewFile[];
+  readonly total_edits: number;
+  readonly truncated: boolean;
+  readonly cancelled: boolean;
+  readonly stopped: string | null;
+  readonly stats: SearchStats;
+}
+
+export interface SearchApplyRequest {
+  readonly plan_id: string;
+  readonly files?: readonly string[] | undefined;
+}
+
+export interface SearchApplyFileResult {
+  readonly path: string;
+  readonly ok: boolean;
+  readonly replacements: number;
+  readonly error?: string | undefined;
+}
+
+export interface SearchApplyResponse {
+  readonly applied: number;
+  readonly failed: number;
+  readonly files: readonly SearchApplyFileResult[];
+}
+
+export interface SearchInTextRequest {
+  readonly text: string;
+  readonly query: string;
+  readonly regex?: boolean | undefined;
+  readonly case_sensitive?: boolean | undefined;
+  readonly whole_word?: boolean | undefined;
+  readonly limit?: number | undefined;
+}
+
+export function searchApi(kernel: Kernel) {
+  return {
+    files: (req: SearchFilesRequest) =>
+      kernel.run<SearchFilesResponse>("search.files", { ...req }),
+    text: (req: SearchTextRequest) =>
+      kernel.run<SearchTextResponse>("search.text", { ...req }),
+    cancel: (id?: number) =>
+      kernel.run<{ cancelled: number }>(
+        "search.cancel",
+        id !== undefined ? { id } : {},
+      ),
+    replacePreview: (req: SearchPreviewRequest) =>
+      kernel.run<SearchPreviewResponse>("search.replace-preview", { ...req }),
+    replaceApply: (req: SearchApplyRequest) =>
+      kernel.run<SearchApplyResponse>("search.replace-apply", { ...req }),
+    inText: (req: SearchInTextRequest) =>
+      kernel.run<SearchTextResponse>("search.in-text", { ...req }),
+  };
+}
+
+export type SearchApi = ReturnType<typeof searchApi>;
+
+/* -------------------------------------------------------------------------- */
+/* Git API                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export interface GitStatusFile {
+  readonly path: string;
+  readonly staged: ChangeState | null;
+  readonly unstaged: ChangeState | null;
+  readonly untracked: boolean;
+  readonly conflicted: boolean;
+}
+
+export interface GitUpstream {
+  readonly name: string;
+  readonly ahead: number;
+  readonly behind: number;
+}
+
+export interface GitStatusReport {
+  readonly branch: string | null;
+  readonly detached: boolean;
+  readonly unborn: boolean;
+  readonly head: string | null;
+  readonly upstream: GitUpstream | null;
+  readonly files: readonly GitStatusFile[];
+  readonly truncated: boolean;
+}
+
+export interface GitDiffLine {
+  readonly kind: "context" | "add" | "remove";
+  readonly text: string;
+  readonly old_line: number | null;
+  readonly new_line: number | null;
+  readonly old_offset: number | null;
+  readonly new_offset: number | null;
+  readonly no_newline: boolean;
+}
+
+export interface GitDiffHunk {
+  readonly old_start: number;
+  readonly old_lines: number;
+  readonly new_start: number;
+  readonly new_lines: number;
+  readonly header: string;
+  readonly lines: readonly GitDiffLine[];
+}
+
+export interface GitFileDiff {
+  readonly path: string;
+  readonly status: "added" | "deleted" | "modified";
+  readonly binary: boolean;
+  readonly too_large: boolean;
+  readonly additions: number;
+  readonly deletions: number;
+  readonly hunks: readonly GitDiffHunk[];
+}
+
+export interface GitDiffResponse {
+  readonly staged: boolean;
+  readonly files: readonly GitFileDiff[];
+}
+
+export interface GitCommitInfo {
+  readonly hash: string;
+  readonly short: string;
+  readonly author_name: string;
+  readonly author_email: string;
+  readonly time: number;
+  readonly subject: string;
+  readonly parents: readonly string[];
+}
+
+export interface GitLogResponse {
+  readonly commits: readonly GitCommitInfo[];
+  readonly has_more: boolean;
+}
+
+export interface GitBranchInfo {
+  readonly name: string;
+  readonly remote: boolean;
+  readonly current: boolean;
+  readonly hash: string;
+  readonly upstream: string | null;
+}
+
+export interface GitBlameRange {
+  readonly start: number;
+  readonly lines: number;
+  readonly commit: string;
+  readonly source_path: string | null;
+}
+
+export interface GitBlameResponse {
+  readonly path: string;
+  readonly total_lines: number;
+  readonly ranges: readonly GitBlameRange[];
+}
+
+export function gitApi(kernel: Kernel) {
+  return {
+    open: (root: string) =>
+      kernel.run<{ root: string; is_repo: boolean }>("git.open", { root }),
+    status: (req: { root?: string | undefined } = {}) =>
+      kernel.run<GitStatusReport>("git.status", { ...req }),
+    diff: (
+      req: {
+        root?: string | undefined;
+        path?: string | undefined;
+        staged?: boolean | undefined;
+      } = {},
+    ) => kernel.run<GitDiffResponse>("git.diff", { ...req }),
+    diffText: (req: {
+      path: string;
+      staged?: boolean | undefined;
+      root?: string | undefined;
+    }) => kernel.run<{ text: string }>("git.diff-text", { ...req }),
+    log: (
+      req: {
+        root?: string | undefined;
+        path?: string | undefined;
+        limit?: number | undefined;
+        offset?: number | undefined;
+      } = {},
+    ) => kernel.run<GitLogResponse>("git.log", { ...req }),
+    blame: (req: { path: string; root?: string | undefined }) =>
+      kernel.run<GitBlameResponse>("git.blame", { ...req }),
+    branches: (req: { root?: string | undefined } = {}) =>
+      kernel.run<readonly GitBranchInfo[]>("git.branches", { ...req }),
+    show: (req: { rev: string; path: string; root?: string | undefined }) =>
+      kernel.run<{ rev: string; path: string; text: string }>("git.show", { ...req }),
+    stage: (req: { paths: readonly string[]; root?: string | undefined }) =>
+      kernel.run<{ staged: number }>("git.stage", { ...req }),
+    unstage: (req: { paths: readonly string[]; root?: string | undefined }) =>
+      kernel.run<{ unstaged: number }>("git.unstage", { ...req }),
+    discard: (req: {
+      paths: readonly string[];
+      confirm: boolean;
+      root?: string | undefined;
+    }) =>
+      kernel.run<{ discarded: readonly string[]; trash: string }>("git.discard", {
+        ...req,
+      }),
+    commit: (req: {
+      message: string;
+      amend?: boolean | undefined;
+      hooks?: boolean | undefined;
+      root?: string | undefined;
+    }) =>
+      kernel.run<{ hash: string; short: string; subject: string; amended: boolean }>(
+        "git.commit",
+        { ...req },
+      ),
+    checkoutBranch: (req: {
+      name: string;
+      create?: boolean | undefined;
+      root?: string | undefined;
+    }) =>
+      kernel.run<{ branch: string; created: boolean }>("git.checkout-branch", {
+        ...req,
+      }),
+    init: (req: { root?: string | undefined } = {}) =>
+      kernel.run<GitStatusReport>("git.init", { ...req }),
+    sync: (req: {
+      action: "fetch" | "pull" | "push";
+      remote?: string | undefined;
+      timeout_secs?: number | undefined;
+      hooks?: boolean | undefined;
+      root?: string | undefined;
+    }) =>
+      kernel.run<{ action: string; remote: string; output: string }>("git.sync", {
+        ...req,
+      }),
+  };
+}
+
+export type GitApi = ReturnType<typeof gitApi>;
+
+// ---------------------------------------------------------------------------
+// Settings, Keybindings & Theme
+// ---------------------------------------------------------------------------
+
+export type SettingScope = "user" | "project";
+
+export interface SettingDef {
+  readonly id: string;
+  readonly type: "bool" | "int" | "float" | "enum" | "string" | "path" | "list";
+  readonly min?: number | undefined;
+  readonly max?: number | undefined;
+  readonly values?: readonly string[] | undefined;
+  readonly item?: unknown | undefined;
+  readonly default: unknown;
+  readonly description: string;
+  readonly scope: SettingScope;
+  readonly requires_restart: boolean;
+  readonly owner: string;
+  readonly category: string;
+}
+
+export interface SettingsSchema {
+  readonly version: number;
+  readonly categories: readonly string[];
+  readonly settings: readonly SettingDef[];
+}
+
+export interface SettingDescription {
+  readonly id: string;
+  readonly value: unknown;
+  readonly source: "default" | "user" | "project";
+  readonly default: unknown;
+  readonly "requires-restart"?: boolean | undefined;
+  readonly written?: string | undefined;
+}
+
+export interface SettingsGetAllResponse {
+  readonly values: Record<
+    string,
+    { readonly value: unknown; readonly source: "default" | "user" | "project" }
+  >;
+  readonly warnings: readonly {
+    readonly layer: string;
+    readonly id: string | null;
+    readonly message: string;
+  }[];
+}
+
+export interface KeybindingItem {
+  readonly command: string;
+  readonly key: string;
+  readonly display: string;
+  readonly when: string;
+  readonly source: "default" | "user";
+}
+
+export interface KeybindingConflict {
+  readonly key: string;
+  readonly kind: "conflict" | "shadow";
+  readonly commands: readonly string[];
+}
+
+export interface KeybindingsListResponse {
+  readonly platform: string;
+  readonly bindings: readonly KeybindingItem[];
+  readonly conflicts: readonly KeybindingConflict[];
+  readonly warnings?: readonly string[] | undefined;
+}
+
+export interface ThemeSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly scheme: "dark" | "light";
+  readonly builtin: boolean;
+  readonly base: string | null;
+}
+
+export interface ThemeDetail {
+  readonly id: string;
+  readonly name: string;
+  readonly scheme: "dark" | "light";
+  readonly builtin: boolean;
+  readonly base: string | null;
+  readonly tokens: Record<string, string>;
+  readonly overrides: Record<string, string>;
+}
+
+export interface ThemeListResponse {
+  readonly themes: readonly ThemeSummary[];
+  readonly warnings: readonly string[];
+}
+
+export function settingsApi(kernel: Kernel) {
+  function get(id: string): Promise<SettingDescription>;
+  function get(): Promise<SettingsGetAllResponse>;
+  function get(
+    id?: string | undefined,
+  ): Promise<SettingDescription | SettingsGetAllResponse> {
+    return id !== undefined
+      ? kernel.run<SettingDescription>("settings.get", { id })
+      : kernel.run<SettingsGetAllResponse>("settings.get", {});
+  }
+
+  return {
+    get,
+    set: (req: { id: string; value: unknown; scope?: SettingScope | undefined }) =>
+      kernel.run<SettingDescription>("settings.set", { ...req }),
+    reset: (req: { id: string; scope?: SettingScope | undefined }) =>
+      kernel.run<SettingDescription>("settings.reset", { ...req }),
+    schema: () => kernel.run<SettingsSchema>("settings.schema", {}),
+    register: (req: { settings: readonly SettingDef[]; owner?: string | undefined }) =>
+      kernel.run<{ registered: number; warnings: readonly unknown[] }>(
+        "settings.register",
+        { ...req },
+      ),
+    openFile: (scope: "user" | "project" | "keybindings") =>
+      kernel.run<{ path: string; created: boolean }>("settings.open-file", { scope }),
+    useProject: (path: string | null) =>
+      kernel.run<{ warnings: readonly unknown[] }>("settings.use-project", { path }),
+  };
+}
+
+export type SettingsApi = ReturnType<typeof settingsApi>;
+
+export function keybindingsApi(kernel: Kernel) {
+  return {
+    list: () => kernel.run<KeybindingsListResponse>("keybindings.list", {}),
+    resolve: (req: { key: string; context?: string | readonly string[] | undefined }) =>
+      kernel.run<unknown>("keybindings.resolve", { ...req }),
+    set: (req: {
+      command: string;
+      key?: string | undefined;
+      keys?: readonly string[] | undefined;
+      when?: string | undefined;
+    }) =>
+      kernel.run<{
+        command: string;
+        keys: readonly string[];
+        when: string;
+        conflicts: readonly KeybindingConflict[];
+      }>("keybindings.set", { ...req }),
+    reset: (command?: string | undefined) =>
+      kernel.run<{ command: string | null }>(
+        "keybindings.reset",
+        command ? { command } : {},
+      ),
+  };
+}
+
+export type KeybindingsApi = ReturnType<typeof keybindingsApi>;
+
+export function themeApi(kernel: Kernel) {
+  return {
+    list: () => kernel.run<ThemeListResponse>("theme.list", {}),
+    get: (id: string) => kernel.run<ThemeDetail>("theme.get", { id }),
+  };
+}
+
+export type ThemeApi = ReturnType<typeof themeApi>;
+
+export interface CitationAuthor {
+  readonly name: string;
+  readonly family?: string | undefined;
+  readonly given?: string | undefined;
+}
+
+export interface CitationEntry {
+  readonly key: string;
+  readonly entry_type: string;
+  readonly title?: string | undefined;
+  readonly authors?: readonly CitationAuthor[] | undefined;
+  readonly year?: number | undefined;
+  readonly month?: number | undefined;
+  readonly journal_or_publisher?: string | undefined;
+  readonly volume?: string | undefined;
+  readonly number?: string | undefined;
+  readonly pages?: string | undefined;
+  readonly doi?: string | undefined;
+  readonly url?: string | undefined;
+  readonly arxiv_id?: string | undefined;
+  readonly abstract_text?: string | undefined;
+  readonly raw_fields?: Readonly<Record<string, string>> | undefined;
+}
+
+export interface CitationDifference {
+  readonly field: string;
+  readonly local: string;
+  readonly remote: string;
+}
+
+export type CitationVerificationStatus =
+  "verified" | "mismatch" | "not_found" | "error";
+
+export interface CitationVerificationResult {
+  readonly status: CitationVerificationStatus;
+  readonly matched?: CitationEntry | null | undefined;
+  readonly differences: readonly CitationDifference[];
+  readonly message?: string | null | undefined;
+}
+
+export interface CitationParseDiagnostic {
+  readonly file?: string | null | undefined;
+  readonly line: number;
+  readonly column: number;
+  readonly message: string;
+}
+
+export interface CitationLoadResponse {
+  readonly loaded: number;
+  readonly total: number;
+  readonly errors: readonly CitationParseDiagnostic[];
+}
+
+export interface CitationSearchResultItem {
+  readonly key: string;
+  readonly score: number;
+  readonly entry: CitationEntry;
+}
+
+export interface CitationSearchResponse {
+  readonly results: readonly CitationSearchResultItem[];
+}
+
+export interface CitationFormatResponse {
+  readonly key: string;
+  readonly style: string;
+  readonly formatted: string;
+}
+
+export interface CitationExtractKeysResponse {
+  readonly keys: readonly string[];
+}
+
+export function citationsApi(kernel: Kernel) {
+  return {
+    load: (req: { paths: readonly string[] } | { path: string }) =>
+      kernel.run<CitationLoadResponse>("citations.load", { ...req }),
+    search: (req: { query: string; limit?: number | undefined }) =>
+      kernel.run<CitationSearchResponse>("citations.search", { ...req }),
+    get: (key: string) => kernel.run<CitationEntry>("citations.get", { key }),
+    format: (key: string, style: "apa" | "numeric" | "ieee" = "apa") =>
+      kernel.run<CitationFormatResponse>("citations.format", { key, style }),
+    extractKeys: (source: string, syntax: "typst" | "latex" | "markdown") =>
+      kernel.run<CitationExtractKeysResponse>("citations.extract-keys", {
+        source,
+        syntax,
+      }),
+    verify: (key: string) =>
+      kernel.run<CitationVerificationResult>("citations.verify", { key }),
+  };
+}
+
+export type CitationsApi = ReturnType<typeof citationsApi>;
+
+export interface MarkdownHeading {
+  readonly title: string;
+  readonly level: number;
+  readonly id?: string | undefined;
+  readonly line: number;
+  readonly offset: number;
+}
