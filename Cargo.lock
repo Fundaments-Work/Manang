@@ -4304,10 +4304,13 @@ name = "manang-figure"
 version = "0.1.0"
 dependencies = [
  "insta",
+ "manang-kernel",
+ "parking_lot",
  "perfect_freehand",
  "proptest",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 

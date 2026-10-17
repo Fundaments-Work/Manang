@@ -1,0 +1,41 @@
+[plugin]
+name = "figure"
+version = "0.1.0"
+description = "Typed SVG scene graph, deterministic headless renderer and vector studio"
+tier = "native"
+
+[permissions]
+filesystem = ["write:project"]
+
+[contributes]
+[[contributes.commands]]
+id = "figure.create"
+title = "New figure"
+
+[[contributes.commands]]
+id = "figure.open"
+title = "Open figure"
+
+[[contributes.commands]]
+id = "figure.save"
+title = "Save figure"
+
+[[contributes.commands]]
+id = "figure.list"
+title = "List open figures"
+
+[[contributes.commands]]
+id = "figure.apply"
+title = "Apply edit operation"
+
+[[contributes.commands]]
+id = "figure.get"
+title = "Get figure scene"
+
+[[contributes.commands]]
+id = "figure.export-svg"
+title = "Export SVG"
+
+[[contributes.commands]]
+id = "figure.hit-test"
+title = "Hit test coordinates"
