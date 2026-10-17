@@ -35,7 +35,6 @@ pub enum SearchError {
 }
 
 impl SearchError {
-    #[allow(dead_code)]
     pub(crate) fn io(context: impl Into<String>, source: io::Error) -> Self {
         Self::Io {
             context: context.into(),

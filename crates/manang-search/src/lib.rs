@@ -13,6 +13,12 @@ pub mod index;
 pub mod intext;
 mod limits;
 pub mod pattern;
+mod plugin;
+pub mod registry;
+pub mod replace;
+pub mod scan;
+pub mod text;
 
 pub use error::SearchError;
 pub use limits::Limits;
+pub use plugin::{NO_BUS_TTL, SearchPlugin, manifest, plugin};

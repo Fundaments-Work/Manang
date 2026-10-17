@@ -1,0 +1,33 @@
+[plugin]
+name = "search"
+version = "0.1.0"
+description = "Fuzzy file finder, project-wide text search, atomic replace and in-document find"
+tier = "native"
+
+[permissions]
+filesystem = ["write:project"]
+
+[contributes]
+[[contributes.commands]]
+id = "search.files"
+title = "Go to file (fuzzy file-name search)"
+
+[[contributes.commands]]
+id = "search.text"
+title = "Search in project"
+
+[[contributes.commands]]
+id = "search.cancel"
+title = "Cancel running search"
+
+[[contributes.commands]]
+id = "search.replace-preview"
+title = "Preview replace across project"
+
+[[contributes.commands]]
+id = "search.replace-apply"
+title = "Apply planned replace"
+
+[[contributes.commands]]
+id = "search.in-text"
+title = "Find in document text"
