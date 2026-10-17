@@ -1,0 +1,32 @@
+[package]
+name = "manang-project"
+description = "Manang's first-party project plugin: manang.toml, file tree, safe file operations, watching and git status"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+# gix 0.89 requires Rust 1.88.
+rust-version = "1.88"
+
+[dependencies]
+gix = { version = "0.89", default-features = false, features = ["sha1", "status", "index"] }
+ignore = "0.4"
+manang-kernel = { path = "../manang-kernel" }
+notify = "8.2"
+notify-debouncer-full = "0.7"
+parking_lot = "0.12"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = "3"
+thiserror = { workspace = true }
+toml = "1"
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+insta = "1"
+proptest = "1"
+
+[[bench]]
+name = "tree_listing"
+harness = false
