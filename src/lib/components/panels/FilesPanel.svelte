@@ -11,6 +11,7 @@
     renameEntry,
     trashEntry,
   } from "$lib/state/actions";
+  import { canBeMain, setMainFile } from "$lib/state/mainFile";
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { basename, dirname, newFileName, uniqueName } from "$lib/workbench/paths";
@@ -197,6 +198,12 @@
       { label: "New file", onselect: () => void startCreate("file", dir) },
       { label: "New folder", onselect: () => void startCreate("folder", dir) },
     );
+    if (row !== null && row.kind === "file" && canBeMain(row.path)) {
+      items.push({
+        label: "Set as main file",
+        onselect: () => void setMainFile(row.path),
+      });
+    }
     if (row !== null) {
       items.push(
         {

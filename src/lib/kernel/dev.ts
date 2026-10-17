@@ -9,6 +9,8 @@ import type { Kernel } from "./client";
 import { createMockKernel } from "./mock";
 import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject";
 import { figurePlugin } from "./mockFigure";
+import { latexPlugin } from "./mockLatex";
+import { markdownPlugin } from "./mockMarkdown";
 import { typstPlugin } from "./mockTypst";
 
 export const DEMO_ROOT = "/home/author/entropy-paper";
@@ -199,6 +201,23 @@ const LECTURE_CH1 = `## Chapter one
 Entropy counts the microstates compatible with what we can measure.
 `;
 
+const THESIS_MAIN = `\\documentclass{article}
+\\begin{document}
+
+\\section{Introduction}
+Heat and information are linked by Landauer's principle, which bounds the
+energy cost of erasing one bit of memory from below.
+
+\\input{chapters/methods}
+
+\\end{document}
+`;
+
+const THESIS_METHODS = `\\section{Methods}
+We simulate a driven two-level system coupled to a thermal reservoir and
+average the dissipated heat over ten thousand cycles.
+`;
+
 export const DEMO_PROJECTS: readonly SeedProject[] = [
   {
     root: DEMO_ROOT,
@@ -238,6 +257,15 @@ export const DEMO_PROJECTS: readonly SeedProject[] = [
     committed: ["index.md", "chapter1.md"],
     openedAt: 1_760_000_000,
   },
+  {
+    root: "/home/author/thesis-draft",
+    name: "Thesis draft",
+    engine: "latex",
+    main: "main.tex",
+    files: { "main.tex": THESIS_MAIN, "chapters/methods.tex": THESIS_METHODS },
+    committed: ["main.tex", "chapters/methods.tex"],
+    openedAt: 1_750_000_001,
+  },
 ];
 
 /** Listed as recent but gone from disk, to show the missing-folder state. */
@@ -250,7 +278,13 @@ export function createDevKernel(
 ): Kernel & { host: MockProjectHost } {
   const host = new MockProjectHost(seeds, MISSING);
   const kernel = createMockKernel({
-    plugins: [projectPlugin(host), typstPlugin(host), figurePlugin()],
+    plugins: [
+      projectPlugin(host),
+      typstPlugin(host),
+      latexPlugin(host),
+      markdownPlugin(),
+      figurePlugin(),
+    ],
   });
   return Object.assign(kernel, { host });
 }

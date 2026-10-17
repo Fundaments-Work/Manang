@@ -1,19 +1,13 @@
 /**
- * Kernel lint results.
+ * Placing compile diagnostics in editor text.
  *
- * Plugins that implement an `on_lint`-style pass expose it as the command
- * `lint.diagnostics`, returning `{file, line, column, severity, message}[]`
- * (1-based line and column; the column counts Unicode scalars, like the rest of
- * the kernel). The command is optional: when no plugin provides it, nothing is
- * shown and nothing fails.
+ * Problems carry 1-based lines and columns counted in Unicode scalars, like the
+ * rest of the kernel; the editor wants UTF-16 offsets.
  */
 
 import type { Diagnostic } from "$lib/editor/diagnostics";
 
-import type { Kernel } from "./client";
 import { scalarToUtf16 } from "./offsets";
-
-export const LINT_COMMAND = "lint.diagnostics";
 
 export interface LintItem {
   readonly file: string;
@@ -21,36 +15,6 @@ export interface LintItem {
   readonly column: number;
   readonly severity: "error" | "warning";
   readonly message: string;
-}
-
-/** Validate untrusted kernel output; malformed entries are dropped. */
-export function parseLint(raw: unknown): LintItem[] {
-  if (!Array.isArray(raw)) return [];
-  const items: LintItem[] = [];
-  for (const entry of raw as unknown[]) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const e = entry as Record<string, unknown>;
-    if (
-      typeof e["line"] !== "number" ||
-      typeof e["column"] !== "number" ||
-      typeof e["message"] !== "string" ||
-      !Number.isInteger(e["line"]) ||
-      !Number.isInteger(e["column"]) ||
-      e["line"] < 1 ||
-      e["column"] < 1
-    ) {
-      continue;
-    }
-    items.push({
-      file: typeof e["file"] === "string" ? e["file"] : "",
-      line: e["line"],
-      column: e["column"],
-      // The gutter knows two severities; anything else reads as a warning.
-      severity: e["severity"] === "error" ? "error" : "warning",
-      message: e["message"],
-    });
-  }
-  return items;
 }
 
 /**
@@ -84,14 +48,4 @@ export function toEditorDiagnostics(
     out.push({ from, to, message: item.message, severity: item.severity });
   }
   return out;
-}
-
-/** Ask the kernel for diagnostics. Absent or failing command yields `[]`. */
-export async function fetchLint(kernel: Kernel, file?: string): Promise<LintItem[]> {
-  try {
-    const raw = await kernel.run(LINT_COMMAND, file === undefined ? {} : { file });
-    return parseLint(raw);
-  } catch {
-    return [];
-  }
 }

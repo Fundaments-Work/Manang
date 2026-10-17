@@ -477,7 +477,7 @@ async function main() {
       await page.evaluate(`(() => {
       const rows = [...document.querySelectorAll('section[aria-labelledby="recent-heading"] li button')];
       const missing = rows.find((r) => r.textContent.includes("Old thesis"));
-      return rows.length === 3 && missing?.disabled === true && missing.textContent.includes("Folder not found");
+      return rows.length === 4 && missing?.disabled === true && missing.textContent.includes("Folder not found");
     })()`),
     );
     check(
@@ -1295,6 +1295,138 @@ async function main() {
       ),
     );
     await resize(page, 1280, 820);
+
+    /* ------------------------------------------------------------------ */
+    section("LaTeX and Markdown preview");
+    const doc = await newPage(browser);
+    current = doc;
+    await clickText(
+      doc,
+      'section[aria-labelledby="recent-heading"] button',
+      "Thesis draft",
+    );
+    await expectEventually(
+      doc,
+      "a LaTeX project compiles with latex.compile and shows the PDF in the viewer",
+      `document.querySelector('[data-pdf-viewer] canvas') !== null`,
+      { timeout: 20000 },
+    );
+    await expectEventually(
+      doc,
+      "status bar reports the LaTeX compile time",
+      `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    );
+    check(
+      "the toolbar says which page of how many",
+      await doc.evaluate(
+        `/Page 1 of \\d+/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
+      ),
+    );
+    await shoot(doc, "22-latex-preview");
+
+    // A chapter compiles through the main file, not by itself.
+    await press(doc, "p", { ctrl: true, wait: 300 });
+    await insertText(doc, "methods");
+    await press(doc, "Enter", { wait: 500 });
+    await expectEventually(
+      doc,
+      "a chapter is compiled through main.tex",
+      `document.querySelector('section[aria-label="Preview"]').innerText.includes("via main.tex")`,
+    );
+
+    // Saving a broken chapter reaches Problems and keeps the last good PDF.
+    await focusEditor(doc);
+    await caretToEnd(doc);
+    await insertText(doc, "\\input{missing}\n");
+    await press(doc, "s", { ctrl: true, wait: 600 });
+    await expectEventually(
+      doc,
+      "after the save the status bar counts the LaTeX error",
+      `/1 error/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+      { timeout: 8000 },
+    );
+    await expectEventually(
+      doc,
+      "the error banner names the problem and keeps the last good page",
+      `document.querySelector('section[aria-label="Preview"]').innerText.includes("last good page") && document.querySelector('[data-pdf-viewer] canvas') !== null`,
+    );
+    await clickText(doc, 'section[aria-label="Preview"] button', "Show problems");
+    check(
+      "Show problems opens the panel with the TeX message",
+      await doc.evaluate(
+        `document.querySelector("#bottom-panel")?.innerText.includes("not found") ?? false`,
+      ),
+    );
+    await shoot(doc, "23-latex-error");
+
+    // Many pages: page navigation and scroll position across a recompile.
+    await focusEditor(doc);
+    await press(doc, "a", { ctrl: true });
+    await insertText(
+      doc,
+      Array.from({ length: 140 }, (_, i) => `Line ${i + 1} of the methods.`).join(
+        "\n\n",
+      ) + "\n",
+    );
+    await press(doc, "s", { ctrl: true, wait: 800 });
+    await expectEventually(
+      doc,
+      "a long document reports several pages",
+      `/Page 1 of ([2-9]|\\d\\d)/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
+      { timeout: 8000 },
+    );
+    await click(doc, 'button[aria-label="Next page"]');
+    await expectEventually(
+      doc,
+      "Next page scrolls the viewer to page 2",
+      `/Page 2 of/.test(document.querySelector('section[aria-label="Preview"]').innerText) && document.querySelector('[data-pdf-viewer]').scrollTop > 100`,
+    );
+    const scrollBefore = await doc.evaluate(
+      `document.querySelector('[data-pdf-viewer]').scrollTop`,
+    );
+    await insertText(doc, "One more line.\n");
+    await press(doc, "s", { ctrl: true, wait: 1200 });
+    const scrollAfter = await doc.evaluate(
+      `document.querySelector('[data-pdf-viewer]').scrollTop`,
+    );
+    check(
+      "scroll position survives a recompile",
+      Math.abs(scrollAfter - scrollBefore) < 4,
+      `${scrollBefore} vs ${scrollAfter}`,
+    );
+    check(
+      "only the pages near the viewport own a canvas",
+      await doc.evaluate(
+        `document.querySelectorAll('[data-pdf-viewer] canvas').length <= 4`,
+      ),
+    );
+
+    // Markdown.
+    await press(doc, "k", { ctrl: true, wait: 300 });
+    await insertText(doc, "close project");
+    await press(doc, "Enter", { wait: 600 });
+    if (await exists(doc, '[role="dialog"]')) {
+      await clickText(doc, '[role="dialog"] button', "Don't save");
+      await sleep(300);
+    }
+    await clickText(
+      doc,
+      'section[aria-labelledby="recent-heading"] button',
+      "Lecture notes",
+    );
+    await expectEventually(
+      doc,
+      "Markdown renders the sanitised HTML from markdown.render-html on the paper page",
+      `(() => { const a = document.querySelector('article[aria-label="Markdown preview"]'); return !!a && a.querySelector("h1")?.textContent === "Lecture notes" && getComputedStyle(a).backgroundColor === "rgb(250, 249, 247)"; })()`,
+    );
+    await shoot(doc, "24-markdown-preview");
+    check(
+      "no page errors during LaTeX and Markdown preview",
+      doc.errors.length === 0,
+      doc.errors.slice(0, 2).join(" | "),
+    );
+    doc.close();
+    current = page;
 
     /* ------------------------------------------------------------------ */
     section("Brand invariants");

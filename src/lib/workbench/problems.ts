@@ -5,7 +5,14 @@
 
 import type { Diagnostic } from "$lib/editor/diagnostics";
 import { toEditorDiagnostics, type LintItem } from "$lib/kernel/lint";
-import type { CompileReport, WireDiagnostic } from "$lib/kernel/types";
+import type {
+  CompileReport,
+  LatexReport,
+  MarkdownDiagnostic,
+  WireDiagnostic,
+} from "$lib/kernel/types";
+
+import { dirname, join } from "./paths";
 
 export type Severity = "error" | "warning";
 
@@ -113,4 +120,101 @@ export function groupByFile(
     else groups.push({ file: problem.file, items: [problem] });
   }
   return groups;
+}
+
+/**
+ * LaTeX diagnostics name files relative to the main file's directory; the
+ * Problems panel wants project-relative paths. `info` entries are dropped.
+ */
+export function fromLatexReport(
+  report: Pick<LatexReport, "diagnostics">,
+  main: string,
+): Problem[] {
+  const base = dirname(main);
+  const problems: Problem[] = [];
+  report.diagnostics.forEach((d, index) => {
+    if (d.severity === "info") return;
+    const file = d.file === null ? main : join(base, projectPath(d.file));
+    problems.push({
+      id: `${index}:${file}:${d.line ?? 0}:${d.message}`,
+      severity: d.severity,
+      message: d.message,
+      file,
+      line: d.line,
+      column: null,
+      hints: d.hint === null ? [] : [d.hint],
+    });
+  });
+  return sortProblems(problems);
+}
+
+/** Markdown diagnostics have a free-form severity string; only the first two count. */
+export function fromMarkdown(
+  diagnostics: readonly MarkdownDiagnostic[],
+  file: string,
+): Problem[] {
+  const problems: Problem[] = [];
+  diagnostics.forEach((d, index) => {
+    const severity =
+      d.severity === "error" ? "error" : d.severity === "warning" ? "warning" : null;
+    if (severity === null) return;
+    problems.push({
+      id: `${index}:${file}:${d.line ?? 0}:${d.message}`,
+      severity,
+      message: d.message,
+      file,
+      line: d.line ?? null,
+      column: null,
+      hints: [],
+    });
+  });
+  return sortProblems(problems);
+}
+
+export interface EngineFailure {
+  /** The stable `[code]` prefix of a plugin error, when present. */
+  readonly code: string | null;
+  /** One sentence for the banner and the Output log. */
+  readonly title: string;
+  /** What to do about it, when we know. */
+  readonly fix: string | null;
+}
+
+export const WORKER_BUILD_COMMAND =
+  "cargo build -p manang-latex --features engine --bin manang-latex-worker";
+
+/** Turn a `[code] message` failure of `latex.*` into an actionable message. */
+export function explainLatexFailure(message: string): EngineFailure {
+  const match = /^\[([a-z_]+)\]\s*(.*)$/s.exec(message);
+  const code = match?.[1] ?? null;
+  const detail = match?.[2] ?? message;
+  switch (code) {
+    case "worker_missing":
+    case "worker_spawn":
+      return {
+        code,
+        title: "The LaTeX engine is not installed",
+        fix: `Build the worker with \`${WORKER_BUILD_COMMAND}\`, or set MANANG_LATEX_WORKER to its path, then compile again.`,
+      };
+    case "bundle_unavailable":
+      return {
+        code,
+        title: "The TeX files are not downloaded yet",
+        fix: "Manang needs to download the TeX bundle once. Choose Download TeX files, or connect to the network and compile again.",
+      };
+    case "timeout":
+      return {
+        code,
+        title: "LaTeX took too long and was stopped",
+        fix: "Check for an infinite macro loop, or compile again.",
+      };
+    case "worker_crashed":
+      return {
+        code,
+        title: "The LaTeX engine stopped unexpectedly",
+        fix: `Compile again. If it repeats, the details are: ${detail}`,
+      };
+    default:
+      return { code, title: detail, fix: null };
+  }
 }

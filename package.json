@@ -36,6 +36,7 @@
     "@lezer/highlight": "^1.2.5",
     "@tauri-apps/api": "^2.12.4",
     "codemirror-lang-typst": "^0.6.0",
+    "pdfjs-dist": "6.4.299",
     "perfect-freehand": "^1.2.3",
     "svelte": "^5.57.2"
   },

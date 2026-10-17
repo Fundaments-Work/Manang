@@ -46,7 +46,7 @@
   // Re-compile when the active file changes, since the preview target may too.
   $effect(() => {
     void tabs.active?.id;
-    untrack(() => build.schedule());
+    untrack(() => build.schedule("switch"));
   });
 
   const sideOverlay = $derived(
