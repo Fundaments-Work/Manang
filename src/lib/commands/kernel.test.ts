@@ -13,7 +13,7 @@ const statics: Command[] = [
     group: "Plugin commands",
     run: noop,
   },
-  { id: "verify", title: "Verify citations", group: "AI Actions", run: noop },
+  { id: "verify", title: "Verify citations", group: "Workbench", run: noop },
 ];
 
 const kernelList = [

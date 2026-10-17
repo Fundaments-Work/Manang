@@ -1,86 +1,70 @@
 /**
- * Command palette state — DESIGN.md §7.
+ * Command palette state.
  *
- * Keyboard-first: ↑ and ↓ to move, Enter to execute, Esc to dismiss. The
- * selected row is derived from the query rather than stored independently, so
- * typing can never leave the highlight pointing at a row that has been filtered
- * out from under it.
+ * Keyboard-first, a shortcut rather than the main way in. The result list is
+ * derived from the query, and the cursor is clamped to it, so typing can never
+ * leave the highlight on a row that has been filtered out.
  */
 
 import {
-  commands,
-  searchText,
-  type Command,
-  type CommandGroup,
-} from "$lib/commands/registry";
-import { fuzzyRank, type Ranked } from "$lib/commands/fuzzy";
-import { mergeCommands } from "$lib/commands/kernel";
-import type { KernelCommand } from "$lib/kernel/client";
-import { session } from "$lib/state/session.svelte";
+  flatten,
+  groupRanked,
+  paletteCandidates,
+  rankCandidates,
+  type PaletteGroup,
+  type PaletteMode,
+} from "$lib/commands/palette";
+import type { Command } from "$lib/commands/registry";
+import { workbenchCommands } from "$lib/commands/workbench";
+import { kernel, type KernelCommand } from "$lib/kernel";
 
-const GROUP_ORDER: readonly CommandGroup[] = ["AI Actions", "Plugins & Commands"];
+import { openFile, runKernelCommand } from "./actions";
+import { workspace } from "./workspace.svelte";
 
 export class PaletteState {
   open = $state(false);
-
+  mode = $state<PaletteMode>("commands");
   query = $state("");
-
-  /** Index into the flattened result list. */
   cursor = $state(0);
+  kernelCommands = $state.raw<readonly KernelCommand[]>([]);
+  workbench = $state.raw<readonly Command[]>([]);
 
-  /** Commands contributed by kernel plugins; empty until the kernel answers. */
-  kernelCommands = $state.raw<KernelCommand[]>([]);
-
-  /** Static commands merged with the kernel's. */
-  readonly all: Command[] = $derived(
-    mergeCommands(commands, this.kernelCommands, (id) => void session.run(id)),
+  readonly candidates: Command[] = $derived(
+    paletteCandidates({
+      mode: this.mode,
+      query: this.query,
+      workbench: this.workbench,
+      files: workspace.paths,
+      kernel: this.kernelCommands,
+      runKernel: (id) => void runKernelCommand(id),
+      openFile: (path) => void openFile(path),
+    }),
+  );
+  readonly groups: PaletteGroup[] = $derived(
+    groupRanked(rankCandidates(this.candidates, this.query)),
+  );
+  readonly flat: Command[] = $derived(flatten(this.groups));
+  readonly selected: Command | undefined = $derived(
+    this.flat[Math.min(this.cursor, Math.max(0, this.flat.length - 1))],
   );
 
-  readonly ranked: Ranked<Command>[] = $derived(
-    fuzzyRank(this.all, this.query, searchText),
-  );
-
-  readonly selected: Command | undefined = $derived(this.ranked[this.cursor]?.item);
-
-  /** Results grouped for display, preserving the palette's section order. */
-  readonly groups: { group: CommandGroup; entries: Ranked<Command>[] }[] = $derived.by(
-    () => {
-      const buckets: { group: CommandGroup; entries: Ranked<Command>[] }[] =
-        GROUP_ORDER.map((group) => ({ group, entries: [] }));
-
-      for (const entry of this.ranked) {
-        const bucket = buckets.find(
-          (candidate) => candidate.group === entry.item.group,
-        );
-        if (bucket !== undefined) bucket.entries.push(entry);
-      }
-
-      return buckets.filter((bucket) => bucket.entries.length > 0);
-    },
-  );
-
-  /**
-   * Flat row index of each result, so rendering a highlighted row is a lookup
-   * rather than a second counting pass in the template.
-   */
-  readonly flatOrder: Command[] = $derived(this.ranked.map((entry) => entry.item));
-
-  show(): void {
-    this.open = true;
+  show(mode: PaletteMode = "commands"): void {
+    this.mode = mode;
     this.query = "";
     this.cursor = 0;
-    void this.loadKernelCommands();
+    this.workbench = workbenchCommands((m) => this.show(m));
+    this.open = true;
+    void workspace.ensureAll();
+    void this.#loadKernel();
   }
 
-  /** Fetch plugin commands; the static list keeps working if the kernel is silent. */
-  async loadKernelCommands(): Promise<void> {
-    this.kernelCommands = await session.commands();
-  }
-
-  /** Opens the palette with a query already typed, e.g. from a deep link. */
-  showWith(query: string): void {
-    this.show();
-    this.setQuery(query);
+  async #loadKernel(): Promise<void> {
+    if (this.kernelCommands.length > 0) return;
+    try {
+      this.kernelCommands = await kernel.commands();
+    } catch {
+      this.kernelCommands = [];
+    }
   }
 
   hide(): void {
@@ -99,17 +83,15 @@ export class PaletteState {
     this.cursor = 0;
   }
 
-  /** Moves the cursor, clamping at both ends. */
   move(delta: number): void {
-    const max = this.flatOrder.length - 1;
+    const max = this.flat.length - 1;
     if (max < 0) return;
     this.cursor = Math.max(0, Math.min(this.cursor + delta, max));
   }
 
-  /** Runs the selected command and closes. */
-  execute(): void {
-    const command = this.selected;
-    if (command === undefined) return;
+  /** Run the selected command and close, unless it is disabled. */
+  execute(command: Command | undefined = this.selected): void {
+    if (command === undefined || command.enabled === false) return;
     this.hide();
     command.run();
   }

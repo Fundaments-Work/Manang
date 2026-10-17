@@ -11,7 +11,7 @@
 import { fuzzyRank } from "$lib/commands/fuzzy";
 import type { ChangeState, GitStatus, TreeEntry } from "$lib/kernel/types";
 
-import { basename, dirname } from "./paths";
+import { dirname } from "./paths";
 
 /** Entries the UI never shows: the placeholder that keeps empty folders alive. */
 export const KEEP_FILE = ".gitkeep";
@@ -73,7 +73,11 @@ export function visibleRows(
 }
 
 /** Fuzzy filter over every file in the project, as one flat list. */
-export function filterRows(all: readonly TreeEntry[], query: string, limit = 200): TreeRow[] {
+export function filterRows(
+  all: readonly TreeEntry[],
+  query: string,
+  limit = 200,
+): TreeRow[] {
   const files = all.filter((e) => e.kind !== "dir" && e.name !== KEEP_FILE);
   const ranked = fuzzyRank(files, query, (entry) => entry.path).slice(0, limit);
   return ranked.map(({ item }, index) => ({
@@ -142,7 +146,8 @@ export function gitMarks(status: GitStatus | null): GitMarks {
 /** `main`, or `main*` when the work tree has changes. */
 export function branchLabel(status: GitStatus | null): string | null {
   if (status === null || !status.is_repo) return null;
-  const name = status.branch ?? (status.head === null ? "no commits" : status.head.slice(0, 7));
+  const name =
+    status.branch ?? (status.head === null ? "no commits" : status.head.slice(0, 7));
   return status.changes.length > 0 ? `${name}*` : name;
 }
 
@@ -150,7 +155,8 @@ export function branchLabel(status: GitStatus | null): string | null {
 /* Keyboard navigation (WAI-ARIA tree pattern)                                 */
 /* -------------------------------------------------------------------------- */
 
-export type TreeKey = "ArrowDown" | "ArrowUp" | "ArrowRight" | "ArrowLeft" | "Home" | "End";
+export type TreeKey =
+  "ArrowDown" | "ArrowUp" | "ArrowRight" | "ArrowLeft" | "Home" | "End";
 
 export type TreeMove =
   | { readonly action: "focus"; readonly path: string }
@@ -159,12 +165,18 @@ export type TreeMove =
   | { readonly action: "none" };
 
 /** What a navigation key does from `current`, per the APG tree view pattern. */
-export function navigate(rows: readonly TreeRow[], current: string, key: TreeKey): TreeMove {
+export function navigate(
+  rows: readonly TreeRow[],
+  current: string,
+  key: TreeKey,
+): TreeMove {
   const index = rows.findIndex((row) => row.path === current);
   const row = rows[index];
   if (row === undefined) {
     const first = rows[0];
-    return first === undefined ? { action: "none" } : { action: "focus", path: first.path };
+    return first === undefined
+      ? { action: "none" }
+      : { action: "focus", path: first.path };
   }
   const focus = (target: TreeRow | undefined): TreeMove =>
     target === undefined ? { action: "none" } : { action: "focus", path: target.path };
@@ -179,22 +191,31 @@ export function navigate(rows: readonly TreeRow[], current: string, key: TreeKey
       return focus(rows[rows.length - 1]);
     case "ArrowRight":
       if (row.kind === "dir") {
-        return row.expanded ? focus(rows[index + 1]?.depth === row.depth + 1 ? rows[index + 1] : undefined) : { action: "expand", path: row.path };
+        return row.expanded
+          ? focus(
+              rows[index + 1]?.depth === row.depth + 1 ? rows[index + 1] : undefined,
+            )
+          : { action: "expand", path: row.path };
       }
       return { action: "none" };
     case "ArrowLeft":
-      if (row.kind === "dir" && row.expanded) return { action: "collapse", path: row.path };
-      return focus([...rows.slice(0, index)].reverse().find((r) => r.depth === row.depth - 1));
+      if (row.kind === "dir" && row.expanded)
+        return { action: "collapse", path: row.path };
+      return focus(
+        [...rows.slice(0, index)].reverse().find((r) => r.depth === row.depth - 1),
+      );
   }
 }
 
 /** Type-ahead: the next row after `current` whose name starts with `typed`. */
-export function typeAhead(rows: readonly TreeRow[], current: string, typed: string): string | null {
+export function typeAhead(
+  rows: readonly TreeRow[],
+  current: string,
+  typed: string,
+): string | null {
   if (typed === "") return null;
   const lower = typed.toLowerCase();
   const start = rows.findIndex((row) => row.path === current);
   const order = [...rows.slice(start + 1), ...rows.slice(0, start + 1)];
   return order.find((row) => row.name.toLowerCase().startsWith(lower))?.path ?? null;
 }
-
-export { basename };

@@ -47,7 +47,9 @@ const NAMES: Record<string, string> = {
 
 /** "Ctrl+Shift+P" on Windows and Linux, "⇧⌘P" on macOS. */
 export function formatShortcut(shortcut: Shortcut, platform: Platform): string {
-  const key = NAMES[shortcut.key] ?? (shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key);
+  const key =
+    NAMES[shortcut.key] ??
+    (shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key);
   if (platform.isMac) {
     return `${shortcut.alt === true ? "⌥" : ""}${shortcut.shift === true ? "⇧" : ""}${shortcut.mod === true ? "⌘" : ""}${key}`;
   }

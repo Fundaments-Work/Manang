@@ -121,8 +121,25 @@ const SCENE = {
   width: 960,
   height: 540,
   nodes: [
-    { kind: "math", id: "n1", x: 120, y: 120, tex: "|0⟩  ⟶  |1⟩", size: 28, color: "#b3d17a" },
-    { kind: "rect", id: "n2", x: 120, y: 200, width: 190, height: 84, stroke: "#e8e6e1", fill: "#1c1c20" },
+    {
+      kind: "math",
+      id: "n1",
+      x: 120,
+      y: 120,
+      tex: "|0⟩  ⟶  |1⟩",
+      size: 28,
+      color: "#b3d17a",
+    },
+    {
+      kind: "rect",
+      id: "n2",
+      x: 120,
+      y: 200,
+      width: 190,
+      height: 84,
+      stroke: "#e8e6e1",
+      fill: "#1c1c20",
+    },
     {
       kind: "arrow",
       id: "n3",
@@ -131,7 +148,16 @@ const SCENE = {
       color: "#c6f135",
       label: "H",
     },
-    { kind: "rect", id: "n4", x: 640, y: 200, width: 190, height: 84, stroke: "#e8e6e1", fill: "#1c1c20" },
+    {
+      kind: "rect",
+      id: "n4",
+      x: 640,
+      y: 200,
+      width: 190,
+      height: 84,
+      stroke: "#e8e6e1",
+      fill: "#1c1c20",
+    },
   ],
 };
 
@@ -140,8 +166,21 @@ const CURVE = {
   width: 960,
   height: 540,
   nodes: [
-    { kind: "arrow", id: "n1", from: { x: 120, y: 420 }, to: { x: 840, y: 420 }, color: "#e8e6e1", label: "t" },
-    { kind: "arrow", id: "n2", from: { x: 120, y: 420 }, to: { x: 120, y: 100 }, color: "#e8e6e1" },
+    {
+      kind: "arrow",
+      id: "n1",
+      from: { x: 120, y: 420 },
+      to: { x: 840, y: 420 },
+      color: "#e8e6e1",
+      label: "t",
+    },
+    {
+      kind: "arrow",
+      id: "n2",
+      from: { x: 120, y: 420 },
+      to: { x: 120, y: 100 },
+      color: "#e8e6e1",
+    },
   ],
 };
 
@@ -185,6 +224,8 @@ export const DEMO_PROJECTS: readonly SeedProject[] = [
       "figures/state_lattice.svg",
       "figures/dissipation_curve.figure.json",
     ],
+    // results.typ was committed before its last paragraph was added.
+    committedEarlier: { "sections/results.typ": RESULTS_COMMITTED },
     openedAt: 1_760_600_000,
   },
   {

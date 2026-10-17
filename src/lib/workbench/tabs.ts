@@ -40,7 +40,11 @@ export function makeTab(path: string, view: DocumentView = "text"): Tab {
 
 function withActive(model: TabsModel, id: string | null): TabsModel {
   if (id === null) return { ...model, active: null };
-  return { ...model, active: id, history: [id, ...model.history.filter((h) => h !== id)] };
+  return {
+    ...model,
+    active: id,
+    history: [id, ...model.history.filter((h) => h !== id)],
+  };
 }
 
 export function activeTab(model: TabsModel): Tab | undefined {
@@ -48,18 +52,27 @@ export function activeTab(model: TabsModel): Tab | undefined {
 }
 
 /** Open `path`, or focus its tab. New tabs land right of the active one. */
-export function openTab(model: TabsModel, path: string, view?: DocumentView): TabsModel {
+export function openTab(
+  model: TabsModel,
+  path: string,
+  view?: DocumentView,
+): TabsModel {
   const id = tabId(path);
   const existing = model.tabs.find((tab) => tab.id === id);
   if (existing !== undefined) {
-    const next = view === undefined || view === existing.view
-      ? model
-      : { ...model, tabs: model.tabs.map((t) => (t.id === id ? { ...t, view } : t)) };
+    const next =
+      view === undefined || view === existing.view
+        ? model
+        : { ...model, tabs: model.tabs.map((t) => (t.id === id ? { ...t, view } : t)) };
     return withActive(next, id);
   }
   const at = model.tabs.findIndex((tab) => tab.id === model.active);
   const index = at === -1 ? model.tabs.length : at + 1;
-  const tabs = [...model.tabs.slice(0, index), makeTab(path, view), ...model.tabs.slice(index)];
+  const tabs = [
+    ...model.tabs.slice(0, index),
+    makeTab(path, view),
+    ...model.tabs.slice(index),
+  ];
   return withActive({ ...model, tabs }, id);
 }
 
@@ -70,7 +83,9 @@ export function activateTab(model: TabsModel, id: string): TabsModel {
 export function setView(model: TabsModel, id: string, view: DocumentView): TabsModel {
   return {
     ...model,
-    tabs: model.tabs.map((tab) => (tab.id === id && tab.kind === "document" ? { ...tab, view } : tab)),
+    tabs: model.tabs.map((tab) =>
+      tab.id === id && tab.kind === "document" ? { ...tab, view } : tab,
+    ),
   };
 }
 
@@ -81,13 +96,18 @@ export function closeTab(model: TabsModel, id: string): TabsModel {
   const tabs = model.tabs.filter((tab) => tab.id !== id);
   const history = model.history.filter((h) => h !== id);
   if (model.active !== id) return { tabs, active: model.active, history };
-  const survivor = history.find((h) => tabs.some((t) => t.id === h)) ?? tabs[Math.min(index, tabs.length - 1)]?.id ?? null;
+  const survivor =
+    history.find((h) => tabs.some((t) => t.id === h)) ??
+    tabs[Math.min(index, tabs.length - 1)]?.id ??
+    null;
   return withActive({ tabs, active: null, history }, survivor);
 }
 
 export function closeOthers(model: TabsModel, id: string): TabsModel {
   const keep = model.tabs.filter((tab) => tab.id === id);
-  return keep.length === 0 ? model : withActive({ tabs: keep, active: null, history: [] }, id);
+  return keep.length === 0
+    ? model
+    : withActive({ tabs: keep, active: null, history: [] }, id);
 }
 
 export function closeToRight(model: TabsModel, id: string): TabsModel {
@@ -109,7 +129,8 @@ export function cycleTab(model: TabsModel, direction: 1 | -1): TabsModel {
 
 /** Ctrl+1..8 pick that tab; Ctrl+9 picks the last, as in most editors. */
 export function tabByShortcut(model: TabsModel, digit: number): TabsModel {
-  const target = digit === 9 ? model.tabs[model.tabs.length - 1] : model.tabs[digit - 1];
+  const target =
+    digit === 9 ? model.tabs[model.tabs.length - 1] : model.tabs[digit - 1];
   return target === undefined ? model : withActive(model, target.id);
 }
 
@@ -131,7 +152,9 @@ export function renamePath(model: TabsModel, from: string, to: string): TabsMode
   return {
     tabs: model.tabs.map((tab) => {
       const path = moved(tab.path, from, to);
-      return path === tab.path ? tab : { ...tab, path, id: tabId(path), kind: kindForPath(path) };
+      return path === tab.path
+        ? tab
+        : { ...tab, path, id: tabId(path), kind: kindForPath(path) };
     }),
     active: model.active === null ? null : remap(model.active),
     history: model.history.map(remap),
@@ -141,7 +164,8 @@ export function renamePath(model: TabsModel, from: string, to: string): TabsMode
 /** A file or folder is gone: close every tab inside it. */
 export function removePath(model: TabsModel, path: string): TabsModel {
   let next = model;
-  for (const tab of model.tabs) if (isUnder(tab.path, path)) next = closeTab(next, tab.id);
+  for (const tab of model.tabs)
+    if (isUnder(tab.path, path)) next = closeTab(next, tab.id);
   return next;
 }
 
@@ -149,9 +173,12 @@ export function removePath(model: TabsModel, path: string): TabsModel {
  * Labels for the strip. A file name that appears twice gets its folder as a
  * suffix so the two tabs can be told apart.
  */
-export function tabLabels(tabs: readonly Tab[]): Map<string, { name: string; hint: string }> {
+export function tabLabels(
+  tabs: readonly Tab[],
+): Map<string, { name: string; hint: string }> {
   const counts = new Map<string, number>();
-  for (const tab of tabs) counts.set(basename(tab.path), (counts.get(basename(tab.path)) ?? 0) + 1);
+  for (const tab of tabs)
+    counts.set(basename(tab.path), (counts.get(basename(tab.path)) ?? 0) + 1);
   return new Map(
     tabs.map((tab) => {
       const name = basename(tab.path);
@@ -184,7 +211,8 @@ export function sanitizeSession(raw: unknown): SessionData {
   const empty: SessionData = { project: null, tabs: [], active: null };
   if (typeof raw !== "object" || raw === null) return empty;
   const r = raw as Record<string, unknown>;
-  const project = typeof r["project"] === "string" && r["project"] !== "" ? r["project"] : null;
+  const project =
+    typeof r["project"] === "string" && r["project"] !== "" ? r["project"] : null;
   const seen = new Set<string>();
   const tabs: { path: string; view: DocumentView }[] = [];
   if (Array.isArray(r["tabs"])) {
@@ -197,8 +225,13 @@ export function sanitizeSession(raw: unknown): SessionData {
       tabs.push({ path, view: e["view"] === "slides" ? "slides" : "text" });
     }
   }
-  const active = typeof r["active"] === "string" && seen.has(r["active"]) ? r["active"] : null;
-  return { project, tabs: project === null ? [] : tabs.slice(0, 24), active: project === null ? null : active };
+  const active =
+    typeof r["active"] === "string" && seen.has(r["active"]) ? r["active"] : null;
+  return {
+    project,
+    tabs: project === null ? [] : tabs.slice(0, 24),
+    active: project === null ? null : active,
+  };
 }
 
 export function fromSession(session: SessionData): TabsModel {

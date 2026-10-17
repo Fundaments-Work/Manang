@@ -43,7 +43,10 @@ function source(
   return typeof saved === "string" ? saved : undefined;
 }
 
-function bibliographyKeys(fs: MockProjectFs, sources: Record<string, string>): Set<string> {
+function bibliographyKeys(
+  fs: MockProjectFs,
+  sources: Record<string, string>,
+): Set<string> {
   const keys = new Set<string>();
   for (const path of fs.files.keys()) {
     if (!path.endsWith(".bib")) continue;
@@ -93,7 +96,8 @@ export function layout(text: string): PageLine[] {
   let paragraph: string[] = [];
   const flush = (): void => {
     if (paragraph.length === 0) return;
-    for (const row of wrap(plain(paragraph.join(" ")))) lines.push({ kind: "body", text: row });
+    for (const row of wrap(plain(paragraph.join(" "))))
+      lines.push({ kind: "body", text: row });
     lines.push({ kind: "rule", text: "" });
     paragraph = [];
   };
@@ -153,7 +157,11 @@ function escapeXml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function pageSvg(page: readonly PageLine[], number: number, total: number): string {
+export function pageSvg(
+  page: readonly PageLine[],
+  number: number,
+  total: number,
+): string {
   const parts: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PAGE_W} ${PAGE_H}" width="${PAGE_W}" height="${PAGE_H}">`,
     `<rect width="${PAGE_W}" height="${PAGE_H}" fill="#faf9f7"/>`,
@@ -231,11 +239,17 @@ function expand(
     const startScalar = scalarLength(text.slice(0, item.from));
     diagnostics.push({
       severity: item.severity,
-      message: item.message.replace(/^Missing label for @(.+)$/, "label `$1` does not exist in the document"),
+      message: item.message.replace(
+        /^Missing label for @(.+)$/,
+        "label `$1` does not exist in the document",
+      ),
       file,
       line,
       column,
-      range: { start: startScalar, end: startScalar + scalarLength(text.slice(item.from, item.to)) },
+      range: {
+        start: startScalar,
+        end: startScalar + scalarLength(text.slice(item.from, item.to)),
+      },
       hints: hintFor(item.message),
       trace: [],
     });
@@ -265,14 +279,18 @@ function expand(
       });
       return;
     }
-    out.push(expand(fs, sources, target, depth + 1, diagnostics, bibKeys, knownFigures));
+    out.push(
+      expand(fs, sources, target, depth + 1, diagnostics, bibKeys, knownFigures),
+    );
   });
   return out.join("\n");
 }
 
 function hintFor(message: string): string[] {
-  if (message.startsWith("Unclosed math")) return ["close the formula with a matching `$`"];
-  if (message.startsWith("Missing label")) return ["add the entry to your bibliography file"];
+  if (message.startsWith("Unclosed math"))
+    return ["close the formula with a matching `$`"];
+  if (message.startsWith("Missing label"))
+    return ["add the entry to your bibliography file"];
   return [];
 }
 
@@ -294,19 +312,34 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
         "typst.compile": (args): CompileReport => {
           const fs = host.require();
           const main = args["main"];
-          if (typeof main !== "string") throw { message: "`main` must be a string path" };
+          if (typeof main !== "string")
+            throw { message: "`main` must be a string path" };
           const raw = args["sources"];
-          if (raw !== undefined && raw !== null && (typeof raw !== "object" || Array.isArray(raw))) {
+          if (
+            raw !== undefined &&
+            raw !== null &&
+            (typeof raw !== "object" || Array.isArray(raw))
+          ) {
             throw { message: "`sources` must be an object of path to text" };
           }
-          const sources = { ...((raw as Record<string, string> | null | undefined) ?? {}) };
+          const sources = {
+            ...((raw as Record<string, string> | null | undefined) ?? {}),
+          };
           const entry = main.replace(/^\//, "");
           if (source(fs, sources, entry) === undefined) {
             throw { message: `${entry}: No such file or directory` };
           }
           const diagnostics: WireDiagnostic[] = [];
           const figures = [...fs.files.keys()].filter((path) => !path.endsWith(".typ"));
-          const text = expand(fs, sources, entry, 0, diagnostics, bibliographyKeys(fs, sources), figures);
+          const text = expand(
+            fs,
+            sources,
+            entry,
+            0,
+            diagnostics,
+            bibliographyKeys(fs, sources),
+            figures,
+          );
           const ok = diagnostics.every((d) => d.severity !== "error");
           const pages = paginate(layout(text));
           if (ok) {
@@ -316,7 +349,10 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
           return {
             ok,
             pages: ok ? pages.length : (latest?.pages.length ?? 0),
-            page_sizes: Array.from({ length: ok ? pages.length : (latest?.pages.length ?? 0) }, () => [PAGE_W, PAGE_H] as const),
+            page_sizes: Array.from(
+              { length: ok ? pages.length : (latest?.pages.length ?? 0) },
+              () => [PAGE_W, PAGE_H] as const,
+            ),
             diagnostics,
             // Deterministic, so tests can assert on it.
             duration_ms: Math.round((4 + text.length / 700) * 10) / 10,
@@ -335,9 +371,13 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
           }
           const lines = latest.pages[page];
           if (lines === undefined) {
-            throw { message: `page ${page + 1} does not exist (the document has ${latest.pages.length})` };
+            throw {
+              message: `page ${page + 1} does not exist (the document has ${latest.pages.length})`,
+            };
           }
-          return new TextEncoder().encode(pageSvg(lines, page + 1, latest.pages.length));
+          return new TextEncoder().encode(
+            pageSvg(lines, page + 1, latest.pages.length),
+          );
         },
         "typst.export-pdf": () => {
           if (latest === null) {

@@ -103,7 +103,9 @@ export function toGutter(text: string, problems: readonly Problem[]): Diagnostic
 }
 
 /** Group by file, preserving the sorted order, for the panel's sections. */
-export function groupByFile(problems: readonly Problem[]): { file: string; items: Problem[] }[] {
+export function groupByFile(
+  problems: readonly Problem[],
+): { file: string; items: Problem[] }[] {
   const groups: { file: string; items: Problem[] }[] = [];
   for (const problem of problems) {
     const last = groups[groups.length - 1];

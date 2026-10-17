@@ -54,7 +54,7 @@ export function parseLint(raw: unknown): LintItem[] {
 }
 
 /**
- * Place lint items in `text`. The whisper spans from the reported column to the
+ * Place lint items in `text`. The marker spans from the reported column to the
  * end of the token there (at least one character), clamped to the line.
  */
 export function toEditorDiagnostics(

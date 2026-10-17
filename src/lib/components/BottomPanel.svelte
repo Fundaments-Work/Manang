@@ -1,0 +1,210 @@
+<script lang="ts">
+  import { tick } from "svelte";
+
+  import Icon from "$lib/components/ui/Icon.svelte";
+  import { goToProblem } from "$lib/state/actions";
+  import { build } from "$lib/state/build.svelte";
+  import { layout } from "$lib/state/layout.svelte";
+  import { countLabel, groupByFile } from "$lib/workbench/problems";
+  import type { PanelTab } from "$lib/workbench/layout";
+
+  /**
+   * The bottom panel: Problems (compile diagnostics, click to jump to the
+   * line) and Output (the compile log). The Problems tab carries the count, so
+   * the state is visible even when the panel is closed elsewhere (status bar).
+   */
+
+  const tabsList: readonly { id: PanelTab; label: string }[] = [
+    { id: "problems", label: "Problems" },
+    { id: "output", label: "Output" },
+  ];
+
+  const groups = $derived(groupByFile(build.problems));
+  const total = $derived(build.counts.errors + build.counts.warnings);
+  let body: HTMLElement | undefined = $state();
+
+  // Output follows the newest line.
+  $effect(() => {
+    void build.log.length;
+    if (layout.panelTab !== "output" || body === undefined) return;
+    void tick().then(() => {
+      if (body !== undefined) body.scrollTop = body.scrollHeight;
+    });
+  });
+
+  function onTabKey(event: KeyboardEvent): void {
+    const at = tabsList.findIndex((t) => t.id === layout.panelTab);
+    const next =
+      event.key === "ArrowRight" ? at + 1 : event.key === "ArrowLeft" ? at - 1 : null;
+    if (next === null) return;
+    event.preventDefault();
+    const target = tabsList[(next + tabsList.length) % tabsList.length];
+    if (target === undefined) return;
+    layout.setPanelTab(target.id);
+    void tick().then(() => document.getElementById(`panel-tab-${target.id}`)?.focus());
+  }
+
+  function onRowKey(event: KeyboardEvent): void {
+    const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+    if (step === 0) return;
+    event.preventDefault();
+    const rows = [...(body?.querySelectorAll<HTMLElement>("[data-problem]") ?? [])];
+    const at = rows.indexOf(event.target as HTMLElement);
+    rows[Math.max(0, Math.min(rows.length - 1, at + step))]?.focus();
+  }
+
+  const emptyText = $derived(
+    build.status === "ok"
+      ? "No problems. The document compiled cleanly."
+      : build.status === "unsupported"
+        ? "Problems appear here for Typst documents. This file has no compiler yet."
+        : build.status === "unavailable"
+          ? "No compiler is available, so there is nothing to check."
+          : build.status === "compiling"
+            ? "Compiling"
+            : "Nothing has been compiled yet. Open a Typst document and problems appear here.",
+  );
+</script>
+
+<section
+  id="bottom-panel"
+  class="flex min-h-0 flex-col bg-surface"
+  aria-label="Panel"
+  style="height: {layout.panelHeight}px"
+>
+  <div class="flex h-8 shrink-0 items-center border-b border-line px-2">
+    <div
+      role="tablist"
+      aria-label="Panel views"
+      class="flex h-full items-stretch"
+      tabindex="-1"
+      onkeydown={onTabKey}
+    >
+      {#each tabsList as item (item.id)}
+        {@const active = layout.panelTab === item.id}
+        <button
+          type="button"
+          role="tab"
+          id="panel-tab-{item.id}"
+          aria-selected={active}
+          aria-controls="panel-body"
+          tabindex={active ? 0 : -1}
+          class="inset-focus relative flex items-center gap-1.5 px-3 text-xs {active
+            ? 'text-text'
+            : 'text-text-60 hover:text-text'}"
+          onclick={() => layout.setPanelTab(item.id)}
+        >
+          {item.label}
+          {#if item.id === "problems" && total > 0}
+            <span
+              class="font-mono text-[10px] text-text-60"
+              aria-label="{total} {total === 1 ? 'problem' : 'problems'}">{total}</span
+            >
+          {/if}
+          {#if active}<span
+              class="absolute inset-x-0 bottom-0 h-px bg-accent"
+              aria-hidden="true"
+            ></span>{/if}
+        </button>
+      {/each}
+    </div>
+    <span class="ml-auto"></span>
+    {#if layout.panelTab === "output"}
+      <button
+        type="button"
+        class="mng-btn mr-1 h-6 px-2"
+        disabled={build.log.length === 0}
+        onclick={() => build.clearLog()}>Clear output</button
+      >
+    {/if}
+    <button
+      type="button"
+      class="mng-icon-btn h-6 w-6"
+      aria-label="Close panel"
+      title="Close panel (Ctrl+J)"
+      onclick={() => layout.closePanel()}
+    >
+      <Icon name="close" size={12} />
+    </button>
+  </div>
+
+  <div
+    bind:this={body}
+    id="panel-body"
+    role="tabpanel"
+    aria-labelledby="panel-tab-{layout.panelTab}"
+    class="min-h-0 flex-1 overflow-y-auto"
+  >
+    {#if layout.panelTab === "problems"}
+      {#if groups.length === 0}
+        <p class="m-0 px-4 py-3 text-xs text-text-60" role="status">{emptyText}</p>
+      {:else}
+        <p class="sr-only" role="status" aria-live="polite">
+          {countLabel(build.counts)}
+        </p>
+        {#each groups as group (group.file)}
+          <div role="group" aria-label={group.file === "" ? "Other files" : group.file}>
+            <p
+              class="m-0 flex items-baseline gap-2 px-4 pt-2 pb-1 text-[11px] text-text-60"
+            >
+              {group.file === "" ? "Packages and other files" : group.file}
+              <span class="font-mono text-[10px] text-text-muted"
+                >{group.items.length}</span
+              >
+            </p>
+            {#each group.items as problem (problem.id)}
+              <button
+                type="button"
+                data-problem
+                class="inset-focus flex w-full items-start gap-2.5 px-4 py-1 text-left text-xs hover:bg-surface-hi disabled:cursor-default"
+                disabled={problem.file === ""}
+                onclick={() => void goToProblem(problem)}
+                onkeydown={onRowKey}
+              >
+                <Icon
+                  name={problem.severity === "error" ? "error" : "warning"}
+                  size={14}
+                  class="mt-px shrink-0 {problem.severity === 'error'
+                    ? 'text-text'
+                    : 'text-text-60'}"
+                />
+                <span class="min-w-0 flex-1">
+                  <span class="sr-only"
+                    >{problem.severity === "error" ? "Error: " : "Warning: "}</span
+                  >
+                  <span class="text-text">{problem.message}</span>
+                  {#each problem.hints as hint (hint)}
+                    <span class="block text-[11px] text-text-60">Hint: {hint}</span>
+                  {/each}
+                </span>
+                {#if problem.line !== null}
+                  <span class="shrink-0 font-mono text-[10px] text-text-muted"
+                    >Ln {problem.line}, Col {problem.column ?? 1}</span
+                  >
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/each}
+      {/if}
+    {:else}
+      <div
+        role="log"
+        aria-label="Compile output"
+        class="selectable px-4 py-2 font-mono text-[11px] leading-relaxed"
+      >
+        {#if build.log.length === 0}
+          <p class="m-0 font-sans text-xs text-text-60">
+            No output yet. Compile messages appear here.
+          </p>
+        {/if}
+        {#each build.log as line (line.id)}
+          <div class={line.level === "error" ? "text-text" : "text-text-60"}>
+            <span class="text-text-muted">{line.time}</span>
+            {line.text}
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+</section>

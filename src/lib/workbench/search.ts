@@ -20,7 +20,11 @@ export const MAX_MATCHES_PER_FILE = 100;
 const CONTEXT = 36;
 
 /** Case-insensitive literal search, line by line. */
-export function searchText(text: string, query: string, limit = MAX_MATCHES_PER_FILE): TextMatch[] {
+export function searchText(
+  text: string,
+  query: string,
+  limit = MAX_MATCHES_PER_FILE,
+): TextMatch[] {
   const needle = query.toLowerCase();
   if (needle === "") return [];
   const matches: TextMatch[] = [];
@@ -29,7 +33,11 @@ export function searchText(text: string, query: string, limit = MAX_MATCHES_PER_
     const line = lines[i] ?? "";
     const lower = line.toLowerCase();
     let from = 0;
-    for (let at = lower.indexOf(needle, from); at !== -1; at = lower.indexOf(needle, from)) {
+    for (
+      let at = lower.indexOf(needle, from);
+      at !== -1;
+      at = lower.indexOf(needle, from)
+    ) {
       const start = Math.max(0, at - CONTEXT);
       matches.push({
         line: i + 1,
@@ -46,7 +54,11 @@ export function searchText(text: string, query: string, limit = MAX_MATCHES_PER_
   return matches;
 }
 
-export function searchNames(paths: readonly string[], query: string, limit = 50): string[] {
+export function searchNames(
+  paths: readonly string[],
+  query: string,
+  limit = 50,
+): string[] {
   if (query.trim() === "") return [];
   return fuzzyRank(paths, query, (p) => p)
     .slice(0, limit)

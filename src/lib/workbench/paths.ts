@@ -47,7 +47,20 @@ export function extension(path: string): string {
 }
 
 const BINARY = new Set([
-  "pdf", "png", "jpg", "jpeg", "gif", "webp", "ico", "zip", "gz", "woff", "woff2", "ttf", "otf", "wasm",
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "ico",
+  "zip",
+  "gz",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "wasm",
 ]);
 
 export function fileKind(path: string): FileKind {
@@ -84,7 +97,12 @@ export function engineOf(path: string): Engine | null {
 }
 
 /** Why `name` cannot be used for a new or renamed entry, or null when it can. */
-export function nameProblem(name: string, siblings: ReadonlySet<string>, current?: string): string | null {
+export function nameProblem(
+  name: string,
+  existing: Iterable<string>,
+  current?: string,
+): string | null {
+  const siblings = new Set(existing);
   const trimmed = name.trim();
   if (trimmed === "") return "Enter a name.";
   if (trimmed === "." || trimmed === "..") return "That name is reserved.";
@@ -96,7 +114,8 @@ export function nameProblem(name: string, siblings: ReadonlySet<string>, current
 }
 
 /** `untitled.typ`, then `untitled 2.typ`, … the first name not in `taken`. */
-export function uniqueName(base: string, taken: ReadonlySet<string>): string {
+export function uniqueName(base: string, existing: Iterable<string>): string {
+  const taken = new Set(existing);
   if (!taken.has(base)) return base;
   const dot = base.lastIndexOf(".");
   const stem = dot <= 0 ? base : base.slice(0, dot);
@@ -109,5 +128,9 @@ export function uniqueName(base: string, taken: ReadonlySet<string>): string {
 
 /** Default new-file name for a project's engine. */
 export function newFileName(engine: Engine): string {
-  return engine === "typst" ? "untitled.typ" : engine === "latex" ? "untitled.tex" : "untitled.md";
+  return engine === "typst"
+    ? "untitled.typ"
+    : engine === "latex"
+      ? "untitled.tex"
+      : "untitled.md";
 }

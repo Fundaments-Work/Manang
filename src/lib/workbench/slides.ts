@@ -17,7 +17,17 @@ export interface Slide {
   readonly math: string | null;
 }
 
-function emptySlide(index: number, title: string, level: number): { title: string; level: number; index: number; paragraphs: string[]; math: string | null } {
+function emptySlide(
+  index: number,
+  title: string,
+  level: number,
+): {
+  title: string;
+  level: number;
+  index: number;
+  paragraphs: string[];
+  math: string | null;
+} {
   return { index, title, level, paragraphs: [], math: null };
 }
 
@@ -27,7 +37,8 @@ export function parseSlides(text: string): Slide[] {
   let current: ReturnType<typeof emptySlide> | undefined;
 
   const flush = (): void => {
-    if (current !== undefined && paragraph.length > 0) current.paragraphs.push(paragraph.join(" "));
+    if (current !== undefined && paragraph.length > 0)
+      current.paragraphs.push(paragraph.join(" "));
     paragraph = [];
   };
 

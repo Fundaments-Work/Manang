@@ -38,11 +38,20 @@ describe("problems model", () => {
       wire({ line: 2, message: "early" }),
       wire({ file: "/a.typ", line: 5, message: "other file" }),
     ]);
-    expect(problems.map((p) => p.message)).toEqual(["other file", "early", "late", "w"]);
+    expect(problems.map((p) => p.message)).toEqual([
+      "other file",
+      "early",
+      "late",
+      "w",
+    ]);
   });
 
   it("counts and phrases them in plain language", () => {
-    const problems = fromWire([wire({}), wire({ severity: "warning" }), wire({ severity: "warning" })]);
+    const problems = fromWire([
+      wire({}),
+      wire({ severity: "warning" }),
+      wire({ severity: "warning" }),
+    ]);
     const counts = countProblems(problems);
     expect(counts).toEqual({ errors: 1, warnings: 2 });
     expect(countLabel(counts)).toBe("1 error, 2 warnings");
@@ -51,7 +60,11 @@ describe("problems model", () => {
   });
 
   it("groups by file and filters by file", () => {
-    const problems = fromWire([wire({ file: "/b.typ" }), wire({ file: "/a.typ" }), wire({ file: "/a.typ", line: 4 })]);
+    const problems = fromWire([
+      wire({ file: "/b.typ" }),
+      wire({ file: "/a.typ" }),
+      wire({ file: "/a.typ", line: 4 }),
+    ]);
     expect(groupByFile(problems).map((g) => [g.file, g.items.length])).toEqual([
       ["a.typ", 2],
       ["b.typ", 1],

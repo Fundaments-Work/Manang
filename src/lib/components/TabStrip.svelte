@@ -1,0 +1,301 @@
+<script lang="ts">
+  import { tick } from "svelte";
+
+  import ContextMenu, { type MenuItem } from "$lib/components/ui/ContextMenu.svelte";
+  import Icon from "$lib/components/ui/Icon.svelte";
+  import {
+    closeOtherTabs,
+    closeTab,
+    closeTabsToRight,
+    isTabDirty,
+    toggleSlides,
+  } from "$lib/state/actions";
+  import { tabs } from "$lib/state/tabs.svelte";
+  import { engineOf } from "$lib/workbench/paths";
+  import { tabLabels, type Tab } from "$lib/workbench/tabs";
+
+  /**
+   * The tab strip: WAI-ARIA tabs with automatic activation (every tab's content
+   * is already in memory, so switching has no latency). Left and Right move and
+   * activate, Home and End jump, Delete closes, Shift+F10 opens the menu. Tabs
+   * can be closed with the middle button and reordered by dragging; the strip
+   * scrolls sideways when there are more tabs than fit.
+   */
+
+  let strip: HTMLElement | undefined = $state();
+  let menu = $state<{ x: number; y: number; tab: Tab } | null>(null);
+  let dragId = $state<string | null>(null);
+  let dropAt = $state<number | null>(null);
+
+  const labels = $derived(tabLabels(tabs.tabs));
+  const activeTypst = $derived(
+    tabs.active?.kind === "document" && engineOf(tabs.active.path) === "typst",
+  );
+
+  // Keep the active tab visible when it changes, including after a keyboard jump.
+  $effect(() => {
+    const id = tabs.active?.id;
+    if (id === undefined || strip === undefined) return;
+    strip
+      .querySelector<HTMLElement>(`[data-tab="${CSS.escape(id)}"]`)
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  });
+
+  async function focusTab(id: string): Promise<void> {
+    await tick();
+    strip?.querySelector<HTMLElement>(`[data-tab="${CSS.escape(id)}"]`)?.focus();
+  }
+
+  function onkeydown(event: KeyboardEvent, tab: Tab): void {
+    const list = tabs.tabs;
+    const at = list.findIndex((t) => t.id === tab.id);
+    let target: Tab | undefined;
+    switch (event.key) {
+      case "ArrowRight":
+        target = list[(at + 1) % list.length];
+        break;
+      case "ArrowLeft":
+        target = list[(at - 1 + list.length) % list.length];
+        break;
+      case "Home":
+        target = list[0];
+        break;
+      case "End":
+        target = list[list.length - 1];
+        break;
+      case "Delete":
+        event.preventDefault();
+        void closeTab(tab.id).then(() => {
+          const next = tabs.active;
+          if (next !== undefined) void focusTab(next.id);
+        });
+        return;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        tabs.activate(tab.id);
+        return;
+      case "ContextMenu":
+        event.preventDefault();
+        openMenu(
+          tab,
+          (event.currentTarget as HTMLElement).getBoundingClientRect().left,
+          (event.currentTarget as HTMLElement).getBoundingClientRect().bottom,
+        );
+        return;
+      case "F10":
+        if (!event.shiftKey) return;
+        event.preventDefault();
+        openMenu(
+          tab,
+          (event.currentTarget as HTMLElement).getBoundingClientRect().left,
+          (event.currentTarget as HTMLElement).getBoundingClientRect().bottom,
+        );
+        return;
+      default:
+        return;
+    }
+    event.preventDefault();
+    if (target !== undefined) {
+      tabs.activate(target.id);
+      void focusTab(target.id);
+    }
+  }
+
+  function openMenu(tab: Tab, x: number, y: number): void {
+    menu = { x, y, tab };
+  }
+
+  function menuItems(tab: Tab): MenuItem[] {
+    const items: MenuItem[] = [
+      { label: "Close", shortcut: "Ctrl+W", onselect: () => void closeTab(tab.id) },
+      {
+        label: "Close others",
+        disabled: tabs.tabs.length < 2,
+        onselect: () => void closeOtherTabs(tab.id),
+      },
+      {
+        label: "Close to the right",
+        disabled: tabs.tabs.findIndex((t) => t.id === tab.id) === tabs.tabs.length - 1,
+        onselect: () => void closeTabsToRight(tab.id),
+      },
+    ];
+    if (tab.kind === "document" && engineOf(tab.path) === "typst") {
+      items.push({
+        label: tab.view === "slides" ? "Show as text" : "Show as slides",
+        separated: true,
+        onselect: () => {
+          tabs.activate(tab.id);
+          toggleSlides();
+        },
+      });
+    }
+    items.push({
+      label: "Copy path",
+      separated: true,
+      onselect: () =>
+        void navigator.clipboard?.writeText(tab.path).catch(() => undefined),
+    });
+    return items;
+  }
+
+  function onwheel(event: WheelEvent): void {
+    if (strip === undefined || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    strip.scrollLeft += event.deltaY;
+  }
+
+  function dropIndex(event: DragEvent, index: number): number {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    return event.clientX > box.left + box.width / 2 ? index + 1 : index;
+  }
+</script>
+
+<div class="flex h-9 shrink-0 items-stretch border-b border-line bg-surface">
+  <div
+    bind:this={strip}
+    role="tablist"
+    aria-label="Open files"
+    class="no-scrollbar flex min-w-0 flex-1 overflow-x-auto"
+    {onwheel}
+  >
+    {#each tabs.tabs as tab, index (tab.id)}
+      {@const label = labels.get(tab.id)}
+      {@const active = tab.id === tabs.active?.id}
+      {@const dirty = isTabDirty(tab.path)}
+      <div
+        role="presentation"
+        class="group relative flex shrink-0 items-stretch border-r border-line {active
+          ? 'bg-bg'
+          : 'bg-surface hover:bg-surface-hi'}"
+        draggable="true"
+        ondragstart={(event) => {
+          dragId = tab.id;
+          event.dataTransfer?.setData("text/plain", tab.path);
+        }}
+        ondragover={(event) => {
+          if (dragId === null) return;
+          event.preventDefault();
+          dropAt = dropIndex(event, index);
+        }}
+        ondrop={(event) => {
+          event.preventDefault();
+          if (dragId !== null && dropAt !== null) {
+            const from = tabs.tabs.findIndex((t) => t.id === dragId);
+            tabs.move(dragId, dropAt > from ? dropAt - 1 : dropAt);
+          }
+          dragId = null;
+          dropAt = null;
+        }}
+        ondragend={() => {
+          dragId = null;
+          dropAt = null;
+        }}
+      >
+        {#if active}
+          <span class="absolute inset-x-0 top-0 h-0.5 bg-accent" aria-hidden="true"
+          ></span>
+        {/if}
+        {#if dropAt === index && dragId !== null && dragId !== tab.id}
+          <span class="absolute inset-y-0 left-0 w-px bg-text" aria-hidden="true"
+          ></span>
+        {/if}
+        <div
+          role="tab"
+          id="tab-{index}"
+          data-tab={tab.id}
+          aria-selected={active}
+          aria-controls="editor-area"
+          aria-label="{label?.name ?? tab.path}{dirty ? ', unsaved changes' : ''}"
+          tabindex={active ? 0 : -1}
+          class="inset-focus flex max-w-56 min-w-0 cursor-default items-center gap-1.5 pr-1 pl-3 text-xs {active
+            ? 'text-text'
+            : 'text-text-60 group-hover:text-text'}"
+          title={tab.path}
+          onclick={() => tabs.activate(tab.id)}
+          onkeydown={(event) => onkeydown(event, tab)}
+          onauxclick={(event) => {
+            if (event.button === 1) {
+              event.preventDefault();
+              void closeTab(tab.id);
+            }
+          }}
+          onmousedown={(event) => {
+            // Middle-click would otherwise start autoscroll, or on Linux paste
+            // the primary selection into the focused editor.
+            if (event.button === 1) event.preventDefault();
+          }}
+          onmouseup={(event) => {
+            if (event.button === 1) event.preventDefault();
+          }}
+          oncontextmenu={(event) => {
+            event.preventDefault();
+            openMenu(tab, event.clientX, event.clientY);
+          }}
+        >
+          {#if tab.kind === "figure"}
+            <Icon name="figures" size={13} class="shrink-0 opacity-70" />
+          {:else if tab.view === "slides"}
+            <Icon name="slides" size={13} class="shrink-0 opacity-70" />
+          {/if}
+          <span class="truncate">{label?.name ?? tab.path}</span>
+          {#if label?.hint !== undefined && label.hint !== ""}
+            <span class="truncate text-text-muted">{label.hint}</span>
+          {/if}
+        </div>
+        <button
+          type="button"
+          tabindex="-1"
+          class="mng-icon-btn h-full w-7 {active || dirty
+            ? ''
+            : 'opacity-0 group-hover:opacity-100'} focus-visible:opacity-100"
+          aria-label="Close {label?.name ?? tab.path}"
+          title="Close"
+          onclick={() => void closeTab(tab.id)}
+        >
+          {#if dirty}
+            <!-- Unsaved: a small square that becomes the close mark on hover. -->
+            <span class="h-1.5 w-1.5 bg-text group-hover:hidden" aria-hidden="true"
+            ></span>
+            <Icon name="close" size={12} class="hidden group-hover:block" />
+          {:else}
+            <Icon name="close" size={12} />
+          {/if}
+        </button>
+      </div>
+    {/each}
+  </div>
+
+  {#if activeTypst && tabs.active !== undefined}
+    {@const slidesOn = tabs.active.view === "slides"}
+    <div
+      role="radiogroup"
+      aria-label="Document view"
+      class="flex shrink-0 items-center gap-px border-l border-line px-2"
+    >
+      <button
+        type="button"
+        role="radio"
+        aria-checked={!slidesOn}
+        class="mng-btn h-6 px-2"
+        onclick={() => slidesOn && toggleSlides()}>Text</button
+      >
+      <button
+        type="button"
+        role="radio"
+        aria-checked={slidesOn}
+        class="mng-btn h-6 px-2"
+        onclick={() => !slidesOn && toggleSlides()}>Slides</button
+      >
+    </div>
+  {/if}
+</div>
+
+{#if menu !== null}
+  <ContextMenu
+    x={menu.x}
+    y={menu.y}
+    label="Tab actions"
+    items={menuItems(menu.tab)}
+    onclose={() => (menu = null)}
+  />
+{/if}

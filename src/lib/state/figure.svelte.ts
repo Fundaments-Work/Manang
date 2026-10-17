@@ -1,12 +1,18 @@
 /**
- * Vector ink canvas state — DESIGN.md §4.
+ * Figure editor state: one `FigureState` per open figure file.
  *
- * Pen tray tools map one-to-one onto scene node kinds. The store owns the
- * scene, the active tool, and the in-progress stroke; rendering is Svelte's job
- * and persistence belongs to the Rust renderer.
+ * Tools map one-to-one onto scene node kinds. The state owns the scene, the
+ * active tool and the in-progress stroke; rendering is Svelte's job and the
+ * headless SVG render belongs to the Rust figure crate. The scene is plain JSON
+ * (`*.figure.json`), so it diffs and commits like any other project file.
  */
 
-import { allAnchors, hitTest, snapToAnchors, type SnapResult } from "$lib/figure/geometry";
+import {
+  allAnchors,
+  hitTest,
+  snapToAnchors,
+  type SnapResult,
+} from "$lib/figure/geometry";
 import {
   appendNode,
   createScene,
@@ -24,69 +30,66 @@ import {
 
 export type PenTool = "select" | "freehand" | "geometry" | "arrow" | "math";
 
-export const TOOLS: readonly { tool: PenTool; label: string; glyph: string }[] = [
-  { tool: "freehand", label: "Freehand", glyph: "✎" },
-  { tool: "geometry", label: "Geometry", glyph: "□" },
-  { tool: "arrow", label: "Arrow", glyph: "→" },
-  { tool: "math", label: "Math", glyph: "T" },
+export const TOOLS: readonly { tool: PenTool; label: string; key: string }[] = [
+  { tool: "select", label: "Select", key: "P" },
+  { tool: "freehand", label: "Freehand", key: "B" },
+  { tool: "geometry", label: "Rectangle", key: "G" },
+  { tool: "arrow", label: "Arrow", key: "A" },
+  { tool: "math", label: "Formula", key: "M" },
 ];
 
-export const FIGURE_PATH = "figures/state_lattice.figure.json";
-
-/** A hand-seeded scene so the canvas is never an empty void on open. */
-function seedScene(): FigureScene {
-  const base = createScene(960, 540);
-
-  const left: FigureNode = {
-    kind: "rect",
-    id: formatNodeId(1),
-    x: 120,
-    y: 200,
-    width: 190,
-    height: 84,
-    stroke: "#e8e6e1",
-    fill: "#1c1c20",
-  };
-  const right: FigureNode = {
-    kind: "rect",
-    id: formatNodeId(2),
-    x: 640,
-    y: 200,
-    width: 190,
-    height: 84,
-    stroke: "#e8e6e1",
-    fill: "#1c1c20",
-  };
-  const arrow: FigureNode = {
-    kind: "arrow",
-    id: formatNodeId(3),
-    from: { x: 310, y: 242 },
-    to: { x: 640, y: 242 },
-    color: "#c6f135",
-    label: "H",
-  };
-  const math: FigureNode = {
-    kind: "math",
-    id: formatNodeId(4),
-    x: 120,
-    y: 120,
-    tex: "|0⟩  ⟶  |1⟩",
-    size: 28,
-    color: "#b3d17a",
-  };
-
-  return {
-    ...base,
-    nodes: [math, left, arrow, right],
-  };
+/** Parse a `.figure.json` file; throws a sentence the user can act on. */
+export function parseScene(text: string): FigureScene {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("This file is not valid JSON, so it cannot be opened as a figure.");
+  }
+  const scene = raw as Partial<FigureScene> | null;
+  if (
+    scene === null ||
+    typeof scene !== "object" ||
+    scene.version !== SCENE_VERSION ||
+    typeof scene.width !== "number" ||
+    typeof scene.height !== "number" ||
+    !Array.isArray(scene.nodes)
+  ) {
+    throw new Error(
+      `This file is not a version ${SCENE_VERSION} Manang figure (expected version, width, height and nodes).`,
+    );
+  }
+  return scene as FigureScene;
 }
 
-export class InkState {
-  scene = $state<FigureScene>(seedScene());
+export function serializeScene(scene: FigureScene): string {
+  return `${JSON.stringify(scene, null, 2)}\n`;
+}
+
+export class FigureState {
+  path: string;
+  scene = $state.raw<FigureScene>(createScene(960, 540));
+  /** The scene as last saved; `dirty` compares by reference. */
+  saved = $state.raw<FigureScene>(this.scene);
+  readonly dirty: boolean = $derived(this.scene !== this.saved);
+
+  constructor(path: string, scene?: FigureScene) {
+    this.path = path;
+    if (scene !== undefined) {
+      this.scene = scene;
+      this.saved = scene;
+    }
+    this.#counter = highestId(this.scene);
+  }
+
+  /** Record that the current scene is what is on disk. */
+  markSaved(scene: FigureScene): void {
+    this.saved = scene;
+  }
 
   tool = $state<PenTool>("freehand");
 
-  #counter = 5;
+  #counter = 0;
 
   /** The stroke being drawn right now; committed on pointer up. */
   draft = $state<StrokeSample[]>([]);
@@ -300,10 +303,23 @@ export class InkState {
     this.selectedId = null;
   }
 
-  /** The embed line the manuscript receives — DESIGN.md §4.1. */
+  /** The line that embeds this figure's rendered SVG in a Typst document. */
   embedSnippet(): string {
-    return `#figure(image("figures/state_lattice.svg", width: 80%))`;
+    return `#figure(image("${this.path.replace(/\.figure\.json$/, ".svg")}", width: 80%))`;
   }
 }
 
-export const ink = new InkState();
+/** Highest numeric suffix among node ids, so new ids never collide with loaded ones. */
+function highestId(scene: FigureScene): number {
+  let highest = 0;
+  for (const node of scene.nodes) {
+    const parsed = Number.parseInt(node.id.slice(1), 36);
+    if (Number.isFinite(parsed)) highest = Math.max(highest, parsed);
+  }
+  return highest;
+}
+
+/** A blank 960 by 540 figure, the size the starter scenes use. */
+export function blankFigure(): string {
+  return serializeScene(createScene(960, 540));
+}

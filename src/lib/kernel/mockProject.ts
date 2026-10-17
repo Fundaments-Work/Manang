@@ -28,8 +28,10 @@ export interface SeedProject {
   readonly engine: Engine;
   readonly main: string;
   readonly files: Readonly<Record<string, Bytes>>;
-  /** Content `git` already knows; anything else is untracked or modified. */
+  /** Files `git` already knows, at the content given in `files`. */
   readonly committed: readonly string[];
+  /** Earlier committed content for files edited since, so they show as modified. */
+  readonly committedEarlier?: Readonly<Record<string, string>>;
   readonly openedAt: number;
 }
 
@@ -149,6 +151,9 @@ function materialise(seed: SeedProject): MockProjectFs {
     const value = seed.files[path];
     if (typeof value === "string") baseline.set(path, value);
   }
+  for (const [path, value] of Object.entries(seed.committedEarlier ?? {})) {
+    baseline.set(path, value);
+  }
   // `manang.toml` is part of every project and is committed with it.
   const config = configText(seed);
   files.set("manang.toml", config);
@@ -170,17 +175,13 @@ function configText(seed: SeedProject): string {
 /* -------------------------------------------------------------------------- */
 
 function confine(raw: unknown, key = "path"): string {
-  if (typeof raw !== "string") throw { message: `bad arguments: \`${key}\` must be a string` };
+  if (typeof raw !== "string")
+    throw { message: `bad arguments: \`${key}\` must be a string` };
   const path = raw.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
   if (path.startsWith("/") || path.split("/").includes("..")) {
     throw { message: `${raw}: path escapes the project` };
   }
   return path;
-}
-
-function dirOf(path: string): string {
-  const at = path.lastIndexOf("/");
-  return at === -1 ? "" : path.slice(0, at);
 }
 
 function nameOf(path: string): string {
@@ -320,7 +321,9 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           const engine = args["engine"];
           const name = args["name"];
           if (engine !== "typst" && engine !== "latex" && engine !== "markdown") {
-            throw { message: "bad arguments: `engine` must be typst, latex or markdown" };
+            throw {
+              message: "bad arguments: `engine` must be typst, latex or markdown",
+            };
           }
           if (typeof name !== "string" || name.trim() === "") {
             throw { message: "bad arguments: `name` must be a non-empty string" };
@@ -366,7 +369,8 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
             moves.push([from, to]);
           } else if (isDir(fs, from)) {
             for (const key of fs.files.keys()) {
-              if (key.startsWith(`${from}/`)) moves.push([key, to + key.slice(from.length)]);
+              if (key.startsWith(`${from}/`))
+                moves.push([key, to + key.slice(from.length)]);
             }
           } else {
             throw { message: `${from}: No such file or directory` };
@@ -386,7 +390,8 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           const doomed = fs.files.has(path)
             ? [path]
             : [...fs.files.keys()].filter((key) => key.startsWith(`${path}/`));
-          if (doomed.length === 0) throw { message: `${path}: No such file or directory` };
+          if (doomed.length === 0)
+            throw { message: `${path}: No such file or directory` };
           for (const key of doomed) fs.files.delete(key);
           changed(
             fs,
@@ -402,7 +407,8 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           const fs = host.require();
           const path = confine(args["path"]);
           const value = fs.files.get(path);
-          if (value === undefined) throw { message: `${path}: No such file or directory` };
+          if (value === undefined)
+            throw { message: `${path}: No such file or directory` };
           return typeof value === "string" ? new TextEncoder().encode(value) : value;
         },
       },
@@ -417,5 +423,3 @@ function confineRoot(args: Record<string, unknown>): string {
   }
   return path.trim().replace(/\/+$/, "");
 }
-
-export { dirOf };

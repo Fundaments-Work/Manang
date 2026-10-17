@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { fileKind, engineOf, isOpenable } from "./paths";
-import { authorSummary, citationFor, filterReferences, parseBibtex } from "./references";
+import {
+  authorSummary,
+  citationFor,
+  filterReferences,
+  parseBibtex,
+} from "./references";
 import { MAX_MATCHES_PER_FILE, searchNames, searchText } from "./search";
 import { clampSlide, parseSlides } from "./slides";
 
@@ -26,7 +31,11 @@ describe("references", () => {
   const entries = parseBibtex(BIB, "references.bib");
 
   it("reads entries, skipping comments", () => {
-    expect(entries.map((e) => e.key)).toEqual(["landauer1961", "nielsen2010", "berut2012"]);
+    expect(entries.map((e) => e.key)).toEqual([
+      "landauer1961",
+      "nielsen2010",
+      "berut2012",
+    ]);
     expect(entries[0]).toMatchObject({
       type: "article",
       title: "Irreversibility and heat generation",
@@ -37,14 +46,25 @@ describe("references", () => {
   });
 
   it("handles quoted and bare values, name order and accents", () => {
-    expect(entries[1]).toMatchObject({ year: "2010", authors: ["Michael A. Nielsen", "Isaac L. Chuang"] });
+    expect(entries[1]).toMatchObject({
+      year: "2010",
+      authors: ["Michael A. Nielsen", "Isaac L. Chuang"],
+    });
     expect(entries[2]?.authors[0]).toBe("Antoine Bérut");
   });
 
   it("filters by key, author, title and year", () => {
-    expect(filterReferences(entries, "landauer").map((e) => e.key)).toEqual(["landauer1961"]);
+    expect(filterReferences(entries, "landauer").map((e) => e.key)).toEqual([
+      "landauer1961",
+    ]);
     expect(filterReferences(entries, "2012").map((e) => e.key)).toContain("berut2012");
     expect(filterReferences(entries, "")).toHaveLength(3);
+    // Every word must appear; letters scattered across the entry do not count.
+    expect(filterReferences(entries, "rolf irreversibility").map((e) => e.key)).toEqual(
+      ["landauer1961"],
+    );
+    expect(filterReferences(entries, "lndr")).toEqual([]);
+    expect(filterReferences(entries, "berut").map((e) => e.key)).toEqual(["berut2012"]);
   });
 
   it("summarises authors and cites per engine", () => {
@@ -120,7 +140,9 @@ describe("search", () => {
   });
 
   it("ranks file names fuzzily", () => {
-    expect(searchNames(["main.typ", "sections/results.typ", "notes.md"], "rslt")[0]).toBe("sections/results.typ");
+    expect(
+      searchNames(["main.typ", "sections/results.typ", "notes.md"], "rslt")[0],
+    ).toBe("sections/results.typ");
     expect(searchNames(["a"], " ")).toEqual([]);
   });
 });
