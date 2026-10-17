@@ -14,6 +14,8 @@ import type {
   GitChange,
   GitStatus,
   ProjectConfig,
+  ProjectEntry,
+  ProjectPatch,
   ProjectSummary,
   RecentProject,
   TreeEntry,
@@ -33,6 +35,13 @@ export interface SeedProject {
   /** Earlier committed content for files edited since, so they show as modified. */
   readonly committedEarlier?: Readonly<Record<string, string>>;
   readonly openedAt: number;
+  /** Registry metadata, for the Home screen. */
+  readonly pinned?: boolean;
+  readonly archived?: boolean;
+  readonly tags?: readonly string[];
+  readonly created?: number;
+  /** A ready-made thumbnail (SVG text), so a card has one before any compile. */
+  readonly thumbnail?: string;
 }
 
 export interface MockProjectFs {
@@ -44,19 +53,52 @@ export interface MockProjectFs {
   readonly baseline: Map<string, string>;
 }
 
+interface Meta {
+  name: string;
+  engine: Engine;
+  created: number;
+  openedAt: number;
+  pinned: boolean;
+  archived: boolean;
+  tags: string[];
+  thumbnail: string | null;
+}
+
+function unknownProject(path: string): { message: string } {
+  return { message: "`" + path + "` does not exist" };
+}
+
 /** Shared by the project and typst mocks: which project is open right now. */
 export class MockProjectHost {
   readonly #seeds = new Map<string, SeedProject>();
-  readonly #recent = new Map<string, { name: string; openedAt: number }>();
+  readonly #meta = new Map<string, Meta>();
   #current: MockProjectFs | null = null;
 
   constructor(seeds: readonly SeedProject[], extraRecent: readonly RecentSeed[] = []) {
     for (const seed of seeds) {
       this.#seeds.set(seed.root, seed);
-      this.#recent.set(seed.root, { name: seed.name, openedAt: seed.openedAt });
+      this.#meta.set(seed.root, {
+        name: seed.name,
+        engine: seed.engine,
+        created: seed.created ?? seed.openedAt,
+        openedAt: seed.openedAt,
+        pinned: seed.pinned ?? false,
+        archived: seed.archived ?? false,
+        tags: [...(seed.tags ?? [])],
+        thumbnail: seed.thumbnail ?? null,
+      });
     }
     for (const entry of extraRecent) {
-      this.#recent.set(entry.path, { name: entry.name, openedAt: entry.openedAt });
+      this.#meta.set(entry.path, {
+        name: entry.name,
+        engine: entry.engine ?? "typst",
+        created: entry.openedAt,
+        openedAt: entry.openedAt,
+        pinned: false,
+        archived: false,
+        tags: [],
+        thumbnail: null,
+      });
     }
   }
 
@@ -75,7 +117,7 @@ export class MockProjectHost {
       throw { message: `${path}: not a Manang project (no manang.toml found)` };
     }
     this.#current = materialise(seed);
-    this.#touch(seed.root, seed.name);
+    this.#touch(seed.root, seed.name, seed.engine);
     return this.#current;
   }
 
@@ -93,7 +135,7 @@ export class MockProjectHost {
     };
     this.#seeds.set(path, seed);
     this.#current = materialise(seed);
-    this.#touch(path, name);
+    this.#touch(path, name, engine);
     return this.#current;
   }
 
@@ -102,7 +144,7 @@ export class MockProjectHost {
   }
 
   recent(): RecentProject[] {
-    return [...this.#recent.entries()]
+    return [...this.#meta.entries()]
       .map(([path, value]) => ({
         path,
         name: value.name,
@@ -112,8 +154,89 @@ export class MockProjectHost {
       .sort((a, b) => b.opened_at - a.opened_at);
   }
 
-  #touch(path: string, name: string): void {
-    this.#recent.set(path, { name, openedAt: nowSeconds() });
+  /** `project.list`: everything; filtering and sorting happen in the caller. */
+  list(): ProjectEntry[] {
+    return [...this.#meta.keys()].map((path) => this.entry(path));
+  }
+
+  entry(path: string): ProjectEntry {
+    const meta = this.#meta.get(path);
+    if (meta === undefined) throw unknownProject(path);
+    return {
+      path,
+      name: meta.name,
+      engine: meta.engine,
+      created: meta.created,
+      last_opened: meta.openedAt,
+      pinned: meta.pinned,
+      archived: meta.archived,
+      tags: [...meta.tags],
+      exists: this.#seeds.has(path),
+      has_thumbnail: meta.thumbnail !== null,
+    };
+  }
+
+  register(path: string): ProjectEntry {
+    if (!this.#meta.has(path)) {
+      const seed = this.#seeds.get(path);
+      if (seed === undefined) {
+        throw { message: `${path}: not a Manang project (no manang.toml found)` };
+      }
+      this.#touch(path, seed.name, seed.engine);
+    }
+    return this.entry(path);
+  }
+
+  update(path: string, patch: ProjectPatch): ProjectEntry {
+    const meta = this.#meta.get(path);
+    if (meta === undefined) throw unknownProject(path);
+    if (patch.name !== undefined) {
+      const name = patch.name.trim();
+      if (name === "") {
+        throw { message: "invalid project metadata: the name cannot be empty" };
+      }
+      meta.name = name;
+    }
+    if (patch.pinned !== undefined) meta.pinned = patch.pinned;
+    if (patch.archived !== undefined) meta.archived = patch.archived;
+    if (patch.tags !== undefined) {
+      meta.tags = [...new Set(patch.tags.map((t) => t.trim()).filter((t) => t !== ""))];
+    }
+    return this.entry(path);
+  }
+
+  forget(path: string): boolean {
+    return this.#meta.delete(path);
+  }
+
+  thumbnail(path: string): string | null {
+    return this.#meta.get(path)?.thumbnail ?? null;
+  }
+
+  setThumbnail(path: string, svg: string): void {
+    const meta = this.#meta.get(path);
+    if (meta === undefined) throw unknownProject(path);
+    meta.thumbnail = svg;
+  }
+
+  #touch(path: string, name: string, engine: Engine): void {
+    const meta = this.#meta.get(path);
+    if (meta === undefined) {
+      const now = nowSeconds();
+      this.#meta.set(path, {
+        name,
+        engine,
+        created: now,
+        openedAt: now,
+        pinned: false,
+        archived: false,
+        tags: [],
+        thumbnail: null,
+      });
+    } else {
+      meta.openedAt = nowSeconds();
+      meta.engine = engine;
+    }
   }
 }
 
@@ -121,6 +244,7 @@ export interface RecentSeed {
   readonly path: string;
   readonly name: string;
   readonly openedAt: number;
+  readonly engine?: Engine;
 }
 
 const MAIN_FILE: Record<Engine, string> = {
@@ -296,6 +420,12 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["project.delete", "Move file to trash"],
   ["project.recent", "Recent projects"],
   ["project.git-status", "Git status"],
+  ["project.list", "List known projects"],
+  ["project.register", "Add a project folder to the list"],
+  ["project.update", "Rename, pin, archive or tag a project"],
+  ["project.forget", "Remove a project from the list"],
+  ["project.thumbnail-get", "Read a project thumbnail"],
+  ["project.thumbnail-set", "Store a project thumbnail"],
 ];
 
 export function projectPlugin(host: MockProjectHost): MockPluginFactory {
@@ -401,8 +531,40 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
         },
         "project.recent": () => host.recent(),
         "project.git-status": () => gitStatus(host.require()),
+        "project.list": () => host.list(),
+        "project.register": (args) => host.register(confineRoot(args)),
+        "project.update": (args) => {
+          const patch: {
+            name?: string;
+            pinned?: boolean;
+            archived?: boolean;
+            tags?: string[];
+          } = {};
+          if (typeof args["name"] === "string") patch.name = args["name"];
+          if (typeof args["pinned"] === "boolean") patch.pinned = args["pinned"];
+          if (typeof args["archived"] === "boolean") patch.archived = args["archived"];
+          if (Array.isArray(args["tags"]))
+            patch.tags = args["tags"].filter((t): t is string => typeof t === "string");
+          return host.update(confineRoot(args), patch);
+        },
+        "project.forget": (args) => ({ removed: host.forget(confineRoot(args)) }),
+        "project.thumbnail-set": (args) => {
+          const svg = args["svg"];
+          if (typeof svg !== "string" || !svg.trimStart().startsWith("<svg")) {
+            throw {
+              message: "invalid project metadata: the thumbnail is not an SVG document",
+            };
+          }
+          host.setThumbnail(confineRoot(args), svg);
+          return null;
+        },
       },
       binaryHandlers: {
+        "project.thumbnail-get": (args) => {
+          const svg = host.thumbnail(confineRoot(args));
+          if (svg === null) throw { message: "no thumbnail" };
+          return new TextEncoder().encode(svg);
+        },
         "project.read-bytes": (args) => {
           const fs = host.require();
           const path = confine(args["path"]);

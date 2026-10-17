@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon, { type IconName } from "$lib/components/ui/Icon.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
+  import { home } from "$lib/state/home.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { sidePanelVisible, type SideView } from "$lib/workbench/layout";
@@ -52,6 +53,8 @@
 
   let focused = $state<SideView>("files");
   let bar: HTMLElement | undefined = $state();
+
+  const homeShortcut = formatShortcut({ key: "h", mod: true, shift: true }, platform);
 
   const changes = $derived(workspace.git?.changes.length ?? 0);
 
@@ -116,6 +119,27 @@
   class="flex w-12 shrink-0 flex-col border-r border-line bg-bg"
   aria-label="Workbench views"
 >
+  <button
+    type="button"
+    class="group relative flex h-12 w-12 shrink-0 items-center justify-center border-b border-line inset-focus {home.showing
+      ? 'text-text'
+      : 'text-text-60 hover:text-text'}"
+    aria-label="Home"
+    aria-pressed={home.showing}
+    aria-keyshortcuts="Control+Shift+H"
+    onclick={() => (workspace.project === null ? home.show() : home.toggle())}
+  >
+    {#if home.showing}
+      <span class="absolute inset-y-0 left-0 w-0.5 bg-accent" aria-hidden="true"></span>
+    {/if}
+    <Icon name="home" size={20} />
+    <span
+      class="pointer-events-none absolute top-1/2 left-full z-30 ml-1 hidden -translate-y-1/2 items-center gap-2 border border-line bg-surface-hi px-2 py-1 text-xs whitespace-nowrap text-text group-hover:flex group-focus-visible:flex"
+      aria-hidden="true"
+    >
+      Home <span class="mng-kbd">{homeShortcut}</span>
+    </span>
+  </button>
   <div
     role="toolbar"
     aria-orientation="vertical"

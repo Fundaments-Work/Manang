@@ -55,3 +55,27 @@ title = "Recent projects"
 [[contributes.commands]]
 id = "project.git-status"
 title = "Git status"
+
+[[contributes.commands]]
+id = "project.list"
+title = "List known projects"
+
+[[contributes.commands]]
+id = "project.register"
+title = "Add a project folder to the list"
+
+[[contributes.commands]]
+id = "project.update"
+title = "Rename, pin, archive or tag a project"
+
+[[contributes.commands]]
+id = "project.forget"
+title = "Remove a project from the list"
+
+[[contributes.commands]]
+id = "project.thumbnail-get"
+title = "Read a project thumbnail"
+
+[[contributes.commands]]
+id = "project.thumbnail-set"
+title = "Store a project thumbnail"

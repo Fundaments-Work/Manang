@@ -14,7 +14,8 @@ import type { KernelEvent } from "$lib/kernel";
 import { writingApi } from "$lib/kernel/api";
 import type { Engine, ProjectChanged } from "$lib/kernel/types";
 import type { Problem } from "$lib/workbench/problems";
-import { SESSION_KEY, loadJson } from "$lib/workbench/persist";
+import { hasNativeDialogs, pickSavePath, saveBinaryArtifact } from "$lib/kernel/native";
+import { SESSION_KEY, loadJson, saveJson } from "$lib/workbench/persist";
 import {
   basename,
   dirname,
@@ -26,13 +27,14 @@ import {
   uniqueName,
 } from "$lib/workbench/paths";
 import { citationFor, type BibEntry } from "$lib/workbench/references";
-import { sanitizeSession } from "$lib/workbench/tabs";
+import { sanitizeSession, toSession } from "$lib/workbench/tabs";
 
 import { build } from "./build.svelte";
 import { dialog } from "./dialog.svelte";
 import { documents } from "./documents.svelte";
 import { blankFigure } from "./figure.svelte";
 import { figures } from "./figures.svelte";
+import { home } from "./home.svelte";
 import { layout } from "./layout.svelte";
 import { notice } from "./notice.svelte";
 import { preview } from "./preview.svelte";
@@ -160,16 +162,56 @@ function resetEditors(): void {
   preview.release();
 }
 
+/** Tabs remembered per project, so switching back finds the same files open. */
+const SESSIONS_KEY = "manang.sessions.v1";
+const MAX_SESSIONS = 30;
+
+function loadSessions(): Record<string, unknown> {
+  const raw = loadJson(SESSIONS_KEY);
+  return typeof raw === "object" && raw !== null
+    ? (raw as Record<string, unknown>)
+    : {};
+}
+
+/** Remember the open project's tabs before leaving it. */
+function rememberSession(): void {
+  const project = workspace.project;
+  if (project === null) return;
+  const sessions = loadSessions();
+  delete sessions[project.root];
+  sessions[project.root] = toSession(project.root, tabs.model);
+  // Keep the most recently left projects only.
+  for (const key of Object.keys(sessions).slice(0, -MAX_SESSIONS)) delete sessions[key];
+  saveJson(SESSIONS_KEY, sessions);
+}
+
+async function restoreSession(project: { main: string; root: string }): Promise<void> {
+  const saved = sanitizeSession(loadSessions()[project.root]);
+  for (const entry of saved.tabs) {
+    await openFile(entry.path, { focus: false, view: entry.view });
+  }
+  if (saved.active !== null) tabs.activate(saved.active);
+  if (tabs.tabs.length === 0) await openFile(project.main, { focus: false });
+}
+
 async function startProject(
-  open: () => Promise<{ main: string } | null>,
+  open: () => Promise<{ main: string; root: string } | null>,
 ): Promise<boolean> {
   if (!(await confirmDiscard())) return false;
+  rememberSession();
   resetEditors();
   const project = await open();
-  if (project === null) return false;
+  if (project === null) {
+    // The kernel keeps the project that was open; put its tabs back.
+    const staying = workspace.project;
+    if (staying !== null) await restoreSession(staying);
+    return false;
+  }
+  home.hide();
   if (!layout.narrow) layout.showSide("files");
-  await openFile(project.main, { focus: false });
+  await restoreSession(project);
   build.schedule();
+  void home.load();
   return true;
 }
 
@@ -185,12 +227,20 @@ export function createProject(
   return startProject(() => workspace.create(path, name, engine));
 }
 
+/** Show Home over the open project without closing it. */
+export function goHome(): void {
+  home.show();
+}
+
 export async function closeProject(): Promise<void> {
   if (!(await confirmDiscard())) return;
+  rememberSession();
   resetEditors();
   await workspace.close();
   workspace.error = "";
   tabs.remember();
+  home.hide();
+  void home.load();
   void build.compile();
 }
 
@@ -347,7 +397,33 @@ export function toggleSlides(): void {
 
 export function exportPdf(): void {
   const target = build.previewTarget() ?? tabs.active?.path ?? "document";
-  void preview.exportPdf(basename(target));
+  if (hasNativeDialogs()) void exportPdfNative(basename(target));
+  else void preview.exportPdf(basename(target));
+}
+
+/** Desktop: choose where in a native Save dialog, then the shell writes the PDF. */
+async function exportPdfNative(name: string): Promise<void> {
+  const stem = name.replace(/\.[^.]+$/, "");
+  const root = workspace.project?.root;
+  preview.exporting = true;
+  try {
+    const dest = await pickSavePath(
+      root === undefined ? `${stem}.pdf` : `${root}/${stem}.pdf`,
+      { name: "PDF document", extensions: ["pdf"] },
+    );
+    if (dest === null) return;
+    await build.compile();
+    if (build.status === "failed") {
+      notice.error("Fix the errors in the Problems panel before exporting a PDF.");
+      return;
+    }
+    await saveBinaryArtifact("typst.export-pdf", null, dest);
+    notice.show(`Exported ${basename(dest)}.`);
+  } catch (error) {
+    notice.error(`Could not export a PDF: ${errorMessage(error)}`);
+  } finally {
+    preview.exporting = false;
+  }
 }
 
 /** Format the shown document with the writing plugin (one undo step). */
@@ -446,14 +522,16 @@ export async function boot(): Promise<void> {
   if (booted) return;
   booted = true;
   layout.restore();
+  home.restore();
   documents.onEdit(() => build.schedule());
   void kernel.onEvent(onKernelEvent);
   await workspace.loadRecent();
+  void home.load();
 
   const session = sanitizeSession(loadJson(SESSION_KEY));
   if (session.project === null) return;
   if ((await workspace.open(session.project)) === null) {
-    // The folder moved or was deleted; fall back to the welcome screen.
+    // The folder moved or was deleted; fall back to Home.
     workspace.error = "";
     return;
   }

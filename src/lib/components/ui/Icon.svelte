@@ -49,6 +49,15 @@
     formula: "M3 3.5h10 M3 3.5l5 4.5-5 4.5h10",
     save: "M2.5 2.5h9l2 2v9h-11z M5 2.5v4h5v-4 M5 13.5v-4h6v4",
     clear: "M3 8h10",
+    home: "M2.5 7.5L8 2.5l5.5 5 M4 6.5v7h8v-7 M7 13.5v-4h2v4",
+    pin: "M5.5 2.5h5v4l1.5 2.5H4l1.5-2.5z M8 9v4.5",
+    "pin-filled": "M5.5 2.5h5v4l1.5 2.5H4l1.5-2.5z M6.5 4h3 M6.5 5.5h3 M8 9v4.5",
+    more: "M2.5 7h2v2h-2z M7 7h2v2H7z M11.5 7h2v2h-2z",
+    grid: "M2.5 2.5h4.5v4.5H2.5z M9 2.5h4.5v4.5H9z M2.5 9h4.5v4.5H2.5z M9 9h4.5v4.5H9z",
+    list: "M2.5 4h11 M2.5 8h11 M2.5 12h11",
+    archive: "M2.5 3.5h11v3h-11z M3.5 6.5v7h9v-7 M6.5 9h3",
+    recent: "M2.5 2.5h11v11h-11z M8 5v3.5l2.5 1.5",
+    templates: "M2.5 2.5h5v5h-5z M9 2.5h4.5v5H9z M2.5 9h11v4.5h-11z",
   } as const;
 
   export type IconName = keyof typeof PATHS;

@@ -200,6 +200,23 @@ const LECTURE_CH1 = `## Chapter one
 Entropy counts the microstates compatible with what we can measure.
 `;
 
+const THESIS = `\\documentclass{article}
+\\begin{document}
+\\section{Chapter three}
+Open questions on finite-time erasure.
+\\end{document}
+`;
+
+const POSTER = `#set page(paper: "a4")
+
+= Landauer bound poster
+
+Finite-time operation costs extra heat.
+`;
+
+/** A tiny paper-white page, standing in for a stored first-page thumbnail. */
+const PAGE_THUMBNAIL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 297"><rect width="210" height="297" fill="#faf9f7"/><rect x="40" y="48" width="130" height="8" fill="#1c1c1c"/><rect x="40" y="80" width="130" height="3" fill="#7a7a7a"/><rect x="40" y="90" width="130" height="3" fill="#7a7a7a"/><rect x="40" y="100" width="100" height="3" fill="#7a7a7a"/></svg>`;
+
 export const DEMO_PROJECTS: readonly SeedProject[] = [
   {
     root: DEMO_ROOT,
@@ -229,6 +246,9 @@ export const DEMO_PROJECTS: readonly SeedProject[] = [
     // results.typ was committed before its last paragraph was added.
     committedEarlier: { "sections/results.typ": RESULTS_COMMITTED },
     openedAt: 1_760_600_000,
+    created: 1_758_000_000,
+    pinned: true,
+    tags: ["physics", "draft"],
   },
   {
     root: "/home/author/lecture-notes",
@@ -238,12 +258,42 @@ export const DEMO_PROJECTS: readonly SeedProject[] = [
     files: { "index.md": LECTURE_INDEX, "chapter1.md": LECTURE_CH1 },
     committed: ["index.md", "chapter1.md"],
     openedAt: 1_760_000_000,
+    created: 1_740_000_000,
+    tags: ["teaching"],
+  },
+  {
+    root: "/home/author/thesis-chapter-3",
+    name: "Thesis chapter 3",
+    engine: "latex",
+    main: "main.tex",
+    files: { "main.tex": THESIS },
+    committed: ["main.tex"],
+    openedAt: 1_759_000_000,
+    created: 1_750_000_000,
+    tags: ["thesis"],
+    thumbnail: PAGE_THUMBNAIL,
+  },
+  {
+    root: "/home/author/conference-poster",
+    name: "Conference poster",
+    engine: "typst",
+    main: "main.typ",
+    files: { "main.typ": POSTER },
+    committed: ["main.typ"],
+    openedAt: 1_755_000_000,
+    created: 1_754_000_000,
+    archived: true,
   },
 ];
 
 /** Listed as recent but gone from disk, to show the missing-folder state. */
 const MISSING = [
-  { path: "/home/author/old-thesis", name: "Old thesis", openedAt: 1_750_000_000 },
+  {
+    path: "/home/author/old-thesis",
+    name: "Old thesis",
+    openedAt: 1_750_000_000,
+    engine: "latex",
+  },
 ] as const;
 
 export function createDevKernel(
