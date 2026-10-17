@@ -1,0 +1,12 @@
+---
+source: crates/manang-settings/tests/plugin.rs
+expression: errors
+---
+[
+    "`editor.font-size` is 500, above the maximum 48",
+    "`editor.font-size` must be an integer, found a string",
+    "`appearance.theme` must be one of dark, light, system, found `sepia`",
+    "no setting `nope.nothing` is registered",
+    "setting `files.autosave` is user-scoped and cannot be set in a project",
+    "no project is selected; call settings.use-project first",
+]
