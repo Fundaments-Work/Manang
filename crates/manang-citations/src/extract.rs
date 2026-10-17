@@ -96,8 +96,8 @@ pub fn extract_latex_keys(source: &str) -> Vec<String> {
                     }
                 }
 
-                if cursor.starts_with('{') {
-                    if let Some(close_brace) = cursor.find('}') {
+                if cursor.starts_with('{')
+                    && let Some(close_brace) = cursor.find('}') {
                         let inner = &cursor[1..close_brace];
                         for raw_key in inner.split(',') {
                             let key = raw_key.trim();
@@ -109,7 +109,6 @@ pub fn extract_latex_keys(source: &str) -> Vec<String> {
                         matched_cmd = true;
                         break;
                     }
-                }
             }
         }
 

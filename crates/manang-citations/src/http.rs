@@ -165,15 +165,14 @@ impl BlockingHttpClient {
     fn read_from_cache(&self, url: &str) -> Option<HttpResponse> {
         let cache_dir = self.cache_dir.as_ref()?;
         let path = cache_dir.join(Self::cache_key(url));
-        if path.exists() {
-            if let Ok(bytes) = std::fs::read(path) {
+        if path.exists()
+            && let Ok(bytes) = std::fs::read(path) {
                 return Some(HttpResponse {
                     status: 200,
                     headers: HashMap::new(),
                     body: bytes,
                 });
             }
-        }
         None
     }
 
@@ -243,17 +242,15 @@ impl HttpClient for BlockingHttpClient {
             let status = response.status().as_u16();
 
             // Handle redirect codes
-            if matches!(status, 301 | 302 | 303 | 307 | 308) {
-                if let Some(loc_header) = response.headers().get("location") {
-                    if let Ok(loc_str) = loc_header.to_str() {
+            if matches!(status, 301 | 302 | 303 | 307 | 308)
+                && let Some(loc_header) = response.headers().get("location")
+                    && let Ok(loc_str) = loc_header.to_str() {
                         let next_url = parsed.join(loc_str).map_err(|e| {
                             CitationsError::Http(format!("failed to resolve redirect: {e}"))
                         })?;
                         current_url = next_url.to_string();
                         continue;
                     }
-                }
-            }
 
             // Collect headers
             let mut headers = HashMap::new();
