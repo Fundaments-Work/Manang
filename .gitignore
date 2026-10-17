@@ -31,3 +31,5 @@ plugins/**/target
 fuzz/target
 fuzz/corpus
 fuzz/artifacts
+sdk/**/dist
+plugins/**/dist

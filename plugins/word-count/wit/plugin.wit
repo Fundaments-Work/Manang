@@ -1,0 +1,140 @@
+package manang:plugin@0.2.0;
+
+/// Values that cross the plugin boundary.
+interface types {
+    variant payload {
+        empty,
+        json(string),
+        binary(list<u8>),
+    }
+
+    record failure {
+        message: string,
+    }
+
+    enum hook {
+        on-compile-pre,
+        on-compile-post,
+        on-lint,
+        register-agent-tool,
+    }
+}
+
+/// The active document buffer. Linked only when the manifest declares a
+/// `buffer` permission; a component importing it without that grant is
+/// rejected at load time.
+interface buffer {
+    use types.{failure};
+
+    /// Requires `read:active`.
+    read-active: func() -> result<string, failure>;
+    /// Requires `write:active`.
+    write-active: func(text: string) -> result<_, failure>;
+}
+
+/// Scoped access to the open project's files. Linked only when the manifest
+/// declares a `filesystem` permission.
+///
+/// Paths are relative to the project directory and use `/` separators.
+/// Absolute paths, `..`, empty segments and backslashes are refused. Each
+/// operation must fall inside a granted scope (`read:<dir>` or
+/// `write:<dir>`); symlinks that leave the scope are refused.
+interface fs {
+    use types.{failure};
+
+    record dir-entry {
+        name: string,
+        is-dir: bool,
+        size: u64,
+    }
+
+    /// Requires `read:<scope>` covering `path`. Capped by the host's
+    /// per-file size limit.
+    read-file: func(path: string) -> result<list<u8>, failure>;
+    /// Requires `write:<scope>` covering `path`. Creates parent directories
+    /// inside the scope and replaces any existing file.
+    write-file: func(path: string, data: list<u8>) -> result<_, failure>;
+    /// Requires `read:<scope>` covering `path`. Sorted by name.
+    list-dir: func(path: string) -> result<list<dir-entry>, failure>;
+}
+
+/// Outbound HTTP(S). Linked only when the manifest declares at least one
+/// `network` host. The request host, and the host of every redirect hop,
+/// must exactly match a granted host.
+interface http {
+    use types.{failure};
+
+    record header {
+        name: string,
+        value: string,
+    }
+
+    record request {
+        /// GET, HEAD, POST, PUT or DELETE.
+        method: string,
+        /// Absolute `http://` or `https://` URL without credentials.
+        url: string,
+        headers: list<header>,
+        body: option<list<u8>>,
+    }
+
+    record response {
+        status: u16,
+        headers: list<header>,
+        body: list<u8>,
+    }
+
+    /// Blocking. Bounded by the host's time and response-size limits.
+    fetch: func(request: request) -> result<response, failure>;
+}
+
+/// What every plugin exports.
+interface handler {
+    use types.{payload, failure, hook};
+
+    invoke: func(command: string, input: payload) -> result<payload, failure>;
+    on-hook: func(hook: hook, input: payload) -> result<payload, failure>;
+}
+
+/// A plugin that needs nothing from the host. Third-party authors target this
+/// world by default. There are deliberately no WASI imports: a plugin has no
+/// ambient syscalls, only the interfaces below.
+world plugin {
+    export handler;
+}
+
+/// A plugin that also edits the active buffer.
+world plugin-buffer {
+    import buffer;
+    export handler;
+}
+
+/// A plugin that reads or writes project files.
+world plugin-fs {
+    import fs;
+    export handler;
+}
+
+/// A plugin that makes network requests.
+world plugin-http {
+    import http;
+    export handler;
+}
+
+/// Everything a plugin may ask for. Only interfaces the guest actually calls
+/// end up in the compiled component, and the host grants each one only if the
+/// manifest permits it.
+world plugin-full {
+    import buffer;
+    import fs;
+    import http;
+    export handler;
+}
+
+/// Host-side superset used to generate bindings. Not a plugin target.
+world bindings {
+    import buffer;
+    import fs;
+    import http;
+    export handler;
+}
