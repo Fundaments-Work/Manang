@@ -1,0 +1,24 @@
+[package]
+name = "manang-wasm-host"
+description = "Sandboxed WASM plugin tier for Manang, on the Wasmtime component model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+wasmtime = { version = "49", default-features = false, features = [
+    "std",
+    "runtime",
+    "cranelift",
+    "component-model",
+    "pooling-allocator",
+] }
+
+[dev-dependencies]
+wit-component = "0.262"
