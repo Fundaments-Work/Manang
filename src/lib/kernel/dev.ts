@@ -8,6 +8,7 @@
 import type { Kernel } from "./client";
 import { createMockKernel } from "./mock";
 import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject";
+import { figurePlugin } from "./mockFigure";
 import { typstPlugin } from "./mockTypst";
 
 export const DEMO_ROOT = "/home/author/entropy-paper";
@@ -249,7 +250,7 @@ export function createDevKernel(
 ): Kernel & { host: MockProjectHost } {
   const host = new MockProjectHost(seeds, MISSING);
   const kernel = createMockKernel({
-    plugins: [projectPlugin(host), typstPlugin(host)],
+    plugins: [projectPlugin(host), typstPlugin(host), figurePlugin()],
   });
   return Object.assign(kernel, { host });
 }

@@ -5,7 +5,9 @@
 
 import { SvelteMap } from "svelte/reactivity";
 
-import { errorMessage } from "$lib/kernel";
+import { errorMessage, kernel } from "$lib/kernel";
+
+import { svgPathFor } from "$lib/figure/edit";
 
 import { FigureState, parseScene, serializeScene } from "./figure.svelte";
 import { notice } from "./notice.svelte";
@@ -50,11 +52,21 @@ export class FiguresStore {
     try {
       await workspace.writeFile(path, serializeScene(scene));
       figure.markSaved(scene);
-      return true;
     } catch (error) {
       notice.error(`Could not save ${path}: ${errorMessage(error)}`);
       return false;
     }
+    // The SVG next to the scene is what documents embed. The scene is already
+    // safe on disk, so a rendering failure is reported but does not fail the save.
+    try {
+      const bytes = await kernel.runBinary("figure.render-svg", { scene });
+      await workspace.writeFile(svgPathFor(path), new TextDecoder().decode(bytes));
+    } catch (error) {
+      notice.error(
+        `Saved ${path}, but could not write its SVG: ${errorMessage(error)}`,
+      );
+    }
+    return true;
   }
 
   renamed(from: string, to: string): void {

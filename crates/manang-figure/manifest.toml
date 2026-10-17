@@ -33,6 +33,10 @@ id = "figure.get"
 title = "Get figure scene"
 
 [[contributes.commands]]
+id = "figure.render-svg"
+title = "Render a scene to SVG"
+
+[[contributes.commands]]
 id = "figure.export-svg"
 title = "Export SVG"
 

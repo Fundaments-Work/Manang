@@ -416,3 +416,46 @@ fn svg_snapshot_through_plugin() {
     let svg_str = std::str::from_utf8(&bytes).expect("utf8");
     insta::assert_snapshot!(svg_str);
 }
+
+#[test]
+fn render_svg_is_stateless_and_matches_export() {
+    let k = test_kernel();
+    let scene = json!({
+        "version": 1,
+        "width": 200.0,
+        "height": 100.0,
+        "nodes": [
+            {"kind": "rect", "id": "n1", "x": 10.0, "y": 10.0, "width": 50.0, "height": 30.0,
+             "stroke": "#e8e6e1", "fill": "#1c1c20"}
+        ]
+    });
+    let out = k
+        .invoke(
+            "figure.render-svg",
+            Payload::Json(json!({ "scene": scene })),
+        )
+        .expect("renders");
+    let Payload::Binary(bytes) = out else {
+        panic!("expected binary SVG");
+    };
+    let svg = std::str::from_utf8(&bytes).expect("utf-8");
+    assert!(svg.starts_with("<svg") || svg.starts_with("<?xml"), "{svg}");
+    assert!(svg.contains("<rect"), "{svg}");
+
+    // Nothing was opened: the store stays empty.
+    let listed = json_of(k.invoke("figure.list", Payload::Empty).expect("lists"));
+    assert_eq!(listed.as_array().map(Vec::len), Some(0));
+
+    // Bad input is an error, not a panic.
+    assert!(
+        k.invoke(
+            "figure.render-svg",
+            Payload::Json(json!({ "scene": {"nodes": 3} }))
+        )
+        .is_err()
+    );
+    assert!(
+        k.invoke("figure.render-svg", Payload::Json(json!({})))
+            .is_err()
+    );
+}

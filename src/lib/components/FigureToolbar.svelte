@@ -19,9 +19,20 @@
     select: "select",
     freehand: "freehand",
     geometry: "rect",
+    ellipse: "ellipse",
     arrow: "arrow",
     math: "formula",
   };
+
+  /** The selected formula, if any: its text is edited in the toolbar. */
+  const formula = $derived(
+    figure.selected?.kind === "math" ? figure.selected : undefined,
+  );
+
+  function commitFormula(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    if (formula !== undefined) figure.setMathText(formula.id, input.value);
+  }
 
   async function copyEmbed(): Promise<void> {
     const line = figure.embedSnippet();
@@ -58,11 +69,47 @@
   <button
     type="button"
     class="mng-btn h-7 border-transparent bg-transparent px-2 text-text-60 hover:text-text"
+    disabled={!figure.canUndo}
+    title="Undo (Ctrl+Z)"
+    aria-keyshortcuts="Control+Z"
+    onclick={() => figure.undo()}
+  >
+    <Icon name="undo" size={14} /> Undo
+  </button>
+  <button
+    type="button"
+    class="mng-btn h-7 border-transparent bg-transparent px-2 text-text-60 hover:text-text"
+    disabled={!figure.canRedo}
+    title="Redo (Ctrl+Shift+Z)"
+    aria-keyshortcuts="Control+Shift+Z"
+    onclick={() => figure.redo()}
+  >
+    <Icon name="redo" size={14} /> Redo
+  </button>
+  <button
+    type="button"
+    class="mng-btn h-7 border-transparent bg-transparent px-2 text-text-60 hover:text-text"
     disabled={figure.nodeCount === 0}
     onclick={() => figure.clear()}
   >
     <Icon name="trash" size={14} /> Clear
   </button>
+
+  {#if formula !== undefined}
+    <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
+    <label class="flex items-center gap-1.5 text-text-60">
+      Formula
+      <input
+        class="mng-field selectable h-7 w-48 font-mono text-[12px]"
+        value={formula.tex}
+        aria-label="Formula text"
+        onchange={commitFormula}
+        onkeydown={(event) => {
+          if (event.key === "Enter") (event.currentTarget as HTMLInputElement).blur();
+        }}
+      />
+    </label>
+  {/if}
 
   <span class="ml-auto"></span>
 

@@ -7,6 +7,7 @@
  * (`*.figure.json`), so it diffs and commits like any other project file.
  */
 
+import { HISTORY_LIMIT, svgPathFor, translatedScene } from "$lib/figure/edit";
 import {
   allAnchors,
   hitTest,
@@ -28,12 +29,13 @@ import {
   type Vec,
 } from "$lib/figure/scene";
 
-export type PenTool = "select" | "freehand" | "geometry" | "arrow" | "math";
+export type PenTool = "select" | "freehand" | "geometry" | "ellipse" | "arrow" | "math";
 
 export const TOOLS: readonly { tool: PenTool; label: string; key: string }[] = [
   { tool: "select", label: "Select", key: "P" },
   { tool: "freehand", label: "Freehand", key: "B" },
   { tool: "geometry", label: "Rectangle", key: "G" },
+  { tool: "ellipse", label: "Ellipse", key: "E" },
   { tool: "arrow", label: "Arrow", key: "A" },
   { tool: "math", label: "Formula", key: "M" },
 ];
@@ -103,6 +105,63 @@ export class FigureState {
 
   selectedId = $state<string | null>(null);
 
+  /** Scenes before each committed change, newest last. Scenes are immutable, so this is cheap. */
+  #undo: FigureScene[] = [];
+  #redo: FigureScene[] = [];
+  /** Bumped on every history change so `canUndo`/`canRedo` stay reactive. */
+  historyVersion = $state(0);
+
+  /** While dragging a selection: the last pointer position and the scene before the drag. */
+  #moveLast: Vec | null = null;
+  #moveBase: FigureScene | null = null;
+
+  get canUndo(): boolean {
+    void this.historyVersion;
+    return this.#undo.length > 0;
+  }
+
+  get canRedo(): boolean {
+    void this.historyVersion;
+    return this.#redo.length > 0;
+  }
+
+  /** Replace the scene as one undoable step. */
+  commit(next: FigureScene, before: FigureScene = this.scene): void {
+    if (next === before) return;
+    this.#undo.push(before);
+    if (this.#undo.length > HISTORY_LIMIT) this.#undo.shift();
+    this.#redo = [];
+    this.scene = next;
+    this.historyVersion += 1;
+  }
+
+  undo(): void {
+    const previous = this.#undo.pop();
+    if (previous === undefined) return;
+    this.#redo.push(this.scene);
+    this.scene = previous;
+    this.#dropMissingSelection();
+    this.historyVersion += 1;
+  }
+
+  redo(): void {
+    const next = this.#redo.pop();
+    if (next === undefined) return;
+    this.#undo.push(this.scene);
+    this.scene = next;
+    this.#dropMissingSelection();
+    this.historyVersion += 1;
+  }
+
+  #dropMissingSelection(): void {
+    if (
+      this.selectedId !== null &&
+      nodeById(this.scene, this.selectedId) === undefined
+    ) {
+      this.selectedId = null;
+    }
+  }
+
   readonly selected: FigureNode | undefined = $derived(
     this.selectedId === null ? undefined : nodeById(this.scene, this.selectedId),
   );
@@ -110,7 +169,7 @@ export class FigureState {
   readonly nodeCount: number = $derived(this.scene.nodes.length);
 
   get isDrawing(): boolean {
-    return this.draft.length > 0 || this.dragStart !== null;
+    return this.draft.length > 0 || this.dragStart !== null || this.#moveLast !== null;
   }
 
   setTool(tool: PenTool): void {
@@ -134,12 +193,17 @@ export class FigureState {
         this.draft = [{ x: point.x, y: point.y, pressure }];
         break;
       case "geometry":
+      case "ellipse":
       case "arrow":
         this.dragStart = point;
         this.dragCurrent = point;
         break;
       case "select":
         this.selectedId = hitTest(this.scene, point)?.id ?? null;
+        if (this.selectedId !== null) {
+          this.#moveLast = point;
+          this.#moveBase = this.scene;
+        }
         break;
       case "math":
         this.stampMath(point);
@@ -155,6 +219,14 @@ export class FigureState {
    * outline deterministic across machines.
    */
   extend(point: Vec, pressure: number): void {
+    if (this.#moveLast !== null && this.selectedId !== null) {
+      const delta = { x: point.x - this.#moveLast.x, y: point.y - this.#moveLast.y };
+      this.#moveLast = point;
+      // Live movement is not a history step; the whole drag becomes one on release.
+      this.scene = translatedScene(this.scene, this.selectedId, delta);
+      return;
+    }
+
     if (this.tool === "freehand") {
       const last = this.draft[this.draft.length - 1];
       if (last !== undefined && Math.hypot(point.x - last.x, point.y - last.y) < 1.5) {
@@ -175,14 +247,20 @@ export class FigureState {
 
   /** Commits the in-progress node, if the gesture produced one. */
   endStroke(): void {
+    if (this.#moveBase !== null) {
+      this.commit(this.scene, this.#moveBase);
+    }
+
     if (this.tool === "freehand" && this.draft.length > 1) {
-      this.scene = appendNode(this.scene, {
-        kind: "stroke",
-        id: this.nextId(),
-        points: this.draft,
-        size: 2.5,
-        color: "#e8e6e1",
-      });
+      this.commit(
+        appendNode(this.scene, {
+          kind: "stroke",
+          id: this.nextId(),
+          points: this.draft,
+          size: 2.5,
+          color: "#e8e6e1",
+        }),
+      );
     }
 
     if (this.dragStart !== null && this.dragCurrent !== null) {
@@ -190,29 +268,52 @@ export class FigureState {
       const to = this.dragCurrent;
 
       if (this.tool === "arrow" && Math.hypot(to.x - from.x, to.y - from.y) > 8) {
-        this.scene = appendNode(this.scene, {
-          kind: "arrow",
-          id: this.nextId(),
-          from,
-          to,
-          color: "#e8e6e1",
-        });
+        this.commit(
+          appendNode(this.scene, {
+            kind: "arrow",
+            id: this.nextId(),
+            from,
+            to,
+            color: "#e8e6e1",
+          }),
+        );
       }
 
       if (this.tool === "geometry") {
         const width = to.x - from.x;
         const height = to.y - from.y;
         if (Math.abs(width) > 8 && Math.abs(height) > 8) {
-          this.scene = appendNode(this.scene, {
-            kind: "rect",
-            id: this.nextId(),
-            x: from.x,
-            y: from.y,
-            width,
-            height,
-            stroke: "#e8e6e1",
-            fill: "#1c1c20",
-          });
+          this.commit(
+            appendNode(this.scene, {
+              kind: "rect",
+              id: this.nextId(),
+              x: from.x,
+              y: from.y,
+              width,
+              height,
+              stroke: "#e8e6e1",
+              fill: "#1c1c20",
+            }),
+          );
+        }
+      }
+
+      if (this.tool === "ellipse") {
+        const rx = Math.abs(to.x - from.x) / 2;
+        const ry = Math.abs(to.y - from.y) / 2;
+        if (rx > 4 && ry > 4) {
+          this.commit(
+            appendNode(this.scene, {
+              kind: "ellipse",
+              id: this.nextId(),
+              cx: (from.x + to.x) / 2,
+              cy: (from.y + to.y) / 2,
+              rx,
+              ry,
+              stroke: "#e8e6e1",
+              fill: "#1c1c20",
+            }),
+          );
         }
       }
     }
@@ -221,6 +322,8 @@ export class FigureState {
   }
 
   cancel(): void {
+    this.#moveLast = null;
+    this.#moveBase = null;
     this.draft = [];
     this.dragStart = null;
     this.dragCurrent = null;
@@ -231,81 +334,58 @@ export class FigureState {
   /* Mutation                                                               */
   /* ---------------------------------------------------------------------- */
 
-  stampMath(point: Vec): void {
-    this.scene = appendNode(this.scene, {
-      kind: "math",
-      id: this.nextId(),
-      x: point.x,
-      y: point.y,
-      tex: "|ψ⟩",
-      size: 26,
-      color: "#b3d17a",
-    });
+  /** Places a formula and selects it so its text can be typed straight away. */
+  stampMath(point: Vec, tex = "x"): void {
+    const id = this.nextId();
+    this.commit(
+      appendNode(this.scene, {
+        kind: "math",
+        id,
+        x: point.x,
+        y: point.y,
+        tex,
+        size: 26,
+        color: "#b3d17a",
+      }),
+    );
+    this.tool = "select";
+    this.selectedId = id;
+  }
+
+  /** Change a formula's text. Empty text is refused so a formula cannot vanish invisibly. */
+  setMathText(id: string, tex: string): void {
+    const node = nodeById(this.scene, id);
+    if (node?.kind !== "math" || tex.trim() === "" || node.tex === tex) return;
+    this.commit(replaceNode(this.scene, { ...node, tex }));
   }
 
   deleteSelected(): void {
     if (this.selectedId === null) return;
-    this.scene = removeNode(this.scene, this.selectedId);
+    this.commit(removeNode(this.scene, this.selectedId));
     this.selectedId = null;
   }
 
-  translate(id: string, delta: Vec): void {
-    const node = nodeById(this.scene, id);
-    if (node === undefined) return;
+  /** Move the selection by a fixed step (arrow keys); one undo step each. */
+  nudge(delta: Vec): void {
+    if (this.selectedId === null) return;
+    this.commit(translatedScene(this.scene, this.selectedId, delta));
+  }
 
-    switch (node.kind) {
-      case "rect":
-        this.scene = replaceNode(this.scene, {
-          ...node,
-          x: node.x + delta.x,
-          y: node.y + delta.y,
-        });
-        break;
-      case "ellipse":
-        this.scene = replaceNode(this.scene, {
-          ...node,
-          cx: node.cx + delta.x,
-          cy: node.cy + delta.y,
-        });
-        break;
-      case "arrow":
-        this.scene = replaceNode(this.scene, {
-          ...node,
-          from: { x: node.from.x + delta.x, y: node.from.y + delta.y },
-          to: { x: node.to.x + delta.x, y: node.to.y + delta.y },
-        });
-        break;
-      case "math":
-        this.scene = replaceNode(this.scene, {
-          ...node,
-          x: node.x + delta.x,
-          y: node.y + delta.y,
-        });
-        break;
-      case "stroke":
-        this.scene = replaceNode(this.scene, {
-          ...node,
-          points: node.points.map((point) => ({
-            ...point,
-            x: point.x + delta.x,
-            y: point.y + delta.y,
-          })),
-        });
-        break;
-    }
+  translate(id: string, delta: Vec): void {
+    this.commit(translatedScene(this.scene, id, delta));
   }
 
   clear(): void {
-    this.scene = {
+    this.commit({
       ...createScene(this.scene.width, this.scene.height),
       version: SCENE_VERSION,
-    };
+    });
     this.selectedId = null;
   }
 
   /** The line that embeds this figure's rendered SVG in a Typst document. */
   embedSnippet(): string {
-    return `#figure(image("${this.path.replace(/\.figure\.json$/, ".svg")}", width: 80%))`;
+    return `#figure(image("${svgPathFor(this.path)}", width: 80%))`;
   }
 }
 
