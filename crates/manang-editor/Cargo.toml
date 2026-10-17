@@ -1,0 +1,20 @@
+[package]
+name = "manang-editor"
+description = "Manang's first-party editor plugin: document store, edits and buffer service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+parking_lot = "0.12"
+ropey = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"

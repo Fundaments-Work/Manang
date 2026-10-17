@@ -3,12 +3,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use manang_kernel::{CapabilitySet, Context, Hook, Manifest, Payload, Plugin, PluginError, Tier};
+use manang_kernel::{
+    BufferService, CapabilitySet, Context, Hook, Manifest, Payload, Plugin, PluginError, Tier,
+};
 use wasmtime::component::{Component, HasSelf, Linker};
 use wasmtime::{Config, Engine, OptLevel, Store, StoreLimitsBuilder};
 
 use crate::error::WasmError;
-use crate::host::{BufferService, HostState};
+use crate::host::HostState;
 use crate::limits::Limits;
 
 pub(crate) mod bindings {
