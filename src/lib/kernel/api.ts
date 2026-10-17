@@ -8,6 +8,7 @@
 
 import type { Kernel } from "./client";
 import type {
+  ChangeState,
   CompileReport,
   Engine,
   GitStatus,
@@ -225,4 +226,140 @@ export function searchApi(kernel: Kernel) {
 export type ProjectApi = ReturnType<typeof projectApi>;
 export type TypstApi = ReturnType<typeof typstApi>;
 export type SearchApi = ReturnType<typeof searchApi>;
+
+/* -------------------------------------------------------------------------- */
+/* Git API                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export interface GitStatusFile {
+  readonly path: string;
+  readonly staged: ChangeState | null;
+  readonly unstaged: ChangeState | null;
+  readonly untracked: boolean;
+  readonly conflicted: boolean;
+}
+
+export interface GitUpstream {
+  readonly name: string;
+  readonly ahead: number;
+  readonly behind: number;
+}
+
+export interface GitStatusReport {
+  readonly branch: string | null;
+  readonly detached: boolean;
+  readonly unborn: boolean;
+  readonly head: string | null;
+  readonly upstream: GitUpstream | null;
+  readonly files: readonly GitStatusFile[];
+  readonly truncated: boolean;
+}
+
+export interface GitDiffLine {
+  readonly kind: "context" | "add" | "remove";
+  readonly text: string;
+  readonly old_line: number | null;
+  readonly new_line: number | null;
+  readonly old_offset: number | null;
+  readonly new_offset: number | null;
+  readonly no_newline: boolean;
+}
+
+export interface GitDiffHunk {
+  readonly old_start: number;
+  readonly old_lines: number;
+  readonly new_start: number;
+  readonly new_lines: number;
+  readonly header: string;
+  readonly lines: readonly GitDiffLine[];
+}
+
+export interface GitFileDiff {
+  readonly path: string;
+  readonly status: "added" | "deleted" | "modified";
+  readonly binary: boolean;
+  readonly too_large: boolean;
+  readonly additions: number;
+  readonly deletions: number;
+  readonly hunks: readonly GitDiffHunk[];
+}
+
+export interface GitDiffResponse {
+  readonly staged: boolean;
+  readonly files: readonly GitFileDiff[];
+}
+
+export interface GitCommitInfo {
+  readonly hash: string;
+  readonly short: string;
+  readonly author_name: string;
+  readonly author_email: string;
+  readonly time: number;
+  readonly subject: string;
+  readonly parents: readonly string[];
+}
+
+export interface GitLogResponse {
+  readonly commits: readonly GitCommitInfo[];
+  readonly has_more: boolean;
+}
+
+export interface GitBranchInfo {
+  readonly name: string;
+  readonly remote: boolean;
+  readonly current: boolean;
+  readonly hash: string;
+  readonly upstream: string | null;
+}
+
+export interface GitBlameRange {
+  readonly start: number;
+  readonly lines: number;
+  readonly commit: string;
+  readonly source_path: string | null;
+}
+
+export interface GitBlameResponse {
+  readonly path: string;
+  readonly total_lines: number;
+  readonly ranges: readonly GitBlameRange[];
+}
+
+export function gitApi(kernel: Kernel) {
+  return {
+    open: (root: string) =>
+      kernel.run<{ root: string; is_repo: boolean }>("git.open", { root }),
+    status: (req: { root?: string | undefined } = {}) =>
+      kernel.run<GitStatusReport>("git.status", { ...req }),
+    diff: (req: { root?: string | undefined; path?: string | undefined; staged?: boolean | undefined } = {}) =>
+      kernel.run<GitDiffResponse>("git.diff", { ...req }),
+    diffText: (req: { path: string; staged?: boolean | undefined; root?: string | undefined }) =>
+      kernel.run<{ text: string }>("git.diff-text", { ...req }),
+    log: (req: { root?: string | undefined; path?: string | undefined; limit?: number | undefined; offset?: number | undefined } = {}) =>
+      kernel.run<GitLogResponse>("git.log", { ...req }),
+    blame: (req: { path: string; root?: string | undefined }) =>
+      kernel.run<GitBlameResponse>("git.blame", { ...req }),
+    branches: (req: { root?: string | undefined } = {}) =>
+      kernel.run<readonly GitBranchInfo[]>("git.branches", { ...req }),
+    show: (req: { rev: string; path: string; root?: string | undefined }) =>
+      kernel.run<{ rev: string; path: string; text: string }>("git.show", { ...req }),
+    stage: (req: { paths: readonly string[]; root?: string | undefined }) =>
+      kernel.run<{ staged: number }>("git.stage", { ...req }),
+    unstage: (req: { paths: readonly string[]; root?: string | undefined }) =>
+      kernel.run<{ unstaged: number }>("git.unstage", { ...req }),
+    discard: (req: { paths: readonly string[]; confirm: boolean; root?: string | undefined }) =>
+      kernel.run<{ discarded: readonly string[]; trash: string }>("git.discard", { ...req }),
+    commit: (req: { message: string; amend?: boolean | undefined; hooks?: boolean | undefined; root?: string | undefined }) =>
+      kernel.run<{ hash: string; short: string; subject: string; amended: boolean }>("git.commit", { ...req }),
+    checkoutBranch: (req: { name: string; create?: boolean | undefined; root?: string | undefined }) =>
+      kernel.run<{ branch: string; created: boolean }>("git.checkout-branch", { ...req }),
+    init: (req: { root?: string | undefined } = {}) =>
+      kernel.run<GitStatusReport>("git.init", { ...req }),
+    sync: (req: { action: "fetch" | "pull" | "push"; remote?: string | undefined; timeout_secs?: number | undefined; hooks?: boolean | undefined; root?: string | undefined }) =>
+      kernel.run<{ action: string; remote: string; output: string }>("git.sync", { ...req }),
+  };
+}
+
+export type GitApi = ReturnType<typeof gitApi>;
+
 

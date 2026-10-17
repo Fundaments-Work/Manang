@@ -9,6 +9,7 @@ import type { Kernel } from "./client";
 import { createMockKernel } from "./mock";
 import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject";
 import { figurePlugin } from "./mockFigure";
+import { gitPlugin } from "./mockGit";
 import { searchPlugin } from "./mockSearch";
 import { typstPlugin } from "./mockTypst";
 
@@ -255,6 +256,7 @@ export function createDevKernel(
       projectPlugin(host),
       typstPlugin(host),
       figurePlugin(),
+      gitPlugin(host),
       searchPlugin(host),
     ],
   });

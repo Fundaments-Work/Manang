@@ -33,6 +33,7 @@
       icon: "search",
       shortcut: formatShortcut({ key: "f", mod: true, shift: true }, platform),
     },
+    { view: "source-control", label: "Source Control", icon: "source-control" },
     { view: "figures", label: "Figures", icon: "figures" },
     { view: "references", label: "References", icon: "references" },
     {

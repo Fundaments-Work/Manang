@@ -5,6 +5,7 @@
   import ReferencesPanel from "./panels/ReferencesPanel.svelte";
   import SearchPanel from "./panels/SearchPanel.svelte";
   import SettingsPanel from "./panels/SettingsPanel.svelte";
+  import SourceControlPanel from "./panels/SourceControlPanel.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
@@ -23,6 +24,7 @@
   const LABELS = {
     files: "Files",
     search: "Search",
+    "source-control": "Source Control",
     figures: "Figures",
     references: "References",
     plugins: "Plugins",
@@ -46,6 +48,8 @@
       <FilesPanel />
     {:else if view === "search"}
       <SearchPanel />
+    {:else if view === "source-control"}
+      <SourceControlPanel />
     {:else if view === "figures"}
       <FiguresPanel />
     {:else if view === "references"}

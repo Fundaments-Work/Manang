@@ -625,7 +625,43 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - Match clicks navigate to file, line, and column via `goToMatch`.
 5. **Testing & Verification:**
    - Unit tests in `src/lib/kernel/mockSearch.test.ts` (4 tests) and `src/lib/workbench/search.test.ts` (6 tests).
-   - Updated plugin count and groups in `src/lib/workbench/plugins.test.ts`.
-   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (22 test suites, 209 tests all green).
-   - Passed end-to-end headless verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+## UI Wiring - Task B: Source Control View -> `git.*`
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added typed interfaces matching `crates/manang-git`: `GitStatusFile`, `GitStatusUpstream`, `GitStatusReport`, `GitDiffLine`, `GitDiffHunk`, `GitFileDiff`, `GitDiffResponse`, `GitCommitInfo`, `GitLogResponse`, `GitBranchInfo`, `GitCheckoutResult`, `GitBlameRange`, `GitBlameResponse`, `GitStageResult`, `GitUnstageResult`, `GitDiscardResult`, `GitSyncResult`.
+   - Added `gitApi(kernel)` wrapper with 15 commands: `status`, `diff`, `diffText`, `log`, `blame`, `branches`, `show`, `stage`, `unstage`, `discard`, `commit`, `checkoutBranch`, `init`, `sync`, `open`.
+2. **Browser Mock Plugin (`src/lib/kernel/mockGit.ts`):**
+   - Replicated all 15 commands from `crates/manang-git` over `MockProjectHost`:
+     - Tracks repository state, branches, staged paths, and commit log.
+     - Computes clean status files comparing memory files against baseline.
+     - Supports structured and unified diffs with line numbering and hunks.
+     - Supports discard with confirmation and safety checks.
+     - Supports amend toggle, empty commit message rejection, and author metadata.
+     - Automatically emits `git.changed` and `project.changed` events on mutations.
+   - Registered `gitPlugin(host)` in `src/lib/kernel/dev.ts`.
+3. **Pure Workbench Utilities (`src/lib/workbench/git.ts` & `git.test.ts`):**
+   - Pure helpers: `groupGitFiles` (staged, changes, untracked, conflicted), `formatRelativeTime`, `parseGitError` (parsing `{code, message}` inside error message strings), `gitActionableError` (turning error codes like `no-author` or `uncommitted-changes` into plain-language actionable directions), and `statusBadge` (`M`, `A`, `D`, `U`).
+   - 5 unit tests verifying grouping, status codes, relative time formatting, and error parsing.
+4. **Source Control Panel UI (`src/lib/components/SourceControlPanel.svelte` & `src/lib/components/panels/SourceControlPanel.svelte`):**
+   - Built full view conforming to Fundaments design system:
+     - Empty state when folder is not a repository with "Initialize repository" action.
+     - Staged / Changes / Untracked / Conflicts collapsible groups with counts and badges.
+     - File-level and group-level Stage, Unstage, and Discard (with confirmation warning).
+     - Commit section: message input, Commit button (`git.commit`), amend checkbox, disabled state with actionable explanation when staging is empty or author identity is missing.
+     - Branch header showing active branch, ahead/behind indicators, branch switcher dropdown with branch creation (`git.branches`, `git.checkout-branch`).
+     - "Sync" action (`git.sync`) with in-progress spinner and notification.
+     - Click-to-inspect diff viewer rendering structured diff hunks with line numbers, addition/deletion styling, and close button.
+     - Paged commit history list (`git.log`) with short hashes, subjects, authors, relative timestamps, and "Load more" button.
+     - Auto-refresh on `git.changed` and `project.changed` kernel events.
+5. **Activity Bar & Sidebar Integration:**
+   - Added `"source-control"` icon to `src/lib/components/ui/Icon.svelte`.
+   - Wired `"source-control"` into `SideView` and `SIDE_VIEWS` in `src/lib/workbench/layout.ts`.
+   - Wired into `src/lib/components/ActivityBar.svelte` (with icon and tooltip) and `src/lib/components/SideBar.svelte`.
+6. **Testing & Verification:**
+   - 4 tests in `src/lib/kernel/mockGit.test.ts` and 5 tests in `src/lib/workbench/git.test.ts`.
+   - Updated `src/lib/workbench/plugins.test.ts` to expect 15 git commands (45 total across 4 plugins).
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (24 test suites, 218 tests passing).
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
 
