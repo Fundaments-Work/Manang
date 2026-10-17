@@ -752,5 +752,32 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (28 test suites, 244 tests passing).
    - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
 
+## UI Wiring - Task E: LaTeX and BibTeX Highlighting
+
+### Summary of Changes
+1. **Package Dependency:**
+   - Added `@codemirror/legacy-modes@6.5.5` (MIT license, published by Marijn Haverbeke / CodeMirror maintainer a week ago) providing the canonical `stex` stream parser for LaTeX/TeX.
+2. **Editor Languages Module (`src/lib/editor/languages.ts`):**
+   - Implemented `languageFor(path)` selecting language by extension:
+     - LaTeX: `.tex`, `.sty`, `.cls`, `.dtx`, `.ltx`
+     - BibTeX: `.bib`, `.biblatex`
+     - Typst: `.typ`
+     - Markdown: `.md`, `.markdown`
+     - Fallback: `"plain"`
+   - Implemented custom `bibtexParser` via `StreamParser<BibtexParserState>` and `bibtexLanguage` (`StreamLanguage.define(bibtexParser)`):
+     - Parses `@entryType{citationKey, field = value}` structures.
+     - Supports quoted strings (`"..."`), nested braced strings (`{...}`), integers, variable/macro references, and comment lines (`%` and `@comment{...}`).
+     - Maps tokens to Lezer tags using explicit `tokenTable`: `tags.keyword`, `tags.labelName`, `tags.propertyName`, `tags.string`, `tags.number`, `tags.comment`, `tags.bracket`, `tags.punctuation`, `tags.operator`.
+   - Implemented `loadLanguageExtension(language)` with lazy-loaded code-splitting for `markdown`, `typst`, `latex` (stex), `bibtex`, and `plain`.
+3. **Theme Highlight Style Mappings (`src/lib/editor/theme.ts`):**
+   - Added `manangLatexHighlight` styling commands, math delimiters, comments, numbers, brackets, and labels.
+   - Added `manangBibtexHighlight` styling entry types and property names (`var(--mng-text)`), citation keys (`var(--mng-math)` Sage tone), strings/numbers (`var(--mng-text-60)`), and comments (`var(--mng-text-muted)` in italic).
+4. **Editor View Swapping (`src/lib/editor/view.ts`):**
+   - Swapped language resolution lines to import and re-export `languageFor`, `EditorLanguage`, and delegate language loading to `loadLanguageExtension`.
+5. **Testing & Verification:**
+   - 9 unit tests in `src/lib/editor/languages.test.ts` verifying language selection across `.tex`, `.sty`, `.cls`, `.bib`, `.typ`, `.md`, tokenizing BibTeX entries/comments, and extension loading.
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (29 test suites, 253 tests passing).
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
 
 
