@@ -664,4 +664,50 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (24 test suites, 218 tests passing).
    - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
 
+## UI Wiring - Task C: Settings Page -> `settings.*`, `keybindings.*`, `theme.*`
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added typed interfaces matching `crates/manang-settings`: `SettingDef`, `SettingsSchema`, `SettingDescription`, `SettingsGetAllResponse`, `KeybindingItem`, `KeybindingConflict`, `KeybindingsListResponse`, `ThemeSummary`, `ThemeDetail`, `ThemeListResponse`.
+   - Added `settingsApi(kernel)` with overloads for `get` (single or all), `set`, `reset`, `schema`, `register`, `openFile`, `useProject`.
+   - Added `keybindingsApi(kernel)` with `list`, `resolve`, `set`, `reset`, `register`.
+   - Added `themeApi(kernel)` with `list`, `get`.
+2. **Browser Mock Plugin (`src/lib/kernel/mockSettings.ts`):**
+   - Replicated all 14 commands across the 3 namespaces (`settings.*`, `keybindings.*`, `theme.*`) over `MockProjectHost`:
+     - Registered core definitions matching `crates/manang-settings/src/defaults.rs` across `editor`, `preview`, `compile`, `files`, and `appearance`.
+     - Validates candidate values against type constraints (int/float bounds, enums, strings, booleans).
+     - Distinguishes user vs. project scope; handles project activation via `settings.use-project`.
+     - Tracks user keybinding overrides with conflict reporting.
+     - Serves built-in dark and light themes with accurate tokens from `src/app.css` / `theme.rs`.
+     - Publishes `settings.changed` and `keybindings.changed` events on the bus.
+   - Registered `settingsPlugin(host)` in `src/lib/kernel/dev.ts`.
+3. **Pure Workbench Utilities (`src/lib/workbench/settings.ts` & `settings.test.ts`):**
+   - Implemented `groupSettings` for stable grouping (Editor, Preview, Compile, Files, Appearance, and alphabetical plugins).
+   - Implemented `filterSettings` for fuzzy/containment search across IDs, humanized titles, and descriptions.
+   - Implemented `formatSettingTitle` and `formatCategoryLabel`.
+   - Implemented `isSettingModified` and `validateSettingValue`.
+   - Implemented `recordShortcutFromEvent`, `formatShortcutDisplay`, and `findCommandConflicts`.
+   - 9 unit tests covering grouping, search filtering, modified detection, type validation, and key recording.
+4. **Settings Panel UI (`src/lib/components/SettingsPanel.svelte`, `panels/SettingsPanel.svelte`, and `src/lib/components/settings/`):**
+   - Built full view conforming to Fundaments design system:
+     - Tabs for Settings, Keyboard shortcuts, and About.
+     - Search filter with live matching across setting ID, title, and description.
+     - User / Project scope toggle; Project scope disabled with tooltip when no project is open.
+     - Form dynamically generated from `settings.schema` with specialized controls:
+       - Boolean switch with accessibility label.
+       - Integer and float inputs with range sliders when bounds are present.
+       - Select dropdown for enum settings.
+       - Text and path inputs.
+     - Per-setting modified indicator and reset button calling `settings.reset`.
+     - Inline validation error alerts when invalid values are entered.
+     - Theme selector switching between Dark and Light via `settings.set` and `layout.setTheme`, applying `.theme-light` on document root.
+     - "Open file" button calling `settings.open-file` to reveal config file paths.
+     - Keybindings table view with shortcut display, "Press keys..." recording modal, conflict detection notifications, and reset action.
+5. **Testing & Verification:**
+   - 5 tests in `src/lib/kernel/mockSettings.test.ts` and 9 tests in `src/lib/workbench/settings.test.ts`.
+   - Updated `src/lib/workbench/plugins.test.ts` to expect 14 settings commands (59 total across 5 plugins).
+   - Passed `pnpm run typecheck && pnpm run lint && pnpm vitest run` (26 test suites, 232 tests passing).
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).
+
+
 

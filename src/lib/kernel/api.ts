@@ -362,4 +362,143 @@ export function gitApi(kernel: Kernel) {
 
 export type GitApi = ReturnType<typeof gitApi>;
 
+// ---------------------------------------------------------------------------
+// Settings, Keybindings & Theme
+// ---------------------------------------------------------------------------
+
+export type SettingScope = "user" | "project";
+
+export interface SettingDef {
+  readonly id: string;
+  readonly type: "bool" | "int" | "float" | "enum" | "string" | "path" | "list";
+  readonly min?: number | undefined;
+  readonly max?: number | undefined;
+  readonly values?: readonly string[] | undefined;
+  readonly item?: unknown | undefined;
+  readonly default: unknown;
+  readonly description: string;
+  readonly scope: SettingScope;
+  readonly requires_restart: boolean;
+  readonly owner: string;
+  readonly category: string;
+}
+
+export interface SettingsSchema {
+  readonly version: number;
+  readonly categories: readonly string[];
+  readonly settings: readonly SettingDef[];
+}
+
+export interface SettingDescription {
+  readonly id: string;
+  readonly value: unknown;
+  readonly source: "default" | "user" | "project";
+  readonly default: unknown;
+  readonly "requires-restart"?: boolean | undefined;
+  readonly written?: string | undefined;
+}
+
+export interface SettingsGetAllResponse {
+  readonly values: Record<string, { readonly value: unknown; readonly source: "default" | "user" | "project" }>;
+  readonly warnings: readonly { readonly layer: string; readonly id: string | null; readonly message: string }[];
+}
+
+export interface KeybindingItem {
+  readonly command: string;
+  readonly key: string;
+  readonly display: string;
+  readonly when: string;
+  readonly source: "default" | "user";
+}
+
+export interface KeybindingConflict {
+  readonly key: string;
+  readonly kind: "conflict" | "shadow";
+  readonly commands: readonly string[];
+}
+
+export interface KeybindingsListResponse {
+  readonly platform: string;
+  readonly bindings: readonly KeybindingItem[];
+  readonly conflicts: readonly KeybindingConflict[];
+  readonly warnings?: readonly string[] | undefined;
+}
+
+export interface ThemeSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly scheme: "dark" | "light";
+  readonly builtin: boolean;
+  readonly base: string | null;
+}
+
+export interface ThemeDetail {
+  readonly id: string;
+  readonly name: string;
+  readonly scheme: "dark" | "light";
+  readonly builtin: boolean;
+  readonly base: string | null;
+  readonly tokens: Record<string, string>;
+  readonly overrides: Record<string, string>;
+}
+
+export interface ThemeListResponse {
+  readonly themes: readonly ThemeSummary[];
+  readonly warnings: readonly string[];
+}
+
+export function settingsApi(kernel: Kernel) {
+  function get(id: string): Promise<SettingDescription>;
+  function get(): Promise<SettingsGetAllResponse>;
+  function get(id?: string | undefined): Promise<SettingDescription | SettingsGetAllResponse> {
+    return id !== undefined
+      ? kernel.run<SettingDescription>("settings.get", { id })
+      : kernel.run<SettingsGetAllResponse>("settings.get", {});
+  }
+
+  return {
+    get,
+    set: (req: { id: string; value: unknown; scope?: SettingScope | undefined }) =>
+      kernel.run<SettingDescription>("settings.set", { ...req }),
+    reset: (req: { id: string; scope?: SettingScope | undefined }) =>
+      kernel.run<SettingDescription>("settings.reset", { ...req }),
+    schema: () =>
+      kernel.run<SettingsSchema>("settings.schema", {}),
+    register: (req: { settings: readonly SettingDef[]; owner?: string | undefined }) =>
+      kernel.run<{ registered: number; warnings: readonly unknown[] }>("settings.register", { ...req }),
+    openFile: (scope: "user" | "project" | "keybindings") =>
+      kernel.run<{ path: string; created: boolean }>("settings.open-file", { scope }),
+    useProject: (path: string | null) =>
+      kernel.run<{ warnings: readonly unknown[] }>("settings.use-project", { path }),
+  };
+}
+
+export type SettingsApi = ReturnType<typeof settingsApi>;
+
+export function keybindingsApi(kernel: Kernel) {
+  return {
+    list: () =>
+      kernel.run<KeybindingsListResponse>("keybindings.list", {}),
+    resolve: (req: { key: string; context?: string | readonly string[] | undefined }) =>
+      kernel.run<unknown>("keybindings.resolve", { ...req }),
+    set: (req: { command: string; key?: string | undefined; keys?: readonly string[] | undefined; when?: string | undefined }) =>
+      kernel.run<{ command: string; keys: readonly string[]; when: string; conflicts: readonly KeybindingConflict[] }>("keybindings.set", { ...req }),
+    reset: (command?: string | undefined) =>
+      kernel.run<{ command: string | null }>("keybindings.reset", command ? { command } : {}),
+  };
+}
+
+export type KeybindingsApi = ReturnType<typeof keybindingsApi>;
+
+export function themeApi(kernel: Kernel) {
+  return {
+    list: () =>
+      kernel.run<ThemeListResponse>("theme.list", {}),
+    get: (id: string) =>
+      kernel.run<ThemeDetail>("theme.get", { id }),
+  };
+}
+
+export type ThemeApi = ReturnType<typeof themeApi>;
+
 
