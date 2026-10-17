@@ -63,6 +63,37 @@ export interface RecentProject {
   readonly exists: boolean;
 }
 
+/** One project in the registry (`project.list`, `project.register`, `project.update`). */
+export interface ProjectEntry {
+  readonly path: string;
+  readonly name: string;
+  readonly engine: Engine;
+  /** Seconds since the Unix epoch. */
+  readonly created: number;
+  readonly last_opened: number;
+  readonly pinned: boolean;
+  readonly archived: boolean;
+  readonly tags: readonly string[];
+  /** False when the folder or its `manang.toml` has gone. */
+  readonly exists: boolean;
+  readonly has_thumbnail: boolean;
+}
+
+export type ProjectSort = "modified" | "name" | "created";
+
+export interface ProjectListQuery {
+  readonly query?: string;
+  readonly sort?: ProjectSort;
+  readonly include_archived?: boolean;
+}
+
+export interface ProjectPatch {
+  readonly name?: string;
+  readonly pinned?: boolean;
+  readonly archived?: boolean;
+  readonly tags?: readonly string[];
+}
+
 export type ChangeState =
   | "added"
   | "modified"
