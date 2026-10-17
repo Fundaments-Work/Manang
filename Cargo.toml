@@ -11,6 +11,7 @@ members = [
     "crates/manang-project",
     "crates/manang-buffer",
     "crates/manang-figure",
+    "crates/manang-settings",
     "crates/manang-git",
     "crates/manang-search",
 ]

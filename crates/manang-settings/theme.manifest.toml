@@ -1,0 +1,17 @@
+[plugin]
+name = "theme"
+version = "0.1.0"
+description = "Brand-locked built-in and user themes"
+tier = "native"
+
+[permissions]
+filesystem = ["write:config"]
+
+[contributes]
+[[contributes.commands]]
+id = "theme.list"
+title = "List themes"
+
+[[contributes.commands]]
+id = "theme.get"
+title = "Read a theme"

@@ -1,0 +1,16 @@
+---
+source: crates/manang-settings/tests/plugin.rs
+expression: "all[\"warnings\"]"
+---
+[
+  {
+    "id": "editor.mystery",
+    "layer": "user",
+    "message": "unknown setting `editor.mystery`; kept in the file but has no effect"
+  },
+  {
+    "id": "zzz.flag",
+    "layer": "user",
+    "message": "unknown setting `zzz.flag`; kept in the file but has no effect"
+  }
+]
