@@ -1,0 +1,13 @@
+---
+source: crates/manang-latex/tests/log_parser.rs
+expression: "parse_tex_log(log, \"main.tex\")"
+---
+[
+  {
+    "severity": "error",
+    "message": "Undefined control sequence.",
+    "file": "main.tex",
+    "line": 7,
+    "hint": "check the spelling or load the package that provides this command"
+  }
+]

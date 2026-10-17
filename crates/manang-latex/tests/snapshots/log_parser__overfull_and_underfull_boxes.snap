@@ -1,0 +1,27 @@
+---
+source: crates/manang-latex/tests/log_parser.rs
+expression: diagnostics
+---
+[
+  {
+    "severity": "warning",
+    "message": "Overfull \\hbox (119.62pt too wide) detected at line 3",
+    "file": "main.tex",
+    "line": 3,
+    "hint": "the content is wider than the line: rephrase, allow hyphenation, or use `\\sloppy`"
+  },
+  {
+    "severity": "warning",
+    "message": "Underfull \\hbox (badness 10000) detected at line 6",
+    "file": "main.tex",
+    "line": 6,
+    "hint": null
+  },
+  {
+    "severity": "warning",
+    "message": "Overfull \\hbox (90.6pt too wide) in paragraph at lines 7--8",
+    "file": "main.tex",
+    "line": 7,
+    "hint": "the content is wider than the line: rephrase, allow hyphenation, or use `\\sloppy`"
+  }
+]
