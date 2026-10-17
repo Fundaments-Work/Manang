@@ -25,8 +25,15 @@ Requires Rust 1.85+, Node 22+, and pnpm 10. On Linux the Tauri shell needs
 pnpm install          # install the frontend workspace
 pnpm app:dev          # run the desktop shell (Vite + Tauri)
 pnpm typecheck        # svelte-check + tsc
+pnpm test             # vitest, pure-logic unit suites
 pnpm lint             # eslint
+pnpm verify:ui        # headless UI verification (needs the dev server running)
 ```
+
+The UI verification drives the system Chromium over the DevTools protocol
+rather than downloading a browser, so it runs offline and against the same
+binary used in development. It writes annotated screenshots to
+`artifacts/screens/`.
 
 Rust quality gates, per `AGENTS.md`:
 
@@ -43,7 +50,11 @@ Cargo.toml          Rust workspace (release profile lives here, not in a member)
 src-tauri/          Tauri shell: lifecycle and IPC surface only
 frontend/           Svelte 5 presentation shell
   src/app.css       Design tokens — the single source of UI truth
+  src/lib/editor/   CodeMirror 6 mount, theme, Margin Whispers
+  src/lib/ink/      Figure scene graph and geometry (pure, unit tested)
+  src/lib/commands/ Command registry and fuzzy matcher
   src/lib/state/    Rune-based view state, kept close to the leaves
+scripts/            Headless UI verification
 docs/plans/         Architecture and roadmap
 docs/adr/           Architecture decision records
 ```

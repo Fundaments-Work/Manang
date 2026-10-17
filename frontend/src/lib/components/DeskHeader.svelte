@@ -2,6 +2,7 @@
   import HairButton from "./ui/HairButton.svelte";
   import Mark from "./Mark.svelte";
   import { desk } from "$lib/state/desk.svelte";
+  import { document } from "$lib/state/document.svelte";
 
   /**
    * Desk header — DESIGN.md §3.1.
@@ -9,7 +10,7 @@
    * h-10, px-4, 1px hairline along the bottom. Mark and wordmark left,
    * breadcrumb centre, responsive actions right.
    */
-  const breadcrumb = $derived(["papers", "quantum_entropy.typ"]);
+  const parts = $derived(document.meta.path.split("/"));
 </script>
 
 <header class="flex h-10 shrink-0 items-center gap-4 border-b border-line px-4">
@@ -25,15 +26,13 @@
 
   <nav aria-label="Breadcrumb" class="min-w-0 flex-1">
     <ol class="flex items-center gap-1.5 font-mono text-xs text-text-60">
-      {#each breadcrumb as crumb, index (crumb)}
-        <li class="flex items-center gap-1.5">
+      {#each parts as part, index (part)}
+        <li class="flex min-w-0 items-center gap-1.5">
           {#if index > 0}
             <span aria-hidden="true" class="text-text-muted">/</span>
           {/if}
-          <span
-            class={index === breadcrumb.length - 1 ? "truncate text-text" : "truncate"}
-          >
-            {crumb}
+          <span class="truncate" class:text-text={index === parts.length - 1}>
+            {part}
           </span>
         </li>
       {/each}
@@ -42,10 +41,22 @@
 
   <div class="flex items-center gap-1.5">
     <HairButton
+      label="Library"
+      pressed={desk.libraryOpen}
+      onactivate={() => (desk.libraryOpen = !desk.libraryOpen)}
+      icon={ShelfIcon}
+    />
+    <HairButton
       label="Draw"
       pressed={desk.canvasOpen}
       onactivate={desk.toggleCanvas}
       icon={PenIcon}
+    />
+    <HairButton
+      label="Slides"
+      pressed={desk.slideMode}
+      onactivate={() => (desk.slideMode = !desk.slideMode)}
+      icon={SlidesIcon}
     />
     <HairButton
       label="Split"
@@ -61,6 +72,43 @@
     />
   </div>
 </header>
+
+{#snippet ShelfIcon()}
+  <svg
+    viewBox="0 0 16 16"
+    width="12"
+    height="12"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.25"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M2.5 3.5 H6" />
+    <path d="M2.5 8 H6" />
+    <path d="M2.5 12.5 H6" />
+    <path d="M8.5 3.5 H13.5" />
+    <path d="M8.5 8 H13.5" />
+    <path d="M8.5 12.5 H13.5" />
+  </svg>
+{/snippet}
+
+{#snippet SlidesIcon()}
+  <svg
+    viewBox="0 0 16 16"
+    width="12"
+    height="12"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.25"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M2.5 3 H13.5 V11 H2.5 Z" />
+    <path d="M8 11 V13.5" />
+    <path d="M5.5 13.5 H10.5" />
+  </svg>
+{/snippet}
 
 {#snippet PenIcon()}
   <svg

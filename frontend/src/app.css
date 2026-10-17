@@ -194,6 +194,65 @@
     color: var(--mng-text);
   }
 
+  /* -------------------------------------------------------------- */
+  /* Margin Whispers — DESIGN.md §3.2                                  */
+  /* -------------------------------------------------------------- */
+
+  .manang-whisper-gutter {
+    /* 12px of gutter carries a 4px square plus its breathing room. */
+    width: 12px;
+  }
+
+  .manang-whisper {
+    display: block;
+    width: 4px;
+    height: 4px;
+  }
+
+  .manang-whisper-tooltip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    max-width: 26rem;
+  }
+
+  .manang-whisper-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .manang-whisper-label {
+    /* Severity is a word, never a bare colour. */
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--mng-text-60);
+    flex-shrink: 0;
+  }
+
+  .manang-whisper-message {
+    color: var(--mng-text);
+  }
+
+  .manang-whisper-fix {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    color: var(--mng-accent);
+    background: none;
+    border: 1px solid var(--mng-line);
+    padding: 1px 6px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .manang-whisper-fix:hover {
+    background-color: var(--mng-surface-hi);
+  }
+
   :focus-visible {
     outline: var(--hairline) solid var(--mng-accent);
     outline-offset: -1px;

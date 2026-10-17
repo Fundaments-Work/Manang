@@ -5,8 +5,12 @@
 # Node
 node_modules
 .pnpm-store
-dist
-build
+
+# Frontend build output
+frontend/dist
+
+# Verification artifacts
+artifacts
 
 # Tauri generated
 src-tauri/gen/schemas
