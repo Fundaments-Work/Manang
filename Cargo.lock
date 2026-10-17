@@ -4290,6 +4290,8 @@ dependencies = [
 name = "manang-editor"
 version = "0.1.0"
 dependencies = [
+ "criterion 0.5.1",
+ "manang-buffer",
  "manang-kernel",
  "parking_lot",
  "proptest",

@@ -16,4 +16,6 @@ pub enum EditorError {
         #[source]
         source: std::io::Error,
     },
+    #[error(transparent)]
+    Buffer(#[from] manang_buffer::BufferError),
 }

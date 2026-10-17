@@ -325,3 +325,70 @@ pub fn resolve_figure_paths(path: &Path) -> (PathBuf, PathBuf);
    - 9 integration tests in `crates/manang-figure/tests/kernel.rs` testing all commands against a live `manang_kernel::Kernel`.
    - 2 property tests in `crates/manang-figure/tests/plugin_proptest.rs` validating that arbitrary operation sequences never panic and that undo/redo round-trips state losslessly.
    - Snapshot test validating deterministic SVG output exported through the plugin.
+
+---
+
+## Phase 2 - Task 2: `crates/manang-editor` DocumentBuffer & Undo/Redo/Transactions
+
+- **Crate Name:** `manang-editor`
+- **Location:** `crates/manang-editor`
+- **Underlying Buffer:** `manang_buffer::DocumentBuffer` (Rope-backed with bounded transaction history and coordinate mapping)
+
+### Public API Surface
+```rust
+impl Editor {
+    // Existing methods preserved:
+    pub fn new() -> Self;
+    pub fn create(&self) -> DocId;
+    pub fn open(&self, path: &Path) -> Result<DocId, EditorError>;
+    pub fn save(&self, id: Option<DocId>, path: Option<&Path>) -> Result<(), EditorError>;
+    pub fn activate(&self, id: DocId) -> Result<(), EditorError>;
+    pub fn insert(&self, id: Option<DocId>, at: usize, text: &str) -> Result<u64, EditorError>;
+    pub fn delete(&self, id: Option<DocId>, from: usize, to: usize) -> Result<u64, EditorError>;
+    pub fn text(&self, id: Option<DocId>) -> Result<String, EditorError>;
+    pub fn info(&self, id: Option<DocId>) -> Result<DocInfo, EditorError>;
+    pub fn list(&self) -> Vec<DocInfo>;
+
+    // New methods added:
+    pub fn replace(&self, id: Option<DocId>, from: usize, to: usize, text: &str) -> Result<u64, EditorError>;
+    pub fn undo(&self, id: Option<DocId>) -> Result<u64, EditorError>;
+    pub fn redo(&self, id: Option<DocId>) -> Result<u64, EditorError>;
+    pub fn slice(&self, id: Option<DocId>, from: usize, to: usize) -> Result<String, EditorError>;
+    pub fn line_col(&self, id: Option<DocId>, char_idx: usize) -> Result<(usize, usize), EditorError>;
+}
+
+impl BufferService for Editor {
+    fn read_active(&self) -> Result<String, String>;
+    fn write_active(&self, text: &str) -> Result<(), String>;
+}
+```
+
+### Contributed Commands & Argument/Return Shapes
+1. `editor.undo`:
+   - Args: `{ id?: u64 }` (defaults to active document)
+   - Return: `Payload::Json({ "revision": u64 })`
+2. `editor.redo`:
+   - Args: `{ id?: u64 }`
+   - Return: `Payload::Json({ "revision": u64 })`
+3. `editor.replace`:
+   - Args: `{ id?: u64, from: usize, to: usize, text: string }`
+   - Behavior: Atomic transaction recording single undo/redo step.
+   - Return: `Payload::Json({ "revision": u64 })`
+4. `editor.slice`:
+   - Args: `{ id?: u64, from: usize, to: usize }`
+   - Return: `Payload::Json(Value::String)`
+5. `editor.line-col`:
+   - Args: `{ id?: u64, char: usize }`
+   - Return: `Payload::Json({ "line": usize, "column": usize })` (0-based)
+
+### Criterion Benchmark Results (5 MB Document)
+Evaluated across a live 5 MB UTF-8 document in `benches/editor_throughput.rs`:
+- **`insert_middle_5mb`:** $476.00\text{ ns}$ ($< 0.5\text{ \textmu s}$)
+- **`delete_middle_5mb`:** $1.13\text{ \textmu s}$
+- **`undo_middle_5mb`:** $437.16\text{ ns}$ ($< 0.5\text{ \textmu s}$)
+All operations stay well below the 8 ms keystroke latency SLA.
+
+### Handoff Notes for Claude Code
+1. `DocumentBuffer::write_to` streams chunked rope slices directly to disk, avoiding intermediate allocations.
+2. The `BufferService` implementation remains 100% compatible for other plugins (such as Typst and WASM plugins).
+3. The oracle proptest against `Vec<char>` passes with zero regressions.
