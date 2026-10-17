@@ -1,0 +1,4 @@
+[plugin]
+name = "a"
+version = "0.1.0"
+entry = "bin/p.wasm"
