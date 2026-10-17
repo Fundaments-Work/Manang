@@ -37,6 +37,10 @@ id = "writing.spell.words"
 title = "List user dictionary words"
 
 [[contributes.commands]]
+id = "writing.spell.languages"
+title = "List spelling languages"
+
+[[contributes.commands]]
 id = "writing.lint.prose"
 title = "Lint prose"
 
