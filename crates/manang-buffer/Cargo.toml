@@ -8,8 +8,6 @@ authors = ["Fundaments.work"]
 repository = "https://github.com/Fundaments-Work/Manang"
 rust-version = "1.85"
 
-[workspace]
-
 [dependencies]
 ropey = "1.6"
 serde = { version = "1", features = ["derive"] }
