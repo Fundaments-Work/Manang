@@ -1,0 +1,137 @@
+---
+source: crates/manang-git/tests/diff_snapshots.rs
+expression: v
+---
+{
+  "files": [
+    {
+      "additions": 2,
+      "binary": false,
+      "deletions": 1,
+      "hunks": [
+        {
+          "header": "@@ -1,7 +1,8 @@",
+          "lines": [
+            {
+              "kind": "context",
+              "new_line": 1,
+              "new_offset": 0,
+              "no_newline": false,
+              "old_line": 1,
+              "old_offset": 0,
+              "text": "= Title"
+            },
+            {
+              "kind": "context",
+              "new_line": 2,
+              "new_offset": 8,
+              "no_newline": false,
+              "old_line": 2,
+              "old_offset": 8,
+              "text": ""
+            },
+            {
+              "kind": "remove",
+              "new_line": null,
+              "new_offset": null,
+              "no_newline": false,
+              "old_line": 3,
+              "old_offset": 9,
+              "text": "First paragraph."
+            },
+            {
+              "kind": "add",
+              "new_line": 3,
+              "new_offset": 9,
+              "no_newline": false,
+              "old_line": null,
+              "old_offset": null,
+              "text": "First paragraph, edited."
+            },
+            {
+              "kind": "context",
+              "new_line": 4,
+              "new_offset": 34,
+              "no_newline": false,
+              "old_line": 4,
+              "old_offset": 26,
+              "text": "Second line."
+            },
+            {
+              "kind": "context",
+              "new_line": 5,
+              "new_offset": 47,
+              "no_newline": false,
+              "old_line": 5,
+              "old_offset": 39,
+              "text": "Third line."
+            },
+            {
+              "kind": "add",
+              "new_line": 6,
+              "new_offset": 59,
+              "no_newline": false,
+              "old_line": null,
+              "old_offset": null,
+              "text": "Inserted ünïcode 😀."
+            },
+            {
+              "kind": "context",
+              "new_line": 7,
+              "new_offset": 80,
+              "no_newline": false,
+              "old_line": 6,
+              "old_offset": 51,
+              "text": ""
+            },
+            {
+              "kind": "context",
+              "new_line": 8,
+              "new_offset": 81,
+              "no_newline": false,
+              "old_line": 7,
+              "old_offset": 52,
+              "text": "End."
+            }
+          ],
+          "new_lines": 8,
+          "new_start": 1,
+          "old_lines": 7,
+          "old_start": 1
+        }
+      ],
+      "path": "doc.typ",
+      "status": "modified",
+      "too_large": false
+    },
+    {
+      "additions": 1,
+      "binary": false,
+      "deletions": 0,
+      "hunks": [
+        {
+          "header": "@@ -0,0 +1,1 @@",
+          "lines": [
+            {
+              "kind": "add",
+              "new_line": 1,
+              "new_offset": 0,
+              "no_newline": false,
+              "old_line": null,
+              "old_offset": null,
+              "text": "brand new"
+            }
+          ],
+          "new_lines": 1,
+          "new_start": 1,
+          "old_lines": 0,
+          "old_start": 0
+        }
+      ],
+      "path": "fresh.txt",
+      "status": "added",
+      "too_large": false
+    }
+  ],
+  "staged": false
+}
