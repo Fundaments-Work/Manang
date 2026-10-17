@@ -1,0 +1,10 @@
+---
+source: crates/manang-project/src/config.rs
+expression: "err(\"[project]\\nname = \\\"x\\\"\\n\")"
+---
+manang.toml does not match the schema:
+TOML parse error at line 1, column 1
+  |
+1 | [project]
+  | ^^^^^^^^^
+missing field `engine`

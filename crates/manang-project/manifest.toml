@@ -1,0 +1,57 @@
+[plugin]
+name = "project"
+version = "0.1.0"
+description = "Project config, file tree, confined file operations, watching and git status"
+tier = "native"
+
+[permissions]
+filesystem = ["write:project"]
+
+[contributes]
+[[contributes.commands]]
+id = "project.open"
+title = "Open project"
+
+[[contributes.commands]]
+id = "project.close"
+title = "Close project"
+
+[[contributes.commands]]
+id = "project.create"
+title = "New project"
+
+[[contributes.commands]]
+id = "project.config"
+title = "Read project configuration"
+
+[[contributes.commands]]
+id = "project.tree"
+title = "List project files"
+
+[[contributes.commands]]
+id = "project.read-file"
+title = "Read text file"
+
+[[contributes.commands]]
+id = "project.read-bytes"
+title = "Read binary file"
+
+[[contributes.commands]]
+id = "project.write-file"
+title = "Write text file"
+
+[[contributes.commands]]
+id = "project.rename"
+title = "Rename or move file"
+
+[[contributes.commands]]
+id = "project.delete"
+title = "Move file to trash"
+
+[[contributes.commands]]
+id = "project.recent"
+title = "Recent projects"
+
+[[contributes.commands]]
+id = "project.git-status"
+title = "Git status"

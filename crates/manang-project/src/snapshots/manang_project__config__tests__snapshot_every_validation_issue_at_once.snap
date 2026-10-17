@@ -1,0 +1,13 @@
+---
+source: crates/manang-project/src/config.rs
+expression: "err(r#\"\n[project]\nengine = \"typst\"\nname = \"  \"\nmain = \"../outside.tex\"\n\n[template]\nid = \"bad id!\"\nversion = \"\"\n\n[bibliography]\npaths = [\"refs.bib\", \"refs.bib\", \"/etc/passwd\", \"notes.txt\", \"\"]\n\"#)"
+---
+manang.toml is invalid:
+  - `project.name`: must not be empty
+  - `project.main`: path `../outside.tex` escapes the project root
+  - `template.id`: may only contain letters, digits, `-`, `_`, `.` and `/`
+  - `template.version`: must not be empty
+  - `bibliography.paths[1]`: `refs.bib` is listed more than once
+  - `bibliography.paths[2]`: invalid path `/etc/passwd`: path must be relative to the project
+  - `bibliography.paths[3]`: `notes.txt` is not a bibliography file; expected one of `.bib`, `.bibtex`, `.yml`, `.yaml`
+  - `bibliography.paths[4]`: must not be empty

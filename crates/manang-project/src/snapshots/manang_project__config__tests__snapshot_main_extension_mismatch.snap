@@ -1,0 +1,6 @@
+---
+source: crates/manang-project/src/config.rs
+expression: "err(\"[project]\\nengine = \\\"markdown\\\"\\nmain = \\\"main.typ\\\"\\n\")"
+---
+manang.toml is invalid:
+  - `project.main`: `main.typ` does not look like a markdown document; expected extension `.md` or `.markdown`

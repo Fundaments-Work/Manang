@@ -1,0 +1,10 @@
+---
+source: crates/manang-project/src/config.rs
+expression: "err(\"[project]\\nengine = \\\"word\\\"\\n\")"
+---
+manang.toml does not match the schema:
+TOML parse error at line 2, column 10
+  |
+2 | engine = "word"
+  |          ^^^^^^
+unknown variant `word`, expected one of `typst`, `latex`, `markdown`

@@ -1,0 +1,6 @@
+---
+source: crates/manang-project/src/config.rs
+expression: "err(\"[project]\\nengine = \\\"typst\\\"\\nzzzzzzzz = 1\\n\")"
+---
+manang.toml is invalid:
+  - `project.zzzzzzzz`: unknown key (valid keys in [project]: engine, name, main)
