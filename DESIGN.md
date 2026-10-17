@@ -1,292 +1,139 @@
-# DESIGN.md — Visual Design & UI/UX Master Specification
+# DESIGN.md: the Manang workbench
 
-**Project:** Manang  
-**Role:** Canonical Visual Design & UI/UX System Specification  
-**Design System Authority:** [Fundaments.work Design System](file:///run/media/sapiens/Development/Fundaments/design-system)  
-**Version:** 3.0.0 (Visual Master Plan)  
+**Design system authority:** [Fundaments.work](https://fundaments.work/brand/) ("square, quiet, and set in two weights").
+**Scope:** the desktop shell: layout, surfaces, states, interaction and accessibility. Engine behaviour lives in the Rust crates; this document describes only what the shell presents and how it is operated.
 
----
+## 1. What it is
 
-## 1. Product Thesis: "Paper & Pen" Immediacy
+Manang is a workbench for writing: a familiar editor layout (activity bar, side panel, tabs, editor with live preview, bottom panel, status bar) with a geometric identity of its own. It should feel as immediate as VS Code or Zed to someone who has used either, and look like nothing else.
 
-Manang is designed to be the tool people instinctively open whenever they think of document preparation—academic papers, conference slide decks, technical reports, mathematical notes, or books.
+Three rules shape every decision:
 
-Traditional authoring tools bury the writer in technical friction: arcane LaTeX package errors, shifting margins, multi-button toolbars, and laggy compilation loops.
+1. **The shell is thin.** Everything real (files, git, compile, diagnostics, plugins) comes from the Rust kernel through `kernel.run` / `kernel.runBinary`. The shell renders and dispatches.
+2. **One signal per frame.** Acid lime marks *where you are*: the active tab's top rule, the open activity icon's edge, the selected slide's edge, the focus ring, the selection. It is never decoration and never used for a button fill.
+3. **Square, quiet, tonal.** Radius 0, 1px hairlines, depth by tonal step only.
 
-**Manang's core design promise is radical simplicity:** writing in Manang feels as immediate, natural, and calm as opening a blank notebook and writing with a fountain pen. Under the hood, a high-performance Rust core and WebAssembly plugin architecture do all the heavy lifting, but the user interface remains completely quiet, focused, and frictionless.
+## 2. Tokens (unchanged, in `src/app.css`)
 
----
+| Token | Dark | Use |
+| --- | --- | --- |
+| `--mng-bg` | `#141416` | base, editor |
+| `--mng-surface` / `-hi` / `-muted` | `#1c1c20` / `#28282c` / `#353539` | side panel, tab strip, status bar / hover, selected row / reserved |
+| `--mng-line` | `#3d3d42` | every hairline (1px) |
+| `--mng-text` / `-60` / `-muted` | `#e8e6e1` / `#9a9a9a` / `#7a7a7a` | primary / secondary / hints and disabled (never body text) |
+| `--mng-accent` | `#c6f135` | the signal above |
+| `--mng-math` | `#b3d17a` | sage, sparingly: math in the editor, search match tint |
+| paper | `#faf9f7` / `#1c1c1c` | the rendered page and slides; identical in every theme |
 
-## 2. Visual Identity & Design Tokens
+Type: DM Sans 300 and 400, DM Mono 400, nothing else. Scale: 11px (meta, status, mono hints), 12px (UI), 13px (editor, forms), 15px (wordmark, dialog titles), 28px (welcome). Hierarchy comes from size and colour, never a third weight. Sentence case everywhere; no tracked capitals, no eyebrow labels. Spacing is the 4px scale. Motion is limited to the palette fade and the zen hint, both responses to an action; `prefers-reduced-motion` removes it.
 
-Manang is strictly governed by the **Fundaments.work Design System**: *"Square, quiet, and set in two weights."*
+Shared controls live in `app.css` as `.mng-btn`, `.mng-icon-btn`, `.mng-field`, `.mng-kbd`, `.mng-panel-head`. Icons are a 16-unit inline set (`ui/Icon.svelte`): squares, rules and diagonals, no circles.
 
-### 2.1. The Mark & Identity
-* **The Mark (`[⩓]`):** Constructed on a strict 24-unit geometric grid with zero corner radius. Two upright pilasters bridged by an apex chevron, evoking both an open book and an ink nib.
-* **The Wordmark:** Set cleanly in **DM Sans 300** (`font-light`, tracking `-0.02em`, 15px). Unadorned, self-contained, confident.
-* **Credit Attribution:** Placed respectfully in settings and about dialogues as `Made by Fundaments.work` in DM Mono 400.
-
-### 2.2. Foundational Tokens & Invariants
-* **Zero Corner Radius (`--radius: 0`):** Every element terminates in sharp 90-degree right angles without exception. No rounded rectangles, no pills, no circles.
-* **Hairline Dividers (`--hairline: 1px`):** Depth is created exclusively via 1px hairline boundaries (`#3d3d42` dark, `#d4d3ce` light) and tonal surface steps, rejecting all drop shadows, ambient glows, or dimensional blurring.
-* **Typography (Two Families, Two Weights):**
-  - **DM Sans (300 Light & 400 Regular):** Interface chrome, headings, dialogs, and narrative prose.
-    - Display: Sans 300, tracking `-3%` (`-0.03em`)
-    - Headline: Sans 300, tracking `-2%` (`-0.02em`)
-    - Body: Sans 400, tracking `-1%` (`-0.01em`)
-  - **DM Mono (400 Regular):** Data, code editor buffers, line numbers, coordinate readouts, citations, and metadata.
-* **Color Hierarchy:**
-  - **Dark Base (Default):** Background `#141416`, Surface `#1c1c20`, Surface-Hi `#28282c`, Line `#3d3d42`, Text Primary `#e8e6e1`, Text Secondary `#9a9a9a`.
-  - **Light Paper Override:** Page `#faf9f7`, Surface `#f4f3f0`, Line `#d4d3ce`, Ink `#1c1c1c`, Ink-60 `#6b6b6b`.
-  - **Accent:** **Acid lime (`#c6f135`)** is the mark and one action per view (one signal per frame), used for active selection and focus. Brand page is the source of truth. Always paired with a text label or icon.
-  - **Secondary:** **Sage (`#b3d17a`)**, used sparingly for math for mathematical equation delimiters and coordinates.
-
----
-
-## 3. Screen 1: The Desk (The Daily Writing Home)
-
-The Desk is the primary workspace where authors spend 90% of their time. It balances a distraction-free writing surface with a live rendered paper sheet.
+## 3. Layout
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│ [⩓] Manang     papers / quantum_entropy.typ      [✎ Draw]  [◫ Split]   │
-├───────────────────────────────────┬────────────────────────────────────┤
-│ 140  // Non-equilibrium Entropy   │ 2. Quantum Thermodynamic Bounds    │
-│ 141  = Irreversible Dynamics      │                                    │
-│ 142  Under unitary coupling, the  │ Under unitary coupling, the        │
-│ 143  rate $Sigma$ satisfies:      │ entropy production rate satisfies: │
-│ 144                               │                                    │
-│ 145  $ Delta S_text("irr") >=     │      ΔS_irr ≥ ∫ (δQ / T) + k_B D   │
-│ 146    integral_0^t (delta Q)/T $ │                                    │
-│  ·   [p.14 missing in @penrose]   │ [1] Landauer, R. IBM J. (1961)     │
-│ 148  This generalizes Landauer.   │                                    │
-└───────────────────────────────────┴────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [⩓] Manang  Project / dir / file.typ   [ Search commands   Ctrl+K ]  Split Editor Preview  Export PDF  Zen │  top bar 40px
+├────┬───────────────┬─┬───────────────────────────────────────────┬────────────┤
+│ ▌  │ Files  + ▢ ↻ ⇕│ │ main.typ ×  results.typ ●        Text│Slides│            │  tab strip 36px
+│ F  │ [Filter files]│ ├───────────────────────────┬─┬─────────────┤            │
+│ S  │ ▸ figures     │ │ 1  = Title                │ │ ↑ ↓ Page 1/2 │            │
+│ Fg │ ▾ sections   ▪│ │ 2  ...                    │ │ − Fit +  ↻ ⤓ │            │
+│ R  │     results M │ │                           │ │  ┌────────┐  │            │
+│ P  │   main.typ    │ │                           │ │  │ paper  │  │            │
+│    │   notes.md  U │ ├───────────────────────────┴─┴─────────────┤            │
+│    │               │ │ Problems 2 │ Output                      × │  bottom panel (Ctrl+J)
+│ ⚙  │               │ │ ⊠ Unclosed math delimiter       Ln 3, Col 6│            │
+├────┴───────────────┴─┴───────────────────────────────────────────────────────┤
+│ ⑂ main*  ⊠ 2 errors   [notice]            Ln 3, Col 6  67 words  Typst  Kernel│  status bar 24px
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.1. Header Bar (h-10, px-4, Border-b 1px `#3d3d42`)
-* **Left:** Mark `[⩓]` + Wordmark `Manang` (DM Sans 300).
-* **Center:** Breadcrumb trail (`papers / quantum_entropy.typ`) in DM Mono text-xs text `#9a9a9a`.
-* **Right (Responsive Actions):**
-  - `[✎ Draw]` — Toggles the Canvas overlay.
-  - `[◫ Split]` — Toggles single-pane vs. dual-pane paper preview.
-  - `[⛶ Zen]` — Fullscreen distraction-free mode.
-  - When screen width drops below 1024px, buttons collapse automatically to icon-only buttons (`[✎]`, `[◫]`, `[⛶]`) with instant tooltips.
+* **Activity bar** (48px): Files, Search, Figures, References, Plugins; Settings at the bottom. Clicking an icon opens its side panel; clicking the open one collapses it. The Files icon carries the git change count. Project-bound views are dimmed until a folder is open.
+* **Side panel** (200 to 480px, default 264, draggable, double-click resets). Under 800px it overlays the editor instead of squeezing it; opening a file or pressing Esc dismisses it.
+* **Tab strip + editor area.** Tabs hold a document, a figure, or a document shown as slides. The editor and the preview split with a draggable divider (25 to 75%).
+* **Bottom panel** (96 to 560px): Problems and Output.
+* **Zen** removes every piece of chrome and leaves the editor as a 680px reading column (no gutter, 15px). Esc leaves.
 
-### 3.2. Left Pane: The Writing Surface
-* **Editor Core:** Virtualized CodeMirror 6 text buffer in DM Mono 400 (13px, 1.6 line height).
-* **Quiet Syntax Highlighting:**
-  - Prose: High-contrast `#e8e6e1`.
-  - Math Delimiters (`$ ... $`): Highlighted in Sage (`#b3d17a`).
-  - Headings (`= Section`): Clean DM Sans 300 warm ivory.
-  - Functions & Commands: Acid lime (`#c6f135`).
-  - Comments: Low-contrast `#7a7a7a` italic.
-* **Margin Whispers (Diagnostics):**
-  - Missing brackets, broken references, or warnings never trigger modal popups or terminal dumps.
-  - A subtle 4px square dot appears in the line number gutter.
-  - Hovering reveals a quiet one-line callout: `Missing page locator in @penrose` with a 1-click `[Auto-Fix]` action.
+Narrow behaviour: at 1024px everything fits; under 800px the side panel overlays and split falls back to the editor alone (an explicit "Preview" choice is kept); at the 640px minimum the top bar reduces the palette field and the three actions to icons, and nothing scrolls sideways.
 
-### 3.3. Right Pane: The Live Paper Sheet
-* **Real-Time Rendering:** The document updates in real time as ink dries on paper.
-* **Bidirectional Sync (SyncTeX):**
-  - Clicking any sentence or equation in the paper instantly jumps the cursor to that line in the manuscript.
-  - Typing in the manuscript smoothly aligns the preview page.
+## 4. Vocabulary
 
----
+| Old | Now |
+| --- | --- |
+| Library Shelf | **Files** (`FilesPanel`, `workspace.svelte.ts`) |
+| Instrument Shelf | **Plugins** (`PluginsPanel`, `workbench/plugins.ts`) |
+| Whispers, Margin Whispers | **Problems** (`BottomPanel`, `workbench/problems.ts`, gutter markers) |
+| Desk | **workspace** and **editor** (`Workbench`, `EditorArea`, `EditorPane`) |
+| Canvas, ink | **Figure editor** (`FigureEditor`, `lib/figure`, `figure.svelte.ts`) |
+| Presentation Studio | **Slides** (a view of a `.typ` document) |
+| Curated Lab | removed |
 
-## 4. Screen 2: The Canvas (Natural Sketching & Vector Studio)
+## 5. Surfaces and their states
 
-Triggered instantly by typing `/draw` anywhere in the manuscript or clicking `[✎ Draw]`. The canvas overlay glides in over the writing pane.
+**Welcome** (no project). Open folder (by path, because the native picker needs the dialog plugin; recents are the quick way back), New project (name, Typst / LaTeX / Markdown, location), recent projects from `project.recent`. A missing folder is listed, disabled, as "Folder not found". A non-project folder says to choose the folder containing `manang.toml` or create a project.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ [⩓] Manang     figures / vectors / state_lattice.svg      [Done ↵] [✕] │
-├────────────────────────────────────────────────────────────────────────┤
-│                                                                        │
-│               ┌──────────┐                                             │
-│               │ State |0⟩│ ───(Hamiltonian H)───► [ State |1⟩ ]        │
-│               └──────────┘                                             │
-│                                                                        │
-│  [ ✎ Freehand ]   [ □ Geometry ]   [ → Arrow ]   [ T Math ]   [ ⌫ ]    │
-└────────────────────────────────────────────────────────────────────────┘
-```
+**Files.** ARIA tree, lazy per folder, git badges (M, A, D, R, U, !) from `project.git-status`, a dot on folders containing changes, a square on files with unsaved edits. Filter is fuzzy across all paths. New file, new folder (kept alive by a hidden `.gitkeep`), rename (F2) and delete (to trash) happen inline or from the context menu. States: loading, empty folder, no filter matches.
 
-### 4.1. Design & Interaction Affordances
-* **The Overlay Transition:** Glides smoothly into view without modal borders or backdrop darkness.
-* **The Pen Tray (Bottom Floating HUD):**
-  - Centered floating bar (h-9, bg `#141416`, 1px hairline `#3d3d42`, zero radius).
-  - **`[ ✎ Freehand ]`:** Natural sketching powered by Manang's own vector ink engine (Svelte scene graph + `perfect-freehand` stroke geometry, rendered as native SVG).
-  - **`[ □ Geometry ]`:** Sharp mathematical shapes (rectangles, ellipses, coordinate grids).
-  - **`[ → Arrow ]`:** Directional connectors that magnetically snap to node boundaries.
-  - **`[ T Math ]`:** Type any LaTeX/Typst formula (`$|\psi\rangle$`) to stamp rendered mathematical text directly onto the figure.
-* **Embedding the Ink:**
-  - Pressing `Enter` or clicking `[Done ↵]` quietly closes the canvas.
-  - The drawing is automatically saved as a vector `.svg` / `.pdf` in the project's `figures/` folder and embedded into the manuscript:
-    ```typst
-    #figure(image("figures/state_lattice.svg", width: 80%))
-    ```
-  - Double-clicking the figure in the document re-opens the canvas at any time for editing.
+**Search.** File names (fuzzy) and text (open documents with unsaved edits, other text files read via `project.read-file`, first 80). Results jump to line and column.
 
----
+**Figures.** The project's `*.figure.json` files and New figure. Opening one puts the figure editor in a tab.
 
-## 5. Screen 3: The Library Shelf (Document Organization)
+**References.** Entries from `.bib` files, word-AND filter, count. Choosing one inserts a citation in the active document's syntax (`@key`, `\cite{key}`, `[@key]`). Parsing is a client-side stub behind `BibSource`; the citations plugin replaces it.
 
-Accessible via `Cmd+P` or clicking the shelf icon `[≡]`. A clean, quiet rail sliding out from the left.
+**Plugins.** The live `kernel.commands()` grouped by plugin, each expandable to its commands. The kernel does not report tier or permissions yet, so none are shown. Empty state explains the kernel is unreachable; a note says third-party installation is not available yet.
 
-```
-┌──────────────────────────────────────┐
-│ [≡] LIBRARY SHELF                [✕] │
-├──────────────────────────────────────┤
-│ ▾ papers                             │
-│   📄 01_formalism.typ       (Active) │
-│   📄 02_entropy_bounds.typ           │
-│   📄 03_numerical_sim.typ            │
-│ ▾ figures                            │
-│   🎨 state_lattice.svg               │
-│   🎨 dissipation_curve.svg           │
-│ ▾ bibliography                       │
-│   📚 references.bib        (3 items) │
-├──────────────────────────────────────┤
-│ [+ New Document]     [+ New Diagram] │
-└──────────────────────────────────────┘
-```
+**Settings.** Theme and layout reset. Persisted in browser storage until the settings plugin lands.
 
-### 5.1. Design Affordances
-* **Spatial Layout:** 260px wide, dark background (`#141416`), 1px right border (`#3d3d42`).
-* **Active State:** The active document is highlighted with a 2px lime left boundary and surface fill (`#1c1c20`).
-* **Instant Filter:** Type immediately to fuzzy-search across files, sections, and figures.
+**Tabs.** Dirty square that becomes a close mark on hover, close button, middle-click, drag to reorder, context menu (close, close others, close to the right, show as slides, copy path), overflow scrolls. Same-named files get their folder as a suffix.
 
----
+**Preview.** Real `typst.render` SVG. Toolbar: previous and next page, "Page n of N", zoom out, zoom (Fit, 50 to 200%), zoom in, refresh, export PDF. States: compiling (last page stays), ready, failed (last good page plus a banner linking to Problems), no compiler for this engine, compiler missing. Compile runs 250ms after typing stops and sends every unsaved buffer.
 
-## 6. Screen 4: The Instrument Shelf (Plugin Manager)
+**Problems and Output.** Problems are `typst.compile` diagnostics grouped by file with severity icon (solid square-cross for error, triangle for warning, so severity never relies on hue), message, hints and `Ln, Col`; click jumps there. The tab label and status bar carry the count. Output is the compile log. The editor gutter shows a solid (error) or hollow (warning) 6px square on the line, with a hover callout.
 
-Manang is **plugin-first**. Everything—compilers, drawing engines, citation verifiers, slide frameworks—is an isolated WebAssembly instrument. The Instrument Shelf makes extensions approachable and clean.
+**Slides.** A `.typ` document viewed as a deck: each heading is a slide. Thumbnail strip (listbox), current slide, Present (F5), full-window presentation (arrows, Space, Esc).
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ [⩓] Manang     INSTRUMENT SHELF (PLUGINS)                          [✕] │
-├────────────────────────────────────────────────────────────────────────┤
-│                                                                        │
-│  ┌──────────────────────────────┐    ┌──────────────────────────────┐  │
-│  │ [✓] Typst Compiler Engine    │    │ [✓] Vector Ink Engine       │  │
-│  │ Native in-memory compilation │    │ Infinite vector sketch pad   │  │
-│  │ v0.12.0 · Core Instrument    │    │ v1.4.0 · Drawing Plugin      │  │
-│  └──────────────────────────────┘    └──────────────────────────────┘  │
-│  ┌──────────────────────────────┐    ┌──────────────────────────────┐  │
-│  │ [✓] CeTZ Mathematical Vectors│    │ [✓] Touying Slide Decks      │  │
-│  │ Precise coordinate geometry  │    │ 16:9 presentation studio     │  │
-│  │ v0.3.1 · Graphic Plugin      │    │ v0.5.2 · Presentation Plugin │  │
-│  └──────────────────────────────┘    └──────────────────────────────┘  │
-│                                                                        │
-│  [+ Install WASM Plugin (.wasm)]              [Browse Curated Lab]     │
-└────────────────────────────────────────────────────────────────────────┘
-```
+**Figure editor.** Toolbar (select, freehand, rectangle, arrow, formula, clear), copy embed line, save. Scenes load and save as JSON through the project plugin.
 
-### 6.1. Design Affordances
-* **Clean Instrument Cards:** 1px hairline border (`#3d3d42`), surface `#1c1c20`, zero radius.
-* **Toggle Controls:** Square zero-radius checkboxes. Checking or unchecking enables or sandboxes capabilities instantly.
-* **Capability Transparency:** Hovering over any plugin card reveals its permissions in clean DM Mono: `Buffer: read | Net: none | FS: figures/`.
+**Status bar.** Branch (`main*` when dirty), compile state with timing ("Compiled in 9 ms", "Compiling", "2 errors"), a transient notice, caret, words, engine, kernel connection ("Demo kernel" in the browser). Branch and compile state are buttons.
 
----
+**Command palette.** `Ctrl+K` or `Ctrl+Shift+P` for commands (workbench and plugin, grouped, with real shortcuts; files appear once you type); `Ctrl+P` for go to file. It is a shortcut: every command is reachable elsewhere.
 
-## 7. Screen 5: The Command & Co-Pilot Palette (`Cmd+K`)
+## 6. Keyboard map
 
-The single, universal keyboard launcher uniting navigation, plugin tools, and AI actions into one quiet dialog.
+| Action | Keys |
+| --- | --- |
+| Command palette / go to file | Ctrl+K or Ctrl+Shift+P / Ctrl+P |
+| Files, Search, Plugins, Settings | Ctrl+Shift+E, Ctrl+Shift+F, Ctrl+Shift+X, Ctrl+, |
+| Toggle side panel / bottom panel / Problems | Ctrl+B / Ctrl+J / Ctrl+Shift+M |
+| Next / previous tab | Ctrl+Tab or Ctrl+PgDn / Ctrl+Shift+Tab or Ctrl+PgUp |
+| Tab 1 to 8, last tab | Ctrl+1 to Ctrl+8, Ctrl+9 |
+| Close tab, save, save all, new file | Ctrl+W, Ctrl+S, Ctrl+Shift+S, Ctrl+N |
+| Cycle preview layout, export PDF, zen | Ctrl+Shift+V, Ctrl+E, Ctrl+\ |
+| Present slides | F5 |
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│  > Ask or type a command...                                            │
-├────────────────────────────────────────────────────────────────────────┤
-│  AI ACTIONS                                                            │
-│  ✨ Verify citations against Crossref & OpenAlex                       │
-│  ✨ Generate 6 Touying presentation slides from Section 2              │
-│  ✨ Add commutative diagram in CeTZ                                    │
-│                                                                        │
-│  PLUGINS & COMMANDS                                                    │
-│  ✎ Open Drawing Canvas (/draw)                                         │
-│  ◫ Toggle Split Screen (/split)                                        │
-│  ⬇ Export Publication PDF (/export)                                    │
-│  ⚙ Open Instrument Shelf (/plugins)                                    │
-└────────────────────────────────────────────────────────────────────────┘
-```
+Cmd replaces Ctrl on macOS. Shortcuts are data (`commands/workbench.ts`); the handler and the palette read the same list. In a browser some chords (Ctrl+W, Ctrl+Tab) belong to the browser; they work in the desktop app.
 
-### 7.1. Design Affordances
-* **Placement:** Centered floating modal (600px wide, zero radius, 1px border `#3d3d42`, bg `#1c1c20`).
-* **Keyboard-First:** Navigate with `↑` and `↓`, execute with `Enter`, dismiss with `Esc`.
-* **Zero Jargon:** Prompts read as direct human actions (*"Verify citations"*, *"Generate slides"*).
+## 7. Accessibility
 
----
+* Roles: `tablist`/`tab`/`tabpanel` (automatic activation, arrows, Home, End, Delete, Shift+F10), `tree`/`treeitem` with level, set size and position (arrows, Home, End, type-ahead, Enter, F2, Delete), `menu`/`menuitem` (roving focus, Esc returns focus), `dialog`/`alertdialog` with focus restored, `combobox` + `listbox` + `aria-activedescendant` for the palette, `separator` with value attributes for resizers (arrows, Home, End), `toolbar`, `radiogroup`, `log`, live `status` regions.
+* Focus is always visible: a 1px lime outline, 1px offset (inset inside scrolling lists).
+* State is never colour alone: pressed, selected and severity also change shape, weight of border or text.
+* Targets: 28px controls, 48px activity icons. Text meets AA on every surface; `--mng-text-muted` is never used for body text.
+* `prefers-reduced-motion` is honoured globally.
 
-## 8. Screen 6: The Presentation Studio (Slide Mode)
+## 8. Data, real and mocked
 
-When authoring slides using Typst **Touying** or **Polylux**, the live sheet adapts into a 16:9 presentation studio.
+Everything goes through `$lib/kernel`: the Tauri client inside the app, an in-memory dev kernel in a browser (`pnpm dev`, tests). The dev kernel reproduces the editor, project and typst manifests (commands, arguments, result shapes, failure messages) with a demo project, git status, `project.changed` events, and a stand-in compiler that reports unclosed math and brackets, missing includes, figures and citations, and draws pages as SVG. Large artefacts stay `Uint8Array`. Events arrive on `kernel://event` and are ignored when there is no Tauri.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ [⩓] Manang     slides / quantum_talk.typ           [Present F5]  [✕]   │
-├────────────────────────────────────────────────────────────────────────┤
-│                                                                        │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │  QUANTUM THERMODYNAMICS · §2                      SLIDE 3 / 6  │   │
-│   │                                                                │   │
-│   │  Landauer Bound in Quantum Regimes                             │   │
-│   │                                                                │   │
-│   │  Minimal heat dissipated per erased bit of physical entropy:   │   │
-│   │                                                                │   │
-│   │          ΔQ_diss ≥ k_B · T · ln 2 + D(ρ || ρ_eq)               │   │
-│   │                                                                │   │
-│   │  [1] Landauer, R. (1961) IBM J. Res. Dev.                      │   │
-│   └────────────────────────────────────────────────────────────────┘   │
-│                                                                        │
-│   [ 01. Title ]  [ 02. Formalism ]  [ 03. Landauer ]  [ 04. Data ]     │
-└────────────────────────────────────────────────────────────────────────┘
-```
+## 9. Persistence
 
-### 8.1. Design Affordances
-* **16:9 Canvas:** Framed in a clean `#141416` dark background with a 1px border `#3d3d42`.
-* **Bottom Slide Carousel:** Miniature cards for rapid jumping across slides with an active lime hairline indicator.
-* **One-Click Presentation:** Pressing `F5` launches distraction-free full-screen presentation mode with instant keyboard slide navigation.
+Layout (panel sizes, open panels, preview layout, theme) and session (last project, open tabs and their views) are saved to `localStorage` through `workbench/persist.ts`, every access wrapped in try/catch. The settings plugin will take over; only that module changes.
 
----
+## 10. Known limits
 
-## 9. Screen 7: Zen Mode (Distraction-Free Deep Focus)
-
-Triggered via `Cmd+\` or `F11`.
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                                                                        │
-│                                                                        │
-│        = Quantum Thermodynamic Bounds                                  │
-│                                                                        │
-│        Under unitary coupling to a heat reservoir at inverse           │
-│        temperature β = (k_B T)⁻¹, the irreversible entropy             │
-│        production rate Σ satisfies the finite-time lower bound:        │
-│                                                                        │
-│        $ Delta S_text("irr") >= integral_0^t (delta Q) / T $           │
-│                                                                        │
-│        This confirms that quantum coherence retains finite             │
-│        work capacity even under thermal dissipation.                   │
-│                                                                        │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-### 9.1. Design Affordances
-* **Zero UI Chrome:** Header, file rails, status indicators, and preview panes smoothly dissolve away.
-* **Centered Paper Column:** 680px optimal reading column width, keeping lines within comfortable 70–80 character measure.
-* **Instant Reversibility:** Pressing `Esc` or `Cmd+\` seamlessly brings back the Desk view.
-
----
-
-## 10. Summary of UI/UX Invariants & Quality Standards
-
-| Dimension | Rule | Rationale |
-| :--- | :--- | :--- |
-| **Corner Radius** | `0px` universally (`--radius: 0`) | Strictly complies with Fundaments.work identity. Architectural, quiet, and serious. |
-| **Borders** | `1px` hairlines (`#3d3d42`) | Structural containment without visual weight or fuzzy shadows. |
-| **Speed Indicators** | **Hidden** (no millisecond counters) | Speed is an invisible reality. Users care about flow, not benchmark telemetry. |
-| **Error Handling** | Margin Whispers | Low-cognitive-load gutter squares with 1-click fixes, replacing intimidating terminal dumps. |
-| **Drawing** | Natural `/draw` sheet | Eliminates file management friction; drawings are vector ink embedded directly in prose. |
-| **Typography** | DM Sans (300/400), DM Mono (400) | Strictly two typefaces and two weights for maximum typographic calm. |
-
-
+* Open folder takes a path; a native picker needs the Tauri dialog plugin.
+* Export PDF downloads through the webview; saving into the project needs a binary write command.
+* The preview target is the active Typst file; pinning a main file for `#include`d chapters is not built.
+* Folder listings stop at 5,000 entries per directory.
+* LaTeX and Markdown edit and save but have no preview until their plugins exist.

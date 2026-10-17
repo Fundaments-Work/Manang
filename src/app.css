@@ -192,67 +192,225 @@
     color: var(--mng-text);
   }
 
-  /* -------------------------------------------------------------- */
-  /* Margin Whispers — DESIGN.md §3.2                                  */
-  /* -------------------------------------------------------------- */
-
-  .manang-whisper-gutter {
-    /* 12px of gutter carries a 4px square plus its breathing room. */
-    width: 12px;
+  :focus-visible {
+    outline: var(--hairline) solid var(--mng-accent);
+    outline-offset: 1px;
   }
 
-  .manang-whisper {
+  /* Items inside scrolling lists and strips would have their ring clipped by
+   * the container, so they draw it inside their own box. */
+  .inset-focus:focus-visible {
+    outline-offset: -1px;
+  }
+
+  /* Native form controls keep the system's square look. */
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+
+  button {
+    cursor: default;
+  }
+
+  /* Text a person may want to copy opts back in. */
+  .selectable {
+    user-select: text;
+  }
+
+  /* Motion answers an action; people who ask for none get none. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Shared controls. Square, hairline, tonal. Three sizes of hit target: 28px
+ * toolbar controls, 24px dense row actions, 48px activity bar.
+ * ----------------------------------------------------------------------- */
+
+@layer components {
+  .mng-btn {
+    display: inline-flex;
+    height: 28px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    border: var(--hairline) solid var(--mng-line);
+    background: var(--mng-surface);
+    color: var(--mng-text);
+    font-size: 12px;
+    white-space: nowrap;
+    transition: background-color var(--duration-fast) var(--ease-manang);
+  }
+  .mng-btn:hover:not(:disabled) {
+    background: var(--mng-surface-hi);
+  }
+  .mng-btn:disabled {
+    color: var(--mng-text-muted);
+    pointer-events: none;
+  }
+  .mng-btn[aria-pressed="true"],
+  .mng-btn[aria-checked="true"] {
+    background: var(--mng-surface-hi);
+    border-color: var(--mng-text-60);
+  }
+
+  /* Borderless icon control for toolbars and row actions. */
+  .mng-icon-btn {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--mng-text-60);
+    transition:
+      background-color var(--duration-fast) var(--ease-manang),
+      color var(--duration-fast) var(--ease-manang);
+  }
+  .mng-icon-btn:hover:not(:disabled) {
+    background: var(--mng-surface-hi);
+    color: var(--mng-text);
+  }
+  .mng-icon-btn:disabled {
+    color: var(--mng-text-muted);
+    pointer-events: none;
+  }
+  .mng-icon-btn[aria-pressed="true"] {
+    background: var(--mng-surface-hi);
+    color: var(--mng-text);
+  }
+
+  .mng-field {
+    height: 28px;
+    width: 100%;
+    border: var(--hairline) solid var(--mng-line);
+    background: var(--mng-bg);
+    padding: 0 8px;
+    font-size: 12px;
+    color: var(--mng-text);
+  }
+  .mng-field::placeholder {
+    color: var(--mng-text-muted);
+  }
+  .mng-field:focus {
+    outline: none;
+    border-color: var(--mng-accent);
+  }
+
+  .mng-kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mng-text-muted);
+    white-space: nowrap;
+  }
+
+  /* A side panel's title row. Sentence case, no eyebrow. */
+  .mng-panel-head {
+    display: flex;
+    height: 36px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px 0 16px;
+    font-size: 12px;
+    color: var(--mng-text-60);
+  }
+  .mng-panel-head > h2 {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--mng-text);
+  }
+
+  /* Problem markers in the editor gutter and their hover callout. */
+  .manang-problem-gutter {
+    width: 14px;
+  }
+  .manang-problem {
     display: block;
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
+    margin: 0 4px;
+    box-sizing: border-box;
+  }
+  .manang-problem-error {
+    background: var(--mng-text);
+  }
+  .manang-problem-warning {
+    border: var(--hairline) solid var(--mng-text-60);
   }
 
-  .manang-whisper-tooltip {
+  .manang-problem-tooltip {
     display: flex;
     flex-direction: column;
     gap: 4px;
     padding: 8px 10px;
     max-width: 26rem;
   }
-
-  .manang-whisper-row {
+  .manang-problem-row {
     display: flex;
     align-items: baseline;
     gap: 8px;
     font-size: 12px;
   }
-
-  .manang-whisper-label {
-    /* Severity is a word, never a bare colour. */
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--mng-text-60);
+  .manang-problem-label {
     flex-shrink: 0;
+    font-size: 11px;
+    color: var(--mng-text-60);
   }
-
-  .manang-whisper-message {
+  .manang-problem-message {
     color: var(--mng-text);
   }
-
-  .manang-whisper-fix {
-    font-family: var(--font-sans);
+  .manang-problem-hint {
+    padding-left: 0;
     font-size: 11px;
-    color: var(--mng-accent);
-    background: none;
-    border: 1px solid var(--mng-line);
-    padding: 1px 6px;
-    cursor: pointer;
-    white-space: nowrap;
+    color: var(--mng-text-60);
   }
+}
 
-  .manang-whisper-fix:hover {
-    background-color: var(--mng-surface-hi);
+/* Zen mode: the editor becomes a quiet 680px reading column. */
+.zen-editor .cm-gutters {
+  display: none !important;
+}
+.zen-editor .cm-content {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 96px 24px !important;
+  font-size: 15px !important;
+  line-height: 1.8 !important;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes mng-hint {
+  0%,
+  70% {
+    opacity: 1;
   }
-
-  :focus-visible {
-    outline: var(--hairline) solid var(--mng-accent);
-    outline-offset: -1px;
+  100% {
+    opacity: 0;
   }
 }

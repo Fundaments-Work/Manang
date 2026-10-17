@@ -8,6 +8,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 /** A command contributed by a plugin manifest, as listed for the palette. */
 export interface KernelCommand {
@@ -15,6 +16,17 @@ export interface KernelCommand {
   readonly title: string;
   readonly plugin: string;
 }
+
+/**
+ * An event published on the kernel bus and forwarded by the shell as the
+ * `kernel://event` Tauri event, e.g. `project.changed`.
+ */
+export interface KernelEvent {
+  readonly topic: string;
+  readonly payload: unknown;
+}
+
+export type Unlisten = () => void;
 
 /** Failure reported by the kernel. */
 export interface KernelError {
@@ -29,6 +41,12 @@ export function isKernelError(value: unknown): value is KernelError {
   );
 }
 
+/** Human-readable text of anything a kernel call may reject with. */
+export function errorMessage(error: unknown): string {
+  if (isKernelError(error)) return error.message;
+  return error instanceof Error ? error.message : String(error);
+}
+
 export type Args = Record<string, unknown>;
 
 /**
@@ -40,6 +58,12 @@ export interface Kernel {
   commands(): Promise<KernelCommand[]>;
   run<T = unknown>(command: string, args?: Args): Promise<T>;
   runBinary(command: string, args?: Args): Promise<Uint8Array>;
+  /**
+   * Subscribe to kernel events. Resolves once the subscription is live and
+   * yields the function that cancels it. Never rejects: a backend without an
+   * event channel simply never calls the handler.
+   */
+  onEvent(handler: (event: KernelEvent) => void): Promise<Unlisten>;
 }
 
 export const kernel: Kernel = {
@@ -59,5 +83,15 @@ export const kernel: Kernel = {
       args,
     });
     return new Uint8Array(bytes);
+  },
+
+  async onEvent(handler: (event: KernelEvent) => void): Promise<Unlisten> {
+    try {
+      return await listen<KernelEvent>("kernel://event", (message) =>
+        handler(message.payload),
+      );
+    } catch {
+      return () => undefined;
+    }
   },
 };

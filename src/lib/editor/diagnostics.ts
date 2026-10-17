@@ -1,9 +1,10 @@
 /**
- * Margin Whispers — DESIGN.md §3.2.
+ * Problems: quick syntax checks over the manuscript text.
  *
- * Diagnostics never raise modals or dump a terminal. Each one becomes a 4px
- * square in the line-number gutter, and hovering reveals a single quiet line
- * with a one-click fix where one exists.
+ * The in-memory dev kernel uses these to produce plausible compile
+ * diagnostics, and they give instant feedback where no compiler runs. The Rust
+ * compiler is the authority; a diagnostic here may carry a one-step fix, which
+ * compile diagnostics do not.
  *
  * Pure functions over the manuscript text: the Rust core will eventually own
  * the authoritative parse, but the shell needs immediate feedback on every
@@ -60,7 +61,7 @@ export function lineOf(text: string, offset: number): number {
  * Full diagnostic sweep for the manuscript.
  *
  * Checks are ordered from most to least specific so the gutter shows the most
- * actionable whisper first when several land on one line.
+ * actionable problem first when several land on one line.
  */
 export function analyse(text: string, options: DiagnosticOptions = {}): Diagnostic[] {
   const scannable = withoutFencedCode(text);

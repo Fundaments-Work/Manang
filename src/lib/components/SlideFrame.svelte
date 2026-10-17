@@ -1,52 +1,51 @@
 <script lang="ts">
-  import { deck } from "$lib/state/slides.svelte";
+  import type { Slide } from "$lib/workbench/slides";
 
   /**
-   * The slide itself — DESIGN.md §8.1.
-   *
-   * A true 16:9 frame, so the studio shows the same aspect ratio the audience
-   * will see. Content is laid out by the engine eventually; the shell provides
-   * the frame, the type ramp and the citation rail.
+   * One slide, drawn at a true 16:9 on the paper tokens. Every size is in
+   * container-query units, so the same markup renders the large slide, the
+   * thumbnail and the full-screen presentation without a scale transform.
+   * Layout is the shell's; the engine's own render replaces it later.
    */
+  interface Props {
+    slide: Slide;
+    total: number;
+  }
+
+  const { slide, total }: Props = $props();
+  const title = $derived(slide.level === 1);
 </script>
 
-<div class="flex h-full w-full items-center justify-center p-8">
-  <div
-    class="aspect-video w-full max-w-5xl border border-line bg-paper px-16 py-14 text-paper-ink"
-  >
-    {#if deck.current !== undefined}
-      {@const slide = deck.current}
-
-      <div
-        class="flex items-baseline justify-between font-mono text-[10px] tracking-[0.08em] text-paper-ink-60 uppercase"
-      >
-        <span>{slide.kicker}</span>
-        <span>Slide {deck.displayNumber} / {deck.count}</span>
-      </div>
-
-      <h2
-        class="mt-10 max-w-3xl font-sans text-3xl font-light"
-        style="letter-spacing: var(--tracking-display)"
-      >
-        {slide.title}
-      </h2>
-
+<div
+  class="relative aspect-video w-full overflow-hidden border border-line bg-paper text-paper-ink"
+  style="container-type: inline-size"
+>
+  <div class="flex h-full flex-col" style="padding: 6cqw 7cqw">
+    <h2
+      class="m-0 font-sans font-light"
+      style="font-size: {title
+        ? '6cqw'
+        : '4.4cqw'}; line-height: 1.12; letter-spacing: var(--tracking-display); margin-top: {title
+        ? '14cqw'
+        : '0'}"
+    >
+      {slide.title}
+    </h2>
+    {#each slide.paragraphs as paragraph (paragraph)}
       <p
-        class="mt-5 max-w-2xl font-sans text-sm"
-        style="letter-spacing: var(--tracking-body)"
+        class="m-0 font-sans"
+        style="font-size: 2.3cqw; line-height: 1.45; margin-top: 2.4cqw; max-width: 80%; letter-spacing: var(--tracking-body)"
       >
-        {slide.body}
+        {paragraph}
       </p>
-
-      {#if slide.math !== undefined}
-        <p class="mt-10 text-center font-mono text-xl">{slide.math}</p>
-      {/if}
-
-      {#if slide.citation !== undefined}
-        <p class="mt-auto pt-10 font-mono text-[11px] text-paper-ink-60">
-          {slide.citation}
-        </p>
-      {/if}
+    {/each}
+    {#if slide.math !== null}
+      <p class="m-0 text-center font-mono" style="font-size: 2.8cqw; margin-top: 4cqw">
+        {slide.math}
+      </p>
     {/if}
+    <span class="mt-auto self-end font-mono text-paper-ink-60" style="font-size: 1.5cqw"
+      >{slide.index + 1} / {total}</span
+    >
   </div>
 </div>
