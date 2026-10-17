@@ -5,7 +5,13 @@
   import { goToProblem } from "$lib/state/actions";
   import { build } from "$lib/state/build.svelte";
   import { layout } from "$lib/state/layout.svelte";
-  import { countLabel, groupByFile } from "$lib/workbench/problems";
+  import { writing } from "$lib/state/writing.svelte";
+  import {
+    countLabel,
+    groupByFile,
+    sortProblems,
+    type Severity,
+  } from "$lib/workbench/problems";
   import type { PanelTab } from "$lib/workbench/layout";
 
   /**
@@ -19,8 +25,16 @@
     { id: "output", label: "Output" },
   ];
 
-  const groups = $derived(groupByFile(build.problems));
-  const total = $derived(build.counts.errors + build.counts.warnings);
+  // Compiler diagnostics and prose-lint findings share one list; they differ by
+  // `source`, never by being dropped.
+  const all = $derived(sortProblems([...build.problems, ...writing.problems]));
+  const groups = $derived(groupByFile(all));
+  const total = $derived(all.length);
+  const SEVERITY_LABEL: Record<Severity, string> = {
+    error: "Error: ",
+    warning: "Warning: ",
+    info: "Suggestion: ",
+  };
   let body: HTMLElement | undefined = $state();
 
   // Output follows the newest line.
@@ -166,13 +180,18 @@
                   size={14}
                   class="mt-px shrink-0 {problem.severity === 'error'
                     ? 'text-text'
-                    : 'text-text-60'}"
+                    : problem.severity === 'warning'
+                      ? 'text-text-60'
+                      : 'text-text-muted'}"
                 />
                 <span class="min-w-0 flex-1">
-                  <span class="sr-only"
-                    >{problem.severity === "error" ? "Error: " : "Warning: "}</span
-                  >
+                  <span class="sr-only">{SEVERITY_LABEL[problem.severity]}</span>
                   <span class="text-text">{problem.message}</span>
+                  {#if problem.source !== undefined}
+                    <span class="ml-2 font-mono text-[10px] text-text-muted"
+                      >{problem.source}{problem.code ? `: ${problem.code}` : ""}</span
+                    >
+                  {/if}
                   {#each problem.hints as hint (hint)}
                     <span class="block text-[11px] text-text-60">Hint: {hint}</span>
                   {/each}

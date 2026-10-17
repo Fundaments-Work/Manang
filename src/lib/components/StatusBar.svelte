@@ -6,6 +6,7 @@
   import { layout } from "$lib/state/layout.svelte";
   import { notice } from "$lib/state/notice.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
+  import { writing } from "$lib/state/writing.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { countLabel } from "$lib/workbench/problems";
 
@@ -43,6 +44,24 @@
               : "",
   );
   const warnings = $derived(build.status === "ok" && build.counts.warnings > 0);
+
+  // The writing plugin's count (prose only) once it has answered, else the
+  // quick local one.
+  const textStats = $derived(
+    tabs.active === undefined ? undefined : writing.stats[tabs.active.path],
+  );
+  const wordCount = $derived(textStats?.words ?? documents.words);
+  const statsTitle = $derived(
+    textStats === undefined
+      ? "Words in the document"
+      : `${textStats.characters.toLocaleString()} characters (${textStats.characters_no_spaces.toLocaleString()} without spaces), ${textStats.sentences.toLocaleString()} ${textStats.sentences === 1 ? "sentence" : "sentences"}, ${textStats.paragraphs.toLocaleString()} ${textStats.paragraphs === 1 ? "paragraph" : "paragraphs"}, about ${readingTime(textStats.reading_time_seconds)} to read`,
+  );
+
+  function readingTime(seconds: number): string {
+    if (seconds < 60) return "under a minute";
+    const minutes = Math.round(seconds / 60);
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  }
 
   const kernelText = $derived(
     !documents.kernelOnline
@@ -100,8 +119,8 @@
     <span class="mng-status-text font-mono"
       >Ln {documents.cursor.line}, Col {documents.cursor.column}</span
     >
-    <span class="mng-status-text"
-      >{documents.words} {documents.words === 1 ? "word" : "words"}</span
+    <span class="mng-status-text" data-word-count title={statsTitle}
+      >{wordCount} {wordCount === 1 ? "word" : "words"}</span
     >
   {/if}
   {#if engine !== null}
