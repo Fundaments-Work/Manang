@@ -228,3 +228,100 @@ pub fn render_svg(scene: &FigureScene, options: &SvgExportOptions) -> String;
      - Zen mode dissolves header, footer, and nav, presenting a 680px reading column.
      - Overlays preserve background clarity without artificial brightness darkening.
 
+
+---
+
+## Phase 2 - Task 1: `crates/manang-figure` Native Plugin Module
+
+- **Crate Name:** `manang-figure`
+- **Location:** `crates/manang-figure`
+- **Manifest:** `manifest.toml` (tier: `native`, name: `figure`, permissions: `filesystem = ["write:project"]`)
+
+### Public API Surface
+```rust
+pub fn manifest() -> Result<manang_kernel::Manifest, manang_kernel::ManifestError>;
+pub fn plugin() -> impl manang_kernel::Plugin;
+pub fn plugin_with_store(store: Arc<FigureStore>) -> impl manang_kernel::Plugin;
+
+pub struct FigurePlugin { ... }
+pub struct FigureStore { ... }
+pub struct FigureDocument { ... }
+
+pub type FigureId = u64;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FigureInfo {
+    pub id: FigureId,
+    pub path: Option<String>,
+    pub nodes: usize,
+    pub revision: u64,
+    pub dirty: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApplyResult {
+    pub revision: u64,
+    pub applied: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum FigureOp {
+    AddNode { node: FigureNode },
+    UpdateNode { node: FigureNode },
+    RemoveNode { id: String },
+    Clear,
+    SetStyle {
+        id: String,
+        stroke: Option<String>,
+        fill: Option<String>,
+        size: Option<f64>,
+        color: Option<String>,
+    },
+    Undo,
+    Redo,
+}
+
+pub fn resolve_figure_paths(path: &Path) -> (PathBuf, PathBuf);
+```
+
+### Contributed Commands & Argument/Return Shapes
+1. `figure.create`:
+   - Args: `{ width?: f64, height?: f64 }` (defaults: `800.0`, `600.0`)
+   - Return: `Payload::Json({ "id": u64 })`
+2. `figure.open`:
+   - Args: `{ path: string }`
+   - Return: `Payload::Json({ "id": u64 })`
+3. `figure.save`:
+   - Args: `{ id?: u64, path?: string }`
+   - Output: Saves `<stem>.figure.json` scene and companion deterministic headless `<stem>.svg` beside it.
+   - Return: `Payload::Empty`
+4. `figure.list`:
+   - Args: `Payload::Empty` or `{}`
+   - Return: `Payload::Json(Vec<FigureInfo>)`
+5. `figure.apply`:
+   - Args: `{ id?: u64, op: FigureOp }` (supports tagged enum with `"op"`, `"type"`, or `"kind"`, plus string `"undo"` / `"redo"` / `"clear"`)
+   - Return: `Payload::Json({ "revision": u64, "applied": bool })`
+6. `figure.get`:
+   - Args: `{ id?: u64 }` (defaults to active figure)
+   - Return: `Payload::Json(FigureScene)`
+7. `figure.export-svg`:
+   - Args: `{ id?: u64 }`
+   - Return: `Payload::Binary(Arc<[u8]>)` (raw UTF-8 SVG buffer, zero-copy across IPC)
+8. `figure.hit-test`:
+   - Args: `{ id?: u64, x: f64, y: f64 }`
+   - Return: `Payload::Json({ "hit": bool, "node_id": Option<String>, "node": Option<FigureNode> })`
+
+### Handoff Notes for Claude Code
+1. **Registration in `src-tauri`:**
+   ```rust
+   kernel.register(
+       manang_figure::manifest().expect("figure manifest"),
+       Arc::new(manang_figure::plugin()),
+   ).expect("register figure plugin");
+   ```
+2. **Companion SVG Export:** `figure.save` automatically writes both `<name>.figure.json` and deterministic headless `<name>.svg` directly beside it for immediate inclusion in Typst documents (`#image("circuit.svg")`).
+3. **Bounded Undo/Redo & Revision:** Each figure document maintains in-memory history snapshots (default 100 steps) and a monotonically increasing revision counter.
+4. **Verification & Testing:**
+   - 9 integration tests in `crates/manang-figure/tests/kernel.rs` testing all commands against a live `manang_kernel::Kernel`.
+   - 2 property tests in `crates/manang-figure/tests/plugin_proptest.rs` validating that arbitrary operation sequences never panic and that undo/redo round-trips state losslessly.
+   - Snapshot test validating deterministic SVG output exported through the plugin.
