@@ -1,0 +1,201 @@
+/* Manang design tokens — Fundaments.work design system.
+ *
+ * Authority: /run/media/sapiens/Development/Fundaments/design-system/tokens.md
+ * Visual spec: DESIGN.md §2
+ *
+ * Two layers, per the system: a Base that never varies per product, and one
+ * Accent. Manang's accent is Cerulean (#38bdf8) for state only; Acid Lime
+ * (#c6f135) is reserved exclusively for mathematics (DESIGN.md §2.2).
+ *
+ * Runtime theming uses `@theme inline` so utilities resolve through the
+ * custom properties and the light override swaps without a rebuild.
+ */
+
+/* Self-hosted fonts. A local-first app must never reach a font CDN.
+ * Only the two permitted weights are shipped: Sans 300/400, Mono 400. */
+@import "@fontsource/dm-sans/latin-300.css";
+@import "@fontsource/dm-sans/latin-400.css";
+@import "@fontsource/dm-mono/latin-400.css";
+
+@import "tailwindcss";
+
+/* --------------------------------------------------------------------------
+ * Base. Dark is the system's single base; light is a theme inside it.
+ * ----------------------------------------------------------------------- */
+
+:root,
+.theme-dark {
+  color-scheme: dark;
+
+  --mng-bg: #141416;
+  --mng-surface: #1c1c20;
+  --mng-surface-hi: #28282c;
+  --mng-surface-muted: #353539;
+  --mng-recessed: #0d0f0a;
+
+  --mng-line: #3d3d42;
+  --mng-line-subtle: #323236;
+
+  --mng-text: #e8e6e1;
+  --mng-text-60: #9a9a9a;
+  --mng-text-muted: #7a7a7a; /* never text — decorative rules and disabled only */
+
+  /* Accent: state, selection, focus. Always paired with a text label or icon. */
+  --mng-accent: #38bdf8;
+  --mng-accent-ink: #141416; /* ink set on cerulean — the base, not a new hue */
+
+  /* Mathematics only: delimiters and coordinate readouts.
+   * Lime scores 14.16:1 on carbon but 1.24:1 on paper, so the light theme
+   * must never reuse it — see .theme-light below. */
+  --mng-math: #c6f135;
+}
+
+.theme-light {
+  color-scheme: light;
+
+  --mng-bg: #faf9f7;
+  --mng-surface: #f4f3f0;
+  --mng-surface-hi: #ffffff;
+  --mng-surface-muted: #e8e7e2;
+  --mng-recessed: #f4f3f0;
+
+  --mng-line: #d4d3ce;
+  --mng-line-subtle: #e2e1dd;
+
+  --mng-text: #1c1c1c;
+  --mng-text-60: #6b6b6b;
+  --mng-text-muted: #9c9c9c;
+
+  /* Cerulean fails on paper the same way lime does, so the light theme darkens
+   * it by mixing it toward ink. Derived from the token rather than introducing a
+   * new hue: 4.24:1 on paper, which clears the 3:1 floor for UI components and
+   * borders. Accent text always ships beside it. */
+  --mng-accent: color-mix(in srgb, #38bdf8 62%, #1c1c1c);
+  --mng-accent-ink: #faf9f7;
+
+  /* Lime is unusable on paper (1.24:1). Mathematics falls back to ink with a
+   * hairline rule rather than inventing a second accent hue. */
+  --mng-math: #1c1c1c;
+}
+
+/* Paper is not a theme. A rendered page stays paper-white and ink-black
+ * regardless of the surrounding base, because the manuscript must look the
+ * same on screen as it will in print. Theme-independent by design. */
+:root {
+  --mng-paper: #faf9f7;
+  --mng-paper-ink: #1c1c1c;
+  --mng-paper-ink-60: #6b6b6b;
+}
+
+/* --------------------------------------------------------------------------
+ * Tokens consumed by Tailwind. `inline` keeps the var() reference intact so
+ * the theme overrides above take effect at runtime.
+ * ----------------------------------------------------------------------- */
+
+@theme inline {
+  --color-bg: var(--mng-bg);
+  --color-surface: var(--mng-surface);
+  --color-surface-hi: var(--mng-surface-hi);
+  --color-surface-muted: var(--mng-surface-muted);
+  --color-recessed: var(--mng-recessed);
+
+  --color-line: var(--mng-line);
+  --color-line-subtle: var(--mng-line-subtle);
+
+  --color-text: var(--mng-text);
+  --color-text-60: var(--mng-text-60);
+  --color-text-muted: var(--mng-text-muted);
+
+  --color-accent: var(--mng-accent);
+  --color-accent-ink: var(--mng-accent-ink);
+  --color-math: var(--mng-math);
+
+  --color-paper: var(--mng-paper);
+  --color-paper-ink: var(--mng-paper-ink);
+  --color-paper-ink-60: var(--mng-paper-ink-60);
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Two weights only. Hierarchy comes from size and colour. */
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+
+  /* The system's most visible invariant: radius 0, without exception.
+   * Zeroing the scale means any `rounded-*` utility resolves to 0 rather than
+   * needing to be policed by hand. */
+  --radius-none: 0;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+
+  /* Motion. Three durations, one curve. No bounce, no spring, no elastic. */
+  --ease-manang: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 220ms;
+  --duration-slow: 320ms;
+
+  /* Spacing: Tailwind's default 4px base already yields the permitted scale
+   * 4, 8, 12, 16, 24, 32, 48, 64, 96 at steps 1, 2, 3, 4, 6, 8, 12, 16, 24.
+   * Off-scale pixel literals are a defect. */
+}
+
+:root {
+  /* Shared layer, verbatim from the design system. */
+  --radius: 0;
+  --hairline: 1px;
+
+  --tracking-display: -0.03em;
+  --tracking-headline: -0.02em;
+  --tracking-body: -0.01em;
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--mng-bg);
+    color: var(--mng-text);
+    font-family: var(--font-sans);
+    font-weight: 400;
+    letter-spacing: var(--tracking-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* A thin shell must never rubber-band or text-select like a web page. */
+    overscroll-behavior: none;
+    user-select: none;
+  }
+
+  /* Radius backstop. The token scale above handles `rounded-{none..4xl}`, but
+   * `rounded-full` is a literal in Tailwind and cannot be tokenised. The system
+   * forbids every rounded corner, so this is deliberately authoritative:
+   * rounding something requires writing `!important` by hand. */
+  :where(*, ::before, ::after) {
+    border-radius: 0 !important;
+  }
+
+  /* Depth is tonal. The system rejects shadows as a depth mechanism. */
+  :where(*, ::before, ::after) {
+    box-shadow: none;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--mng-accent) 40%, transparent);
+    color: var(--mng-text);
+  }
+
+  :focus-visible {
+    outline: var(--hairline) solid var(--mng-accent);
+    outline-offset: -1px;
+  }
+}

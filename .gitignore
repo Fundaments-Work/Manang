@@ -1,0 +1,22 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Node
+node_modules
+.pnpm-store
+dist
+build
+
+# Tauri generated
+src-tauri/gen/schemas
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea
+*.swp
+
+# Local env
+.env
+.env.local

@@ -1,0 +1,19 @@
+{
+  "name": "manang",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The High-Performance Scientific Authoring & Illustration Suite",
+  "scripts": {
+    "dev": "pnpm --dir frontend dev",
+    "build": "pnpm --dir frontend build",
+    "preview": "pnpm --dir frontend preview",
+    "typecheck": "pnpm --dir frontend typecheck",
+    "lint": "pnpm --dir frontend lint",
+    "format": "pnpm --dir frontend format",
+    "tauri": "pnpm --dir frontend tauri",
+    "app:dev": "pnpm --dir frontend tauri dev",
+    "app:build": "pnpm --dir frontend tauri build"
+  },
+  "packageManager": "pnpm@10.18.1"
+}

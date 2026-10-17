@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Manang",
+  "version": "0.1.0",
+  "identifier": "work.fundaments.manang",
+  "build": {
+    "beforeDevCommand": "pnpm --dir frontend dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm --dir frontend build",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Manang",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 640,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "devCsp": null,
+      "freezePrototype": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Scientific authoring & illustration suite",
+    "longDescription": "Manang combines Typst, LaTeX (Tectonic), Markdown, a vector figure studio, and a CeTZ/TikZ visual development environment into a local-first authoring suite.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

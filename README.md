@@ -16,5 +16,39 @@ Manang combines **Typst**, **LaTeX (Tectonic)**, **Markdown**, an in-house **vec
 
 ---
 
+## Development
+
+Requires Rust 1.85+, Node 22+, and pnpm 10. On Linux the Tauri shell needs
+`webkit2gtk-4.1`, `gtk3`, `libsoup-3.0`, and `glib-2.0` development packages.
+
+```bash
+pnpm install          # install the frontend workspace
+pnpm app:dev          # run the desktop shell (Vite + Tauri)
+pnpm typecheck        # svelte-check + tsc
+pnpm lint             # eslint
+```
+
+Rust quality gates, per `AGENTS.md`:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features --locked -- -D warnings
+cargo test --all
+```
+
+### Layout
+
+```
+Cargo.toml          Rust workspace (release profile lives here, not in a member)
+src-tauri/          Tauri shell: lifecycle and IPC surface only
+frontend/           Svelte 5 presentation shell
+  src/app.css       Design tokens — the single source of UI truth
+  src/lib/state/    Rune-based view state, kept close to the leaves
+docs/plans/         Architecture and roadmap
+docs/adr/           Architecture decision records
+```
+
+---
+
 ### License & Attribution
 Part of the [Fundaments.work](https://fundaments.work) laboratory tools ecosystem.
