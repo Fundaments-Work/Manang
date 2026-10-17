@@ -92,3 +92,39 @@ Compared with Overleaf, the Typst web app and VS Code.
   Whiteboard feature expectations come from common practice, not a verified
   feature matrix.
 - The P0 list is ordered so that each item can be verified in the running app.
+
+## Package 7: Authoring essentials (queued after the Home and compile packages)
+
+Decisions confirmed by the product owner on 2026-10-18:
+
+* **Simplified view = live-preview mode** (Obsidian-style): the source stays
+  editable, but headings, emphasis, lists, math and images render in place and
+  markup appears only around the cursor. Typst and Markdown first, then LaTeX.
+  A full visual (WYSIWYG) editor is deferred to Platform v2 with the `.docx`
+  editor.
+* **Engine per file, not per project.** A file's engine comes from its
+  extension. A project can declare several outputs (main files), each with its
+  own engine, for example a Typst paper and LaTeX slides. Markdown chapters can
+  be included into Typst documents (via our `markdown.to-typst` converter or the
+  `cmarker` Typst package; LaTeX math in Typst via `mitex`). Typst and LaTeX
+  cannot include each other; there is no Markdown-to-LaTeX path yet.
+  `manang.toml` gains an `[[outputs]]` list; the single `engine` key stays as a
+  default for backward compatibility.
+
+Scope:
+
+1. **Images and assets:** drag and drop or paste images into the editor or the
+   Files view; the file is copied into the project (default `figures/`, named
+   from the clipboard or original name, never overwriting) and the right
+   syntax is inserted for the document's language. Image and PDF viewer tabs.
+   An "Insert figure" dialog (file, caption, width, label). A small table
+   helper.
+2. **Click to source and back:** click in the preview jumps to the source
+   position; a command jumps from the cursor to the preview. Typst through the
+   `typst-ide` jump functions (verify against Typst 0.15), LaTeX through the
+   existing `latex.synctex` command.
+3. **Mixed-format projects** as decided above.
+4. **Live-preview mode** as decided above, toggled per editor tab.
+5. **Typst packages:** `cmarker` and `mitex` (and other Typst Universe
+   packages) need a package cache; downloads happen only with consent, then
+   work offline.
