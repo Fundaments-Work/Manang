@@ -1,1 +1,0 @@
-/run/media/sapiens/Development/Manang/crates/manang-wasm-host/tests/fixtures/echo-guest/target/wasm32-unknown-unknown/release/echo_guest.wasm: /run/media/sapiens/Development/Manang/crates/manang-wasm-host/tests/fixtures/echo-guest/src/lib.rs /run/media/sapiens/Development/Manang/crates/manang-wasm-host/wit/plugin.wit

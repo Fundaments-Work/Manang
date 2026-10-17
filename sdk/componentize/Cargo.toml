@@ -1,0 +1,12 @@
+[package]
+name = "manang-componentize"
+version = "0.1.0"
+edition = "2024"
+description = "Encode a wasm32-unknown-unknown core module as a Manang plugin component"
+publish = false
+
+# Standalone workspace: a host tool, not part of the Manang build.
+[workspace]
+
+[dependencies]
+wit-component = "0.262"

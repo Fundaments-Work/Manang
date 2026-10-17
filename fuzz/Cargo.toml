@@ -1,0 +1,32 @@
+[package]
+name = "manang-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Standalone workspace: cargo-fuzz needs nightly and sanitizer flags that must
+# not leak into the main workspace.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+manang-kernel = { path = "../crates/manang-kernel" }
+manang-wasm-host = { path = "../crates/manang-wasm-host" }
+serde_json = "1"
+
+[[bin]]
+name = "manifest_from_toml"
+path = "fuzz_targets/manifest_from_toml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "payload_boundary"
+path = "fuzz_targets/payload_boundary.rs"
+test = false
+doc = false
+bench = false

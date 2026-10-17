@@ -109,6 +109,55 @@ impl CapabilitySet {
         Ok(Self { granted })
     }
 
+    /// Filesystem scopes granted for at least `access` (a `write` grant also
+    /// satisfies a `read` request), sorted for determinism.
+    pub fn filesystem_scopes(&self, access: Access) -> Vec<&str> {
+        let mut scopes: Vec<&str> = self
+            .granted
+            .iter()
+            .filter_map(|c| match c {
+                Capability::Filesystem { access: a, scope }
+                    if access == Access::Read || *a == Access::Write =>
+                {
+                    Some(scope.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        scopes.sort_unstable();
+        scopes.dedup();
+        scopes
+    }
+
+    /// Whether `host` is an exactly granted network host (ASCII
+    /// case-insensitive).
+    pub fn allows_host(&self, host: &str) -> bool {
+        self.granted.contains(&Capability::Network {
+            host: host.to_ascii_lowercase(),
+        })
+    }
+
+    /// Whether any network host is granted.
+    pub fn has_network(&self) -> bool {
+        self.granted
+            .iter()
+            .any(|c| matches!(c, Capability::Network { .. }))
+    }
+
+    /// Whether any filesystem scope is granted.
+    pub fn has_filesystem(&self) -> bool {
+        self.granted
+            .iter()
+            .any(|c| matches!(c, Capability::Filesystem { .. }))
+    }
+
+    /// Whether any buffer target is granted.
+    pub fn has_buffer(&self) -> bool {
+        self.granted
+            .iter()
+            .any(|c| matches!(c, Capability::Buffer { .. }))
+    }
+
     /// Whether `wanted` is covered by a grant. `Write` covers `Read`.
     pub fn allows(&self, wanted: &Capability) -> bool {
         if self.granted.contains(wanted) {
@@ -198,6 +247,24 @@ mod tests {
         assert!(set.allows(&fs(Access::Read, "templates")));
         assert!(!set.allows(&fs(Access::Write, "templates")));
         assert!(!set.allows(&fs(Access::Read, "other")));
+    }
+
+    #[test]
+    fn scope_and_host_queries() {
+        let p = Permissions {
+            filesystem: vec!["write:out".into(), "read:templates".into()],
+            network: vec!["Api.Example.org".into()],
+            ..Permissions::default()
+        };
+        let set = CapabilitySet::from_permissions(&p).expect("valid");
+        assert_eq!(
+            set.filesystem_scopes(Access::Read),
+            vec!["out", "templates"]
+        );
+        assert_eq!(set.filesystem_scopes(Access::Write), vec!["out"]);
+        assert!(set.allows_host("API.example.ORG"));
+        assert!(!set.allows_host("example.org"));
+        assert!(set.has_network() && set.has_filesystem() && !set.has_buffer());
     }
 
     #[test]

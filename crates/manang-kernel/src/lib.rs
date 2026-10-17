@@ -6,7 +6,7 @@
 //!
 //! * [`Tier::Native`]: first-party, trusted Rust compiled into the binary, so
 //!   hot paths stay inside the latency budget.
-//! * [`Tier::Wasm`]: third-party, run in an Extism/Wasmtime sandbox with no
+//! * [`Tier::Wasm`]: third-party, run in a Wasmtime sandbox with no
 //!   syscall access beyond the capabilities the manifest declares.
 //!
 //! The kernel owns no UI and no Tauri types. The shell talks to it through

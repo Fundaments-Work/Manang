@@ -17,6 +17,14 @@ fn fail(message: &str) -> Failure {
     }
 }
 
+#[inline(never)]
+#[allow(unconditional_recursion)] // intentional: the host must survive it
+fn recurse(n: u64) -> u64 {
+    let big = [n as u8; 256];
+    std::hint::black_box(big);
+    recurse(n + 1) + u64::from(big[0])
+}
+
 impl Guest for Echo {
     fn invoke(command: String, input: Payload) -> Result<Payload, Failure> {
         match command.as_str() {
@@ -44,6 +52,26 @@ impl Guest for Echo {
                 v.resize(512 * 1024 * 1024, 1);
                 Ok(Payload::Json(std::hint::black_box(v).len().to_string()))
             }
+            // Returns `n` zero bytes, where `n` is the JSON input.
+            "echo.big" => match input {
+                Payload::Json(n) => {
+                    let n: usize = n.parse().map_err(|_| fail("expected a number"))?;
+                    Ok(Payload::Binary(vec![0; n]))
+                }
+                _ => Err(fail("expected json")),
+            },
+            "echo.bigjson" => match input {
+                Payload::Json(n) => {
+                    let n: usize = n.parse().map_err(|_| fail("expected a number"))?;
+                    Ok(Payload::Json(format!("\"{}\"", "x".repeat(n))))
+                }
+                _ => Err(fail("expected json")),
+            },
+            "echo.badjson" => Ok(Payload::Json("{not json".to_owned())),
+            "echo.longerr" => Err(fail(&"e".repeat(100_000))),
+            "echo.trap" => panic!("guest panics on purpose"),
+            // Unbounded recursion: must hit the stack limit, not crash the host.
+            "echo.stack" => Ok(Payload::Json(recurse(1).to_string())),
             other => Err(fail(&format!("unknown command {other}"))),
         }
     }

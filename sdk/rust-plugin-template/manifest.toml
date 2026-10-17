@@ -1,0 +1,23 @@
+[plugin]
+# Lowercase kebab-case. Must equal the directory name the plugin is installed in
+# and prefixes every command id.
+name = "my-plugin"
+version = "0.1.0"
+description = "What this plugin does, in one line."
+
+# Everything is denied unless listed. Uncomment what you need, and switch the
+# `world` in src/lib.rs to match (`plugin-buffer`, `plugin-fs`, `plugin-http`
+# or `plugin-full`).
+#
+# [permissions]
+# buffer = ["read:active"]            # read the active document
+# filesystem = ["read:templates"]     # read files under <project>/templates
+# network = ["api.crossref.org"]      # exact host names only
+
+[contributes]
+# Lifecycle hooks: on_compile_pre, on_compile_post, on_lint, register_agent_tool.
+hooks = []
+
+[[contributes.commands]]
+id = "my-plugin.hello"
+title = "Say hello"
