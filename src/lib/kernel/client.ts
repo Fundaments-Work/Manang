@@ -29,9 +29,20 @@ export function isKernelError(value: unknown): value is KernelError {
   );
 }
 
-type Args = Record<string, unknown>;
+export type Args = Record<string, unknown>;
 
-export const kernel = {
+/**
+ * The surface every kernel backend implements: the Tauri IPC client below and
+ * the in-memory mock used in the browser. Callers depend on this, never on a
+ * concrete backend.
+ */
+export interface Kernel {
+  commands(): Promise<KernelCommand[]>;
+  run<T = unknown>(command: string, args?: Args): Promise<T>;
+  runBinary(command: string, args?: Args): Promise<Uint8Array>;
+}
+
+export const kernel: Kernel = {
   commands(): Promise<KernelCommand[]> {
     return invoke<KernelCommand[]>("kernel_commands");
   },
