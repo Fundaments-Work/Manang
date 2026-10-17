@@ -21,6 +21,7 @@
     filterSettings,
     groupSettings,
   } from "$lib/workbench/settings";
+  import AboutView from "./settings/AboutView.svelte";
   import KeybindingsTable from "./settings/KeybindingsTable.svelte";
   import SettingRow from "./settings/SettingRow.svelte";
 
@@ -357,36 +358,6 @@
     </div>
 
   {:else}
-    <!-- About View -->
-    <div class="p-4 space-y-4 text-xs">
-      <div>
-        <h3 class="m-0 text-sm font-medium text-text">Manang</h3>
-        <p class="m-0 mt-1 text-[11px] text-text-60 leading-relaxed">
-          The High-Performance Scientific Authoring & Illustration Suite.
-        </p>
-      </div>
-
-      <div class="border border-line p-3 space-y-1 font-mono text-[11px]">
-        <div class="flex justify-between">
-          <span class="text-text-muted">Version:</span>
-          <span class="text-text">0.1.0</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-text-muted">Kernel:</span>
-          <span class="text-text">Plugin Host v2</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-text-muted">Design:</span>
-          <span class="text-accent">Fundaments.work</span>
-        </div>
-      </div>
-
-      <div>
-        <div class="font-medium text-text mb-1">Open Source Licences</div>
-        <p class="m-0 text-[11px] text-text-60 leading-relaxed">
-          Manang incorporates open-source components under MIT, Apache 2.0, and BSD licences.
-        </p>
-      </div>
-    </div>
+    <AboutView />
   {/if}
 </div>
