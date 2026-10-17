@@ -176,20 +176,19 @@ pub(crate) fn fetch(
             .map_err(|e| format!("request failed: {e}"))?;
 
         let status = response.status().as_u16();
-        if matches!(status, 301 | 302 | 303 | 307 | 308) {
-            if let Some(location) = response
+        if matches!(status, 301 | 302 | 303 | 307 | 308)
+            && let Some(location) = response
                 .headers()
                 .get(http::header::LOCATION)
                 .and_then(|v| v.to_str().ok())
-            {
-                url = resolve_location(&uri, location)?;
-                // 303, and 301/302 on POST, become GET without a body.
-                if status == 303 || (matches!(status, 301 | 302) && method == Method::POST) {
-                    method = Method::GET;
-                    body = None;
-                }
-                continue;
+        {
+            url = resolve_location(&uri, location)?;
+            // 303, and 301/302 on POST, become GET without a body.
+            if status == 303 || (matches!(status, 301 | 302) && method == Method::POST) {
+                method = Method::GET;
+                body = None;
             }
+            continue;
         }
 
         let headers = response

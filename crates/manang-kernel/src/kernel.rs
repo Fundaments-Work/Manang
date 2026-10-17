@@ -98,13 +98,13 @@ impl Kernel {
             .cloned()
             .ok_or_else(|| KernelError::UnknownPlugin(name.clone()))?;
         for command in &manifest.contributes.commands {
-            if let Some(owner) = reg.commands.get(&command.id) {
-                if owner != &name {
-                    return Err(KernelError::CommandTaken {
-                        command: command.id.clone(),
-                        owner: owner.clone(),
-                    });
-                }
+            if let Some(owner) = reg.commands.get(&command.id)
+                && owner != &name
+            {
+                return Err(KernelError::CommandTaken {
+                    command: command.id.clone(),
+                    owner: owner.clone(),
+                });
             }
         }
         for command in &old.manifest.contributes.commands {

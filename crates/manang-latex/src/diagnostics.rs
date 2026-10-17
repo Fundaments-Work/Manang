@@ -391,12 +391,13 @@ pub fn parse_bibtex_log(log: &str, aux: &str) -> Vec<Diagnostic> {
         } else if let Some(rest) = line.strip_prefix("---line ") {
             // Location detail for the error printed just before.
             let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-            if let (Some(last), Ok(n)) = (out.last_mut(), digits.parse::<u32>()) {
-                if last.severity == Severity::Error && last.line.is_none() {
-                    last.line = Some(n);
-                    if let Some((_, file)) = rest.split_once("of file ") {
-                        last.file = Some(file.trim().to_owned());
-                    }
+            if let (Some(last), Ok(n)) = (out.last_mut(), digits.parse::<u32>())
+                && last.severity == Severity::Error
+                && last.line.is_none()
+            {
+                last.line = Some(n);
+                if let Some((_, file)) = rest.split_once("of file ") {
+                    last.file = Some(file.trim().to_owned());
                 }
             }
         } else if line.starts_with("I couldn't open")

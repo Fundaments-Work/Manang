@@ -142,10 +142,10 @@ impl Manifest {
         if p.filesystem.len() + p.network.len() + p.buffer.len() > MAX_ENTRIES {
             return Err(ManifestError::TooMany(MAX_ENTRIES, "permissions"));
         }
-        if let Some(entry) = &self.plugin.entry {
-            if !safe_entry(entry) {
-                return Err(ManifestError::BadEntry(entry.clone()));
-            }
+        if let Some(entry) = &self.plugin.entry
+            && !safe_entry(entry)
+        {
+            return Err(ManifestError::BadEntry(entry.clone()));
         }
         let prefix = format!("{name}.");
         let mut seen = HashSet::new();
