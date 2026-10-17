@@ -34,8 +34,9 @@ describe("palette candidates", () => {
       "Workbench",
       "Workbench",
       "Plugin commands",
-      "Plugin commands",
     ]);
+    // `editor.new` is an internal the shell calls itself; it is not offered.
+    expect(all.some((c) => c.hint === "editor.new")).toBe(false);
     const typed = paletteCandidates({ ...base, mode: "commands", query: "res" });
     expect(typed.some((c) => c.id === "file:sections/results.typ")).toBe(true);
   });
