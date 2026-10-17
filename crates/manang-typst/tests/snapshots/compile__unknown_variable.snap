@@ -1,0 +1,21 @@
+---
+source: crates/manang-typst/tests/compile.rs
+expression: report.diagnostics
+---
+[
+  {
+    "severity": "error",
+    "message": "unknown variable: undefined-thing",
+    "file": "/main.typ",
+    "line": 3,
+    "column": 2,
+    "range": {
+      "start": 16,
+      "end": 31
+    },
+    "hints": [
+      "if you meant to use subtraction, try adding spaces around the minus sign: `undefined - thing`"
+    ],
+    "trace": []
+  }
+]
