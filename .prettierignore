@@ -9,4 +9,4 @@ artifacts/
 # markdown table reflow rewrites the specification tables in AGENTS.md and
 # DESIGN.md, which are the contract rather than the output — leave them alone.
 *.md
-docs/
+docs/.claude/
