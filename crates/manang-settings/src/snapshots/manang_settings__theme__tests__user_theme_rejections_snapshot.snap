@@ -1,0 +1,16 @@
+---
+source: crates/manang-settings/src/theme.rs
+expression: out
+---
+[
+    "theme `a` is invalid: `--mng-accent` is a brand colour and cannot be overridden",
+    "theme `b` is invalid: unknown token `--mng-radius`; allowed tokens are --mng-bg, --mng-surface, --mng-surface-hi, --mng-surface-muted, --mng-recessed, --mng-line, --mng-line-subtle, --mng-text, --mng-text-60, --mng-text-muted, --mng-math",
+    "theme `c` is invalid: `--mng-bg` must be a hex colour like \"#1a1a1c\"",
+    "theme `d` is invalid: `--mng-text` on `--mng-bg` has contrast 1.00:1; text needs at least 4.5:1; `--mng-text-60` on `--mng-bg` has contrast 2.26:1; text needs at least 4.5:1; `--mng-math` on `--mng-bg` has contrast 1.37:1; text needs at least 4.5:1; `--mng-accent` on `--mng-bg` has contrast 1.05:1; UI needs at least 3:1",
+    "theme `e` is invalid: `--mng-text` on `--mng-bg` has contrast 1.53:1; text needs at least 4.5:1; `--mng-text` on `--mng-surface` has contrast 1.45:1; text needs at least 4.5:1; `--mng-text` on `--mng-surface-hi` has contrast 1.61:1; text needs at least 4.5:1; `--mng-text` on `--mng-surface-muted` has contrast 1.30:1; text needs at least 4.5:1; `--mng-text` on `--mng-recessed` has contrast 1.45:1; text needs at least 4.5:1",
+    "theme `f` is invalid: unknown base `sepia`; use \"dark\" or \"light\"",
+    "theme `g` is invalid: `base` is required and must be \"dark\" or \"light\"",
+    "theme `h` is invalid: unknown key `extra`",
+    "theme `dark` is invalid: the id must be lowercase kebab-case and not a built-in name",
+    "theme `i` is invalid: not valid TOML: extra `=`, expected nothing",
+]

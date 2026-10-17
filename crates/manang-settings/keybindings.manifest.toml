@@ -1,0 +1,29 @@
+[plugin]
+name = "keybindings"
+version = "0.1.0"
+description = "Keybinding registry, user overrides and conflict detection"
+tier = "native"
+
+[permissions]
+filesystem = ["write:config"]
+
+[contributes]
+[[contributes.commands]]
+id = "keybindings.list"
+title = "List keybindings"
+
+[[contributes.commands]]
+id = "keybindings.resolve"
+title = "Resolve a key press to a command"
+
+[[contributes.commands]]
+id = "keybindings.set"
+title = "Rebind a command"
+
+[[contributes.commands]]
+id = "keybindings.reset"
+title = "Reset keybindings"
+
+[[contributes.commands]]
+id = "keybindings.register"
+title = "Register plugin keybindings"

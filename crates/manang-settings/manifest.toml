@@ -1,0 +1,37 @@
+[plugin]
+name = "settings"
+version = "0.1.0"
+description = "Typed settings registry, layered user/project values, keybindings and themes"
+tier = "native"
+
+[permissions]
+filesystem = ["write:config", "write:project"]
+
+[contributes]
+[[contributes.commands]]
+id = "settings.get"
+title = "Read settings"
+
+[[contributes.commands]]
+id = "settings.set"
+title = "Change a setting"
+
+[[contributes.commands]]
+id = "settings.reset"
+title = "Reset a setting to its default"
+
+[[contributes.commands]]
+id = "settings.schema"
+title = "Settings schema"
+
+[[contributes.commands]]
+id = "settings.register"
+title = "Register plugin settings"
+
+[[contributes.commands]]
+id = "settings.open-file"
+title = "Open settings file"
+
+[[contributes.commands]]
+id = "settings.use-project"
+title = "Select the project whose settings layer applies"

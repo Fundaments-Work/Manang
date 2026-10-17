@@ -1,0 +1,196 @@
+---
+source: crates/manang-settings/tests/registry.rs
+expression: "Registry::with_core().schema()"
+---
+{
+  "categories": [
+    "appearance",
+    "compile",
+    "editor",
+    "files",
+    "preview"
+  ],
+  "settings": [
+    {
+      "category": "appearance",
+      "default": "",
+      "description": "Id of a user theme from the themes folder to use instead of the built-in one. Empty for none.",
+      "id": "appearance.custom-theme",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "user",
+      "type": "string"
+    },
+    {
+      "category": "appearance",
+      "default": "system",
+      "description": "Replace transitions with instant changes. `system` follows the operating system.",
+      "id": "appearance.reduced-motion",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "user",
+      "type": "enum",
+      "values": [
+        "system",
+        "on",
+        "off"
+      ]
+    },
+    {
+      "category": "appearance",
+      "default": "dark",
+      "description": "Colour theme. `system` follows the operating system.",
+      "id": "appearance.theme",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "user",
+      "type": "enum",
+      "values": [
+        "dark",
+        "light",
+        "system"
+      ]
+    },
+    {
+      "category": "appearance",
+      "default": 1.0,
+      "description": "Scale factor for the whole interface.",
+      "id": "appearance.ui-scale",
+      "max": 2.0,
+      "min": 0.75,
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "user",
+      "type": "float"
+    },
+    {
+      "category": "compile",
+      "default": "typst",
+      "description": "Default compile engine for new projects.",
+      "id": "compile.engine",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "project",
+      "type": "enum",
+      "values": [
+        "typst",
+        "latex",
+        "markdown"
+      ]
+    },
+    {
+      "category": "editor",
+      "default": 14,
+      "description": "Editor font size in pixels.",
+      "id": "editor.font-size",
+      "max": 48,
+      "min": 8,
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "project",
+      "type": "int"
+    },
+    {
+      "category": "editor",
+      "default": 1.6,
+      "description": "Editor line height as a multiple of the font size.",
+      "id": "editor.line-height",
+      "max": 3.0,
+      "min": 1.0,
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "project",
+      "type": "float"
+    },
+    {
+      "category": "editor",
+      "default": true,
+      "description": "Show line numbers in the gutter.",
+      "id": "editor.line-numbers",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "project",
+      "type": "bool"
+    },
+    {
+      "category": "editor",
+      "default": 2,
+      "description": "Number of columns a tab occupies.",
+      "id": "editor.tab-size",
+      "max": 16,
+      "min": 1,
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "project",
+      "type": "int"
+    },
+    {
+      "category": "editor",
+      "default": false,
+      "description": "Use Vim-style modal editing. Off keeps the editor modeless.",
+      "id": "editor.vim-mode",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "user",
+      "type": "bool"
+    },
+    {
+      "category": "editor",
+      "default": true,
+      "description": "Wrap long lines at the editor width.",
+      "id": "editor.word-wrap",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "project",
+      "type": "bool"
+    },
+    {
+      "category": "files",
+      "default": "after-delay",
+      "description": "When modified documents are saved automatically.",
+      "id": "files.autosave",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "user",
+      "type": "enum",
+      "values": [
+        "off",
+        "after-delay",
+        "on-focus-loss"
+      ]
+    },
+    {
+      "category": "files",
+      "default": true,
+      "description": "Move deleted files to the trash instead of removing them permanently.",
+      "id": "files.trash-on-delete",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "user",
+      "type": "bool"
+    },
+    {
+      "category": "preview",
+      "default": true,
+      "description": "Recompile the preview automatically while typing.",
+      "id": "preview.auto-compile",
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "project",
+      "type": "bool"
+    },
+    {
+      "category": "preview",
+      "default": 300,
+      "description": "Milliseconds to wait after the last keystroke before recompiling.",
+      "id": "preview.debounce-ms",
+      "max": 5000,
+      "min": 0,
+      "owner": "core",
+      "requires-restart": false,
+      "scope": "project",
+      "type": "int"
+    }
+  ],
+  "version": 1
+}
