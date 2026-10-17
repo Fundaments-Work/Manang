@@ -1,0 +1,23 @@
+---
+source: crates/manang-git/tests/diff_snapshots.rs
+expression: "v[\"text\"].as_str().unwrap_or_default()"
+---
+diff --git a/doc.typ b/doc.typ
+--- a/doc.typ
++++ b/doc.typ
+@@ -1,7 +1,8 @@
+ = Title
+ 
+-First paragraph.
++First paragraph, edited.
+ Second line.
+ Third line.
++Inserted ünïcode 😀.
+ 
+ End.
+diff --git a/fresh.txt b/fresh.txt
+new file
+--- /dev/null
++++ b/fresh.txt
+@@ -0,0 +1 @@
++brand new
