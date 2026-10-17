@@ -781,3 +781,35 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
 
 
 
+
+## UI Wiring - Task F: Outline View -> Typst, LaTeX, and Markdown
+
+### Summary of Changes
+1. **Typed Kernel Wrappers (`src/lib/kernel/api.ts`):**
+   - Added `MarkdownHeading` interface and `markdownApi(kernel)` with `outline(source: string)`.
+2. **Pure Outline Extractors (`src/lib/workbench/outline.ts` & `outline.test.ts`):**
+   - Implemented `parseTypstOutline(source: string)`:
+     - Extracts `= Heading` hierarchical structures (levels 1-6).
+     - Extracts both inline `<label>` tags and subsequent standalone `<label>` lines.
+     - Safely ignores line comments (`//`), block comments (`/* ... */`), and fenced code blocks (` ``` `).
+   - Implemented `parseLatexOutline(source: string)`:
+     - Extracts `\part`, `\chapter`, `\section`, `\subsection`, `\subsubsection`, `\paragraph`, `\subparagraph`.
+     - Handles balanced curly braces across multiline section arguments and cleans LaTeX markup commands.
+     - Extracts associated `\label{...}` declarations.
+     - Safely ignores comments (`%`) and verbatim environments (`\begin{verbatim}`, etc.).
+   - Implemented `parseMarkdownOutline(source: string, kernel?: Kernel)`:
+     - Calls `markdownApi(kernel).outline(...)` when kernel is present.
+     - Pure TypeScript fallback `parseMarkdownOutlineTS` for ATX headings (`# Heading`) and custom `{#id}` attributes outside fenced code blocks.
+   - Implemented `getDocumentOutline(source, engine, kernel)` routing according to engine.
+   - 4 unit tests covering Typst, LaTeX, Markdown TS fallback, and dispatch.
+3. **Outline Panel UI (`src/lib/components/OutlinePanel.svelte` & `src/lib/components/panels/OutlinePanel.svelte`):**
+   - Registered "Outline" side view in `layout.ts` (`SideView`, `SIDE_VIEWS`, `SIDE_VIEW_ICONS`), `Icon.svelte` (outline icon geometry), and `ActivityBar.svelte`.
+   - Connected `SideBar.svelte` to render `OutlinePanel`.
+   - Subscribes to active document (`tabs.active`) and updates while typing via `documents.onEdit(...)` with 300 ms debounce.
+   - Clear empty states: "No document open" and "No headings found" with contextual syntax instructions.
+   - Accessible heading list with level indentation, `H1`..`H6` indicators, title, `<label>` tags, and line numbers (`L${line}`).
+   - Click-to-jump navigates the editor caret directly via `goToMatch(path, line, column)`.
+4. **Testing & Verification:**
+   - Vitest suite passing with 30 test suites (257 tests passing).
+   - Passed `pnpm run typecheck && pnpm run lint`.
+   - Passed end-to-end headless visual verification harness (`verify-ui.mjs`, 122/122 checks passing on port 1431).

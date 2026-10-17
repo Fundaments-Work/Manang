@@ -10,6 +10,7 @@ export type SideView =
   | "files"
   | "search"
   | "source-control"
+  | "outline"
   | "figures"
   | "references"
   | "plugins"
@@ -22,6 +23,7 @@ export const SIDE_VIEWS: readonly SideView[] = [
   "files",
   "search",
   "source-control",
+  "outline",
   "figures",
   "references",
   "plugins",
@@ -32,6 +34,7 @@ export const SIDE_VIEW_ICONS: Record<SideView, string> = {
   files: "files",
   search: "search",
   "source-control": "source-control",
+  outline: "outline",
   figures: "figures",
   references: "references",
   plugins: "plugins",

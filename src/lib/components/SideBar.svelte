@@ -1,6 +1,7 @@
 <script lang="ts">
   import FiguresPanel from "./panels/FiguresPanel.svelte";
   import FilesPanel from "./panels/FilesPanel.svelte";
+  import OutlinePanel from "./panels/OutlinePanel.svelte";
   import PluginsPanel from "./panels/PluginsPanel.svelte";
   import ReferencesPanel from "./panels/ReferencesPanel.svelte";
   import SearchPanel from "./panels/SearchPanel.svelte";
@@ -25,6 +26,7 @@
     files: "Files",
     search: "Search",
     "source-control": "Source Control",
+    outline: "Outline",
     figures: "Figures",
     references: "References",
     plugins: "Plugins",
@@ -50,6 +52,8 @@
       <SearchPanel />
     {:else if view === "source-control"}
       <SourceControlPanel />
+    {:else if view === "outline"}
+      <OutlinePanel />
     {:else if view === "figures"}
       <FiguresPanel />
     {:else if view === "references"}
