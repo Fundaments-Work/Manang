@@ -1,41 +1,41 @@
 /**
- * Headless verification harness for the Manang shell.
+ * Headless verification harness for the Manang workbench.
  *
- * The AGENTS.md testing pyramid asks for end-to-end UI tests, and the shell's
- * most valuable checks are visual and interactive: that the Margin Whisper
- * gutter actually paints a 4px square on the right line, that the palette's
- * arrow-key navigation moves the selection, that an overlay does not darken what
- * sits behind it. None of that is observable from a DOM snapshot alone.
+ * The AGENTS.md testing pyramid asks for end-to-end UI tests, and the
+ * workbench's most valuable checks are visual and interactive: that the tab
+ * strip really switches documents, that an error typed into the editor reaches
+ * the Problems panel and the gutter, that the tree answers the arrow keys, that
+ * the side panel overlays instead of squeezing the editor on a narrow window.
+ * None of that is observable from unit tests alone.
  *
  * Drives the already-installed system Chromium over the DevTools protocol
  * rather than downloading a browser, so the check runs offline and on the same
- * binary the developer sees. `ws` is the only dependency.
+ * binary the developer sees. `ws` is the only dependency. The app runs against
+ * the in-memory demo kernel (`pnpm dev`), which has the same command shapes as
+ * the Rust plugins.
  *
- * Usage: node scripts/verify-ui.mjs [hash ...]
+ * Usage: node scripts/verify-ui.mjs        (expects `pnpm dev` on MANANG_ORIGIN,
+ *        default http://127.0.0.1:1420)
  */
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { setTimeout as sleep } from "node:timers/promises";
 import { request as httpRequest } from "node:http";
+import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 
 const ORIGIN = process.env.MANANG_ORIGIN ?? "http://127.0.0.1:1420";
 const SHOTS = "artifacts/screens";
-const PORT = 9333;
+const PORT = Number(process.env.MANANG_CDP_PORT ?? 9333);
 
 function findBrowser() {
-  const candidates = [
+  for (const name of [
     "chromium",
     "chromium-browser",
     "google-chrome",
     "google-chrome-stable",
-  ];
-  for (const name of candidates) {
-    // `spawnSync` rather than `spawn`: the exit status has to be readable before
-    // deciding, and a browser hunt should not leave a dangling child process.
-    const found = spawnSync("which", [name], { stdio: "ignore" });
-    if (found.status === 0) return name;
+  ]) {
+    if (spawnSync("which", [name], { stdio: "ignore" }).status === 0) return name;
   }
   return null;
 }
@@ -48,11 +48,24 @@ class Cdp {
   #socket;
   #next = 1;
   #pending = new Map();
+  errors = [];
 
   constructor(socket) {
     this.#socket = socket;
     socket.on("message", (raw) => {
       const message = JSON.parse(raw.toString());
+      if (message.method === "Runtime.exceptionThrown") {
+        this.errors.push(
+          message.params.exceptionDetails.exception?.description ?? "exception",
+        );
+      } else if (
+        message.method === "Runtime.consoleAPICalled" &&
+        message.params.type === "error"
+      ) {
+        this.errors.push(
+          message.params.args.map((a) => a.value ?? a.description).join(" "),
+        );
+      }
       const entry = this.#pending.get(message.id);
       if (entry === undefined) return;
       this.#pending.delete(message.id);
@@ -76,7 +89,17 @@ class Cdp {
   send(method, params = {}) {
     const id = this.#next++;
     return new Promise((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      // A call that never answers means the page died; fail loudly, not by hanging.
+      const timer = setTimeout(() => {
+        this.#pending.delete(id);
+        reject(
+          new Error(`no answer to ${method} within 20s (did the page close or crash?)`),
+        );
+      }, 20000);
+      this.#pending.set(id, {
+        resolve: (value) => (clearTimeout(timer), resolve(value)),
+        reject: (error) => (clearTimeout(timer), reject(error)),
+      });
       this.#socket.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -131,52 +154,43 @@ async function waitForEndpoint(port, timeoutMs = 15000) {
 
 const results = [];
 
+/** The page under test, so a failure can show what the page itself reported. */
+let current;
+
 function check(name, passed, detail = "") {
   results.push({ name, passed, detail });
-  const mark = passed ? "PASS" : "FAIL";
-  process.stdout.write(`  ${mark}  ${name}${detail ? ` — ${detail}` : ""}\n`);
-}
-
-async function newPage(browser, hash) {
-  const target = await browser.send("Target.createTarget", { url: "about:blank" });
-  const list = await fetch(`http://127.0.0.1:${PORT}/json/list`).then((r) => r.json());
-  const info = list.find((entry) => entry.id === target.targetId);
-  const cdp = await Cdp.open(info.webSocketDebuggerUrl);
-  await cdp.send("Page.enable");
-  await cdp.send("Runtime.enable");
-  await cdp.send("Emulation.setDeviceMetricsOverride", {
-    width: 1280,
-    height: 820,
-    deviceScaleFactor: 1,
-    mobile: false,
-  });
-  await cdp.send("Page.navigate", { url: `${ORIGIN}/${hash}` });
-  // Wait for the shell to mount rather than sleeping a guessed interval.
-  await waitFor(
-    cdp,
-    `document.readyState === "complete" && document.querySelector("#app")?.childElementCount > 0`,
-    {
-      label: "app mounted",
-    },
+  process.stdout.write(
+    `  ${passed ? "PASS" : "FAIL"}  ${name}${detail ? ` (${detail})` : ""}\n`,
   );
-  await sleep(600);
-  return cdp;
+  if (process.env.MANANG_TRACE === "1" && current !== undefined) {
+    // Debug aid: which tabs are unsaved after each check.
+    void dirtyTabs(current).then(async (dirty) => {
+      process.stdout.write(`        unsaved: ${dirty.join() || "none"}\n`);
+      const active = await activeTab(current);
+      if (active !== null && dirty.includes(active) && dirty.length === 1) {
+        process.stdout.write(
+          `        text: ${JSON.stringify(await current.evaluate(`document.querySelector(".cm-content")?.innerText.slice(0, 300) ?? ""`))}\n`,
+        );
+      }
+    });
+  }
+  if (!passed && current !== undefined && current.errors.length > 0) {
+    process.stdout.write(
+      `        page reported: ${current.errors.splice(0).join(" | ").slice(0, 600)}\n`,
+    );
+  }
 }
 
-async function shoot(cdp, name) {
-  const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
-  mkdirSync(SHOTS, { recursive: true });
-  writeFileSync(`${SHOTS}/${name}.png`, Buffer.from(data, "base64"));
+function section(title) {
+  process.stdout.write(`\n${title}\n`);
 }
 
 /**
- * Polls until `expression` returns truthy.
- *
- * A fixed sleep is a flaky test: the editor mounts, then the Typst grammar
- * chunk resolves, then the whisper gutter repaints. Waiting for the thing under
- * test instead of guessing a duration is what makes this suite reliable.
+ * Polls until `expression` returns truthy. A fixed sleep is a flaky test: the
+ * editor mounts, then the grammar chunk resolves, then the preview renders.
+ * Waiting for the thing under test is what makes this suite reliable.
  */
-async function waitFor(cdp, expression, { timeout = 15000, label = expression } = {}) {
+async function waitFor(cdp, expression, { timeout = 30000, label = expression } = {}) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     let value = false;
@@ -186,29 +200,234 @@ async function waitFor(cdp, expression, { timeout = 15000, label = expression } 
       value = false;
     }
     if (value) return true;
-    await sleep(150);
+    await sleep(100);
   }
   throw new Error(`timed out waiting for: ${label}`);
 }
 
-/** Dispatches a key press the way a real keyboard would. */
-async function pressKey(cdp, key, virtualKeyCode) {
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "rawKeyDown",
-    key,
-    code: key,
-    windowsVirtualKeyCode: virtualKeyCode,
-    nativeVirtualKeyCode: virtualKeyCode,
+/** A check that waits for its condition, so slow machines do not flake. */
+async function expectEventually(cdp, name, expression, options = {}) {
+  try {
+    await waitFor(cdp, expression, { timeout: options.timeout ?? 10000, label: name });
+    check(name, true);
+    return true;
+  } catch {
+    check(name, false, options.detail ?? "condition never became true");
+    return false;
+  }
+}
+
+async function newPage(browser, { width = 1280, height = 820, fresh = true } = {}) {
+  const target = await browser.send("Target.createTarget", { url: "about:blank" });
+  const list = await fetch(`http://127.0.0.1:${PORT}/json/list`).then((r) => r.json());
+  const info = list.find((entry) => entry.id === target.targetId);
+  const cdp = await Cdp.open(info.webSocketDebuggerUrl);
+  await cdp.send("Page.enable");
+  await cdp.send("Runtime.enable");
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width,
+    height,
+    deviceScaleFactor: 1,
+    mobile: false,
   });
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyUp",
-    key,
-    code: key,
-    windowsVirtualKeyCode: virtualKeyCode,
-    nativeVirtualKeyCode: virtualKeyCode,
+  if (fresh) {
+    // Persisted layout and tabs would leak between runs; start from nothing.
+    await cdp.send("Page.navigate", { url: `${ORIGIN}/` });
+    await sleep(400);
+    await cdp.evaluate(`localStorage.clear()`);
+  }
+  await cdp.send("Page.navigate", { url: `${ORIGIN}/` });
+  await waitFor(
+    cdp,
+    `document.readyState === "complete" && document.querySelector("#app")?.childElementCount > 0`,
+    {
+      label: "app mounted",
+    },
+  );
+  await sleep(300);
+  return cdp;
+}
+
+async function reload(cdp) {
+  await cdp.send("Page.reload");
+  await sleep(300);
+  await waitFor(
+    cdp,
+    `document.readyState === "complete" && document.querySelector("#app")?.childElementCount > 0`,
+  );
+}
+
+async function resize(cdp, width, height) {
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width,
+    height,
+    deviceScaleFactor: 1,
+    mobile: false,
   });
   await sleep(250);
 }
+
+async function shoot(cdp, name) {
+  const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
+  mkdirSync(SHOTS, { recursive: true });
+  writeFileSync(`${SHOTS}/${name}.png`, Buffer.from(data, "base64"));
+}
+
+/* -- Input --------------------------------------------------------------- */
+
+const KEYS = {
+  Tab: ["Tab", 9],
+  Enter: ["Enter", 13],
+  Escape: ["Escape", 27],
+  PageUp: ["PageUp", 33],
+  PageDown: ["PageDown", 34],
+  End: ["End", 35],
+  Home: ["Home", 36],
+  ArrowLeft: ["ArrowLeft", 37],
+  ArrowUp: ["ArrowUp", 38],
+  ArrowRight: ["ArrowRight", 39],
+  ArrowDown: ["ArrowDown", 40],
+  Delete: ["Delete", 46],
+  F2: ["F2", 113],
+  F5: ["F5", 116],
+  "\\": ["Backslash", 220],
+  ",": ["Comma", 188],
+};
+
+function keyInfo(key) {
+  if (KEYS[key] !== undefined) return KEYS[key];
+  if (/^[a-z]$/i.test(key))
+    return [`Key${key.toUpperCase()}`, key.toUpperCase().charCodeAt(0)];
+  if (/^[0-9]$/.test(key)) return [`Digit${key}`, key.charCodeAt(0)];
+  return [key, 0];
+}
+
+/** Presses a key (optionally with Ctrl/Shift/Alt) the way a keyboard would. */
+async function press(
+  cdp,
+  key,
+  { ctrl = false, shift = false, alt = false, wait = 200, synthetic = false } = {},
+) {
+  if (synthetic) {
+    // Chords Chromium reserves for itself (Ctrl+W closes the tab, Ctrl+Tab and
+    // Ctrl+PgUp switch tabs) never reach the page from a real keyboard, but do
+    // in the desktop webview. Dispatch them as DOM events instead.
+    await cdp.evaluate(
+      `(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, ctrlKey: ${ctrl}, shiftKey: ${shift}, altKey: ${alt}, bubbles: true, cancelable: true }))`,
+    );
+    await sleep(wait);
+    return;
+  }
+  const [code, vk] = keyInfo(key);
+  const modifiers = (alt ? 1 : 0) | (ctrl ? 2 : 0) | (shift ? 8 : 0);
+  const base = {
+    key,
+    code,
+    windowsVirtualKeyCode: vk,
+    nativeVirtualKeyCode: vk,
+    modifiers,
+  };
+  // Enter needs a character event for forms to submit; other keys must not
+  // produce text, or a shortcut would also type into the editor.
+  await cdp.send(
+    "Input.dispatchKeyEvent",
+    key === "Enter"
+      ? { type: "keyDown", text: "\r", ...base }
+      : { type: "rawKeyDown", ...base },
+  );
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...base });
+  await sleep(wait);
+}
+
+async function insertText(cdp, text) {
+  await cdp.send("Input.insertText", { text });
+  await sleep(150);
+}
+
+async function rect(cdp, selector) {
+  return cdp.evaluate(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height, left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+  })()`);
+}
+
+async function mouse(cdp, type, x, y, button = "left", clickCount = 1) {
+  await cdp.send("Input.dispatchMouseEvent", {
+    type,
+    x,
+    y,
+    button,
+    buttons: button === "left" ? 1 : 4,
+    clickCount,
+  });
+}
+
+/** A real pointer click at the centre of an element. */
+async function click(cdp, selector, button = "left") {
+  const r = await rect(cdp, selector);
+  if (r === null) throw new Error(`no element for ${selector}`);
+  await mouse(cdp, "mouseMoved", r.x, r.y);
+  await mouse(cdp, "mousePressed", r.x, r.y, button);
+  await mouse(cdp, "mouseReleased", r.x, r.y, button);
+  await sleep(200);
+}
+
+/** Click the first element matching `selector` whose text contains `text`. */
+async function clickText(cdp, selector, text) {
+  const ok = await cdp.evaluate(`(() => {
+    const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.textContent.includes(${JSON.stringify(text)}));
+    if (!el) return false;
+    el.scrollIntoView({ block: "nearest" });
+    el.click();
+    return true;
+  })()`);
+  if (!ok) throw new Error(`no ${selector} containing "${text}"`);
+  await sleep(200);
+}
+
+const tabNames = (cdp) =>
+  cdp.evaluate(
+    `[...document.querySelectorAll('[role="tab"][data-tab]')].map((t) => t.dataset.tab)`,
+  );
+const activeTab = (cdp) =>
+  cdp.evaluate(
+    `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab ?? null`,
+  );
+const statusText = (cdp) =>
+  cdp.evaluate(
+    `document.querySelector('footer[aria-label="Status"]')?.innerText ?? ""`,
+  );
+/** Unsaved tabs, by path. Used to catch keystrokes landing in the wrong document. */
+const dirtyTabs = (cdp) =>
+  cdp.evaluate(
+    `[...document.querySelectorAll('[role="tab"][data-tab]')].filter((t) => t.getAttribute("aria-label").includes("unsaved")).map((t) => t.dataset.tab)`,
+  );
+
+async function noStrayEdits(cdp, where) {
+  const dirty = await dirtyTabs(cdp);
+  check(
+    `no document is edited by accident (${where})`,
+    dirty.length === 0,
+    dirty.join(),
+  );
+}
+
+const exists = (cdp, selector) =>
+  cdp.evaluate(`document.querySelector(${JSON.stringify(selector)}) !== null`);
+
+/** Click into the editor so keyboard input reaches CodeMirror. */
+async function focusEditor(cdp) {
+  await click(cdp, ".cm-content");
+}
+
+/** Move the caret to the end of the document. */
+async function caretToEnd(cdp) {
+  await press(cdp, "End", { ctrl: true });
+}
+
+/* -------------------------------------------------------------------------- */
 
 async function main() {
   const browserBin = findBrowser();
@@ -216,7 +435,6 @@ async function main() {
     process.stderr.write("no chromium binary found; skipping UI verification\n");
     process.exit(1);
   }
-
   mkdirSync(SHOTS, { recursive: true });
 
   const child = spawn(
@@ -236,522 +454,893 @@ async function main() {
   try {
     if (!(await waitForEndpoint(PORT)))
       throw new Error("devtools endpoint never opened");
-
     const version = await fetch(`http://127.0.0.1:${PORT}/json/version`).then((r) =>
       r.json(),
     );
     const browser = await Cdp.open(version.webSocketDebuggerUrl);
 
     /* ------------------------------------------------------------------ */
-    process.stdout.write("\nDesk\n");
-
-    const desk = await newPage(browser, "");
-    await shoot(desk, "1-desk");
+    section("Welcome");
+    const page = await newPage(browser);
+    current = page;
+    await shoot(page, "01-welcome");
 
     check(
-      "editor mounts CodeMirror and owns its own DOM",
-      (await desk.evaluate(`document.querySelectorAll(".cm-editor").length`)) === 1,
+      "welcome offers open folder and new project",
+      await page.evaluate(`(() => {
+      const t = [...document.querySelectorAll("button")].map((b) => b.textContent.trim());
+      return t.includes("Open folder") && t.includes("New project");
+    })()`),
+    );
+    check(
+      "recent projects come from project.recent, missing folders are disabled",
+      await page.evaluate(`(() => {
+      const rows = [...document.querySelectorAll('section[aria-labelledby="recent-heading"] li button')];
+      const missing = rows.find((r) => r.textContent.includes("Old thesis"));
+      return rows.length === 3 && missing?.disabled === true && missing.textContent.includes("Folder not found");
+    })()`),
+    );
+    check(
+      "no project means no tab strip or panel yet",
+      !(await exists(page, '[role="tablist"][aria-label="Open files"]')),
     );
 
+    // A folder that is not a project explains what to do.
+    await clickText(page, "button", "Open folder");
+    await click(page, 'input[placeholder*="my-paper"]');
+    await insertText(page, "/nowhere");
+    await press(page, "Enter", { wait: 400 });
     check(
-      "manuscript is rendered by the editor, not by Svelte",
-      await desk.evaluate(
-        `document.querySelector(".cm-content")?.textContent?.includes("Landauer") ?? false`,
+      "opening a non-project folder says what to do",
+      await page.evaluate(
+        `document.querySelector('[role="alert"]')?.textContent.includes("contains manang.toml") ?? false`,
       ),
     );
 
-    const gutter = await desk.evaluate(`(() => {
-      const dots = [...document.querySelectorAll(".manang-whisper")]
-        .filter((el) => el.style.visibility !== "hidden");
-      if (dots.length === 0) return { count: 0 };
-      const box = dots[0].getBoundingClientRect();
-      const style = getComputedStyle(dots[0]);
-      return {
-        count: dots.length,
-        width: box.width,
-        height: box.height,
-        color: style.backgroundColor,
-        top: Math.round(box.top),
-      };
-    })()`);
+    // New project form, then back out.
+    await clickText(page, "button", "Back");
+    await clickText(page, "button", "New project");
+    check(
+      "new project offers Typst, LaTeX and Markdown",
+      await page.evaluate(
+        `[...document.querySelectorAll('[role="radiogroup"][aria-label="Language"] [role="radio"]')].map((r) => r.textContent.trim().split(/\\s/)[0]).join() === "Typst,LaTeX,Markdown"`,
+      ),
+    );
+    await shoot(page, "02-new-project");
+
+    /* ------------------------------------------------------------------ */
+    section("Workbench");
+    await reload(page);
+    await clickText(
+      page,
+      'section[aria-labelledby="recent-heading"] button',
+      "Entropy paper",
+    );
+    await waitFor(
+      page,
+      `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+      { label: "editor shows main.typ" },
+    );
+    await expectEventually(
+      page,
+      "preview renders the compiled page as SVG from typst.render",
+      `document.querySelector('img[alt^="Page 1"]')?.src.startsWith("blob:")`,
+    );
+    await expectEventually(
+      page,
+      "status bar reports compile time",
+      `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    );
+    await sleep(500);
+    await shoot(page, "03-workbench");
 
     check(
-      "a whisper paints exactly one 4px square in the gutter",
-      gutter.count === 1 &&
-        Math.round(gutter.width) === 4 &&
-        Math.round(gutter.height) === 4,
-      `${gutter.count} dot(s), ${gutter.width}x${gutter.height}px, ${gutter.color}`,
+      "workbench has top bar, activity bar, files panel, tabs and status bar",
+      await page.evaluate(
+        `(() => !!document.querySelector("header") && !!document.querySelector('nav[aria-label="Workbench views"]') && !!document.querySelector('aside[aria-label="Files panel"]') && !!document.querySelector('[role="tablist"][aria-label="Open files"]') && !!document.querySelector('footer[aria-label="Status"]'))()`,
+      ),
     );
-
-    // The whisper must sit on the line that carries the broken reference.
-    const onCorrectLine = await desk.evaluate(`(() => {
-      const dot = [...document.querySelectorAll(".manang-whisper")].find((el) => el.style.visibility !== "hidden");
-      if (!dot) return false;
-      const top = dot.getBoundingClientRect().top;
-      const line = [...document.querySelectorAll(".cm-line")]
-        .find((el) => {
-          const r = el.getBoundingClientRect();
-          // Half-open: a dot sitting exactly on a boundary belongs to the line
-          // it starts, not the line that ends there.
-          return r.height > 0 && top >= r.top && top < r.bottom;
-        });
-      return line?.textContent?.includes("@landauer1961") ?? false;
-    })()`);
-    check("whisper sits on the line holding @landauer1961", onCorrectLine);
-
+    check("main.typ opened in a tab on open", (await activeTab(page)) === "main.typ");
     check(
-      "no speed counters leak into the status bar",
-      await desk.evaluate(`!/\\d+\\s?(ms|µs|μs|fps)/i.test(document.body.innerText)`),
+      "breadcrumb names the project and file",
+      await page.evaluate(
+        `document.querySelector('nav[aria-label="Breadcrumb"]').innerText.replace(/\\s+/g, " ").includes("Entropy paper / main.typ")`,
+      ),
+    );
+    check(
+      "status bar shows engine, caret, words, git branch and kernel",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('footer[aria-label="Status"]').innerText; return t.includes("Typst") && /Ln \\d+, Col \\d+/.test(t) && /\\d+ words/.test(t) && t.includes("main*") && /kernel/i.test(t); })()`,
+      ),
+    );
+    check(
+      "the page stays paper-white in the dark theme",
+      await page.evaluate(
+        `getComputedStyle(document.querySelector('img[alt^="Page 1"]')).backgroundColor === "rgb(250, 249, 247)"`,
+      ),
+    );
+    check(
+      "lime marks the active tab only",
+      await page.evaluate(`(() => {
+      const lime = "rgb(198, 241, 53)";
+      const spans = [...document.querySelectorAll('[role="tablist"] span')].filter((s) => getComputedStyle(s).backgroundColor === lime);
+      return spans.length === 1;
+    })()`),
     );
 
+    /* ------------------------------------------------------------------ */
+    section("Activity bar and side panels");
+    const views = [
+      ["Search", 'aside[aria-label="Search panel"]'],
+      ["Figures", 'aside[aria-label="Figures panel"]'],
+      ["References", 'aside[aria-label="References panel"]'],
+      ["Plugins", 'aside[aria-label="Plugins panel"]'],
+      ["Settings", 'aside[aria-label="Settings panel"]'],
+      ["Files", 'aside[aria-label="Files panel"]'],
+    ];
+    for (const [label, panel] of views) {
+      await click(
+        page,
+        `nav[aria-label="Workbench views"] button[aria-label="${label}"]`,
+      );
+      check(
+        `${label} opens its side panel and marks the icon pressed`,
+        (await exists(page, panel)) &&
+          (await page.evaluate(
+            `document.querySelector('button[aria-label="${label}"]').getAttribute("aria-pressed") === "true"`,
+          )),
+      );
+      if (label === "Figures") await shoot(page, "05-figures-panel");
+    }
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    check(
+      "clicking the active icon collapses the side panel",
+      !(await exists(page, "#side-panel")),
+    );
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    check("clicking it again reopens", await exists(page, "#side-panel"));
+
+    // Search
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Search"]');
+    await click(page, 'input[aria-label="Search project"]');
+    await insertText(page, "entropy");
+    await expectEventually(
+      page,
+      "search finds text across files and file names",
+      `(() => { const t = document.querySelector("#side-panel").innerText; return /matches? in \\d+ files?/.test(t); })()`,
+    );
+    await shoot(page, "04-search");
+    await page.evaluate(
+      `document.querySelector('#side-panel section[aria-label^="Matches in"] button').click()`,
+    );
+    await sleep(400);
+    check("choosing a match opens the file", (await tabNames(page)).length >= 1);
+
+    await noStrayEdits(page, "after search");
+    // References
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="References"]',
+    );
+    await expectEventually(
+      page,
+      "references list the .bib entries",
+      `document.querySelectorAll('#side-panel ul[aria-label="References"] li').length === 4`,
+    );
+    await shoot(page, "06-references");
+    await page.evaluate(
+      `document.querySelector('input[aria-label="Filter references"]').focus()`,
+    );
+    await insertText(page, "irreversibility");
+    await expectEventually(
+      page,
+      "reference filter narrows the list",
+      `document.querySelectorAll('#side-panel ul[aria-label="References"] li').length === 1`,
+    );
+
+    await noStrayEdits(page, "after references");
+    // Plugins
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Plugins"]');
+    check(
+      "plugins panel lists the kernel's real plugins",
+      await page.evaluate(
+        `(() => { const t = document.querySelector("#side-panel").innerText; return t.includes("editor") && t.includes("project") && t.includes("typst") && !t.includes("Vale") && !t.includes("Curated"); })()`,
+      ),
+    );
+    await clickText(page, "#side-panel button[aria-expanded]", "typst");
+    check(
+      "a plugin expands to its commands",
+      await page.evaluate(
+        `document.querySelector("#side-panel").innerText.includes("typst.export-pdf")`,
+      ),
+    );
+    await shoot(page, "07-plugins");
+
+    /* ------------------------------------------------------------------ */
+    section("Files tree");
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    check(
+      "tree is an ARIA tree with levels and set sizes",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('[role="tree"]'); const items = t.querySelectorAll('[role="treeitem"]'); return items.length >= 5 && [...items].every((i) => i.getAttribute("aria-level") && i.getAttribute("aria-posinset") && i.getAttribute("aria-setsize")); })()`,
+      ),
+    );
+    // Expand a folder with the keyboard.
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="sections"]').focus()`,
+    );
+    await press(page, "ArrowRight", { wait: 300 });
+    check(
+      "Right arrow expands a folder and loads its children lazily",
+      await page.evaluate(
+        `!!document.querySelector('[data-path="sections/results.typ"]') && document.querySelector('[data-path="sections"]').getAttribute("aria-expanded") === "true"`,
+      ),
+    );
+    check(
+      "git badges show M and U",
+      await page.evaluate(
+        `(() => { const row = document.querySelector('[data-path="sections/results.typ"]'); const note = document.querySelector('[data-path="notes.md"]'); return row?.innerText.includes("M") && note?.innerText.includes("U"); })()`,
+      ),
+    );
+    await press(page, "ArrowDown");
+    check(
+      "Down arrow moves focus to the next row",
+      await page.evaluate(
+        `document.activeElement?.dataset.path === "sections/background.typ"`,
+      ),
+    );
+    await press(page, "ArrowLeft");
+    check(
+      "Left arrow from a child moves to its folder",
+      await page.evaluate(`document.activeElement?.dataset.path === "sections"`),
+    );
+    await press(page, "End");
+    check(
+      "End jumps to the last row",
+      await page.evaluate(
+        `document.activeElement?.dataset.path === [...document.querySelectorAll('[role="treeitem"]')].pop().dataset.path`,
+      ),
+    );
+    await press(page, "Home");
+    check(
+      "Home jumps to the first row",
+      await page.evaluate(
+        `document.activeElement?.dataset.path === document.querySelector('[role="treeitem"]').dataset.path`,
+      ),
+    );
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="sections"]').focus()`,
+    );
+    await press(page, "ArrowDown");
+    await press(page, "Enter", { wait: 500 });
+    check(
+      "Enter opens the focused file in a tab",
+      (await activeTab(page)) === "sections/background.typ",
+    );
+    await shoot(page, "08-files-keyboard");
+
+    await noStrayEdits(page, "after tree navigation");
+    // Filter
+    await click(page, 'input[aria-label="Filter files"]');
+    await insertText(page, "lattice");
+    await expectEventually(
+      page,
+      "filter lists matching files across folders",
+      `[...document.querySelectorAll('[role="treeitem"]')].map((r) => r.dataset.path).sort().join() === "figures/state_lattice.figure.json,figures/state_lattice.svg"`,
+    );
+    await press(page, "Escape");
+    await expectEventually(
+      page,
+      "Escape clears the filter",
+      `document.querySelector('input[aria-label="Filter files"]').value === ""`,
+    );
+
+    await noStrayEdits(page, "after filtering");
+    // Create, rename, delete
+    await click(page, 'button[aria-label="New file"]');
+    await expectEventually(
+      page,
+      "New file starts an inline name field with a suggested name",
+      `document.querySelector("input[data-editing]")?.value === "untitled.typ"`,
+    );
+    await press(page, "Enter", { wait: 600 });
+    check(
+      "creating a file opens it in a new tab",
+      (await activeTab(page)) === "untitled.typ",
+    );
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="untitled.typ"]').focus()`,
+    );
+    await press(page, "F2");
+    // The field selects the stem, so typing replaces "untitled" and keeps ".typ".
+    await insertText(page, "ideas");
+    await press(page, "Enter", { wait: 600 });
+    check(
+      "F2 renames inline and the tab follows",
+      (await tabNames(page)).includes("ideas.typ") &&
+        !(await tabNames(page)).includes("untitled.typ"),
+    );
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="ideas.typ"]').focus()`,
+    );
+    await press(page, "Delete", { wait: 600 });
+    check(
+      "Delete moves the file to the trash and closes its tab",
+      !(await tabNames(page)).includes("ideas.typ") &&
+        !(await exists(page, '[data-path="ideas.typ"]')),
+    );
+    check(
+      "a notice confirms the trash",
+      (await statusText(page)).includes("Moved ideas.typ to the trash"),
+    );
+
+    await noStrayEdits(page, "after create, rename and delete");
+    // Context menu
+    await click(page, '[role="treeitem"][data-path="notes.md"]', "right");
+    check(
+      "right click opens a context menu",
+      await page.evaluate(
+        `document.querySelector('[role="menu"] [role="menuitem"]') !== null && [...document.querySelectorAll('[role="menuitem"]')].map((m) => m.textContent).join().includes("Rename")`,
+      ),
+    );
+    await shoot(page, "09-context-menu");
+    await press(page, "Escape");
+    check("Esc closes the menu", !(await exists(page, '[role="menu"]')));
+
+    /* ------------------------------------------------------------------ */
+    section("Tabs");
+    await noStrayEdits(page, "before tabs");
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="notes.md"]').click()`,
+    );
+    await sleep(400);
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="main.typ"]').click()`,
+    );
+    await sleep(400);
+    const opened = await tabNames(page);
+    check(
+      "several files are open as tabs",
+      opened.includes("main.typ") &&
+        opened.includes("notes.md") &&
+        opened.includes("sections/background.typ"),
+      opened.join(),
+    );
+    check(
+      "tabs follow the ARIA tabs pattern",
+      await page.evaluate(
+        `(() => { const tabs = [...document.querySelectorAll('[role="tab"][data-tab]')]; return tabs.filter((t) => t.tabIndex === 0).length === 1 && tabs.filter((t) => t.getAttribute("aria-selected") === "true").length === 1; })()`,
+      ),
+    );
+
+    await press(page, "Tab", { ctrl: true, synthetic: true });
+    check("Ctrl+Tab goes to the next tab", (await activeTab(page)) !== "main.typ");
+    await press(page, "2", { ctrl: true });
+    check("Ctrl+2 selects the second tab", (await activeTab(page)) === opened[1]);
+    await press(page, "9", { ctrl: true });
+    check(
+      "Ctrl+9 selects the last tab",
+      (await activeTab(page)) === opened[opened.length - 1],
+    );
+    await press(page, "PageUp", { ctrl: true, synthetic: true });
+    check(
+      "Ctrl+PageUp goes to the previous tab",
+      (await activeTab(page)) === opened[opened.length - 2],
+    );
+
+    // Arrow keys within the tablist.
+    await page.evaluate(
+      `document.querySelector('[role="tab"][aria-selected="true"]').focus()`,
+    );
+    await press(page, "ArrowLeft");
+    check(
+      "Left arrow moves between tabs and activates",
+      (await activeTab(page)) === opened[opened.length - 3] || opened.length < 3,
+    );
+    await press(page, "Home");
+    check("Home goes to the first tab", (await activeTab(page)) === opened[0]);
+
+    await noStrayEdits(page, "after tab shortcuts");
+    // Dirty dot
+    await click(page, '[role="tab"][data-tab="main.typ"]');
+    await sleep(400);
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(page, "\nMore words.");
+    check(
+      "typing marks the tab dirty",
+      await page.evaluate(
+        `document.querySelector('[role="tab"][data-tab="main.typ"]').getAttribute("aria-label").includes("unsaved")`,
+      ),
+    );
+    check(
+      "the tree marks the file too",
+      await page.evaluate(
+        `!!document.querySelector('[data-path="main.typ"] [aria-label="Unsaved changes"]')`,
+      ),
+    );
+    await shoot(page, "10-dirty-tab");
+
+    // Close a dirty tab: asks, and Cancel keeps it.
+    await press(page, "w", { ctrl: true, wait: 300, synthetic: true });
+    check(
+      "closing a dirty tab asks what to do",
+      await page.evaluate(
+        `document.querySelector('[role="alertdialog"]')?.innerText.includes("Save changes to main.typ")`,
+      ),
+    );
+    await shoot(page, "11-close-dialog");
+    await press(page, "Escape");
+    check(
+      "Esc cancels and keeps the tab",
+      (await tabNames(page)).includes("main.typ") &&
+        !(await exists(page, '[role="alertdialog"]')),
+    );
+    await press(page, "s", { ctrl: true, wait: 400 });
+    check(
+      "Ctrl+S saves and clears the dirty mark",
+      await page.evaluate(
+        `!document.querySelector('[role="tab"][data-tab="main.typ"]').getAttribute("aria-label").includes("unsaved")`,
+      ),
+    );
+    await expectEventually(
+      page,
+      "the saved change reaches the project (git shows main.typ modified)",
+      `document.querySelector('[data-path="main.typ"]')?.innerText.includes("M")`,
+    );
+    await press(page, "w", { ctrl: true, wait: 300, synthetic: true });
+    check(
+      "Ctrl+W closes a saved tab without asking",
+      !(await tabNames(page)).includes("main.typ") &&
+        !(await exists(page, '[role="alertdialog"]')),
+    );
+
+    // Middle-click closes.
+    await click(page, '[role="tab"][data-tab="notes.md"]', "middle");
+    check("middle-click closes a tab", !(await tabNames(page)).includes("notes.md"));
+
+    await noStrayEdits(page, "after middle-click");
+
+    // Reopen main for the next sections.
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="main.typ"]').click()`,
+    );
+    await sleep(600);
+
+    /* ------------------------------------------------------------------ */
+    section("Problems, preview and the gutter");
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(page, "\nA broken formula $x + y\n");
+    await expectEventually(
+      page,
+      "status bar counts the error after typing",
+      `/1 error/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+      { timeout: 8000 },
+    );
+    await expectEventually(
+      page,
+      "the gutter shows a solid marker on the broken line",
+      `document.querySelectorAll(".manang-problem-error").length >= 1`,
+    );
+    check(
+      "the preview keeps the last good page and says so",
+      await page.evaluate(
+        `document.querySelector('img[alt^="Page 1"]') !== null && document.querySelector('section[aria-label="Preview"]').innerText.includes("last good page")`,
+      ),
+    );
+    await shoot(page, "12-error-state");
+
+    // Open Problems via the status bar.
+    await clickText(page, 'footer[aria-label="Status"] button', "error");
+    check(
+      "the status bar opens the Problems panel",
+      await exists(page, "#bottom-panel"),
+    );
+    check(
+      "Problems lists the message with line and column",
+      await page.evaluate(
+        `(() => { const t = document.querySelector("#bottom-panel").innerText; return t.includes("Unclosed math delimiter") && /Ln \\d+, Col \\d+/.test(t); })()`,
+      ),
+    );
+    check(
+      "the Problems tab carries the count",
+      await page.evaluate(
+        `document.querySelector("#panel-tab-problems").innerText.includes("1")`,
+      ),
+    );
+    await shoot(page, "13-problems");
+    await page.evaluate(
+      `document.querySelector("#bottom-panel [data-problem]").click()`,
+    );
+    await sleep(400);
+    const caret = await page.evaluate(
+      `document.querySelector('footer[aria-label="Status"]').innerText.match(/Ln (\\d+), Col (\\d+)/)?.slice(1).map(Number)`,
+    );
+    const problemLine = await page.evaluate(
+      `document.querySelector("#bottom-panel [data-problem]").innerText.match(/Ln (\\d+)/)?.[1]`,
+    );
+    check(
+      "clicking a problem jumps the caret to its line",
+      caret !== null && String(caret[0]) === problemLine,
+      `caret ${caret}, problem line ${problemLine}`,
+    );
+
+    // Output tab
+    await click(page, "#panel-tab-output");
+    check(
+      "Output shows the compile log",
+      await page.evaluate(
+        `document.querySelector('[role="log"]').innerText.includes("Compiled main.typ")`,
+      ),
+    );
+
+    // Fix it again by undoing.
+    await focusEditor(page);
+    await press(page, "z", { ctrl: true });
+    await expectEventually(
+      page,
+      "undoing the mistake clears the error",
+      `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+      { timeout: 8000 },
+    );
+    check(
+      "Problems says so",
+      await page.evaluate(
+        `document.querySelector("#panel-tab-problems").getAttribute("aria-selected") !== null`,
+      ),
+    );
+
+    // Ctrl+J toggles the panel.
+    await press(page, "j", { ctrl: true });
+    check("Ctrl+J toggles the bottom panel", !(await exists(page, "#bottom-panel")));
+    await press(page, "j", { ctrl: true });
+
+    // Preview toolbar
+    check(
+      "preview toolbar shows page n of N",
+      await page.evaluate(
+        `/Page 1 of \\d+/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
+      ),
+    );
+    await click(page, 'button[aria-label="Zoom in"]');
+    check(
+      "zoom in sets a percentage",
+      await page.evaluate(
+        `/125%/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
+      ),
+    );
+    await click(page, 'button[aria-label="Refresh preview"]');
+    // Layout switch.
+    await click(page, '[role="radio"][data-mode="editor"]');
+    check(
+      "Editor layout hides the preview",
+      !(await exists(page, 'section[aria-label="Preview"]')),
+    );
+    await click(page, '[role="radio"][data-mode="preview"]');
+    check(
+      "Preview layout hides the editor",
+      !(await exists(page, ".cm-editor")) &&
+        (await exists(page, 'section[aria-label="Preview"]')),
+    );
+    await click(page, '[role="radio"][data-mode="split"]');
+    await waitFor(page, `document.querySelector(".cm-editor") !== null`);
+
+    // Resize divider by keyboard.
+    const before = await rect(page, ".cm-editor");
+    await page.evaluate(
+      `document.querySelector('[role="separator"][aria-label="Resize editor and preview"]').focus()`,
+    );
+    await press(page, "ArrowRight");
+    await press(page, "ArrowRight");
+    const after = await rect(page, ".cm-editor");
+    check(
+      "the split divider moves with the arrow keys",
+      after !== null && before !== null && after.w > before.w,
+      `${before?.w} -> ${after?.w}`,
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Command palette");
+    await press(page, "k", { ctrl: true, wait: 300 });
+    check(
+      "Ctrl+K opens the palette as a dialog with focus in the field",
+      await page.evaluate(
+        `document.querySelector('[role="dialog"] input[role="combobox"]') === document.activeElement`,
+      ),
+    );
+    check(
+      "palette lists workbench and plugin commands in groups",
+      await page.evaluate(
+        `(() => { const g = [...document.querySelectorAll('[role="dialog"] [role="group"]')].map((x) => x.getAttribute("aria-label")); return g.includes("Workbench") && g.includes("Plugin commands"); })()`,
+      ),
+    );
+    check(
+      "real shortcuts are shown beside commands",
+      await page.evaluate(
+        `document.querySelector('[role="dialog"]').innerText.includes("Ctrl+J") && document.querySelector('[role="dialog"]').innerText.includes("Ctrl+Shift+P") === false`,
+      ),
+    );
+    await shoot(page, "14-palette");
+    await insertText(page, "problems");
+    check(
+      "typing filters with fuzzy search",
+      await page.evaluate(
+        `document.querySelector('[role="option"][aria-selected="true"]')?.textContent.includes("problems")`,
+      ),
+    );
+    await press(page, "ArrowDown");
+    check(
+      "arrow keys move the highlight (aria-activedescendant follows)",
+      await page.evaluate(
+        `document.activeElement.getAttribute("aria-activedescendant") === document.querySelector('[role="option"][aria-selected="true"]').id`,
+      ),
+    );
+    await press(page, "Escape");
+    check(
+      "Esc closes the palette and returns focus",
+      !(await exists(page, '[role="dialog"]')),
+    );
+
+    await press(page, "p", { ctrl: true, shift: true, wait: 300 });
+    check(
+      "Ctrl+Shift+P also opens it",
+      await exists(page, '[role="dialog"] input[role="combobox"]'),
+    );
+    await insertText(page, "typst.export");
+    check(
+      "kernel commands are listed",
+      await page.evaluate(
+        `document.querySelector('[role="dialog"]').innerText.includes("Export PDF")`,
+      ),
+    );
+    await press(page, "Escape");
+
+    await press(page, "p", { ctrl: true, wait: 300 });
+    await insertText(page, "talk");
+    await press(page, "Enter", { wait: 600 });
+    check("Ctrl+P goes to a file by name", (await activeTab(page)) === "talk.typ");
+
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "compile output");
+    await press(page, "Enter", { wait: 300 });
+    check(
+      "palette runs workbench commands",
+      await page.evaluate(
+        `document.querySelector("#panel-tab-output")?.getAttribute("aria-selected") === "true"`,
+      ),
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Slides");
+    await clickText(
+      page,
+      '[role="radiogroup"][aria-label="Document view"] [role="radio"]',
+      "Slides",
+    );
+    await sleep(600);
+    await waitFor(
+      page,
+      `document.querySelectorAll('[role="listbox"][aria-label="Slides"] [role="option"]').length > 0`,
+      { label: "slide strip" },
+    );
+    check(
+      "talk.typ shows a thumbnail per heading",
+      await page.evaluate(
+        `document.querySelectorAll('[role="listbox"][aria-label="Slides"] [role="option"]').length === 6`,
+      ),
+    );
+    await shoot(page, "15-slides");
+    await press(page, "ArrowDown");
+    await page.evaluate(
+      `document.querySelector('[role="listbox"][aria-label="Slides"] [role="option"][aria-selected="true"]').focus()`,
+    );
+    await press(page, "ArrowDown");
+    check(
+      "arrow keys move through the thumbnails",
+      await page.evaluate(
+        `document.querySelector('[role="option"][aria-selected="true"]').dataset.slide !== "0"`,
+      ),
+    );
+    await clickText(page, "button", "Present");
+    check(
+      "Present opens a full-window presentation",
+      await exists(page, '[role="dialog"][aria-label="Presentation"]'),
+    );
+    await shoot(page, "16-presenting");
+    await press(page, "ArrowRight");
+    await press(page, "Escape");
+    check(
+      "Esc leaves the presentation",
+      !(await exists(page, '[role="dialog"][aria-label="Presentation"]')),
+    );
+    await clickText(
+      page,
+      '[role="radiogroup"][aria-label="Document view"] [role="radio"]',
+      "Text",
+    );
+    await waitFor(page, `document.querySelector(".cm-editor") !== null`);
+
+    /* ------------------------------------------------------------------ */
+    section("Figure editor");
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Figures"]');
+    await sleep(400);
+    await clickText(page, "#side-panel ul button", "state_lattice");
+    await waitFor(page, `document.querySelector('svg[role="application"]') !== null`, {
+      label: "figure editor",
+    });
+    check(
+      "a figure opens inside a tab, not a takeover",
+      (await activeTab(page)) === "figures/state_lattice.figure.json" &&
+        (await exists(page, '[role="tablist"]')),
+    );
+    check(
+      "the scene loads from the project file",
+      await page.evaluate(`document.body.innerText.includes("4 nodes")`),
+    );
+    await clickText(page, "button[aria-pressed]", "Rectangle");
+    const svg = await rect(page, 'svg[role="application"]');
+    await mouse(page, "mouseMoved", svg.left + 200, svg.top + 380);
+    await mouse(page, "mousePressed", svg.left + 200, svg.top + 380);
+    await mouse(page, "mouseMoved", svg.left + 320, svg.top + 450);
+    await mouse(page, "mouseReleased", svg.left + 320, svg.top + 450);
+    await sleep(300);
+    check(
+      "drawing adds a node and marks the tab dirty",
+      (await page.evaluate(`document.body.innerText.includes("5 nodes")`)) &&
+        (await page.evaluate(
+          `document.querySelector('[role="tab"][aria-selected="true"]').getAttribute("aria-label").includes("unsaved")`,
+        )),
+    );
+    await shoot(page, "17-figure");
+    await press(page, "s", { ctrl: true, wait: 400 });
+    check(
+      "Ctrl+S saves the scene as JSON",
+      await page.evaluate(
+        `!document.querySelector('[role="tab"][aria-selected="true"]').getAttribute("aria-label").includes("unsaved")`,
+      ),
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Zen mode");
+    await clickText(page, '[role="tab"]', "main.typ");
+    await sleep(500);
+    await press(page, "\\", { ctrl: true, wait: 400 });
+    check(
+      "zen removes every piece of chrome",
+      await page.evaluate(
+        `document.querySelector("header") === null && document.querySelector("footer") === null && document.querySelector("nav") === null && document.querySelector("aside") === null && document.querySelector('[role="tablist"]') === null`,
+      ),
+    );
+    check(
+      "the writing column is at most 680px",
+      await page.evaluate(
+        `(() => { const c = document.querySelector(".zen-editor .cm-content"); return !!c && Math.round(c.getBoundingClientRect().width) <= 680; })()`,
+      ),
+    );
+    await shoot(page, "18-zen");
+    await press(page, "Escape", { wait: 300 });
+    check(
+      "Esc brings the workbench back",
+      (await exists(page, "header")) &&
+        (await exists(page, 'footer[aria-label="Status"]')),
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Persistence");
+    await press(page, "j", { ctrl: true });
+    const tabsBefore = await tabNames(page);
+    const panelWasOpen = await exists(page, "#bottom-panel");
+    await reload(page);
+    await expectEventually(
+      page,
+      "the last project and its tabs come back after a reload",
+      `document.querySelectorAll('[role="tab"][data-tab]').length > 0 && document.querySelector(".cm-content") !== null`,
+      { timeout: 8000 },
+    );
+    check(
+      "same tabs",
+      JSON.stringify(await tabNames(page)) === JSON.stringify(tabsBefore),
+      `${tabsBefore.join()} vs ${(await tabNames(page)).join()}`,
+    );
+    check(
+      "panel state is remembered",
+      (await exists(page, "#bottom-panel")) === panelWasOpen,
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Narrow layouts");
+    await resize(page, 1024, 700);
+    await shoot(page, "19-1024");
+    check(
+      "at 1024px the workbench is split with the side panel inline",
+      await page.evaluate(
+        `getComputedStyle(document.querySelector("#side-panel")).position !== "absolute" && document.querySelectorAll('section[aria-label="Preview"]').length === 1`,
+      ),
+    );
+    await resize(page, 760, 700);
+    await sleep(300);
+    check(
+      "under 800px the activity bar stays",
+      await page.evaluate(
+        `Math.round(document.querySelector('nav[aria-label="Workbench views"]').getBoundingClientRect().width) === 48`,
+      ),
+    );
+    const sideState = await exists(page, "#side-panel");
+    if (!sideState)
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    check(
+      "the side panel overlays the editor instead of squeezing it",
+      await page.evaluate(
+        `getComputedStyle(document.querySelector("#side-panel")).position === "absolute"`,
+      ),
+    );
+    await shoot(page, "20-narrow-overlay");
+    await press(page, "Escape");
+    check("Esc dismisses the overlay", !(await exists(page, "#side-panel")));
+    check(
+      "split falls back to the editor alone when narrow",
+      !(await exists(page, 'section[aria-label="Preview"]')),
+    );
+    await resize(page, 640, 600);
+    await shoot(page, "21-640");
+    check(
+      "at the 640px minimum nothing scrolls sideways",
+      await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth`),
+    );
+    check(
+      "the top bar keeps the palette reachable at 640px",
+      await page.evaluate(
+        `(() => { const b = document.querySelector('button[aria-label="Search commands"]'); const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= window.innerWidth; })()`,
+      ),
+    );
+    await resize(page, 1280, 820);
+
+    /* ------------------------------------------------------------------ */
+    section("Brand invariants");
     check(
       "no rounded corners anywhere",
-      await desk.evaluate(`(() => {
-        for (const el of document.querySelectorAll("*")) {
-          const r = getComputedStyle(el).borderTopLeftRadius;
-          if (r !== "0px" && r !== "") return el.className + " -> " + r;
-        }
-        return true;
-      })()`),
+      await page.evaluate(
+        `(() => { for (const el of document.querySelectorAll("*")) { const s = getComputedStyle(el); for (const p of ["borderTopLeftRadius","borderTopRightRadius","borderBottomLeftRadius","borderBottomRightRadius"]) { if (s[p] !== "0px" && s[p] !== "") return el.className + " -> " + s[p]; } } return true; })()`,
+      ),
     );
-
     check(
-      "fonts are the two permitted families",
-      await desk.evaluate(`(() => {
-        const fams = new Set();
-        for (const el of document.querySelectorAll("body, header, footer, .cm-content, button")) {
-          fams.add(getComputedStyle(el).fontFamily.split(",")[0].replace(/["']/g, ""));
-        }
-        return [...fams].every((f) => f === "DM Sans" || f === "DM Mono");
-      })()`),
+      "no shadows",
+      await page.evaluate(
+        `[...document.querySelectorAll("*")].every((el) => getComputedStyle(el).boxShadow === "none")`,
+      ),
     );
-
     check(
-      "body background is the carbon base",
-      (await desk.evaluate(`getComputedStyle(document.body).backgroundColor`)) ===
-        "rgb(20, 20, 22)",
+      "only DM Sans and DM Mono",
+      await page.evaluate(
+        `(() => { const fams = new Set(); for (const el of document.querySelectorAll("body, body *")) { if (el.childNodes.length && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) fams.add(getComputedStyle(el).fontFamily.split(",")[0].replace(/["']/g, "")); } return [...fams].every((f) => f === "DM Sans" || f === "DM Mono") || [...fams].join(); })()`,
+      ),
     );
-
     check(
-      "slash key from desk opens command palette",
-      await (async () => {
-        await pressKey(desk, "/", 191);
-        await sleep(250);
-        const isOpen = await desk.evaluate(`document.querySelector('[role="dialog"]') !== null`);
-        await pressKey(desk, "Escape", 27);
-        await sleep(250);
-        return isOpen;
-      })(),
+      "only weights 300 and 400",
+      await page.evaluate(
+        `(() => { const w = new Set(); for (const el of document.querySelectorAll("body, body *")) { if ([...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) w.add(getComputedStyle(el).fontWeight); } return [...w].every((x) => x === "300" || x === "400") || [...w].join(); })()`,
+      ),
     );
-
-    /* ------------------------------------------------------------------ */
-    process.stdout.write("\nLibrary shelf\n");
-
-    const library = await newPage(browser, "#library");
-    await shoot(library, "3-library");
-
     check(
-      "rail is 260px with a hairline right border",
-      await library.evaluate(`(() => {
-        const rail = document.querySelector('aside[aria-label="Library shelf"]');
-        if (!rail) return false;
-        const r = rail.getBoundingClientRect();
-        return Math.round(r.width) === 260 && getComputedStyle(rail).borderRightWidth === "1px";
-      })()`),
+      "base background is carbon #141416",
+      await page.evaluate(
+        `getComputedStyle(document.body).backgroundColor === "rgb(20, 20, 22)"`,
+      ),
     );
-
     check(
-      "active document carries a 2px lime left boundary",
-      await library.evaluate(`(() => {
-        const active = document.querySelector('[aria-current="true"]');
-        if (!active) return false;
-        const s = getComputedStyle(active);
-        return s.borderLeftWidth === "2px" && s.borderLeftColor === "rgb(198, 241, 53)";
-      })()`),
+      "no uppercase text transforms",
+      await page.evaluate(
+        `[...document.querySelectorAll("body *")].every((el) => getComputedStyle(el).textTransform !== "uppercase")`,
+      ),
     );
-
     check(
-      "typing filters the tree",
-      await (async () => {
-        await library.evaluate(`(() => {
-          const input = document.getElementById("library-filter");
-          input.value = "lattice";
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-        })()`);
-        await sleep(300);
-        return library.evaluate(
-          `document.querySelectorAll('nav[aria-label="Project files"] button').length === 1`,
-        );
-      })(),
+      "no page errors were thrown",
+      page.errors.length === 0,
+      page.errors.slice(0, 2).join(" | "),
     );
 
-    check(
-      "document switching activates selected document and transfers lime boundary",
-      await (async () => {
-        await library.evaluate(`(() => {
-          const input = document.getElementById("library-filter");
-          if (input) {
-            input.value = "";
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-          }
-        })()`);
-        await sleep(200);
-        const switched = await library.evaluate(`(() => {
-          const buttons = [...document.querySelectorAll('nav[aria-label="Project files"] button')];
-          const target = buttons.find((b) => b.textContent.includes("01_formalism.typ"));
-          if (!target) return false;
-          target.click();
-          return true;
-        })()`);
-        if (!switched) return false;
-        await sleep(200);
-        return library.evaluate(`(() => {
-          const active = document.querySelector('[aria-current="true"]');
-          if (!active) return false;
-          const s = getComputedStyle(active);
-          return active.textContent.includes("01_formalism.typ") &&
-                 s.borderLeftWidth === "2px" &&
-                 s.borderLeftColor === "rgb(198, 241, 53)";
-        })()`);
-      })(),
-    );
-
-    /* ------------------------------------------------------------------ */
-    process.stdout.write("\nCommand palette\n");
-
-    const palette = await newPage(browser, "#palette/cit");
-    await shoot(palette, "5-palette");
-
-    check(
-      "palette query is applied from the deep link",
-      (await palette.evaluate(`document.getElementById("palette-query")?.value`)) ===
-        "cit",
-    );
-
-    check(
-      "the best fuzzy match is the selected row",
-      (
-        await palette.evaluate(
-          `document.querySelector('[role="option"][aria-selected="true"]')?.textContent ?? ''`,
-        )
-      ).includes("Verify citations") === true,
-    );
-
-    check(
-      "ArrowDown moves the selection",
-      await (async () => {
-        const before = await palette.evaluate(
-          `document.querySelector('[aria-selected="true"]')?.textContent?.trim()`,
-        );
-        await pressKey(palette, "ArrowDown", 40);
-        const after = await palette.evaluate(
-          `document.querySelector('[aria-selected="true"]')?.textContent?.trim()`,
-        );
-        return before !== after;
-      })(),
-    );
-
-    check(
-      "sections render in AI Actions then Plugins order",
-      await palette.evaluate(`(() => {
-        // Scoped to the dialog: the paper sheet behind the palette has its own
-        // heading and would otherwise be counted as a section.
-        const names = [...document.querySelectorAll('[role="dialog"] h2')]
-          .map((h) => h.textContent.trim());
-        return names[0] === "AI Actions" && names[1] === "Plugins & Commands";
-      })()`),
-    );
-
-    check(
-      "Escape key dismisses command palette",
-      await (async () => {
-        await pressKey(palette, "Escape", 27);
-        await sleep(250);
-        return palette.evaluate(`document.querySelector('[role="dialog"]') === null`);
-      })(),
-    );
-
-    /* ------------------------------------------------------------------ */
-    process.stdout.write("\nVector ink canvas\n");
-
-    const canvas = await newPage(browser, "#draw");
-    await shoot(canvas, "2-canvas");
-
-    check(
-      "scene renders as native SVG with no raster surface",
-      await canvas.evaluate(`(() => {
-        const svg = document.querySelector('svg[role="application"]');
-        if (!svg) return false;
-        const frame = svg.querySelector("rect");
-        return frame?.getAttribute("stroke") === "var(--mng-line)" &&
-               svg.querySelectorAll("canvas").length === 0;
-      })()`),
-    );
-
-    check(
-      "pen tray offers the four tools from DESIGN.md §4.1",
-      await canvas.evaluate(`(() => {
-        const labels = [...document.querySelectorAll('[role="toolbar"] button')]
-          .map((b) => b.textContent.trim());
-        return ["Freehand", "Geometry", "Arrow", "Math"].every((t) =>
-          labels.some((l) => l.includes(t)),
-        );
-      })()`),
-    );
-
-    // Draw a stroke and confirm the scene grows by one node.
-    const drew = await (async () => {
-      const before = await canvas.evaluate(
-        `document.querySelectorAll('svg[role="application"] path').length`,
-      );
-      const box = await canvas.evaluate(`(() => {
-        const r = document.querySelector('svg[role="application"]').getBoundingClientRect();
-        return { x: r.x, y: r.y, w: r.width, h: r.height };
-      })()`);
-      const point = (fx, fy) => ({ x: box.x + box.w * fx, y: box.y + box.h * fy });
-      const a = point(0.3, 0.6);
-      const b = point(0.45, 0.75);
-      const common = {
-        button: "left",
-        pointerType: "mouse",
-        clickCount: 1,
-        buttons: 1,
-      };
-      await canvas.send("Input.dispatchMouseEvent", {
-        type: "mousePressed",
-        ...common,
-        x: a.x,
-        y: a.y,
-      });
-      for (let i = 1; i <= 8; i += 1) {
-        await canvas.send("Input.dispatchMouseEvent", {
-          type: "mouseMoved",
-          ...common,
-          x: a.x + ((b.x - a.x) * i) / 8,
-          y: a.y + ((b.y - a.y) * i) / 8,
-        });
-      }
-      await canvas.send("Input.dispatchMouseEvent", {
-        type: "mouseReleased",
-        ...common,
-        buttons: 0,
-        x: b.x,
-        y: b.y,
-      });
-      await sleep(400);
-      const after = await canvas.evaluate(
-        `document.querySelectorAll('svg[role="application"] path').length`,
-      );
-      return { before, after };
-    })();
-
-    check(
-      "dragging with the pen commits a stroke to the scene",
-      drew.after > drew.before,
-      `${drew.before} -> ${drew.after} path elements`,
-    );
-
-    check(
-      "header displays accurate figure breadcrumb path",
-      await canvas.evaluate(`(() => {
-        const span = document.querySelector('header span.font-mono');
-        return span?.textContent?.includes("figures / vectors / state_lattice.svg") ?? false;
-      })()`),
-    );
-
-    check(
-      "pen tray tool switching activates Geometry mode",
-      await (async () => {
-        const switched = await canvas.evaluate(`(() => {
-          const geom = [...document.querySelectorAll('[role="toolbar"] button')].find((b) =>
-            b.textContent.includes("Geometry"),
-          );
-          if (!geom) return false;
-          geom.click();
-          return true;
-        })()`);
-        if (!switched) return false;
-        await sleep(200);
-        return canvas.evaluate(`(() => {
-          const geom = [...document.querySelectorAll('[role="toolbar"] button')].find((b) =>
-            b.textContent.includes("Geometry"),
-          );
-          return geom?.getAttribute("aria-pressed") === "true";
-        })()`);
-      })(),
-    );
-
-    check(
-      "Done button closes ink canvas overlay and restores desk",
-      await (async () => {
-        await canvas.evaluate(`(() => {
-          const done = [...document.querySelectorAll("header button")].find((b) =>
-            b.textContent.includes("Done"),
-          );
-          done?.click();
-        })()`);
-        await sleep(300);
-        return canvas.evaluate(
-          `document.querySelector('section[aria-label="Vector ink canvas"]') === null`,
-        );
-      })(),
-    );
-
-    /* ------------------------------------------------------------------ */
-    process.stdout.write("\nPresentation studio\n");
-
-    const slides = await newPage(browser, "#slides/2");
-    await shoot(slides, "6-slides");
-
-    // `innerText` reflects `text-transform`, so the frame's corner label reads
-    // uppercase in the rendered page even though the source says otherwise.
-    check(
-      "deep link selects the requested slide",
-      (await slides.evaluate(
-        `[...document.querySelectorAll('nav[aria-label="Slides"] [aria-current="true"]')].length`,
-      )) === 1 &&
-        (await slides.evaluate(`document.body.innerText.includes("SLIDE 3 / 6")`)),
-    );
-
-    check(
-      "slide frame is 16:9",
-      await slides.evaluate(`(() => {
-      const el = [...document.querySelectorAll("div")].find((d) =>
-        d.className.includes("aspect-video"),
-      );
-      if (!el) return false;
-      const r = el.getBoundingClientRect();
-      return Math.abs(r.width / r.height - 16 / 9) < 0.02;
-    })()`),
-    );
-
-    check(
-      "slide carousel renders all 6 slide preview buttons",
-      (await slides.evaluate(
-        `document.querySelectorAll('nav[aria-label="Slides"] button').length`,
-      )) === 6,
-    );
-
-    check(
-      "clicking slide thumbnail navigates directly to that slide",
-      await (async () => {
-        await slides.evaluate(`(() => {
-          const thumbs = [...document.querySelectorAll('nav[aria-label="Slides"] button')];
-          thumbs[0]?.click();
-        })()`);
-        await sleep(200);
-        return slides.evaluate(`document.body.innerText.includes("SLIDE 1 / 6")`);
-      })(),
-    );
-
-    check(
-      "ArrowRight and ArrowLeft traverse slide deck bidirectionally",
-      await (async () => {
-        await pressKey(slides, "ArrowRight", 39);
-        await sleep(150);
-        const forward = await slides.evaluate(`document.body.innerText.includes("SLIDE 2 / 6")`);
-        await pressKey(slides, "ArrowLeft", 37);
-        await sleep(150);
-        const backward = await slides.evaluate(`document.body.innerText.includes("SLIDE 1 / 6")`);
-        return forward && backward;
-      })(),
-    );
-
-    check(
-      "close button exits presentation studio and restores desk",
-      await (async () => {
-        await slides.evaluate(`(() => {
-          const close = document.querySelector('button[aria-label="Close presentation studio"]');
-          close?.click();
-        })()`);
-        await sleep(300);
-        return slides.evaluate(
-          `document.querySelector('section[aria-label="Presentation studio"]') === null`,
-        );
-      })(),
-    );
-
-    /* ------------------------------------------------------------------ */
-    process.stdout.write("\nInstrument shelf\n");
-
-    const shelf = await newPage(browser, "#shelf");
-    await shoot(shelf, "4-shelf");
-
-    check(
-      "every capability summary is reachable on hover",
-      await shelf.evaluate(`(() => {
-      const cards = [...document.querySelectorAll("li.group")];
-      return cards.length === 6 && cards.every((c) => c.innerHTML.includes("Net:"));
-    })()`),
-    );
-
-    check(
-      "an essential instrument cannot be disabled",
-      await (async () => {
-        await shelf.evaluate(`(() => {
-        const sw = [...document.querySelectorAll('[role="switch"]')][0];
-        sw.click();
-      })()`);
-        await sleep(200);
-        return shelf.evaluate(
-          `[...document.querySelectorAll('[role="switch"]')][0].getAttribute("aria-checked") === "true"`,
-        );
-      })(),
-    );
-
-    check(
-      "a plugin instrument toggles",
-      await (async () => {
-        const before = await shelf.evaluate(
-          `[...document.querySelectorAll('[role="switch"]')][1].getAttribute("aria-checked")`,
-        );
-        await shelf.evaluate(`document.querySelectorAll('[role="switch"]')[1].click()`);
-        await sleep(200);
-        const after = await shelf.evaluate(
-          `[...document.querySelectorAll('[role="switch"]')][1].getAttribute("aria-checked")`,
-        );
-        return before !== after;
-      })(),
-    );
-
-    /* ------------------------------------------------------------------ */
-    process.stdout.write("\nZen mode\n");
-
-    const zen = await newPage(browser, "#zen");
-    await shoot(zen, "7-zen");
-
-    check(
-      "zen dissolves every chrome element",
-      await zen.evaluate(`(() => {
-      return document.querySelector("header") === null &&
-             document.querySelector("footer") === null &&
-             document.querySelector("nav") === null;
-    })()`),
-    );
-
-    check(
-      "reading column is 680px",
-      await zen.evaluate(`(() => {
-      const article = document.querySelector("article");
-      if (!article) return false;
-      return Math.round(article.getBoundingClientRect().width) === 680;
-    })()`),
-    );
-
-    /* ------------------------------------------------------------------ */
-    process.stdout.write("\nOverlays\n");
-
-    check(
-      "overlays do not darken what sits behind them",
-      await library.evaluate(`(() => {
-      const pane = document.querySelector("main");
-      return pane !== null &&
-             !getComputedStyle(pane).filter.includes("brightness");
-    })()`),
-    );
-
-    for (const page of [desk, library, palette, canvas, slides, shelf, zen])
-      page.close();
+    page.close();
     browser.close();
   } finally {
     child.kill("SIGTERM");
