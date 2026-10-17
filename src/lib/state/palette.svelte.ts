@@ -14,6 +14,9 @@ import {
   type CommandGroup,
 } from "$lib/commands/registry";
 import { fuzzyRank, type Ranked } from "$lib/commands/fuzzy";
+import { mergeCommands } from "$lib/commands/kernel";
+import type { KernelCommand } from "$lib/kernel/client";
+import { session } from "$lib/state/session.svelte";
 
 const GROUP_ORDER: readonly CommandGroup[] = ["AI Actions", "Plugins & Commands"];
 
@@ -25,8 +28,16 @@ export class PaletteState {
   /** Index into the flattened result list. */
   cursor = $state(0);
 
+  /** Commands contributed by kernel plugins; empty until the kernel answers. */
+  kernelCommands = $state.raw<KernelCommand[]>([]);
+
+  /** Static commands merged with the kernel's. */
+  readonly all: Command[] = $derived(
+    mergeCommands(commands, this.kernelCommands, (id) => void session.run(id)),
+  );
+
   readonly ranked: Ranked<Command>[] = $derived(
-    fuzzyRank(commands, this.query, searchText),
+    fuzzyRank(this.all, this.query, searchText),
   );
 
   readonly selected: Command | undefined = $derived(this.ranked[this.cursor]?.item);
@@ -58,6 +69,12 @@ export class PaletteState {
     this.open = true;
     this.query = "";
     this.cursor = 0;
+    void this.loadKernelCommands();
+  }
+
+  /** Fetch plugin commands; the static list keeps working if the kernel is silent. */
+  async loadKernelCommands(): Promise<void> {
+    this.kernelCommands = await session.commands();
   }
 
   /** Opens the palette with a query already typed, e.g. from a deep link. */
