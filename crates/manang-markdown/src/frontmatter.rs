@@ -69,12 +69,11 @@ pub fn parse_frontmatter(source: &str) -> (Option<Frontmatter>, &str, Vec<Diagno
             "\n...\n",
             "\n...\r\n",
         ] {
-            if let Some(pos) = rest.find(delim) {
-                if close_idx.is_none_or(|cur| pos < cur) {
+            if let Some(pos) = rest.find(delim)
+                && close_idx.is_none_or(|cur| pos < cur) {
                     close_idx = Some(pos);
                     delim_len = delim.len();
                 }
-            }
         }
 
         // Also check if rest ends exactly with `\n---` or `\n...`
@@ -84,12 +83,11 @@ pub fn parse_frontmatter(source: &str) -> (Option<Frontmatter>, &str, Vec<Diagno
                     close_idx = Some(pos);
                     delim_len = rest.len() - pos;
                 }
-            } else if let Some(pos) = rest.rfind("\n...") {
-                if rest[pos..].trim() == "..." {
+            } else if let Some(pos) = rest.rfind("\n...")
+                && rest[pos..].trim() == "..." {
                     close_idx = Some(pos);
                     delim_len = rest.len() - pos;
                 }
-            }
         }
 
         if let Some(end) = close_idx {
@@ -134,22 +132,19 @@ pub fn parse_frontmatter(source: &str) -> (Option<Frontmatter>, &str, Vec<Diagno
         let mut delim_len = 0;
 
         for delim in ["\n+++\n", "\n+++\r\n", "\r\n+++\r\n", "\r\n+++\n"] {
-            if let Some(pos) = rest.find(delim) {
-                if close_idx.is_none_or(|cur| pos < cur) {
+            if let Some(pos) = rest.find(delim)
+                && close_idx.is_none_or(|cur| pos < cur) {
                     close_idx = Some(pos);
                     delim_len = delim.len();
                 }
-            }
         }
 
-        if close_idx.is_none() {
-            if let Some(pos) = rest.rfind("\n+++") {
-                if rest[pos..].trim() == "+++" {
+        if close_idx.is_none()
+            && let Some(pos) = rest.rfind("\n+++")
+                && rest[pos..].trim() == "+++" {
                     close_idx = Some(pos);
                     delim_len = rest.len() - pos;
                 }
-            }
-        }
 
         if let Some(end) = close_idx {
             let raw = &rest[..end];
