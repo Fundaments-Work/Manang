@@ -167,11 +167,15 @@ Agents (and humans) work in parallel on one machine with limited CPU and disk. A
   Only remove branches with `git rev-list --count main..<branch>` equal to 0.
 * Never run `git add -A` before checking `git status`: embedded worktrees must stay untracked, build output must stay ignored.
 * A worktree must start from the **current `main`** (`git merge main` or fast-forward first). Stale worktrees miss crates and cause conflicts.
+* Automatic agent worktrees branch from `origin/main`, not local `main`. **Push `main` before spawning agents** (or create the worktree yourself with `git worktree add -b <branch> <path> main`), and have every agent verify `git log -1` matches `main` before starting.
 * Merge conflicts in `Cargo.toml` (workspace `members`) and `Cargo.lock` are expected: keep the union of members and let Cargo regenerate the lockfile.
 
 ### 7.3. Builds and disk
 * Do **not** run several heavy Rust builds at once (`cargo test --workspace`, `tauri dev`, and another agent's build share one `target/` lock and one CPU). Prefer `-p <crate>` while developing and the full workspace gate once at the end.
 * Long commands run in the background with a timeout; wait for completion notifications instead of polling or sleeping.
+* **Concurrency budget on one machine:** at most one heavy Rust build at a time (a workspace test run, `tauri dev`, or an agent's crate build), and at most one build-heavy agent alongside another tool such as Antigravity. Never run a full-workspace gate while agents are building. Watch `uptime`: a load average far above the core count means stop and serialise.
+* Agents share the main build cache: `CARGO_TARGET_DIR=<repo>/target` with `-p <crate>`, instead of a fresh multi-GB `target/` per worktree.
+* To wait for a process, wait on its PID (`while kill -0 <pid>; do ...`), never `pgrep -f "<its command text>"`: the waiting shell's own command line matches and the loop never ends.
 * Delete build output you created in disposable worktrees (`cargo clean` or remove the worktree). Do not commit `target/`, `dist/`, `artifacts/` or fuzz corpora beyond minimal regression seeds.
 * Scratch files go in the session scratchpad directory, never in the repo root or `/tmp`.
 
