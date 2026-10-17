@@ -1,0 +1,23 @@
+[plugin]
+name = "typst"
+version = "0.1.0"
+description = "Typst compiler: incremental compile, SVG page render and PDF export"
+tier = "native"
+
+[permissions]
+filesystem = ["read:project"]
+
+[contributes]
+hooks = ["on_lint"]
+
+[[contributes.commands]]
+id = "typst.compile"
+title = "Compile Typst document"
+
+[[contributes.commands]]
+id = "typst.render"
+title = "Render page as SVG"
+
+[[contributes.commands]]
+id = "typst.export-pdf"
+title = "Export PDF"

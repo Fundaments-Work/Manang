@@ -1,0 +1,21 @@
+---
+source: crates/manang-typst/tests/compile.rs
+expression: report.diagnostics
+---
+[
+  {
+    "severity": "error",
+    "message": "cannot add integer and string",
+    "file": "/lib.typ",
+    "line": 1,
+    "column": 12,
+    "range": {
+      "start": 11,
+      "end": 18
+    },
+    "hints": [],
+    "trace": [
+      "while calling `f`"
+    ]
+  }
+]
