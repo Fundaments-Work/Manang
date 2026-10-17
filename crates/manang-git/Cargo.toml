@@ -1,0 +1,31 @@
+[package]
+name = "manang-git"
+description = "Manang's first-party git plugin: gix reads, system-git writes, confined and sandboxed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+# gix 0.89 requires Rust 1.88.
+rust-version = "1.88"
+
+[dependencies]
+gix = { version = "0.89", default-features = false, features = ["sha1", "status", "index", "blame", "revision", "blob-diff", "mailmap"] }
+manang-kernel = { path = "../manang-kernel" }
+manang-project = { path = "../manang-project" }
+parking_lot = "0.12"
+serde = { workspace = true }
+serde_json = { workspace = true }
+similar = "2.7"
+thiserror = { workspace = true }
+wait-timeout = "0.2"
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+insta = { version = "1", features = ["json"] }
+proptest = "1"
+tempfile = "3"
+
+[[bench]]
+name = "status_diff"
+harness = false
