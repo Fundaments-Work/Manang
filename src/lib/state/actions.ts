@@ -166,7 +166,7 @@ async function startProject(
   if (project === null) return false;
   if (!layout.narrow) layout.showSide("files");
   await openFile(project.main, { focus: false });
-  build.schedule();
+  build.schedule("switch");
   return true;
 }
 
@@ -295,7 +295,7 @@ export async function trashEntry(path: string): Promise<void> {
       ? `Moved ${basename(path)} to the trash. Unsaved changes in it were discarded.`
       : `Moved ${basename(path)} to the trash.`,
   );
-  build.schedule();
+  build.noteDiskChange();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -378,7 +378,7 @@ function onKernelEvent(event: KernelEvent): void {
     .filter((c) => c.kind === "modified" || c.kind === "created")
     .map((c) => c.path);
   void documents.externalChange(touched);
-  build.schedule();
+  build.noteDiskChange();
 }
 
 let booted = false;
@@ -388,7 +388,7 @@ export async function boot(): Promise<void> {
   if (booted) return;
   booted = true;
   layout.restore();
-  documents.onEdit(() => build.schedule());
+  documents.onEdit(() => build.schedule("edit"));
   void kernel.onEvent(onKernelEvent);
   await workspace.loadRecent();
 
@@ -405,5 +405,5 @@ export async function boot(): Promise<void> {
   if (session.active !== null) tabs.activate(session.active);
   else if (tabs.tabs.length === 0)
     await openFile(workspace.project?.main ?? "", { focus: false });
-  build.schedule();
+  build.schedule("switch");
 }

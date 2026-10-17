@@ -125,3 +125,45 @@ export interface CompileReport {
   readonly duration_ms: number;
   readonly generation: number;
 }
+
+/** `crates/manang-latex` `Diagnostic`: file is relative to the main file's directory. */
+export interface LatexDiagnostic {
+  readonly severity: "error" | "warning" | "info";
+  readonly message: string;
+  readonly file: string | null;
+  /** 1-based. */
+  readonly line: number | null;
+  readonly hint: string | null;
+}
+
+/** What `latex.compile` answers with. `pages` is null when the log did not say. */
+export interface LatexReport {
+  readonly ok: boolean;
+  readonly pages: number | null;
+  readonly diagnostics: readonly LatexDiagnostic[];
+  readonly duration_ms: number;
+  readonly synctex: boolean;
+}
+
+/** `crates/manang-markdown` `Diagnostic`; severity is a free string in Rust. */
+export interface MarkdownDiagnostic {
+  readonly severity: string;
+  readonly message: string;
+  /** 1-based; omitted when unknown. */
+  readonly line?: number;
+}
+
+export interface MarkdownHeading {
+  readonly title: string;
+  readonly level: number;
+  readonly id?: string;
+  readonly line: number;
+}
+
+/** What `markdown.render-html` answers with. `html` is already sanitised in Rust. */
+export interface MarkdownRender {
+  readonly html: string;
+  readonly frontmatter: unknown;
+  readonly headings: readonly MarkdownHeading[];
+  readonly diagnostics: readonly MarkdownDiagnostic[];
+}
