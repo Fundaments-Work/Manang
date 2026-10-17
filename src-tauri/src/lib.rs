@@ -96,10 +96,10 @@ fn build_kernel(
     )?;
     kernel.register(
         manang_project::manifest()?,
-        Arc::new(manang_project::plugin(
-            dirs.config.to_path_buf(),
-            events.clone(),
-        )),
+        Arc::new(
+            manang_project::ProjectPlugin::new(dirs.config.to_path_buf(), events.clone())
+                .with_cache_dir(dirs.cache.to_path_buf()),
+        ),
     )?;
     kernel.register(
         manang_figure::manifest()?,
@@ -284,6 +284,59 @@ async fn kernel_invoke_binary(
     }
 }
 
+/// Validate a destination chosen in the native Save dialog: an absolute path
+/// whose folder exists, that is not itself a directory.
+fn check_destination(dest: &std::path::Path) -> Result<(), IpcError> {
+    let fail = |message: String| Err(IpcError { message });
+    if !dest.is_absolute() {
+        return fail(format!("`{}` is not an absolute path", dest.display()));
+    }
+    if dest.is_dir() {
+        return fail(format!("`{}` is a folder", dest.display()));
+    }
+    match dest.parent() {
+        Some(parent) if parent.is_dir() => Ok(()),
+        _ => fail(format!(
+            "the folder for `{}` does not exist",
+            dest.display()
+        )),
+    }
+}
+
+/// Run a binary kernel command (for example `typst.export-pdf`) and write its
+/// bytes to `dest_path`, chosen by the user in the native Save dialog. The
+/// bytes never cross IPC: the kernel produces them and this writes them,
+/// atomically, on a blocking thread. Resolves to the number of bytes written.
+#[tauri::command]
+async fn save_binary_artifact(
+    shell: State<'_, Shell>,
+    command: String,
+    args: Option<Value>,
+    dest_path: String,
+) -> Result<u64, IpcError> {
+    let dest = std::path::PathBuf::from(dest_path);
+    check_destination(&dest)?;
+    let bytes = match dispatch(&shell, command.clone(), args).await? {
+        Payload::Binary(bytes) => bytes,
+        _ => {
+            return Err(IpcError {
+                message: format!("`{command}` does not return binary"),
+            });
+        }
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        manang_project::fsops::atomic_write(&dest, &bytes)
+            .map(|()| bytes.len() as u64)
+            .map_err(|e| IpcError {
+                message: e.to_string(),
+            })
+    })
+    .await
+    .map_err(|e| IpcError {
+        message: format!("save task failed: {e}"),
+    })?
+}
+
 /// Forward kernel events (file changes, ...) to the shell as `kernel://event`.
 fn forward_events(app: tauri::AppHandle, events: &EventBus) -> std::io::Result<()> {
     let subscription = events.subscribe("*");
@@ -309,6 +362,7 @@ fn forward_events(app: tauri::AppHandle, events: &EventBus) -> std::io::Result<(
 pub fn run() -> Result<(), tauri::Error> {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             use tauri::Manager;
             let config_dir = app.path().app_config_dir()?;
@@ -335,16 +389,26 @@ pub fn run() -> Result<(), tauri::Error> {
             app_info,
             kernel_commands,
             kernel_invoke,
-            kernel_invoke_binary
+            kernel_invoke_binary,
+            save_binary_artifact
         ])
         .run(tauri::generate_context!())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{AppInfo, Arc, Dirs, Editor, EventBus, app_info, build_kernel};
+    use super::{AppInfo, Arc, Dirs, Editor, EventBus, app_info, build_kernel, check_destination};
     use manang_kernel::Payload;
     use serde_json::json;
+
+    #[test]
+    fn save_destination_must_be_an_absolute_file_in_an_existing_folder() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(check_destination(&dir.path().join("out.pdf")).is_ok());
+        assert!(check_destination(std::path::Path::new("out.pdf")).is_err());
+        assert!(check_destination(dir.path()).is_err());
+        assert!(check_destination(&dir.path().join("nope/out.pdf")).is_err());
+    }
 
     #[test]
     fn app_info_reports_build_identity() {
