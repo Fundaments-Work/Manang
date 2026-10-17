@@ -1,0 +1,12 @@
+---
+source: crates/manang-citations/tests/kernel.rs
+expression: bib_err
+---
+ParseDiagnostic {
+    file: Some(
+        "malformed.bib",
+    ),
+    line: 4,
+    column: 2,
+    message: "BibTeX parse error: expected comma: 71-71",
+}

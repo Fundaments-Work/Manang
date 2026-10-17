@@ -473,3 +473,125 @@ pub fn markdown_to_typst(source: &str) -> (String, Vec<Diagnostic>);
    - 7 kernel integration tests in `crates/manang-markdown/tests/kernel.rs` covering all commands, frontmatter parsing, XSS vectors, and Typst generation.
    - Property tests with `proptest` in `crates/manang-markdown/tests/fuzz_proptest.rs` verifying arbitrary byte/string inputs never panic.
    - `insta` snapshot tests capturing stable HTML and Typst generation.
+---
+
+## Phase 2 - Task 4: `crates/manang-citations` Native Plugin
+
+- **Crate Name:** `manang-citations`
+- **Location:** `crates/manang-citations`
+- **Manifest:** `manifest.toml` (tier: `native`, name: `citations`, permissions: `network = ["api.crossref.org", "api.openalex.org", "export.arxiv.org"]`, `filesystem = ["read:project"]`)
+
+### Public API Surface
+```rust
+pub fn manifest() -> Result<manang_kernel::Manifest, manang_kernel::ManifestError>;
+pub fn plugin() -> impl manang_kernel::Plugin;
+pub fn plugin_with_client(http_client: Arc<dyn HttpClient>) -> impl manang_kernel::Plugin;
+pub fn plugin_with_store(index: Arc<CitationIndex>, http_client: Arc<dyn HttpClient>) -> impl manang_kernel::Plugin;
+
+pub struct CitationsPlugin { ... }
+pub struct CitationIndex { ... }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Entry {
+    pub key: String,
+    pub entry_type: String,
+    pub title: Option<String>,
+    pub authors: Vec<Author>,
+    pub year: Option<u32>,
+    pub month: Option<u32>,
+    pub journal_or_publisher: Option<String>,
+    pub volume: Option<String>,
+    pub number: Option<String>,
+    pub pages: Option<String>,
+    pub doi: Option<String>,
+    pub url: Option<String>,
+    pub arxiv_id: Option<String>,
+    pub abstract_text: Option<String>,
+    pub raw_fields: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Author {
+    pub name: String,
+    pub family: Option<String>,
+    pub given: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Difference {
+    pub field: String,
+    pub local: String,
+    pub remote: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerificationResult {
+    pub status: VerificationStatus,
+    pub matched: Option<Entry>,
+    pub differences: Vec<Difference>,
+    pub message: Option<String>,
+}
+
+pub trait HttpClient: Send + Sync {
+    fn get(&self, url: &str, headers: &[(&str, &str)]) -> Result<HttpResponse, CitationsError>;
+}
+pub struct BlockingHttpClient { ... }
+pub struct MockHttpClient { ... }
+
+pub fn parse_bibtex(source: &str, file: Option<&str>) -> Result<Vec<Entry>, ParseDiagnostic>;
+pub fn parse_csl_json(source: &str, file: Option<&str>) -> Result<Vec<Entry>, ParseDiagnostic>;
+pub fn parse_file(path: &Path) -> Result<Vec<Entry>, ParseDiagnostic>;
+pub fn format_entry(entry: &Entry, style: &str) -> Result<String, CitationsError>;
+pub fn format_apa(entry: &Entry) -> String;
+pub fn format_numeric(entry: &Entry) -> String;
+pub fn extract_keys(source: &str, syntax: &str) -> Result<Vec<String>, CitationsError>;
+pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResult;
+```
+
+### Contributed Commands & Shapes
+1. `citations.load`:
+   - Args: `{ paths: string[] }` or `{ path: string }`
+   - Return: `Payload::Json({ loaded: usize, total: usize, errors: ParseDiagnostic[] })`
+   - Features: Auto-detects BibTeX/BibLaTeX (`.bib`, `.biblatex`) and CSL-JSON (`.json`, `.csl`), parses into normalized `Entry` models, reports syntax/parsing diagnostics with exact 1-based file, line, and column coordinates.
+2. `citations.search`:
+   - Args: `{ query: string, limit?: usize }`
+   - Return: `Payload::Json({ results: [ { key: string, score: f64, entry: Entry } ] })`
+   - Features: Ranked in-memory search scoring across key exact/containment, title words, author family and given names, publication year, and character subsequence fuzzy matching, with deterministic tie-breaking.
+3. `citations.get`:
+   - Args: `{ key: string }`
+   - Return: `Payload::Json(Entry)`
+4. `citations.format`:
+   - Args: `{ key: string, style?: "apa" | "numeric" }` (default: `"apa"`)
+   - Return: `Payload::Json({ key: string, style: string, formatted: string })`
+   - Supported styles:
+     - `"apa"`: Full APA-compliant author list (initials, ampersand, ellipsis for >20), publication year, italicized/punctuated titles, container/issue/pages, and DOI link.
+     - `"numeric"`: IEEE-like numbered citation with quoted titles and abbreviated pagination labels (`[1] A. M. Turing, ...`).
+5. `citations.extract-keys`:
+   - Args: `{ source: string, syntax: "typst" | "latex" | "markdown" }`
+   - Return: `Payload::Json({ keys: string[] })`
+   - Features:
+     - `typst`: Extracts `@key` identifiers while safely rejecting email addresses (`user@domain.com`).
+     - `latex`: Parses `\cite{...}`, `\citep{...}`, `\citet{...}`, etc., handling optional square bracket arguments and comma-delimited key lists.
+     - `markdown`: Extracts `[@key1; @key2]`, `[-@key]`, and `@key[p. 10]`.
+6. `citations.verify`:
+   - Args: `{ key: string }`
+   - Return: `Payload::Json({ status: "verified" | "mismatch" | "not_found" | "error", matched: Option<Entry>, differences: Difference[] })`
+   - Verification Engine:
+     - Crossref resolution by DOI (`https://api.crossref.org/works/{doi}`) with OpenAlex fallback.
+     - arXiv resolution by arXiv ID (`https://export.arxiv.org/api/query?id_list={id}`) with OpenAlex fallback.
+     - Bibliographic title search query when identifiers are absent.
+     - Sandboxed HTTP: Exact-host allowlist (`api.crossref.org`, `api.openalex.org`, `export.arxiv.org`), size limit (2 MB), timeout (10s), strict redirect validation (each hop checked against allowlist), polite User-Agent, and on-disk SHA hash response caching.
+     - Offline Testing: `MockHttpClient` for 100% deterministic, zero-network tests.
+
+### Handoff Notes for Claude Code
+1. **Registration in `src-tauri`:**
+   ```rust
+   kernel.register(
+       manang_citations::manifest().expect("citations manifest"),
+       Arc::new(manang_citations::plugin()),
+   ).expect("register citations plugin");
+   ```
+2. **Deterministic Offline Tests:** All test suites use `MockHttpClient` so `cargo test` never touches the live network.
+3. **Tests:**
+   - 3 proptests in `tests/fuzz_proptest.rs` verifying arbitrary string inputs to BibTeX, CSL-JSON, and key extraction never panic.
+   - 7 kernel integration tests in `tests/kernel.rs` covering commands, search ranking, citation formatting, mock network verification, and 4 `insta` snapshots for formatted output and parse errors with line/column coordinates.

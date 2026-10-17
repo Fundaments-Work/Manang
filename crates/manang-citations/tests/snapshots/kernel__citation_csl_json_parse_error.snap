@@ -1,0 +1,12 @@
+---
+source: crates/manang-citations/tests/kernel.rs
+expression: csl_err
+---
+ParseDiagnostic {
+    file: Some(
+        "malformed.json",
+    ),
+    line: 5,
+    column: 5,
+    message: "CSL-JSON parse error: expected `,` or `}` at line 5 column 5",
+}
