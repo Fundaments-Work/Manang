@@ -1,0 +1,247 @@
+# Built-in math symbol table.
+#
+# One symbol per line, columns separated by the broken bar `¦`:
+#   typst ¦ latex ¦ char ¦ category ¦ latex package ¦ keywords (comma separated)
+# `-` means "not available in this syntax" (or "no extra package").
+# `typst` and `latex` are the exact insertion text (Typst math mode / LaTeX
+# math mode). Order matters: earlier rows rank higher on equal scores.
+# Every Typst entry is checked against Typst's own symbol table by a test.
+alpha¦\alpha¦α¦greek¦-¦greek letter,angle,coefficient
+beta¦\beta¦β¦greek¦-¦greek letter,angle,coefficient
+gamma¦\gamma¦γ¦greek¦-¦greek letter,euler constant,lorentz factor
+delta¦\delta¦δ¦greek¦-¦greek letter,small change,kronecker
+epsilon¦\varepsilon¦ε¦greek¦-¦greek letter,small,tolerance
+epsilon.alt¦\epsilon¦ϵ¦greek¦-¦greek letter,small,tolerance,varepsilon
+zeta¦\zeta¦ζ¦greek¦-¦greek letter,riemann
+eta¦\eta¦η¦greek¦-¦greek letter,efficiency
+theta¦\theta¦θ¦greek¦-¦greek letter,angle
+theta.alt¦\vartheta¦ϑ¦greek¦-¦greek letter,angle,vartheta
+iota¦\iota¦ι¦greek¦-¦greek letter
+kappa¦\kappa¦κ¦greek¦-¦greek letter,curvature
+kappa.alt¦\varkappa¦ϰ¦greek¦amssymb¦greek letter,varkappa
+lambda¦\lambda¦λ¦greek¦-¦greek letter,wavelength,eigenvalue
+mu¦\mu¦μ¦greek¦-¦greek letter,mean,micro
+nu¦\nu¦ν¦greek¦-¦greek letter,frequency
+xi¦\xi¦ξ¦greek¦-¦greek letter
+omicron¦-¦ο¦greek¦-¦greek letter
+pi¦\pi¦π¦greek¦-¦greek letter,circle,3.14
+pi.alt¦\varpi¦ϖ¦greek¦-¦greek letter,varpi
+rho¦\rho¦ρ¦greek¦-¦greek letter,density,correlation
+rho.alt¦\varrho¦ϱ¦greek¦-¦greek letter,varrho
+sigma¦\sigma¦σ¦greek¦-¦greek letter,standard deviation,stress
+sigma.alt¦\varsigma¦ς¦greek¦-¦greek letter,final sigma,varsigma
+tau¦\tau¦τ¦greek¦-¦greek letter,time constant
+upsilon¦\upsilon¦υ¦greek¦-¦greek letter
+phi¦\varphi¦φ¦greek¦-¦greek letter,golden ratio,angle
+phi.alt¦\phi¦ϕ¦greek¦-¦greek letter,golden ratio,angle,closed phi
+chi¦\chi¦χ¦greek¦-¦greek letter,chi squared
+psi¦\psi¦ψ¦greek¦-¦greek letter,wave function
+omega¦\omega¦ω¦greek¦-¦greek letter,angular frequency
+Gamma¦\Gamma¦Γ¦greek¦-¦capital greek letter,gamma function
+Delta¦\Delta¦Δ¦greek¦-¦capital greek letter,difference,laplacian
+Theta¦\Theta¦Θ¦greek¦-¦capital greek letter
+Lambda¦\Lambda¦Λ¦greek¦-¦capital greek letter
+Xi¦\Xi¦Ξ¦greek¦-¦capital greek letter
+Pi¦\Pi¦Π¦greek¦-¦capital greek letter,product
+Sigma¦\Sigma¦Σ¦greek¦-¦capital greek letter,sum,covariance
+Upsilon¦\Upsilon¦Υ¦greek¦-¦capital greek letter
+Phi¦\Phi¦Φ¦greek¦-¦capital greek letter,flux
+Psi¦\Psi¦Ψ¦greek¦-¦capital greek letter
+Omega¦\Omega¦Ω¦greek¦-¦capital greek letter,ohm
+plus.minus¦\pm¦±¦operator¦-¦plus minus,plus or minus,tolerance
+minus.plus¦\mp¦∓¦operator¦-¦minus plus,minus or plus
+times¦\times¦×¦operator¦-¦multiply,cross product,multiplication
+div¦\div¦÷¦operator¦-¦divide,division
+dot.op¦\cdot¦⋅¦operator¦-¦dot product,multiply,center dot,multiplication
+star.op¦\star¦⋆¦operator¦-¦star operator
+ast.op¦\ast¦∗¦operator¦-¦asterisk,convolution,star
+compose¦\circ¦∘¦operator¦-¦composition,compose,ring,function composition
+plus.o¦\oplus¦⊕¦operator¦-¦direct sum,xor,circled plus
+times.o¦\otimes¦⊗¦operator¦-¦tensor product,kronecker,circled times
+minus.o¦\ominus¦⊖¦operator¦-¦circled minus
+dot.o¦\odot¦⊙¦operator¦-¦hadamard product,circled dot
+dagger¦\dagger¦†¦operator¦-¦dagger,adjoint,hermitian
+dagger.double¦\ddagger¦‡¦operator¦-¦double dagger
+eq.not¦\neq¦≠¦relation¦-¦not equal,unequal,different
+lt.eq¦\leq¦≤¦relation¦-¦less than or equal,at most
+gt.eq¦\geq¦≥¦relation¦-¦greater than or equal,at least
+lt.double¦\ll¦≪¦relation¦-¦much less than
+gt.double¦\gg¦≫¦relation¦-¦much greater than
+approx¦\approx¦≈¦relation¦-¦approximately equal,almost equal
+tilde.op¦\sim¦∼¦relation¦-¦similar,tilde,distributed as
+tilde.eq¦\simeq¦≃¦relation¦-¦asymptotically equal
+tilde.equiv¦\cong¦≅¦relation¦-¦congruent,isomorphic
+equiv¦\equiv¦≡¦relation¦-¦equivalent,identical,congruent modulo
+prop¦\propto¦∝¦relation¦-¦proportional to
+prec¦\prec¦≺¦relation¦-¦precedes
+succ¦\succ¦≻¦relation¦-¦succeeds
+prec.eq¦\preceq¦⪯¦relation¦-¦precedes or equals
+succ.eq¦\succeq¦⪰¦relation¦-¦succeeds or equals
+lt.eq.slant¦\leqslant¦⩽¦relation¦amssymb¦less than or equal slanted
+gt.eq.slant¦\geqslant¦⩾¦relation¦amssymb¦greater than or equal slanted
+parallel¦\parallel¦∥¦relation¦-¦parallel
+perp¦\perp¦⟂¦relation¦-¦perpendicular,orthogonal
+colon.eq¦\coloneqq¦≔¦relation¦mathtools¦definition,defined as,assign,colon equals
+in¦\in¦∈¦set¦-¦element of,member of,belongs to,in
+in.not¦\notin¦∉¦set¦-¦not an element of,not in
+in.rev¦\ni¦∋¦set¦-¦contains as member,owns
+subset¦\subset¦⊂¦set¦-¦subset,proper subset
+subset.eq¦\subseteq¦⊆¦set¦-¦subset or equal
+subset.neq¦\subsetneq¦⊊¦set¦amssymb¦proper subset,strict subset
+supset¦\supset¦⊃¦set¦-¦superset
+supset.eq¦\supseteq¦⊇¦set¦-¦superset or equal
+union¦\cup¦∪¦set¦-¦union,or
+inter¦\cap¦∩¦set¦-¦intersection,intersect
+union.big¦\bigcup¦⋃¦set¦-¦big union,indexed union
+inter.big¦\bigcap¦⋂¦set¦-¦big intersection,indexed intersection
+without¦\setminus¦∖¦set¦-¦set difference,minus,backslash
+emptyset¦\emptyset¦∅¦set¦-¦empty set,null set,nothing
+NN¦\mathbb{N}¦ℕ¦set¦amssymb¦natural numbers,naturals,blackboard n
+ZZ¦\mathbb{Z}¦ℤ¦set¦amssymb¦integers,blackboard z
+QQ¦\mathbb{Q}¦ℚ¦set¦amssymb¦rational numbers,rationals,blackboard q
+RR¦\mathbb{R}¦ℝ¦set¦amssymb¦real numbers,reals,blackboard r
+CC¦\mathbb{C}¦ℂ¦set¦amssymb¦complex numbers,blackboard c
+PP¦\mathbb{P}¦ℙ¦set¦amssymb¦primes,probability,blackboard p
+forall¦\forall¦∀¦logic¦-¦for all,for every,universal quantifier,every
+exists¦\exists¦∃¦logic¦-¦there exists,existential quantifier,exist
+exists.not¦\nexists¦∄¦logic¦amssymb¦there does not exist,not exists
+and¦\wedge¦∧¦logic¦-¦and,conjunction,logical and,meet
+or¦\vee¦∨¦logic¦-¦or,disjunction,logical or,join
+not¦\neg¦¬¦logic¦-¦not,negation,logical not
+and.big¦\bigwedge¦⋀¦logic¦-¦big and,big conjunction
+or.big¦\bigvee¦⋁¦logic¦-¦big or,big disjunction
+top¦\top¦⊤¦logic¦-¦top,true,tautology
+bot¦\bot¦⊥¦logic¦-¦bottom,false,contradiction,falsum
+tack.r¦\vdash¦⊢¦logic¦-¦proves,turnstile,entails,derives
+tack.l¦\dashv¦⊣¦logic¦-¦reverse turnstile
+tack.r.double¦\models¦⊨¦logic¦-¦models,satisfies,semantically entails
+therefore¦\therefore¦∴¦logic¦amssymb¦therefore,hence
+because¦\because¦∵¦logic¦amssymb¦because,since
+arrow.r¦\rightarrow¦→¦arrow¦-¦right arrow,to,maps to,implies
+arrow.l¦\leftarrow¦←¦arrow¦-¦left arrow,gets
+arrow.t¦\uparrow¦↑¦arrow¦-¦up arrow
+arrow.b¦\downarrow¦↓¦arrow¦-¦down arrow
+arrow.l.r¦\leftrightarrow¦↔¦arrow¦-¦left right arrow,bidirectional,iff
+arrow.t.b¦\updownarrow¦↕¦arrow¦-¦up down arrow
+arrow.r.double¦\Rightarrow¦⇒¦arrow¦-¦implies,double right arrow,therefore,if then
+arrow.l.double¦\Leftarrow¦⇐¦arrow¦-¦implied by,double left arrow
+arrow.l.r.double¦\Leftrightarrow¦⇔¦arrow¦-¦if and only if,iff,equivalent,double left right arrow
+arrow.t.double¦\Uparrow¦⇑¦arrow¦-¦double up arrow
+arrow.b.double¦\Downarrow¦⇓¦arrow¦-¦double down arrow
+arrow.r.long¦\longrightarrow¦⟶¦arrow¦-¦long right arrow,long arrow
+arrow.l.long¦\longleftarrow¦⟵¦arrow¦-¦long left arrow
+arrow.l.r.long¦\longleftrightarrow¦⟷¦arrow¦-¦long left right arrow
+arrow.r.long.double¦\Longrightarrow¦⟹¦arrow¦-¦long implies,long double right arrow
+arrow.l.r.long.double¦\Longleftrightarrow¦⟺¦arrow¦-¦long iff,long if and only if
+arrow.r.bar¦\mapsto¦↦¦arrow¦-¦maps to,mapsto,function arrow
+arrow.r.hook¦\hookrightarrow¦↪¦arrow¦-¦hook arrow,inclusion,embedding
+arrow.r.squiggly¦\leadsto¦⇝¦arrow¦amssymb¦leads to,squiggly arrow
+arrow.r.twohead¦\twoheadrightarrow¦↠¦arrow¦amssymb¦surjection,onto,two head arrow
+arrow.r.tail¦\rightarrowtail¦↣¦arrow¦amssymb¦injection,tail arrow
+arrows.rr¦\rightrightarrows¦⇉¦arrow¦amssymb¦double arrows right,parallel arrows
+arrow.tr¦\nearrow¦↗¦arrow¦-¦north east arrow,up right
+arrow.br¦\searrow¦↘¦arrow¦-¦south east arrow,down right
+arrow.bl¦\swarrow¦↙¦arrow¦-¦south west arrow,down left
+arrow.tl¦\nwarrow¦↖¦arrow¦-¦north west arrow,up left
+arrow.r.not¦\nrightarrow¦↛¦arrow¦amssymb¦not right arrow
+harpoon.rt¦\rightharpoonup¦⇀¦arrow¦-¦right harpoon,vector
+harpoon.lt¦\leftharpoonup¦↼¦arrow¦-¦left harpoon
+integral¦\int¦∫¦calculus¦-¦integral,antiderivative
+integral.double¦\iint¦∬¦calculus¦amsmath¦double integral
+integral.triple¦\iiint¦∭¦calculus¦amsmath¦triple integral
+integral.cont¦\oint¦∮¦calculus¦-¦contour integral,closed integral,circulation
+partial¦\partial¦∂¦calculus¦-¦partial derivative,boundary,del
+nabla¦\nabla¦∇¦calculus¦-¦gradient,del,divergence,curl,laplacian
+sum¦\sum¦∑¦calculus¦-¦sum,summation,sigma
+product¦\prod¦∏¦calculus¦-¦product,pi
+product.co¦\coprod¦∐¦calculus¦-¦coproduct,disjoint union
+infinity¦\infty¦∞¦calculus¦-¦infinity,unbounded
+ℏ¦\hbar¦ℏ¦calculus¦-¦h bar,reduced planck constant,hbar
+ell¦\ell¦ℓ¦calculus¦-¦script l,ell,length
+Re¦\Re¦ℜ¦calculus¦-¦real part
+Im¦\Im¦ℑ¦calculus¦-¦imaginary part
+ℵ¦\aleph¦ℵ¦calculus¦-¦aleph,cardinality
+ℶ¦\beth¦ℶ¦calculus¦amssymb¦beth
+pee¦\wp¦℘¦calculus¦-¦weierstrass p,power set
+angle¦\angle¦∠¦geometry¦-¦angle
+angle.arc¦\measuredangle¦∡¦geometry¦amssymb¦measured angle
+triangle.stroked.t¦\triangle¦△¦geometry¦-¦triangle
+square.stroked¦\square¦□¦geometry¦amssymb¦square,box,qed
+square.filled¦\blacksquare¦■¦geometry¦amssymb¦filled square,black square,qed,end of proof
+degree¦^\circ¦°¦geometry¦-¦degree,degrees,temperature
+dots.h¦\ldots¦…¦dots¦-¦ellipsis,dots,horizontal dots,low dots
+dots.h.c¦\cdots¦⋯¦dots¦-¦center dots,centered ellipsis
+dots.v¦\vdots¦⋮¦dots¦-¦vertical dots
+dots.down¦\ddots¦⋱¦dots¦-¦diagonal dots,down dots
+chevron.l¦\langle¦⟨¦bracket¦-¦left angle bracket,inner product,bra
+chevron.r¦\rangle¦⟩¦bracket¦-¦right angle bracket,inner product,ket
+floor.l¦\lfloor¦⌊¦bracket¦-¦left floor
+floor.r¦\rfloor¦⌋¦bracket¦-¦right floor
+ceil.l¦\lceil¦⌈¦bracket¦-¦left ceiling
+ceil.r¦\rceil¦⌉¦bracket¦-¦right ceiling
+bar.v¦\mid¦|¦bracket¦-¦divides,such that,vertical bar,given
+bar.v.double¦\|¦‖¦bracket¦-¦norm,double bar,parallel
+checkmark¦\checkmark¦✓¦misc¦amssymb¦check,tick,done
+star.filled¦\bigstar¦★¦misc¦amssymb¦filled star
+circle.stroked¦\bigcirc¦○¦misc¦-¦circle,big circle
+section¦\S¦§¦misc¦-¦section sign,paragraph
+pilcrow¦\P¦¶¦misc¦-¦pilcrow,paragraph sign
+copyright¦\copyright¦©¦misc¦-¦copyright
+pound¦\pounds¦£¦misc¦-¦pound,sterling,currency
+thin¦\,¦ ¦space¦-¦thin space,small space
+med¦\:¦ ¦space¦-¦medium space
+thick¦\;¦ ¦space¦-¦thick space
+quad¦\quad¦ ¦space¦-¦quad,wide space,em space
+sin¦\sin¦sin¦function¦-¦sine,trigonometry,trig
+cos¦\cos¦cos¦function¦-¦cosine,trigonometry,trig
+tan¦\tan¦tan¦function¦-¦tangent,trigonometry,trig
+cot¦\cot¦cot¦function¦-¦cotangent
+sec¦\sec¦sec¦function¦-¦secant
+csc¦\csc¦csc¦function¦-¦cosecant
+arcsin¦\arcsin¦arcsin¦function¦-¦inverse sine,arc sine
+arccos¦\arccos¦arccos¦function¦-¦inverse cosine,arc cosine
+arctan¦\arctan¦arctan¦function¦-¦inverse tangent,arc tangent
+sinh¦\sinh¦sinh¦function¦-¦hyperbolic sine
+cosh¦\cosh¦cosh¦function¦-¦hyperbolic cosine
+tanh¦\tanh¦tanh¦function¦-¦hyperbolic tangent
+log¦\log¦log¦function¦-¦logarithm,log
+ln¦\ln¦ln¦function¦-¦natural logarithm,log
+exp¦\exp¦exp¦function¦-¦exponential,e to the
+lim¦\lim¦lim¦function¦-¦limit,tends to
+limsup¦\limsup¦limsup¦function¦-¦limit superior
+liminf¦\liminf¦liminf¦function¦-¦limit inferior
+max¦\max¦max¦function¦-¦maximum,largest
+min¦\min¦min¦function¦-¦minimum,smallest
+sup¦\sup¦sup¦function¦-¦supremum,least upper bound
+inf¦\inf¦inf¦function¦-¦infimum,greatest lower bound
+det¦\det¦det¦function¦-¦determinant
+gcd¦\gcd¦gcd¦function¦-¦greatest common divisor
+dim¦\dim¦dim¦function¦-¦dimension
+ker¦\ker¦ker¦function¦-¦kernel,null space
+deg¦\deg¦deg¦function¦-¦degree
+arg¦\arg¦arg¦function¦-¦argument,argmax,argmin
+frac(a, b)¦\frac{a}{b}¦a⁄b¦construct¦-¦fraction,divide,ratio,quotient
+sqrt(x)¦\sqrt{x}¦√x¦construct¦-¦square root,radical,root
+root(n, x)¦\sqrt[n]{x}¦ⁿ√x¦construct¦-¦nth root,radical,root
+binom(n, k)¦\binom{n}{k}¦(n k)¦construct¦amsmath¦binomial,choose,combinations
+sum_(i=1)^n¦\sum_{i=1}^{n}¦∑ⁿᵢ₌₁¦construct¦-¦sum with limits,summation,series
+product_(i=1)^n¦\prod_{i=1}^{n}¦∏ⁿᵢ₌₁¦construct¦-¦product with limits
+integral_a^b¦\int_a^b¦∫ₐᵇ¦construct¦-¦definite integral,integral with limits
+lim_(x -> 0)¦\lim_{x \to 0}¦lim x→0¦construct¦-¦limit with variable,limit as x tends to
+hat(x)¦\hat{x}¦x̂¦construct¦-¦hat,estimator,unit vector,accent
+tilde(x)¦\tilde{x}¦x̃¦construct¦-¦tilde,accent
+bar(x)¦\bar{x}¦x̄¦construct¦-¦bar,mean,overline,accent
+dot(x)¦\dot{x}¦ẋ¦construct¦-¦time derivative,dot,accent,newton
+dot.double(x)¦\ddot{x}¦ẍ¦construct¦-¦second time derivative,double dot,accent
+arrow(x)¦\vec{x}¦x⃗¦construct¦-¦vector,arrow accent
+overline(x)¦\overline{x}¦x̅¦construct¦-¦overline,conjugate,complement
+underline(x)¦\underline{x}¦x̲¦construct¦-¦underline
+abs(x)¦\left| x \right|¦|x|¦construct¦-¦absolute value,modulus,magnitude
+norm(x)¦\left\| x \right\|¦‖x‖¦construct¦-¦norm,length
+mat(a, b; c, d)¦\begin{pmatrix} a & b \\ c & d \end{pmatrix}¦(a b; c d)¦construct¦amsmath¦matrix,2x2 matrix,parentheses matrix
+vec(a, b)¦\begin{pmatrix} a \\ b \end{pmatrix}¦(a; b)¦construct¦amsmath¦column vector,vector
+cases(a "if" b, c "else")¦\begin{cases} a & \text{if } b \\ c & \text{else} \end{cases}¦{a if b; c else}¦construct¦amsmath¦cases,piecewise,conditional definition
+bold(x)¦\mathbf{x}¦𝐱¦construct¦-¦bold,vector,matrix
+bb(A)¦\mathbb{A}¦𝔸¦construct¦amssymb¦blackboard bold,double struck
+cal(A)¦\mathcal{A}¦𝒜¦construct¦-¦calligraphic,script
+"text"¦\text{text}¦text¦construct¦amsmath¦text in math,words in math
