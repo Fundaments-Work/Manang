@@ -1,0 +1,5 @@
+---
+source: crates/manang-citations/tests/kernel.rs
+expression: apa
+---
+Turing, A. M. (1936). On Computable Numbers, with an Application to the Entscheidungsproblem. Proceedings of the London Mathematical Society, s2-42(1), 230–265. https://doi.org/10.1112/plms/s2-42.1.230

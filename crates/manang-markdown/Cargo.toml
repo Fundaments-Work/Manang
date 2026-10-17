@@ -1,0 +1,22 @@
+[package]
+name = "manang-markdown"
+description = "Manang's first-party Markdown parser, HTML renderer and Typst converter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml = "0.8"
+yaml-rust = "0.4"
+
+[dev-dependencies]
+insta = { version = "1", features = ["json"] }
+proptest = "1"

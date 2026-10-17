@@ -1,0 +1,18 @@
+[plugin]
+name = "markdown"
+version = "0.1.0"
+description = "Markdown rendering, outline extraction, XSS sanitization, and Typst conversion"
+tier = "native"
+
+[contributes]
+[[contributes.commands]]
+id = "markdown.render-html"
+title = "Render Markdown to sanitized HTML"
+
+[[contributes.commands]]
+id = "markdown.outline"
+title = "Extract Markdown document outline"
+
+[[contributes.commands]]
+id = "markdown.to-typst"
+title = "Convert Markdown to Typst markup"
