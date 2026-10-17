@@ -1,0 +1,10 @@
+---
+source: crates/manang-project/src/config.rs
+expression: "err(\"[project\\nengine = 1\")"
+---
+manang.toml is not valid TOML:
+TOML parse error at line 1, column 9
+  |
+1 | [project
+  |         ^
+unclosed table, expected `]`
