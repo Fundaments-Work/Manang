@@ -101,6 +101,29 @@ fn build_kernel(
             events.clone(),
         )),
     )?;
+    kernel.register(
+        manang_figure::manifest()?,
+        Arc::new(manang_figure::plugin()),
+    )?;
+    kernel.register(
+        manang_search::manifest()?,
+        Arc::new(manang_search::plugin(Some(events.clone()))),
+    )?;
+    kernel.register(
+        manang_git::manifest()?,
+        Arc::new(manang_git::plugin(Some(events.clone()))),
+    )?;
+    // One settings implementation serves three command namespaces.
+    let settings = Arc::new(manang_settings::plugin(
+        dirs.config.to_path_buf(),
+        events.clone(),
+    ));
+    for manifest in manang_settings::manifests()? {
+        kernel.register(
+            manifest,
+            Arc::clone(&settings) as Arc<dyn manang_kernel::Plugin>,
+        )?;
+    }
     Ok(kernel)
 }
 
@@ -168,6 +191,23 @@ fn kernel_commands(shell: State<'_, Shell>) -> Vec<CommandInfo> {
     shell.kernel.commands()
 }
 
+/// Tell the plugins that work on "the open project" which folder it is.
+///
+/// Best effort: a plugin that is absent or refuses (for example git outside a
+/// repository) must not fail opening the project.
+fn point_plugins_at_project(kernel: &Kernel, opened: &Payload) {
+    let Payload::Json(value) = opened else { return };
+    let Some(root) = value.get("root").and_then(Value::as_str) else {
+        return;
+    };
+    for (command, args) in [
+        ("git.open", serde_json::json!({ "root": root })),
+        ("settings.use-project", serde_json::json!({ "path": root })),
+    ] {
+        let _ = kernel.invoke(command, Payload::Json(args));
+    }
+}
+
 /// Run a plugin command off the async runtime. Plugin calls are synchronous
 /// and may be CPU-bound, so they never occupy a Tokio worker.
 async fn dispatch(
@@ -178,12 +218,18 @@ async fn dispatch(
     let kernel = Arc::clone(&shell.kernel);
     let input = args.map_or(Payload::Empty, Payload::Json);
     let opening = matches!(command.as_str(), "project.open" | "project.create");
-    let output = tauri::async_runtime::spawn_blocking(move || kernel.invoke(&command, input))
-        .await
-        .map_err(|e| IpcError {
-            message: format!("command task failed: {e}"),
-        })?
-        .map_err(IpcError::from)?;
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        let output = kernel.invoke(&command, input)?;
+        if opening {
+            point_plugins_at_project(&kernel, &output);
+        }
+        Ok::<_, KernelError>(output)
+    })
+    .await
+    .map_err(|e| IpcError {
+        message: format!("command task failed: {e}"),
+    })?
+    .map_err(IpcError::from)?;
     // WASM plugins granted `fs` may only touch the open project's directory.
     if opening
         && let Payload::Json(value) = &output

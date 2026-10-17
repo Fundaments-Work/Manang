@@ -1854,6 +1854,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "encoding_rs_io"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fba3fe847045ecff794b9c138293a80db914678c453ad63fbf0c6a9eb6e00b22"
+dependencies = [
+ "encoding_rs",
+]
+
+[[package]]
 name = "endi"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2502,6 +2511,7 @@ checksum = "2156d2e07fc3afa7632a82bf3cb0db91f995645a2852f642105c9ac9b52e1cb2"
 dependencies = [
  "gix-actor 0.44.0",
  "gix-attributes",
+ "gix-blame",
  "gix-command",
  "gix-commitgraph",
  "gix-config 0.62.0",
@@ -2518,6 +2528,7 @@ dependencies = [
  "gix-ignore",
  "gix-index",
  "gix-lock 26.0.0",
+ "gix-mailmap",
  "gix-note",
  "gix-object 0.66.0",
  "gix-odb",
@@ -2594,6 +2605,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "408cb9e482e0dcc5fc481850556348dda6981ec054a4a8e81a8e1bbf84f85eef"
 dependencies = [
  "gix-error 0.5.1",
+]
+
+[[package]]
+name = "gix-blame"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d918e9dd7593182b9e8e19323a22d33b663f28c28507e05fede14de466563045"
+dependencies = [
+ "gix-commitgraph",
+ "gix-date 0.18.0",
+ "gix-diff",
+ "gix-error 0.5.1",
+ "gix-hash 0.28.0",
+ "gix-object 0.66.0",
+ "gix-revwalk",
+ "gix-trace 0.3.0",
+ "gix-traverse",
+ "gix-worktree",
+ "smallvec",
 ]
 
 [[package]]
@@ -3022,6 +3052,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gix-mailmap"
+version = "0.36.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a046c3dac556b482817ad1ecee62662ad2efb2d5469e7c600e014449b4c96c93"
+dependencies = [
+ "bstr",
+ "gix-actor 0.44.0",
+ "gix-date 0.18.0",
+ "gix-error 0.5.1",
+]
+
+[[package]]
 name = "gix-note"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3270,13 +3312,16 @@ version = "0.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63210c1943b67fa700806c3c3486fc16a92b3ea871f5cf092340b8eec10a0ca1"
 dependencies = [
+ "bitflags 2.13.2",
  "bstr",
  "gix-commitgraph",
  "gix-date 0.18.0",
  "gix-error 0.5.1",
  "gix-hash 0.28.0",
+ "gix-hashtable 0.18.0",
  "gix-object 0.66.0",
  "gix-revwalk",
+ "gix-trace 0.3.0",
  "nonempty",
 ]
 
@@ -3666,6 +3711,43 @@ dependencies = [
  "glib-sys",
  "libc",
  "system-deps",
+]
+
+[[package]]
+name = "grep-matcher"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9417543f4870fc8f1c8e1af870afae2431007626d9e703fce6471c468d33847"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "grep-regex"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce0c256c3ad82bcc07b812c15a45ec1d398122e8e15124f96695234db7112ef"
+dependencies = [
+ "bstr",
+ "grep-matcher",
+ "log",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "grep-searcher"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72348823a0eafc4bc2e9051064f28b5b42cc100b571b3a35d67918d711efcbc6"
+dependencies = [
+ "bstr",
+ "encoding_rs",
+ "encoding_rs_io",
+ "grep-matcher",
+ "log",
+ "memchr",
+ "memmap2",
 ]
 
 [[package]]
@@ -5066,10 +5148,14 @@ name = "manang"
 version = "0.1.0"
 dependencies = [
  "manang-editor",
+ "manang-figure",
+ "manang-git",
  "manang-kernel",
  "manang-latex",
  "manang-plugins",
  "manang-project",
+ "manang-search",
+ "manang-settings",
  "manang-typst",
  "manang-wasm-host",
  "serde",
@@ -5095,6 +5181,8 @@ dependencies = [
 name = "manang-editor"
 version = "0.1.0"
 dependencies = [
+ "criterion 0.5.1",
+ "manang-buffer",
  "manang-kernel",
  "parking_lot",
  "proptest",
@@ -5109,11 +5197,33 @@ name = "manang-figure"
 version = "0.1.0"
 dependencies = [
  "insta",
+ "manang-kernel",
+ "parking_lot",
  "perfect_freehand",
  "proptest",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "manang-git"
+version = "0.1.0"
+dependencies = [
+ "criterion 0.8.2",
+ "gix",
+ "insta",
+ "manang-kernel",
+ "manang-project",
+ "parking_lot",
+ "proptest",
+ "serde",
+ "serde_json",
+ "similar",
+ "tempfile",
+ "thiserror 2.0.21",
+ "wait-timeout",
 ]
 
 [[package]]
@@ -5183,6 +5293,30 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",
+]
+
+[[package]]
+name = "manang-search"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "criterion 0.8.2",
+ "globset",
+ "grep-matcher",
+ "grep-regex",
+ "grep-searcher",
+ "ignore",
+ "insta",
+ "manang-kernel",
+ "manang-project",
+ "nucleo-matcher",
+ "parking_lot",
+ "proptest",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -5536,6 +5670,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "nucleo-matcher"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf33f538733d1a5a3494b836ba913207f14d9d4a1d3cd67030c5061bdd2cac85"
+dependencies = [
+ "memchr",
+ "unicode-segmentation",
 ]
 
 [[package]]
