@@ -69,8 +69,12 @@ describe("fromMarkdown", () => {
 
 describe("explainLatexFailure", () => {
   it("turns plugin error codes into a title and a fix", () => {
+    const none = explainLatexFailure("[no_tex] No TeX installation found on PATH");
+    expect(none).toMatchObject({ code: "no_tex", title: "No TeX installation found" });
+    expect(none.fix).toContain("TeX Live");
+    expect(explainLatexFailure("latexmk: command not found").code).toBe("no_tex");
     const worker = explainLatexFailure("[worker_missing] manang-latex-worker");
-    expect(worker.code).toBe("worker_missing");
+    expect(worker.code).toBe("no_tex");
     expect(worker.fix).toContain("cargo build -p manang-latex --features engine");
     expect(explainLatexFailure("[bundle_unavailable] offline").code).toBe(
       "bundle_unavailable",
@@ -89,7 +93,12 @@ describe("dev kernel latex and markdown", () => {
     await kernel.run("project.open", { path: "/home/author/thesis-draft" });
     const api = latexApi(kernel);
     const report = await api.compile({ main: "/home/author/thesis-draft/main.tex" });
-    expect(report).toMatchObject({ ok: true, synctex: true });
+    expect(report).toMatchObject({
+      ok: true,
+      synctex: true,
+      engine: "pdflatex",
+      backend: "system",
+    });
     expect(report.pages).toBeGreaterThan(0);
     const pdf = await api.exportPdf("/home/author/thesis-draft/main.tex");
     expect(sniffArtifact(pdf)?.kind).toBe("pdf");

@@ -255,6 +255,9 @@ export function latexPlugin(host: MockProjectHost): MockPluginFactory {
             diagnostics: out.diagnostics,
             duration_ms: Math.round(380 + out.lines.length * 2),
             synctex: ok,
+            engine: "pdflatex",
+            backend: "system",
+            tex_version: "pdfTeX 3.141592653-2.6-1.40.27 (TeX Live 2025)",
           };
         },
         "latex.synctex": () => {

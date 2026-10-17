@@ -143,6 +143,11 @@ export interface LatexReport {
   readonly diagnostics: readonly LatexDiagnostic[];
   readonly duration_ms: number;
   readonly synctex: boolean;
+  /** Which TeX engine ran (`pdflatex`, `xelatex`, `lualatex`, `tectonic`). Absent on older plugins. */
+  readonly engine?: string;
+  /** `system` (TeX Live / MiKTeX on PATH) or `tectonic` (optional built-in). */
+  readonly backend?: "system" | "tectonic";
+  readonly tex_version?: string;
 }
 
 /** `crates/manang-markdown` `Diagnostic`; severity is a free string in Rust. */

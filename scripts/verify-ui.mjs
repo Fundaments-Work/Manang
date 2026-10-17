@@ -1322,6 +1322,12 @@ async function main() {
         `/Page 1 of \\d+/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
       ),
     );
+    check(
+      "the preview header names the TeX backend",
+      await doc.evaluate(
+        `document.querySelector('section[aria-label="Preview"]').innerText.includes("pdflatex, system TeX")`,
+      ),
+    );
     await shoot(doc, "22-latex-preview");
 
     // A chapter compiles through the main file, not by itself.
