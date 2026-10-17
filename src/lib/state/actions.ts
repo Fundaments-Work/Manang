@@ -7,8 +7,11 @@
  * call these; they are the workbench's vocabulary.
  */
 
+import { paletteAction } from "$lib/commands/allowlist";
+import { recheckWriting, runFormat } from "$lib/editor/writing";
 import { kernel, errorMessage } from "$lib/kernel";
 import type { KernelEvent } from "$lib/kernel";
+import { writingApi } from "$lib/kernel/api";
 import type { Engine, ProjectChanged } from "$lib/kernel/types";
 import type { Problem } from "$lib/workbench/problems";
 import { SESSION_KEY, loadJson } from "$lib/workbench/persist";
@@ -347,8 +350,63 @@ export function exportPdf(): void {
   void preview.exportPdf(basename(target));
 }
 
+/** Format the shown document with the writing plugin (one undo step). */
+export function formatDocument(): void {
+  const view = documents.view;
+  if (view === undefined || documents.shown === undefined) {
+    notice.error("Open a document to format it.");
+    return;
+  }
+  void runFormat(view, undefined, documents.shown.language);
+}
+
+/** Forget cached spelling and lint answers and check the visible text again. */
+export function recheckSpelling(): void {
+  const view = documents.view;
+  if (view === undefined || documents.shown === undefined) {
+    notice.error("Open a document to check its spelling.");
+    return;
+  }
+  recheckWriting(view);
+  notice.show("Checking spelling.");
+}
+
+/** Count the shown document and say the result in the status line. */
+export async function showStats(): Promise<void> {
+  const session = documents.shown;
+  if (session === undefined) {
+    notice.error("Open a document to count its words.");
+    return;
+  }
+  try {
+    const stats = await writingApi(kernel).stats(session.text(), session.language);
+    notice.show(
+      `${stats.words} words, ${stats.characters} characters, ${stats.sentences} sentences.`,
+    );
+  } catch (error) {
+    notice.error(`Could not count: ${errorMessage(error)}`);
+  }
+}
+
 /** Run a kernel command picked from the palette. */
 export async function runKernelCommand(id: string): Promise<void> {
+  // Commands that need the editor run the shell's own action, not a bare call.
+  switch (paletteAction(id)) {
+    case "format":
+      formatDocument();
+      return;
+    case "spell":
+      recheckSpelling();
+      return;
+    case "stats":
+      await showStats();
+      return;
+    case "export-pdf":
+      exportPdf();
+      return;
+    case null:
+      break;
+  }
   try {
     await kernel.run(id);
     notice.show(`${id} finished.`);

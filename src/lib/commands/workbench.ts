@@ -266,6 +266,16 @@ export function workbenchCommands(
       run: () => actions.exportPdf(),
     },
     {
+      id: "doc.format",
+      title: "Format document",
+      group: "Workbench",
+      keywords: "prettify tidy indent whitespace writing.format.document",
+      // Handled by the editor's own keymap; listed here so the palette shows it.
+      shortcuts: [{ key: "f", shift: true, alt: true }],
+      enabled: isDocument && active.view === "text",
+      run: () => actions.formatDocument(),
+    },
+    {
       id: "doc.slides",
       title:
         active?.kind === "document" && active.view === "slides"
