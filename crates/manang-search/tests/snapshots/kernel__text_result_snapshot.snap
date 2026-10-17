@@ -1,0 +1,85 @@
+---
+source: crates/manang-search/tests/kernel.rs
+expression: "serde_json::to_string_pretty(&r).expect(\"json\")"
+---
+{
+  "cancelled": false,
+  "files": [
+    {
+      "matches": [
+        {
+          "after": [],
+          "before": [
+            {
+              "line": 1,
+              "text": "= Title"
+            }
+          ],
+          "byte_offset": 8,
+          "column": 1,
+          "line": 2,
+          "ranges": [
+            {
+              "end": 5,
+              "start": 0
+            }
+          ],
+          "text": "hello world"
+        },
+        {
+          "after": [],
+          "before": [],
+          "byte_offset": 20,
+          "column": 1,
+          "line": 3,
+          "ranges": [
+            {
+              "end": 5,
+              "start": 0
+            }
+          ],
+          "text": "Hello again"
+        }
+      ],
+      "path": "main.typ",
+      "truncated": false
+    },
+    {
+      "matches": [
+        {
+          "after": [
+            {
+              "line": 2,
+              "text": "// world"
+            }
+          ],
+          "before": [],
+          "byte_offset": 0,
+          "column": 4,
+          "line": 1,
+          "ranges": [
+            {
+              "end": 8,
+              "start": 3
+            }
+          ],
+          "text": "fn hello() {}"
+        }
+      ],
+      "path": "src/lib.rs",
+      "truncated": false
+    }
+  ],
+  "stats": {
+    "bytes_scanned": 67,
+    "files_searched": 3,
+    "files_skipped_binary": 1,
+    "files_skipped_large": 0,
+    "files_unreadable": 0,
+    "files_with_matches": 2
+  },
+  "stopped": null,
+  "total_matches": 3,
+  "total_ranges": 3,
+  "truncated": false
+}
