@@ -4344,6 +4344,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "manang-settings"
+version = "0.1.0"
+dependencies = [
+ "criterion 0.8.2",
+ "insta",
+ "manang-kernel",
+ "notify",
+ "notify-debouncer-full",
+ "parking_lot",
+ "proptest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml_edit 0.25.17+spec-1.1.0",
+]
+
+[[package]]
 name = "manang-typst"
 version = "0.1.0"
 dependencies = [
@@ -7034,6 +7052,7 @@ dependencies = [
  "indexmap 2.14.2",
  "toml_datetime 1.1.2+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 1.0.4",
 ]
 
