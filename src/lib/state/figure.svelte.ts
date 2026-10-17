@@ -6,7 +6,7 @@
  * and persistence belongs to the Rust renderer.
  */
 
-import { allAnchors, hitTest, snapToAnchors, type SnapResult } from "$lib/ink/geometry";
+import { allAnchors, hitTest, snapToAnchors, type SnapResult } from "$lib/figure/geometry";
 import {
   appendNode,
   createScene,
@@ -20,7 +20,7 @@ import {
   type FigureScene,
   type StrokeSample,
   type Vec,
-} from "$lib/ink/scene";
+} from "$lib/figure/scene";
 
 export type PenTool = "select" | "freehand" | "geometry" | "arrow" | "math";
 

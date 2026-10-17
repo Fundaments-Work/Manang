@@ -3,7 +3,7 @@
  *
  * Pure so it can be tested without the Svelte runtime: the palette store feeds
  * it the plugin commands and a runner, and gets back registry-shaped entries
- * that merge with the static list under "Plugins & Commands".
+ * that merge with the static list under "Plugin commands".
  */
 
 import type { KernelCommand } from "$lib/kernel/client";
@@ -20,7 +20,7 @@ export function toPaletteCommand(
   return {
     id: `${KERNEL_ID_PREFIX}${command.id}`,
     title: command.title,
-    group: "Plugins & Commands",
+    group: "Plugin commands",
     // Searchable by plugin name and raw id ("editor", "typst.render").
     keywords: `${command.plugin} ${command.id}`,
     hint: command.id,

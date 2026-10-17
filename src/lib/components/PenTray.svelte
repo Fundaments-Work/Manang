@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ink, TOOLS, type PenTool } from "$lib/state/ink.svelte";
+  import { ink, TOOLS, type PenTool } from "$lib/state/figure.svelte";
   import { desk } from "$lib/state/desk.svelte";
 
   /**
