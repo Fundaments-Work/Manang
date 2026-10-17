@@ -113,5 +113,6 @@ inconsistent hyphenation), cheap, deterministic and individually configurable.
   (MIT), `toml`.
 * Third-party notices to surface in the UI: Apache-2.0 (typstyle), MPL-2.0
   (spellbook), SCOWL licence (dictionaries).
-* Suggestions are expensive; `spell.check` computes them for at most 100
-  distinct words per request and `spell.suggest` fetches the rest on demand.
+* Suggestions are expensive (one lookup costs roughly 2-20 ms): `spell.check` computes them for
+  at most 5 distinct words per request and `spell.suggest` fetches the rest on demand;
+  pass `max_suggestions: 0` for pure checking (about 2 ms for a 10k-word document).
