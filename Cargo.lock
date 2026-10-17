@@ -4265,11 +4265,24 @@ version = "0.1.0"
 dependencies = [
  "manang-editor",
  "manang-kernel",
+ "manang-project",
+ "manang-typst",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "manang-buffer"
+version = "0.1.0"
+dependencies = [
+ "criterion 0.5.1",
+ "proptest",
+ "ropey",
+ "serde",
  "thiserror 2.0.21",
 ]
 
@@ -4281,6 +4294,18 @@ dependencies = [
  "parking_lot",
  "proptest",
  "ropey",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "manang-figure"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "perfect_freehand",
+ "proptest",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -4999,6 +5024,12 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "perfect_freehand"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9fa6a5c34a2260773ed097c04182ceb594bb46178200d07b46cd16ac3ca4b0d"
 
 [[package]]
 name = "phf"

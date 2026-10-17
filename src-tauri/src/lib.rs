@@ -8,10 +8,10 @@
 use std::sync::Arc;
 
 use manang_editor::{Editor, EditorPlugin};
-use manang_kernel::{CommandInfo, Kernel, KernelError, Payload};
+use manang_kernel::{CommandInfo, EventBus, Kernel, KernelError, Payload};
 use serde::Serialize;
 use serde_json::Value;
-use tauri::State;
+use tauri::{Emitter, State};
 
 /// Build identity, surfaced to the shell for the about dialogue.
 ///
@@ -47,34 +47,73 @@ impl From<KernelError> for IpcError {
     }
 }
 
+/// Why the shell could not start.
+#[derive(Debug, thiserror::Error)]
+enum BootError {
+    #[error(transparent)]
+    Kernel(#[from] KernelError),
+    #[error(transparent)]
+    Typst(#[from] manang_typst::TypstError),
+    #[error(transparent)]
+    Manifest(#[from] manang_kernel::ManifestError),
+}
+
 /// Build the kernel with every first-party plugin registered.
 ///
 /// Everything in Manang is a plugin; the shell only dispatches commands.
-fn build_kernel() -> Result<Kernel, KernelError> {
+fn build_kernel(config_dir: &std::path::Path, events: &EventBus) -> Result<Kernel, BootError> {
     let kernel = Kernel::new();
-    let editor = Arc::new(Editor::new());
     kernel.register(
         manang_editor::manifest()?,
-        Arc::new(EditorPlugin::new(editor)),
+        Arc::new(EditorPlugin::new(Arc::new(Editor::new()))),
+    )?;
+    kernel.register(
+        manang_typst::manifest()?,
+        Arc::new(manang_typst::plugin(
+            manang_typst::CompilerConfig::default(),
+        )?),
+    )?;
+    kernel.register(
+        manang_project::manifest()?,
+        Arc::new(manang_project::plugin(
+            config_dir.to_path_buf(),
+            events.clone(),
+        )),
     )?;
     Ok(kernel)
 }
 
 /// Commands for the palette.
 #[tauri::command]
-fn kernel_commands(kernel: State<'_, Kernel>) -> Vec<CommandInfo> {
+fn kernel_commands(kernel: State<'_, Arc<Kernel>>) -> Vec<CommandInfo> {
     kernel.commands()
+}
+
+/// Run a plugin command off the async runtime. Plugin calls are synchronous
+/// and may be CPU-bound, so they never occupy a Tokio worker.
+async fn dispatch(
+    kernel: &Arc<Kernel>,
+    command: String,
+    args: Option<Value>,
+) -> Result<Payload, IpcError> {
+    let kernel = Arc::clone(kernel);
+    let input = args.map_or(Payload::Empty, Payload::Json);
+    tauri::async_runtime::spawn_blocking(move || kernel.invoke(&command, input))
+        .await
+        .map_err(|e| IpcError {
+            message: format!("command task failed: {e}"),
+        })?
+        .map_err(IpcError::from)
 }
 
 /// Run a command whose result is structured data.
 #[tauri::command]
-fn kernel_invoke(
-    kernel: State<'_, Kernel>,
+async fn kernel_invoke(
+    kernel: State<'_, Arc<Kernel>>,
     command: String,
     args: Option<Value>,
 ) -> Result<Value, IpcError> {
-    let input = args.map_or(Payload::Empty, Payload::Json);
-    match kernel.invoke(&command, input)? {
+    match dispatch(&kernel, command.clone(), args).await? {
         Payload::Json(value) => Ok(value),
         Payload::Empty => Ok(Value::Null),
         Payload::Binary(_) => Err(IpcError {
@@ -86,13 +125,12 @@ fn kernel_invoke(
 /// Run a command whose result is a binary artefact (PDF, SVG). The bytes cross
 /// IPC raw, never as base64 or JSON.
 #[tauri::command]
-fn kernel_invoke_binary(
-    kernel: State<'_, Kernel>,
+async fn kernel_invoke_binary(
+    kernel: State<'_, Arc<Kernel>>,
     command: String,
     args: Option<Value>,
 ) -> Result<tauri::ipc::Response, IpcError> {
-    let input = args.map_or(Payload::Empty, Payload::Json);
-    match kernel.invoke(&command, input)? {
+    match dispatch(&kernel, command.clone(), args).await? {
         Payload::Binary(bytes) => Ok(tauri::ipc::Response::new(bytes.to_vec())),
         _ => Err(IpcError {
             message: format!("`{command}` does not return binary"),
@@ -100,12 +138,40 @@ fn kernel_invoke_binary(
     }
 }
 
+/// Forward kernel events (file changes, ...) to the shell as `kernel://event`.
+fn forward_events(app: tauri::AppHandle, events: &EventBus) -> std::io::Result<()> {
+    let subscription = events.subscribe("*");
+    std::thread::Builder::new()
+        .name("manang-events".to_owned())
+        .spawn(move || {
+            while let Some(event) = subscription.recv() {
+                let payload = match event.payload {
+                    Payload::Json(value) => value,
+                    _ => Value::Null,
+                };
+                // A closed window is not an error worth stopping the pump for.
+                let _ = app.emit(
+                    "kernel://event",
+                    serde_json::json!({ "topic": event.topic, "payload": payload }),
+                );
+            }
+        })
+        .map(|_| ())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), tauri::Error> {
-    let kernel = build_kernel().map_err(|e| tauri::Error::Anyhow(e.into()))?;
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(kernel)
+        .setup(|app| {
+            use tauri::Manager;
+            let config_dir = app.path().app_config_dir()?;
+            let events = EventBus::new();
+            let kernel = build_kernel(&config_dir, &events)?;
+            forward_events(app.handle().clone(), &events)?;
+            app.manage(Arc::new(kernel));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             app_info,
             kernel_commands,
@@ -117,7 +183,7 @@ pub fn run() -> Result<(), tauri::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppInfo, app_info, build_kernel};
+    use super::{AppInfo, EventBus, app_info, build_kernel};
     use manang_kernel::Payload;
     use serde_json::json;
 
@@ -142,7 +208,8 @@ mod tests {
 
     #[test]
     fn kernel_boots_with_the_editor_plugin() {
-        let kernel = build_kernel().expect("first-party plugins register");
+        let kernel = build_kernel(&std::env::temp_dir(), &EventBus::new())
+            .expect("first-party plugins register");
 
         assert!(kernel.commands().iter().any(|c| c.id == "editor.new"));
         let out = kernel

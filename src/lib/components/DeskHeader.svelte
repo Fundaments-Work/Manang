@@ -49,7 +49,7 @@
     <HairButton
       label="Draw"
       pressed={desk.canvasOpen}
-      onactivate={desk.toggleCanvas}
+      onactivate={() => desk.toggleCanvas()}
       icon={PenIcon}
     />
     <HairButton
@@ -61,13 +61,13 @@
     <HairButton
       label="Split"
       pressed={desk.pane === "split"}
-      onactivate={desk.togglePane}
+      onactivate={() => desk.togglePane()}
       icon={SplitIcon}
     />
     <HairButton
       label="Zen"
       pressed={desk.zen}
-      onactivate={desk.toggleZen}
+      onactivate={() => desk.toggleZen()}
       icon={ZenIcon}
     />
   </div>
