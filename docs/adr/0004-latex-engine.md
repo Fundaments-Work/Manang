@@ -110,3 +110,30 @@ Other choices:
   first run.
 - Optional system-TeX-Live backend for `pdflatex`/LuaTeX/`biber` users.
 - Fuzz the log parser with `cargo-fuzz` (it is already property-tested).
+
+## Amendment, 2026-10-18: system TeX is the default backend
+
+Decided by the product owner. Supersedes the "embedded Tectonic is the engine"
+parts above.
+
+* **Default backend: the system TeX installation** (TeX Live or MiKTeX):
+  `latexmk` when present, otherwise `pdflatex`/`xelatex`/`lualatex` directly,
+  with `biber`/`bibtex` as needed. Reasons: Tectonic is XeTeX-only (no pdfLaTeX
+  or LuaLaTeX), most LaTeX users already have TeX installed with their own
+  packages and classes, and collaborators and journals (and Overleaf) build
+  with TeX Live, so the system toolchain gives the same output as co-authors.
+* **Tectonic is optional:** offered as an on-demand download only when no TeX
+  installation is found; never bundled in the installer; still run as the
+  separate `manang-latex-worker` process (feature `engine`), never linked into
+  the app.
+* **Per project:** `manang.toml` may pin the engine (`pdflatex`, `xelatex`,
+  `lualatex`), `latexmk` on or off, and the expected TeX version; Manang warns
+  when the installed version differs.
+* **System runs:** a temporary build directory (aux files never written into
+  the project), hard timeout, process-tree kill on timeout, no shell (argument
+  arrays), sanitised environment, `-interaction=nonstopmode -halt-on-error`
+  with `-file-line-error -synctex=1`, `-no-shell-escape` unless the project
+  explicitly enables it.
+* **Typst stays embedded** (a Rust library: no install, in-process
+  incremental preview). The project records the Typst version and Manang warns
+  co-authors on a mismatch.
