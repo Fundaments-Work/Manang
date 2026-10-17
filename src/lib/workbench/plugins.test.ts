@@ -8,13 +8,13 @@ import { groupPlugins } from "./plugins";
 describe("plugins panel model", () => {
   it("groups the kernel's commands by plugin, sorted by name then id", async () => {
     const groups = groupPlugins(await createDevKernel().commands());
-    expect(groups.map((g) => g.name)).toEqual(["editor", "project", "typst"]);
-    expect(groups[2]?.commands.map((c) => c.id)).toEqual([
+    expect(groups.map((g) => g.name)).toEqual(["editor", "figure", "project", "typst"]);
+    expect(groups[3]?.commands.map((c) => c.id)).toEqual([
       "typst.compile",
       "typst.export-pdf",
       "typst.render",
     ]);
-    expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(8 + 12 + 3);
+    expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(8 + 1 + 12 + 3);
   });
 
   it("is empty, not invented, when the kernel lists nothing", () => {

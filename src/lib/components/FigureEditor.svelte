@@ -67,12 +67,40 @@
     p: "select",
     b: "freehand",
     g: "geometry",
+    e: "ellipse",
     a: "arrow",
     m: "math",
   };
 
+  /** Arrow keys move the selection: 1 unit, or 10 with Shift. */
+  const NUDGE: Record<string, { x: number; y: number }> = {
+    ArrowLeft: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+    ArrowUp: { x: 0, y: -1 },
+    ArrowDown: { x: 0, y: 1 },
+  };
+
   function onkeydown(event: KeyboardEvent): void {
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const mod = event.ctrlKey || event.metaKey;
+    if (mod && !event.altKey && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      if (event.shiftKey) figure.redo();
+      else figure.undo();
+      return;
+    }
+    if (mod && !event.altKey && event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      figure.redo();
+      return;
+    }
+    if (mod || event.altKey) return;
+    const step = NUDGE[event.key];
+    if (step !== undefined && figure.selectedId !== null) {
+      event.preventDefault();
+      const factor = event.shiftKey ? 10 : 1;
+      figure.nudge({ x: step.x * factor, y: step.y * factor });
+      return;
+    }
     if (event.key === "Delete" || event.key === "Backspace") {
       event.preventDefault();
       figure.deleteSelected();
@@ -95,13 +123,17 @@
       bind:this={surface}
       role="application"
       tabindex="0"
-      aria-label="Figure canvas. Drag to draw. Tool keys: P select, B freehand, G rectangle, A arrow, M formula. Delete removes the selection."
+      aria-label="Figure canvas. Drag to draw. Tool keys: P select, B freehand, G rectangle, E ellipse, A arrow, M formula. Drag a selected shape or use the arrow keys to move it. Delete removes the selection. Ctrl+Z undoes."
       viewBox="0 0 {figure.scene.width} {figure.scene.height}"
       width="100%"
       height="100%"
       preserveAspectRatio="xMidYMid meet"
       class="block touch-none p-6 select-none"
-      style="cursor: {figure.tool === 'select' ? 'default' : 'crosshair'}"
+      style="cursor: {figure.tool === 'select'
+        ? figure.selectedId !== null
+          ? 'move'
+          : 'default'
+        : 'crosshair'}"
       {onpointerdown}
       {onpointermove}
       {onpointerup}
@@ -203,7 +235,18 @@
         />
       {/if}
 
-      {#if figure.dragStart !== null && figure.dragCurrent !== null}
+      {#if figure.tool === "ellipse" && figure.dragStart !== null && figure.dragCurrent !== null}
+        <ellipse
+          cx={(figure.dragStart.x + figure.dragCurrent.x) / 2}
+          cy={(figure.dragStart.y + figure.dragCurrent.y) / 2}
+          rx={Math.abs(figure.dragCurrent.x - figure.dragStart.x) / 2}
+          ry={Math.abs(figure.dragCurrent.y - figure.dragStart.y) / 2}
+          fill="none"
+          stroke="var(--mng-accent)"
+          stroke-width="1"
+          stroke-dasharray="4 4"
+        />
+      {:else if figure.dragStart !== null && figure.dragCurrent !== null}
         <line
           x1={figure.dragStart.x}
           y1={figure.dragStart.y}

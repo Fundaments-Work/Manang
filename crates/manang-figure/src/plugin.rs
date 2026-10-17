@@ -143,6 +143,17 @@ impl Plugin for FigurePlugin {
                     .map(Payload::Json)
                     .map_err(failed)
             }
+            // Stateless: render the scene the caller sends. Used on every save,
+            // so it must not open (and retain) a document in the store.
+            "figure.render-svg" => {
+                let scene_val = a
+                    .get("scene")
+                    .ok_or_else(|| PluginError::Failed("missing `scene` field".to_owned()))?;
+                let scene: crate::FigureScene = serde_json::from_value(scene_val.clone())
+                    .map_err(|e| PluginError::Failed(format!("invalid `scene`: {e}")))?;
+                let svg = crate::render_svg(&scene, &crate::SvgExportOptions::default());
+                Ok(Payload::Binary(Arc::from(svg.into_bytes())))
+            }
             "figure.export-svg" => {
                 let fig_id = id(&a)?;
                 let svg = self.store.export_svg(fig_id, None).map_err(failed)?;
