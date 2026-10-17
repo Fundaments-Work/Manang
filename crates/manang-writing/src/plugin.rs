@@ -7,6 +7,7 @@
 //! | `writing.format.document` | `{source, language, options?}` | `{formatted, changed, skipped?}` |
 //! | `writing.format.range` | `{source, from, to, language, options?}` | `{formatted, changed, range, replacement, skipped?}` |
 //! | `writing.spell.check` | `{text, language?, syntax?, ignore_regions?, max_suggestions?}` | `{language, misspelled[], count}` |
+//! | `writing.spell.suggest` | `{word, language?, limit?}` | `{language, word, suggestions[]}` |
 //! | `writing.spell.add-word` / `remove-word` | `{word}` | `{added\|removed, count}` |
 //! | `writing.spell.words` | none | `{words[]}` |
 //! | `writing.spell.languages` | none | `{default, languages[]}` |
@@ -234,6 +235,17 @@ impl WritingPlugin {
             "writing.spell.remove-word" => {
                 let removed = self.user.remove(req_str(args, "word")?)?;
                 to_payload(json!({ "removed": removed, "count": self.user.words()?.len() }))
+            }
+            "writing.spell.suggest" => {
+                let word = req_str(args, "word")?;
+                let limit = opt_usize(args, "limit")?
+                    .unwrap_or(DEFAULT_SUGGESTIONS)
+                    .min(20);
+                let (language, dictionary) = self.dictionaries.get(opt_str(args, "language")?)?;
+                let suggestions = self.run(|| spell::suggest(&dictionary, word, limit));
+                to_payload(
+                    json!({ "language": language, "word": word, "suggestions": suggestions }),
+                )
             }
             "writing.spell.words" => to_payload(json!({ "words": self.user.words()? })),
             "writing.spell.languages" => to_payload(json!({

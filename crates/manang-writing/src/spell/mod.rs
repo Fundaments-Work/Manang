@@ -15,12 +15,14 @@ pub use user::UserDictionary;
 use crate::diag::{DiagSeverity, Diagnostic, MAX_DIAGNOSTICS};
 use crate::error::WritingError;
 use crate::text::{CharRange, TextIndex};
-use crate::words::{Word, words};
+use crate::words::words;
 
 /// Default number of suggestions per misspelling.
 pub const DEFAULT_SUGGESTIONS: usize = 5;
 /// Upper bound on misspellings reported per request.
 pub const MAX_MISSPELLINGS: usize = 2000;
+/// Distinct misspelled words that get suggestions in one `check`.
+pub const SUGGESTION_BUDGET: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Misspelling {
@@ -74,6 +76,7 @@ pub fn check(
     let user = user.read()?;
     let index = TextIndex::new(masked);
     let mut verdicts: HashMap<&str, bool> = HashMap::new();
+    let mut suggested: HashMap<&str, Vec<String>> = HashMap::new();
     let mut out = Vec::new();
     for word in words(masked) {
         let text = word.text(masked);
@@ -86,32 +89,39 @@ pub fn check(
         if out.len() >= MAX_MISSPELLINGS {
             break;
         }
-        out.push(misspelling(dict, &index, word, text, max_suggestions));
+        // Suggestions are the expensive part: compute each distinct word
+        // once and only for the first SUGGESTION_BUDGET distinct words. The
+        // rest can be fetched on demand with `writing.spell.suggest`.
+        let suggestions = match suggested.get(text) {
+            Some(known) => known.clone(),
+            None if max_suggestions > 0 && suggested.len() < SUGGESTION_BUDGET => {
+                let list = suggest(dict, text, max_suggestions);
+                suggested.insert(text, list.clone());
+                list
+            }
+            None => Vec::new(),
+        };
+        let range = index.char_range(word.start..word.end);
+        let (line, column) = index.line_col(range.start);
+        out.push(Misspelling {
+            word: text.to_owned(),
+            range,
+            line,
+            column,
+            suggestions,
+        });
     }
     Ok(out)
 }
 
-fn misspelling(
-    dict: &Dictionary,
-    index: &TextIndex<'_>,
-    word: Word,
-    text: &str,
-    max_suggestions: usize,
-) -> Misspelling {
-    let range = index.char_range(word.start..word.end);
-    let (line, column) = index.line_col(range.start);
+/// Up to `limit` suggestions for `word`.
+pub fn suggest(dict: &Dictionary, word: &str, limit: usize) -> Vec<String> {
     let mut suggestions = Vec::new();
-    if max_suggestions > 0 {
-        dict.suggest(&text.replace('\u{2019}', "'"), &mut suggestions);
-        suggestions.truncate(max_suggestions);
+    if limit > 0 {
+        dict.suggest(&word.replace('\u{2019}', "'"), &mut suggestions);
+        suggestions.truncate(limit);
     }
-    Misspelling {
-        word: text.to_owned(),
-        range,
-        line,
-        column,
-        suggestions,
-    }
+    suggestions
 }
 
 /// Spelling findings as lint diagnostics (rule `spelling`).

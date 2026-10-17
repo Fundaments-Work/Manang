@@ -25,6 +25,10 @@ id = "writing.spell.check"
 title = "Check spelling"
 
 [[contributes.commands]]
+id = "writing.spell.suggest"
+title = "Suggest spellings"
+
+[[contributes.commands]]
 id = "writing.spell.add-word"
 title = "Add word to user dictionary"
 

@@ -73,35 +73,37 @@ impl MarkdownOptions {
 
 struct Line<'a> {
     text: &'a str,
-    has_eol: bool,
+    /// The line's original terminator: `""`, `"\n"` or `"\r\n"`.
+    term: &'a str,
 }
 
-fn crlf(text: &str) -> bool {
-    text.contains("\r\n") && text.matches('\n').count() == text.matches("\r\n").count()
+/// Dominant line ending: CRLF only when most terminators are CRLF.
+fn eol_of(text: &str) -> &'static str {
+    let crlf = text.matches("\r\n").count();
+    if crlf > 0 && crlf * 2 > text.matches('\n').count() {
+        "\r\n"
+    } else {
+        "\n"
+    }
 }
 
-fn split_lines(text: &str, crlf: bool) -> Vec<Line<'_>> {
+fn split_lines(text: &str) -> Vec<Line<'_>> {
     let mut lines = Vec::new();
     let mut rest = text;
     while !rest.is_empty() {
         match rest.find('\n') {
             Some(p) => {
-                let raw = &rest[..p];
-                let body = if crlf {
-                    raw.strip_suffix('\r').unwrap_or(raw)
-                } else {
-                    raw
+                let (body, term) = match rest[..p].strip_suffix('\r') {
+                    Some(body) => (body, &rest[body.len()..p + 1]),
+                    None => (&rest[..p], &rest[p..p + 1]),
                 };
-                lines.push(Line {
-                    text: body,
-                    has_eol: true,
-                });
+                lines.push(Line { text: body, term });
                 rest = &rest[p + 1..];
             }
             None => {
                 lines.push(Line {
                     text: rest,
-                    has_eol: false,
+                    term: "",
                 });
                 break;
             }
@@ -111,7 +113,7 @@ fn split_lines(text: &str, crlf: bool) -> Vec<Line<'_>> {
 }
 
 fn blank(line: &str) -> bool {
-    line.trim_matches([' ', '\t']).is_empty()
+    line.trim_matches([' ', '\t', '\r']).is_empty()
 }
 
 fn indented_code(line: &str) -> bool {
@@ -241,8 +243,8 @@ fn plan(lines: &[Line<'_>], opts: &MarkdownOptions) -> Vec<Plan> {
 
 /// Normalise a whole document.
 pub fn format_document(source: &str, opts: &MarkdownOptions) -> String {
-    let eol = if crlf(source) { "\r\n" } else { "\n" };
-    let lines = split_lines(source, eol == "\r\n");
+    let eol = eol_of(source);
+    let lines = split_lines(source);
     let plans = plan(&lines, opts);
     let mut out: Vec<(&str, bool)> = Vec::with_capacity(lines.len());
     for (line, p) in lines.iter().zip(&plans) {
@@ -252,7 +254,7 @@ pub fn format_document(source: &str, opts: &MarkdownOptions) -> String {
             Plan::Drop => {}
         }
     }
-    let source_has_eol = lines.last().is_some_and(|l| l.has_eol);
+    let source_has_eol = lines.last().is_some_and(|l| !l.term.is_empty());
     // Trailing blank lines are never meaningful outside verbatim blocks.
     while out.last().is_some_and(|&(_, trimmable)| trimmable) {
         out.pop();
@@ -275,15 +277,14 @@ pub fn format_range(
     to: usize,
     opts: &MarkdownOptions,
 ) -> (std::ops::Range<usize>, String) {
-    let eol = if crlf(source) { "\r\n" } else { "\n" };
-    let lines = split_lines(source, eol == "\r\n");
+    let lines = split_lines(source);
     let plans = plan(&lines, opts);
     // Byte start of each line.
     let mut starts = Vec::with_capacity(lines.len() + 1);
     let mut at = 0;
     for line in &lines {
         starts.push(at);
-        at += line.text.len() + if line.has_eol { eol.len() } else { 0 };
+        at += line.text.len() + line.term.len();
     }
     starts.push(at);
     let first = starts.partition_point(|&s| s <= from).saturating_sub(1);
@@ -297,22 +298,12 @@ pub fn format_range(
     }
     let mut replacement = String::new();
     for i in first..=last {
-        let keep = |s: &mut String| {
-            s.push_str(lines[i].text);
-            if lines[i].has_eol {
-                s.push_str(eol);
-            }
-        };
         match &plans[i] {
-            Plan::Verbatim => keep(&mut replacement),
-            Plan::Text(t) => {
-                replacement.push_str(t);
-                if lines[i].has_eol {
-                    replacement.push_str(eol);
-                }
-            }
-            Plan::Drop => {}
+            Plan::Verbatim => replacement.push_str(lines[i].text),
+            Plan::Text(t) => replacement.push_str(t),
+            Plan::Drop => continue,
         }
+        replacement.push_str(lines[i].term);
     }
     (starts[first]..starts[last + 1], replacement)
 }
@@ -355,6 +346,13 @@ mod tests {
     #[test]
     fn crlf_is_preserved() {
         assert_eq!(fmt("a  \r\n\r\n\r\nb \r\n"), "a  \r\n\r\nb\r\n");
+    }
+
+    #[test]
+    fn mixed_line_endings_become_the_dominant_one() {
+        assert_eq!(fmt("\n\r\n"), "");
+        assert_eq!(fmt("a\r\nb\nc\r\n"), "a\r\nb\r\nc\r\n");
+        assert_eq!(fmt("a\nb\r\nc\n"), "a\nb\nc\n");
     }
 
     #[test]
