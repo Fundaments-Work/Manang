@@ -111,6 +111,35 @@ impl Plugin for EditorPlugin {
                     .map(json_payload)
                     .map_err(|e| PluginError::Failed(e.to_string()))
             }
+            "editor.undo" => {
+                let revision = ed.undo(id(&a)?).map_err(failed)?;
+                Ok(json_payload(json!({ "revision": revision })))
+            }
+            "editor.redo" => {
+                let revision = ed.redo(id(&a)?).map_err(failed)?;
+                Ok(json_payload(json!({ "revision": revision })))
+            }
+            "editor.replace" => {
+                let revision = ed
+                    .replace(
+                        id(&a)?,
+                        number(&a, "from")?,
+                        number(&a, "to")?,
+                        string(&a, "text")?,
+                    )
+                    .map_err(failed)?;
+                Ok(json_payload(json!({ "revision": revision })))
+            }
+            "editor.slice" => {
+                let text = ed
+                    .slice(id(&a)?, number(&a, "from")?, number(&a, "to")?)
+                    .map_err(failed)?;
+                Ok(json_payload(Value::String(text)))
+            }
+            "editor.line-col" => {
+                let (line, column) = ed.line_col(id(&a)?, number(&a, "char")?).map_err(failed)?;
+                Ok(json_payload(json!({ "line": line, "column": column })))
+            }
             other => Err(PluginError::UnknownCommand(other.to_owned())),
         }
     }

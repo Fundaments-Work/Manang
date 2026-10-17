@@ -364,6 +364,14 @@ impl DocumentBuffer {
     pub fn clear_history(&mut self) {
         self.history.clear();
     }
+
+    /// Streams document buffer chunks directly into a writer without allocating a full string.
+    pub fn write_to<W: std::io::Write>(&self, mut writer: W) -> std::io::Result<()> {
+        for chunk in self.rope.chunks() {
+            writer.write_all(chunk.as_bytes())?;
+        }
+        Ok(())
+    }
 }
 
 impl std::fmt::Display for DocumentBuffer {
