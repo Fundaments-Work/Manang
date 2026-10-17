@@ -1,0 +1,13 @@
+---
+source: crates/manang-latex/tests/log_parser.rs
+expression: diagnostics
+---
+[
+  {
+    "severity": "error",
+    "message": "File ended while scanning use of \\textbf",
+    "file": "main.tex",
+    "line": null,
+    "hint": "a `{` is never closed; look for a missing `}` above this point"
+  }
+]

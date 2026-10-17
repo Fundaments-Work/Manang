@@ -1,0 +1,41 @@
+---
+source: crates/manang-latex/tests/log_parser.rs
+expression: diagnostics
+---
+[
+  {
+    "severity": "error",
+    "message": "Undefined control sequence",
+    "file": "chap/one.tex",
+    "line": 1,
+    "hint": "`\\oops` is not defined: check the spelling or load the package that provides it"
+  },
+  {
+    "severity": "warning",
+    "message": "Overfull \\hbox (111.11125pt too wide) detected at line 7",
+    "file": "main.tex",
+    "line": 7,
+    "hint": "the content is wider than the line: rephrase, allow hyphenation, or use `\\sloppy`"
+  },
+  {
+    "severity": "error",
+    "message": "LaTeX Error: File `missing-figure' not found",
+    "file": "main.tex",
+    "line": 8,
+    "hint": "check the file name and path; a missing package may need the TeX bundle to be downloaded once (enable network access)"
+  },
+  {
+    "severity": "warning",
+    "message": "LaTeX Warning: Reference `nowhere' on page 1 undefined on input line 9.",
+    "file": "main.tex",
+    "line": 9,
+    "hint": "the label does not exist yet; check its name, then compile again"
+  },
+  {
+    "severity": "warning",
+    "message": "LaTeX Warning: There were undefined references.",
+    "file": "main.tex",
+    "line": null,
+    "hint": null
+  }
+]

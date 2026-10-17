@@ -1,0 +1,13 @@
+---
+source: crates/manang-latex/tests/log_parser.rs
+expression: diagnostics
+---
+[
+  {
+    "severity": "error",
+    "message": "Undefined control sequence",
+    "file": "main.tex",
+    "line": 3,
+    "hint": "`\\foo` is not defined: check the spelling or load the package that provides it"
+  }
+]

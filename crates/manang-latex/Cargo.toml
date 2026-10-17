@@ -1,0 +1,30 @@
+[package]
+name = "manang-latex"
+description = "Manang's first-party LaTeX plugin: Tectonic compilation, diagnostics and SyncTeX"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flate2 = "1"
+manang-kernel = { path = "../manang-kernel" }
+parking_lot = "0.12"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tectonic = "=0.17.0"
+tectonic_bundles = "=0.4.2"
+tempfile = "3"
+thiserror = { workspace = true }
+wait-timeout = "0.2"
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false }
+insta = { version = "1", features = ["json"] }
+proptest = "1"
+
+[[bench]]
+name = "latex"
+harness = false
