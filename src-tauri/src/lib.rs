@@ -68,6 +68,28 @@ struct Dirs<'a> {
     cache: &'a std::path::Path,
 }
 
+/// The default LaTeX backend is the system TeX installation. The optional
+/// built-in Tectonic engine runs in a separate worker process, never linked into
+/// this binary (static HarfBuzz crashes GTK/WebKit, AGENTS.md 7.4).
+///
+/// For local testing, a debug build uses the worker that
+/// `cargo build -p manang-latex --features engine --bin manang-latex-worker`
+/// leaves next to this executable. It is not bundled with release builds.
+/// `MANANG_LATEX_WORKER` overrides. `None` lets the plugin choose.
+fn latex_worker() -> Option<std::path::PathBuf> {
+    if std::env::var_os("MANANG_LATEX_WORKER").is_some() {
+        return None;
+    }
+    let exe = std::env::current_exe().ok()?;
+    sibling_worker(&exe)
+}
+
+fn sibling_worker(exe: &std::path::Path) -> Option<std::path::PathBuf> {
+    let name = format!("manang-latex-worker{}", std::env::consts::EXE_SUFFIX);
+    let candidate = exe.parent()?.join(name);
+    candidate.is_file().then_some(candidate)
+}
+
 /// Build the kernel with every first-party plugin registered.
 ///
 /// Everything in Manang is a plugin; the shell only dispatches commands.
@@ -90,6 +112,7 @@ fn build_kernel(
     kernel.register(
         manang_latex::manifest()?,
         Arc::new(manang_latex::plugin(manang_latex::LatexConfig {
+            worker: latex_worker(),
             cache_dir: Some(dirs.cache.join("latex")),
             ..manang_latex::LatexConfig::default()
         })),
@@ -353,6 +376,20 @@ mod tests {
         assert_eq!(info.name, "Manang");
         assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(info.target, "typst");
+    }
+
+    #[test]
+    fn worker_is_found_next_to_the_executable_only_when_present() {
+        let dir = std::env::temp_dir().join(format!("manang-worker-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let exe = dir.join("manang");
+        assert_eq!(super::sibling_worker(&exe), None);
+
+        let name = format!("manang-latex-worker{}", std::env::consts::EXE_SUFFIX);
+        let worker = dir.join(name);
+        std::fs::write(&worker, b"").expect("write worker stub");
+        assert_eq!(super::sibling_worker(&exe), Some(worker));
+        std::fs::remove_dir_all(&dir).expect("clean up");
     }
 
     #[test]

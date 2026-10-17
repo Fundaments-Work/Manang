@@ -183,24 +183,34 @@ export interface EngineFailure {
 export const WORKER_BUILD_COMMAND =
   "cargo build -p manang-latex --features engine --bin manang-latex-worker";
 
+const NO_TEX =
+  /no tex (installation|distribution)|tex installation|latexmk.*not found|pdflatex.*not found|no latex (engine|backend)/i;
+
 /** Turn a `[code] message` failure of `latex.*` into an actionable message. */
 export function explainLatexFailure(message: string): EngineFailure {
   const match = /^\[([a-z_]+)\]\s*(.*)$/s.exec(message);
   const code = match?.[1] ?? null;
   const detail = match?.[2] ?? message;
+  if (code === "no_tex" || code === "no_backend" || NO_TEX.test(message)) {
+    return {
+      code: "no_tex",
+      title: "No TeX installation found",
+      fix: "Install TeX Live (texlive.org) or MiKTeX (miktex.org) so that latexmk or pdflatex is on your PATH, then compile again.",
+    };
+  }
   switch (code) {
     case "worker_missing":
     case "worker_spawn":
       return {
-        code,
-        title: "The LaTeX engine is not installed",
-        fix: `Build the worker with \`${WORKER_BUILD_COMMAND}\`, or set MANANG_LATEX_WORKER to its path, then compile again.`,
+        code: "no_tex",
+        title: "No TeX installation found",
+        fix: `Install TeX Live or MiKTeX, or build the optional built-in engine with \`${WORKER_BUILD_COMMAND}\`, then compile again.`,
       };
     case "bundle_unavailable":
       return {
         code,
-        title: "The TeX files are not downloaded yet",
-        fix: "Manang needs to download the TeX bundle once. Choose Download TeX files, or connect to the network and compile again.",
+        title: "The built-in engine's TeX files are not downloaded yet",
+        fix: "Connect to the network once and choose Download TeX files, or install TeX Live or MiKTeX.",
       };
     case "timeout":
       return {

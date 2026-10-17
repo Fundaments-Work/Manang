@@ -88,6 +88,8 @@ export class BuildState {
   viaMain = $state(false);
   /** Rendered, already sanitised HTML of the last Markdown preview. */
   html = $state("");
+  /** "pdflatex (TeX Live)" style label of the TeX backend that ran, when reported. */
+  backend = $state("");
   /** The engine could not run at all (missing worker, no TeX bundle). */
   failure = $state.raw<EngineFailure | null>(null);
   log = $state.raw<readonly LogLine[]>([]);
@@ -261,6 +263,7 @@ export class BuildState {
       ...(this.#network ? { allow_network: true } : {}),
     });
     if (run !== this.#run) return;
+    this.backend = backendLabel(report);
     this.#finish(
       main,
       fromLatexReport(report, main),
@@ -334,6 +337,22 @@ export class BuildState {
   clearLog(): void {
     this.log = [];
   }
+}
+
+/** "pdflatex, system TeX" from the compile report; empty when the plugin does not say. */
+export function backendLabel(report: {
+  engine?: string;
+  backend?: string;
+  tex_version?: string;
+}): string {
+  if (report.engine === undefined && report.backend === undefined) return "";
+  const where =
+    report.backend === "system"
+      ? "system TeX"
+      : report.backend === "tectonic"
+        ? "built-in engine"
+        : "";
+  return [report.engine, where].filter((x) => x).join(", ");
 }
 
 export function formatMs(ms: number): string {

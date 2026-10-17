@@ -146,6 +146,15 @@
       </span>
     {/if}
 
+    {#if kind === "pdf" && build.backend !== ""}
+      <span
+        class="ml-2 min-w-0 truncate font-mono text-[11px] text-text-muted"
+        title="The TeX engine that compiled this document"
+      >
+        {build.backend}
+      </span>
+    {/if}
+
     <span class="ml-auto"></span>
 
     <button
@@ -224,6 +233,11 @@
           <p class="mt-2">{build.failure.fix}</p>
         {/if}
         <div class="mt-3 flex gap-2">
+          {#if build.failure.code === "no_tex"}
+            <button type="button" class="mng-btn" disabled title="Not available yet"
+              >Download the optional built-in engine</button
+            >
+          {/if}
           {#if build.failure.code === "bundle_unavailable"}
             <button type="button" class="mng-btn" onclick={() => build.allowNetwork()}
               >Download TeX files</button
