@@ -320,7 +320,7 @@ impl Registry {
     pub fn with_core() -> Self {
         let mut registry = Self::new();
         // Core definitions are covered by a test, so registration cannot fail.
-        let _ = registry.register_all(crate::core::definitions(), "core");
+        let _ = registry.register_all(crate::defaults::definitions(), "core");
         registry
     }
 

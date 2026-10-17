@@ -1,0 +1,27 @@
+---
+source: crates/manang-settings/tests/plugin.rs
+expression: dark
+---
+{
+  "base": null,
+  "builtin": true,
+  "id": "dark",
+  "name": "Dark",
+  "overrides": {},
+  "scheme": "dark",
+  "tokens": {
+    "--mng-accent": "#c6f135",
+    "--mng-accent-ink": "#141416",
+    "--mng-bg": "#141416",
+    "--mng-line": "#3d3d42",
+    "--mng-line-subtle": "#323236",
+    "--mng-math": "#b3d17a",
+    "--mng-recessed": "#0d0f0a",
+    "--mng-surface": "#1c1c20",
+    "--mng-surface-hi": "#28282c",
+    "--mng-surface-muted": "#353539",
+    "--mng-text": "#e8e6e1",
+    "--mng-text-60": "#9a9a9a",
+    "--mng-text-muted": "#7a7a7a"
+  }
+}
