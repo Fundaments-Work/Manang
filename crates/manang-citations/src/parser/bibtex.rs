@@ -85,10 +85,11 @@ pub fn parse_bibtex(source: &str, file: Option<&str>) -> Result<Vec<Entry>, Pars
                     let raw = c.format_verbatim();
                     for part in raw.split(|c: char| !c.is_ascii_digit()) {
                         if part.len() == 4
-                            && let Ok(y) = part.parse::<u32>() {
-                                year = Some(y);
-                                break;
-                            }
+                            && let Ok(y) = part.parse::<u32>()
+                        {
+                            year = Some(y);
+                            break;
+                        }
                     }
                 }
             }
@@ -96,22 +97,25 @@ pub fn parse_bibtex(source: &str, file: Option<&str>) -> Result<Vec<Entry>, Pars
 
         // Fallbacks for year from raw_fields if not found via date()
         if year.is_none()
-            && let Some(y_str) = raw_fields.get("year").or_else(|| raw_fields.get("date")) {
-                for part in y_str.split(|c: char| !c.is_ascii_digit()) {
-                    if part.len() == 4
-                        && let Ok(y) = part.parse::<u32>() {
-                            year = Some(y);
-                            break;
-                        }
+            && let Some(y_str) = raw_fields.get("year").or_else(|| raw_fields.get("date"))
+        {
+            for part in y_str.split(|c: char| !c.is_ascii_digit()) {
+                if part.len() == 4
+                    && let Ok(y) = part.parse::<u32>()
+                {
+                    year = Some(y);
+                    break;
                 }
             }
+        }
 
         // Fallback for month
         if month.is_none()
             && let Some(m_str) = raw_fields.get("month")
-                && let Ok(m) = m_str.trim().parse::<u32>() {
-                    month = Some(m);
-                }
+            && let Ok(m) = m_str.trim().parse::<u32>()
+        {
+            month = Some(m);
+        }
 
         // Container / journal or publisher
         let journal_or_publisher = raw_fields

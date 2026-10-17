@@ -11,17 +11,21 @@ describe("plugins panel model", () => {
     expect(groups.map((g) => g.name)).toEqual([
       "editor",
       "figure",
+      "latex",
+      "markdown",
       "project",
       "typst",
       "writing",
     ]);
-    expect(groups[3]?.commands.map((c) => c.id)).toEqual([
+    expect(groups[5]?.commands.map((c) => c.id)).toEqual([
       "typst.compile",
       "typst.export-pdf",
       "typst.render",
     ]);
-    expect(groups[4]?.commands).toHaveLength(14);
-    expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(8 + 1 + 18 + 3 + 14);
+    expect(groups[6]?.commands).toHaveLength(14);
+    expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
+      8 + 1 + 3 + 2 + 18 + 3 + 14,
+    );
   });
 
   it("is empty, not invented, when the kernel lists nothing", () => {

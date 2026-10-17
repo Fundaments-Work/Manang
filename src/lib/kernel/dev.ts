@@ -9,6 +9,8 @@ import type { Kernel } from "./client";
 import { createMockKernel } from "./mock";
 import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject";
 import { figurePlugin } from "./mockFigure";
+import { latexPlugin } from "./mockLatex";
+import { markdownPlugin } from "./mockMarkdown";
 import { typstPlugin } from "./mockTypst";
 import { writingPlugin } from "./mockWriting";
 
@@ -217,6 +219,23 @@ Finite-time operation costs extra heat.
 /** A tiny paper-white page, standing in for a stored first-page thumbnail. */
 const PAGE_THUMBNAIL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 297"><rect width="210" height="297" fill="#faf9f7"/><rect x="40" y="48" width="130" height="8" fill="#1c1c1c"/><rect x="40" y="80" width="130" height="3" fill="#7a7a7a"/><rect x="40" y="90" width="130" height="3" fill="#7a7a7a"/><rect x="40" y="100" width="100" height="3" fill="#7a7a7a"/></svg>`;
 
+const THESIS_MAIN = `\\documentclass{article}
+\\begin{document}
+
+\\section{Introduction}
+Heat and information are linked by Landauer's principle, which bounds the
+energy cost of erasing one bit of memory from below.
+
+\\input{chapters/methods}
+
+\\end{document}
+`;
+
+const THESIS_METHODS = `\\section{Methods}
+We simulate a driven two-level system coupled to a thermal reservoir and
+average the dissipated heat over ten thousand cycles.
+`;
+
 export const DEMO_PROJECTS: readonly SeedProject[] = [
   {
     root: DEMO_ROOT,
@@ -284,6 +303,15 @@ export const DEMO_PROJECTS: readonly SeedProject[] = [
     created: 1_754_000_000,
     archived: true,
   },
+  {
+    root: "/home/author/thesis-draft",
+    name: "Thesis draft",
+    engine: "latex",
+    main: "main.tex",
+    files: { "main.tex": THESIS_MAIN, "chapters/methods.tex": THESIS_METHODS },
+    committed: ["main.tex", "chapters/methods.tex"],
+    openedAt: 1_750_000_001,
+  },
 ];
 
 /** Listed as recent but gone from disk, to show the missing-folder state. */
@@ -301,7 +329,14 @@ export function createDevKernel(
 ): Kernel & { host: MockProjectHost } {
   const host = new MockProjectHost(seeds, MISSING);
   const kernel = createMockKernel({
-    plugins: [projectPlugin(host), typstPlugin(host), figurePlugin(), writingPlugin()],
+    plugins: [
+      projectPlugin(host),
+      typstPlugin(host),
+      latexPlugin(host),
+      markdownPlugin(),
+      figurePlugin(),
+      writingPlugin(),
+    ],
   });
   return Object.assign(kernel, { host });
 }
