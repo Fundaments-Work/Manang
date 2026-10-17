@@ -1,0 +1,13 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: range
+---
+{
+  "formatted": "#let a=1\n#let b = 2\n#let c=3\n",
+  "changed": true,
+  "range": {
+    "start": 9,
+    "end": 17
+  },
+  "replacement": "#let b = 2"
+}

@@ -1,0 +1,233 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+assertion_line: 149
+expression: rows
+---
+[
+  {
+    "hits": [
+      "alpha alpha α"
+    ],
+    "query": "alpha",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "alpha \\alpha α"
+    ],
+    "query": "alpha",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "alpha alpha α",
+      "ast.op ast.op ∗",
+      "approx approx ≈",
+      "and and ∧"
+    ],
+    "query": "a",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "alpha \\alpha α",
+      "ast.op \\ast ∗",
+      "approx \\approx ≈",
+      "aleph \\aleph ℵ"
+    ],
+    "query": "a",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "forall forall ∀"
+    ],
+    "query": "forall",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "forall \\forall ∀"
+    ],
+    "query": "forall",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "forall forall ∀"
+    ],
+    "query": "for all",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "forall \\forall ∀"
+    ],
+    "query": "for all",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "arrow.r arrow.r →",
+      "arrow.r.double arrow.r.double ⇒",
+      "arrow.r.tail arrow.r.tail ↣",
+      "arrow.l.r arrow.l.r ↔"
+    ],
+    "query": "\\rightarrow",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "arrow.r \\rightarrow →",
+      "arrow.r.double \\Rightarrow ⇒",
+      "arrow.r.tail \\rightarrowtail ↣",
+      "arrow.l.r \\leftrightarrow ↔"
+    ],
+    "query": "\\rightarrow",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "arrow.r arrow.r →",
+      "arrow.r.double arrow.r.double ⇒",
+      "arrow.r.long arrow.r.long ⟶",
+      "arrow.r.long.double arrow.r.long.double ⟹"
+    ],
+    "query": "arrow.r",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "arrow.r \\rightarrow →",
+      "arrow.r.double \\Rightarrow ⇒",
+      "arrow.r.long \\longrightarrow ⟶",
+      "arrow.r.long.double \\Longrightarrow ⟹"
+    ],
+    "query": "arrow.r",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "arrow.r.double arrow.r.double ⇒",
+      "arrow.r.long.double arrow.r.long.double ⟹"
+    ],
+    "query": "implies",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "arrow.r.double \\Rightarrow ⇒",
+      "arrow.r.long.double \\Longrightarrow ⟹"
+    ],
+    "query": "implies",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "integral integral ∫",
+      "definite integral integral_a^b ∫ₐᵇ",
+      "integral.double integral.double ∬",
+      "integral.triple integral.triple ∭"
+    ],
+    "query": "integral",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "integral \\int ∫",
+      "definite integral \\int_a^b ∫ₐᵇ",
+      "integral.double \\iint ∬",
+      "integral.triple \\iiint ∭"
+    ],
+    "query": "integral",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "nabla nabla ∇"
+    ],
+    "query": "nabla",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "nabla \\nabla ∇"
+    ],
+    "query": "nabla",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "phi phi φ",
+      "Phi Phi Φ",
+      "phi.alt phi.alt ϕ",
+      "tilde.equiv tilde.equiv ≅"
+    ],
+    "query": "phi",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "phi.alt \\phi ϕ",
+      "Phi \\Phi Φ",
+      "phi \\varphi φ",
+      "tilde.equiv \\cong ≅"
+    ],
+    "query": "phi",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "RR RR ℝ"
+    ],
+    "query": "real numbers",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "RR \\mathbb{R} ℝ"
+    ],
+    "query": "real numbers",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "in in ∈"
+    ],
+    "query": "∈",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "in \\in ∈"
+    ],
+    "query": "∈",
+    "syntax": "latex"
+  },
+  {
+    "hits": [
+      "square root sqrt(x) √x",
+      "nth root root(n, x) ⁿ√x"
+    ],
+    "query": "sqrt",
+    "syntax": "typst"
+  },
+  {
+    "hits": [
+      "square root \\sqrt{x} √x",
+      "nth root \\sqrt[n]{x} ⁿ√x"
+    ],
+    "query": "sqrt",
+    "syntax": "latex"
+  },
+  {
+    "hits": [],
+    "query": "zzzz",
+    "syntax": "typst"
+  },
+  {
+    "hits": [],
+    "query": "zzzz",
+    "syntax": "latex"
+  }
+]

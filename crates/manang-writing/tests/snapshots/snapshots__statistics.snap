@@ -1,0 +1,45 @@
+---
+source: crates/manang-writing/tests/snapshots.rs
+expression: rows
+---
+[
+  {
+    "sample": "typst",
+    "stats": {
+      "characters": 252,
+      "characters_no_spaces": 205,
+      "paragraphs": 2,
+      "reading_time_minutes": 0.2,
+      "reading_time_seconds": 12,
+      "sentences": 4,
+      "speaking_time_seconds": 19,
+      "words": 47
+    }
+  },
+  {
+    "sample": "latex",
+    "stats": {
+      "characters": 118,
+      "characters_no_spaces": 99,
+      "paragraphs": 1,
+      "reading_time_minutes": 0.1,
+      "reading_time_seconds": 5,
+      "sentences": 3,
+      "speaking_time_seconds": 8,
+      "words": 19
+    }
+  },
+  {
+    "sample": "markdown",
+    "stats": {
+      "characters": 74,
+      "characters_no_spaces": 60,
+      "paragraphs": 3,
+      "reading_time_minutes": 0.1,
+      "reading_time_seconds": 4,
+      "sentences": 3,
+      "speaking_time_seconds": 6,
+      "words": 14
+    }
+  }
+]
