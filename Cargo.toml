@@ -1,6 +1,16 @@
 [workspace]
 resolver = "3"
-members = ["src-tauri", "crates/manang-kernel", "crates/manang-wasm-host", "crates/manang-editor", "crates/manang-typst", "crates/manang-project", "crates/manang-buffer", "crates/manang-figure"]
+members = [
+    "src-tauri",
+    "crates/manang-kernel",
+    "crates/manang-wasm-host",
+    "crates/manang-editor",
+    "crates/manang-typst",
+    "crates/manang-project",
+    "crates/manang-buffer",
+    "crates/manang-figure",
+    "crates/manang-markdown",
+]
 exclude = ["crates/manang-wasm-host/tests/fixtures/echo-guest"]
 
 [workspace.package]

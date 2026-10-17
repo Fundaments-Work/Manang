@@ -392,3 +392,84 @@ All operations stay well below the 8 ms keystroke latency SLA.
 1. `DocumentBuffer::write_to` streams chunked rope slices directly to disk, avoiding intermediate allocations.
 2. The `BufferService` implementation remains 100% compatible for other plugins (such as Typst and WASM plugins).
 3. The oracle proptest against `Vec<char>` passes with zero regressions.
+---
+
+## Phase 2 - Task 3: `crates/manang-markdown` Native Plugin
+
+- **Crate Name:** `manang-markdown`
+- **Location:** `crates/manang-markdown`
+- **Manifest:** `manifest.toml` (tier: `native`, name: `markdown`)
+
+### Public API Surface
+```rust
+pub fn manifest() -> Result<manang_kernel::Manifest, manang_kernel::ManifestError>;
+pub fn plugin() -> impl manang_kernel::Plugin;
+
+pub struct MarkdownPlugin { ... }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderOptions {
+    pub allow_raw_html: bool,
+    pub allowed_html_tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Heading {
+    pub title: String,
+    pub level: u32,
+    pub line: usize,
+    pub char_offset: usize,
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Diagnostic {
+    pub severity: DiagnosticSeverity,
+    pub message: String,
+    pub line: Option<usize>,
+}
+
+pub fn render_to_html(source: &str, options: &RenderOptions) -> (String, Vec<Diagnostic>);
+pub fn extract_frontmatter(source: &str) -> (Option<serde_json::Value>, &str);
+pub fn extract_outline(source: &str) -> Vec<Heading>;
+pub fn markdown_to_typst(source: &str) -> (String, Vec<Diagnostic>);
+```
+
+### Contributed Commands & Shapes
+1. `markdown.render-html`:
+   - Args: `{ source: string, options?: { allow_raw_html?: bool, allowed_html_tags?: string[] } }`
+   - Return: `Payload::Json({ html: string, frontmatter: Option<Value>, headings: Heading[], diagnostics: Diagnostic[] })`
+   - Features: Parses YAML (`---`) and TOML (`+++`) metadata blocks, tables, footnotes, task lists, strikethrough, preserves inline math (`<span class="math math-inline">$...$</span>`) and display math (`<div class="math math-display">$$...$$</div>`).
+   - XSS Hardening: Strict sanitization against XSS vectors. Raw HTML tags are escaped by default (`&lt;...&gt;`). Unsafe URL schemes (`javascript:`, `vbscript:`, `data:text/html`) in links and images are replaced with `about:blank`. When `allow_raw_html` is explicitly enabled, only tags matching `allowed_html_tags` are permitted, and all event handlers (`onerror`, `onload`, `onclick`, `onmouseover`, `onfocus`, `onblur`) are detected and escaped with warnings in diagnostics.
+2. `markdown.outline`:
+   - Args: `{ source: string }`
+   - Return: `Payload::Json(Heading[])`
+   - Features: Fast AST pass returning heading title, level (1..6), 1-based line number, character offset, and custom heading attributes/id if present.
+3. `markdown.to-typst`:
+   - Args: `{ source: string }`
+   - Return: `Payload::Json({ typst: string, diagnostics: Diagnostic[] })`
+   - Supported Typst subset:
+     - Headings (`= ...` to `====== ...`)
+     - Paragraphs, bold (`*...*`), italics (`_..._`), strikethrough (`#strike[...]`)
+     - Blockquotes (`#quote(block: true)[...]`)
+     - Ordered (`+ `) and unordered (`- `) lists (with nested indent) and task lists (`[x] ` / `[ ] `)
+     - Fenced code blocks (` ```lang ... ``` `) and inline code (`` `...` ``)
+     - Inline and display math (`$...$`, `$ ... $`)
+     - Hyperlinks (`#link("url")[text]`) and images (`#image("url")`)
+     - Tables (`#table(columns: n, [...])`)
+     - Footnotes (`#footnote[...]`) and horizontal rules (`#line(length: 100%)`)
+   - Non-silent diagnostics: Unsupported constructs (e.g. raw HTML tags) emit warnings with exact line numbers in `diagnostics` instead of silently dropping content.
+
+### Handoff Notes for Claude Code
+1. **Registration in `src-tauri`:**
+   ```rust
+   kernel.register(
+       manang_markdown::manifest().expect("markdown manifest"),
+       Arc::new(manang_markdown::plugin()),
+   ).expect("register markdown plugin");
+   ```
+2. **Deterministic Sanitization:** No third-party heavy HTML sanitizers needed; pulldown-cmark AST event interception ensures zero-allocation scanning and secure XSS mitigation.
+3. **Tests:**
+   - 7 kernel integration tests in `crates/manang-markdown/tests/kernel.rs` covering all commands, frontmatter parsing, XSS vectors, and Typst generation.
+   - Property tests with `proptest` in `crates/manang-markdown/tests/fuzz_proptest.rs` verifying arbitrary byte/string inputs never panic.
+   - `insta` snapshot tests capturing stable HTML and Typst generation.
