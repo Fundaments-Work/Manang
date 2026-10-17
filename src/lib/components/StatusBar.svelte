@@ -1,5 +1,6 @@
 <script lang="ts">
   import { document } from "$lib/state/document.svelte";
+  import { session } from "$lib/state/session.svelte";
 
   /**
    * Status bar.
@@ -17,6 +18,12 @@
   <span>{document.meta.language}</span>
   <span>{document.lineCount} lines</span>
   <span>{document.wordCount} words</span>
+
+  {#if session.status === "offline"}
+    <span class="text-text-60" title={session.notice}>kernel offline</span>
+  {:else if session.notice !== ""}
+    <span class="truncate text-text-60">{session.notice}</span>
+  {/if}
 
   {#if document.diagnostics.length > 0}
     <span class="ml-auto text-text-60">
