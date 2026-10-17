@@ -45,10 +45,10 @@ fn start(
 fn expect<T>(rx: &Receiver<PluginEvent>, pick: impl Fn(&PluginEvent) -> Option<T>) -> T {
     let deadline = Instant::now() + WAIT;
     while let Some(left) = deadline.checked_duration_since(Instant::now()) {
-        if let Ok(event) = rx.recv_timeout(left) {
-            if let Some(found) = pick(&event) {
-                return found;
-            }
+        if let Ok(event) = rx.recv_timeout(left)
+            && let Some(found) = pick(&event)
+        {
+            return found;
         }
     }
     panic!("timed out waiting for a plugin event");

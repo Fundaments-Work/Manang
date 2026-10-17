@@ -8,7 +8,9 @@
 use std::sync::Arc;
 
 use manang_editor::{Editor, EditorPlugin};
-use manang_kernel::{CommandInfo, EventBus, Kernel, KernelError, Payload};
+use manang_kernel::{BufferService, CommandInfo, EventBus, Kernel, KernelError, Payload};
+use manang_plugins::{ManagerConfig, PluginEvent, PluginManager, WatchHandle, WatchOptions};
+use manang_wasm_host::{HostServices, ProjectRoot};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{Emitter, State};
@@ -56,16 +58,28 @@ enum BootError {
     Typst(#[from] manang_typst::TypstError),
     #[error(transparent)]
     Manifest(#[from] manang_kernel::ManifestError),
+    #[error(transparent)]
+    Plugins(#[from] manang_plugins::ManagerError),
+}
+
+/// Directories the shell hands to plugins.
+struct Dirs<'a> {
+    config: &'a std::path::Path,
+    cache: &'a std::path::Path,
 }
 
 /// Build the kernel with every first-party plugin registered.
 ///
 /// Everything in Manang is a plugin; the shell only dispatches commands.
-fn build_kernel(config_dir: &std::path::Path, events: &EventBus) -> Result<Kernel, BootError> {
+fn build_kernel(
+    dirs: &Dirs<'_>,
+    events: &EventBus,
+    editor: &Arc<Editor>,
+) -> Result<Kernel, BootError> {
     let kernel = Kernel::new();
     kernel.register(
         manang_editor::manifest()?,
-        Arc::new(EditorPlugin::new(Arc::new(Editor::new()))),
+        Arc::new(EditorPlugin::new(Arc::clone(editor))),
     )?;
     kernel.register(
         manang_typst::manifest()?,
@@ -74,46 +88,120 @@ fn build_kernel(config_dir: &std::path::Path, events: &EventBus) -> Result<Kerne
         )?),
     )?;
     kernel.register(
+        manang_latex::manifest()?,
+        Arc::new(manang_latex::plugin(manang_latex::LatexConfig {
+            cache_dir: Some(dirs.cache.join("latex")),
+            ..manang_latex::LatexConfig::default()
+        })),
+    )?;
+    kernel.register(
         manang_project::manifest()?,
         Arc::new(manang_project::plugin(
-            config_dir.to_path_buf(),
+            dirs.config.to_path_buf(),
             events.clone(),
         )),
     )?;
     Ok(kernel)
 }
 
+/// Shell state: the kernel plus the WASM plugin host that keeps it extended.
+struct Shell {
+    kernel: Arc<Kernel>,
+    project_root: Arc<ProjectRoot>,
+    // Held so the manager and its file watcher live as long as the app.
+    _plugins: Arc<PluginManager>,
+    _watch: Option<WatchHandle>,
+}
+
+/// Load third-party WASM plugins and keep them hot-reloaded.
+fn start_plugins(
+    kernel: &Arc<Kernel>,
+    dirs: &Dirs<'_>,
+    events: &EventBus,
+    editor: &Arc<Editor>,
+    project_root: &Arc<ProjectRoot>,
+) -> Result<(Arc<PluginManager>, Option<WatchHandle>), BootError> {
+    let mut config = ManagerConfig::new(manang_plugins::plugins_dir_in(dirs.config));
+    config.cache_dir = Some(manang_plugins::cache_dir_in(dirs.cache));
+    config.services = HostServices {
+        buffer: Some(Arc::clone(editor) as Arc<dyn BufferService>),
+        project: Arc::clone(project_root),
+    };
+    let manager = Arc::new(PluginManager::new(Arc::clone(kernel), config)?);
+
+    // Scanning compiles components, which is CPU-bound: never on the UI thread.
+    let scanner = Arc::clone(&manager);
+    let bus = events.clone();
+    std::thread::Builder::new()
+        .name("manang-plugin-scan".to_owned())
+        .spawn(move || {
+            let topic = match scanner.scan() {
+                Ok(_) => "plugins.scanned",
+                Err(_) => "plugins.scan-failed",
+            };
+            bus.emit(topic, Payload::Empty);
+        })
+        .map_err(|e| manang_plugins::ManagerError::Watch {
+            path: manager.plugins_dir().to_path_buf(),
+            reason: e.to_string(),
+        })?;
+
+    let bus = events.clone();
+    let watch = manager
+        .watch(WatchOptions::default(), move |event| {
+            let (topic, name) = match &event {
+                PluginEvent::Loaded(info) => ("plugins.loaded", info.name.clone()),
+                PluginEvent::Reloaded(info) => ("plugins.reloaded", info.name.clone()),
+                PluginEvent::Unloaded(name) => ("plugins.unloaded", name.clone()),
+                PluginEvent::Failed(_) => ("plugins.failed", String::new()),
+                PluginEvent::WatchError(_) => ("plugins.watch-error", String::new()),
+            };
+            bus.emit(topic, Payload::Json(serde_json::json!({ "name": name })));
+        })
+        .ok();
+    Ok((manager, watch))
+}
+
 /// Commands for the palette.
 #[tauri::command]
-fn kernel_commands(kernel: State<'_, Arc<Kernel>>) -> Vec<CommandInfo> {
-    kernel.commands()
+fn kernel_commands(shell: State<'_, Shell>) -> Vec<CommandInfo> {
+    shell.kernel.commands()
 }
 
 /// Run a plugin command off the async runtime. Plugin calls are synchronous
 /// and may be CPU-bound, so they never occupy a Tokio worker.
 async fn dispatch(
-    kernel: &Arc<Kernel>,
+    shell: &Shell,
     command: String,
     args: Option<Value>,
 ) -> Result<Payload, IpcError> {
-    let kernel = Arc::clone(kernel);
+    let kernel = Arc::clone(&shell.kernel);
     let input = args.map_or(Payload::Empty, Payload::Json);
-    tauri::async_runtime::spawn_blocking(move || kernel.invoke(&command, input))
+    let opening = matches!(command.as_str(), "project.open" | "project.create");
+    let output = tauri::async_runtime::spawn_blocking(move || kernel.invoke(&command, input))
         .await
         .map_err(|e| IpcError {
             message: format!("command task failed: {e}"),
         })?
-        .map_err(IpcError::from)
+        .map_err(IpcError::from)?;
+    // WASM plugins granted `fs` may only touch the open project's directory.
+    if opening
+        && let Payload::Json(value) = &output
+        && let Some(root) = value.get("root").and_then(Value::as_str)
+    {
+        shell.project_root.set(Some(root.into()));
+    }
+    Ok(output)
 }
 
 /// Run a command whose result is structured data.
 #[tauri::command]
 async fn kernel_invoke(
-    kernel: State<'_, Arc<Kernel>>,
+    shell: State<'_, Shell>,
     command: String,
     args: Option<Value>,
 ) -> Result<Value, IpcError> {
-    match dispatch(&kernel, command.clone(), args).await? {
+    match dispatch(&shell, command.clone(), args).await? {
         Payload::Json(value) => Ok(value),
         Payload::Empty => Ok(Value::Null),
         Payload::Binary(_) => Err(IpcError {
@@ -126,11 +214,11 @@ async fn kernel_invoke(
 /// IPC raw, never as base64 or JSON.
 #[tauri::command]
 async fn kernel_invoke_binary(
-    kernel: State<'_, Arc<Kernel>>,
+    shell: State<'_, Shell>,
     command: String,
     args: Option<Value>,
 ) -> Result<tauri::ipc::Response, IpcError> {
-    match dispatch(&kernel, command.clone(), args).await? {
+    match dispatch(&shell, command.clone(), args).await? {
         Payload::Binary(bytes) => Ok(tauri::ipc::Response::new(bytes.to_vec())),
         _ => Err(IpcError {
             message: format!("`{command}` does not return binary"),
@@ -166,10 +254,23 @@ pub fn run() -> Result<(), tauri::Error> {
         .setup(|app| {
             use tauri::Manager;
             let config_dir = app.path().app_config_dir()?;
+            let cache_dir = app.path().app_cache_dir()?;
+            let dirs = Dirs {
+                config: &config_dir,
+                cache: &cache_dir,
+            };
             let events = EventBus::new();
-            let kernel = build_kernel(&config_dir, &events)?;
+            let editor = Arc::new(Editor::new());
+            let kernel = Arc::new(build_kernel(&dirs, &events, &editor)?);
+            let project_root = Arc::new(ProjectRoot::new(None));
+            let (plugins, watch) = start_plugins(&kernel, &dirs, &events, &editor, &project_root)?;
             forward_events(app.handle().clone(), &events)?;
-            app.manage(Arc::new(kernel));
+            app.manage(Shell {
+                kernel,
+                project_root,
+                _plugins: plugins,
+                _watch: watch,
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -208,10 +309,23 @@ mod tests {
 
     #[test]
     fn kernel_boots_with_the_editor_plugin() {
-        let kernel = build_kernel(&std::env::temp_dir(), &EventBus::new())
+        let tmp = std::env::temp_dir();
+        let dirs = Dirs {
+            config: &tmp,
+            cache: &tmp,
+        };
+        let kernel = build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
             .expect("first-party plugins register");
 
-        assert!(kernel.commands().iter().any(|c| c.id == "editor.new"));
+        let ids: Vec<_> = kernel.commands().into_iter().map(|c| c.id).collect();
+        for expected in [
+            "editor.new",
+            "typst.compile",
+            "latex.compile",
+            "project.open",
+        ] {
+            assert!(ids.iter().any(|id| id == expected), "missing {expected}");
+        }
         let out = kernel
             .invoke("editor.new", Payload::Empty)
             .expect("editor.new runs");

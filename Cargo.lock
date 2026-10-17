@@ -5067,8 +5067,11 @@ version = "0.1.0"
 dependencies = [
  "manang-editor",
  "manang-kernel",
+ "manang-latex",
+ "manang-plugins",
  "manang-project",
  "manang-typst",
+ "manang-wasm-host",
  "serde",
  "serde_json",
  "tauri",
