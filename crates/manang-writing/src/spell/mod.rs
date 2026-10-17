@@ -22,7 +22,7 @@ pub const DEFAULT_SUGGESTIONS: usize = 5;
 /// Upper bound on misspellings reported per request.
 pub const MAX_MISSPELLINGS: usize = 2000;
 /// Distinct misspelled words that get suggestions in one `check`.
-pub const SUGGESTION_BUDGET: usize = 100;
+pub const SUGGESTION_BUDGET: usize = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Misspelling {
