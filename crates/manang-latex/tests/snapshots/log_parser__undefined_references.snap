@@ -1,0 +1,34 @@
+---
+source: crates/manang-latex/tests/log_parser.rs
+expression: diagnostics
+---
+[
+  {
+    "severity": "warning",
+    "message": "LaTeX Warning: Reference `nope' on page 1 undefined on input line 3.",
+    "file": "main.tex",
+    "line": 3,
+    "hint": "the label does not exist yet; check its name, then compile again"
+  },
+  {
+    "severity": "warning",
+    "message": "LaTeX Warning: Citation `ghost' on page 1 undefined on input line 3.",
+    "file": "main.tex",
+    "line": 3,
+    "hint": "check the citation key and that the .bib file defines it"
+  },
+  {
+    "severity": "warning",
+    "message": "LaTeX Warning: Empty `thebibliography' environment on input line 3.",
+    "file": "main.bbl",
+    "line": 3,
+    "hint": null
+  },
+  {
+    "severity": "warning",
+    "message": "LaTeX Warning: There were undefined references.",
+    "file": "main.tex",
+    "line": null,
+    "hint": null
+  }
+]
