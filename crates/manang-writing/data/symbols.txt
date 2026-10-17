@@ -117,7 +117,7 @@ tack.l¦\dashv¦⊣¦logic¦-¦reverse turnstile
 tack.r.double¦\models¦⊨¦logic¦-¦models,satisfies,semantically entails
 therefore¦\therefore¦∴¦logic¦amssymb¦therefore,hence
 because¦\because¦∵¦logic¦amssymb¦because,since
-arrow.r¦\rightarrow¦→¦arrow¦-¦right arrow,to,maps to,implies
+arrow.r¦\rightarrow¦→¦arrow¦-¦right arrow,to,maps to,tends to
 arrow.l¦\leftarrow¦←¦arrow¦-¦left arrow,gets
 arrow.t¦\uparrow¦↑¦arrow¦-¦up arrow
 arrow.b¦\downarrow¦↓¦arrow¦-¦down arrow
