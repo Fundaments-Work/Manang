@@ -10,6 +10,8 @@
 
 pub mod core;
 pub mod error;
+pub mod keybindings;
+pub mod keys;
 pub mod layers;
 pub mod registry;
 pub mod store;
