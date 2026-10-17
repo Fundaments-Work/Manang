@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use manang_buffer::DocumentBuffer;
 use manang_kernel::BufferService;
 use parking_lot::Mutex;
-use ropey::Rope;
 use serde::Serialize;
 
 use crate::error::EditorError;
@@ -14,14 +14,14 @@ pub type DocId = u64;
 
 struct Document {
     path: Option<PathBuf>,
-    rope: Rope,
+    buffer: DocumentBuffer,
     revision: u64,
     saved_revision: u64,
 }
 
 impl Document {
     fn edit_range(&self, from: usize, to: usize) -> Result<(), EditorError> {
-        let len = self.rope.len_chars();
+        let len = self.buffer.len_chars();
         if from > to || to > len {
             return Err(EditorError::OutOfRange { from, to, len });
         }
@@ -66,14 +66,14 @@ impl State {
         Ok((id, doc))
     }
 
-    fn add(&mut self, path: Option<PathBuf>, rope: Rope) -> DocId {
+    fn add(&mut self, path: Option<PathBuf>, buffer: DocumentBuffer) -> DocId {
         self.next_id += 1;
         let id = self.next_id;
         self.documents.insert(
             id,
             Document {
                 path,
-                rope,
+                buffer,
                 revision: 0,
                 saved_revision: 0,
             },
@@ -96,7 +96,7 @@ impl Editor {
 
     /// Create an empty untitled document and make it active.
     pub fn create(&self) -> DocId {
-        self.state.lock().add(None, Rope::new())
+        self.state.lock().add(None, DocumentBuffer::new())
     }
 
     /// Load a UTF-8 file as a new active document.
@@ -108,7 +108,7 @@ impl Editor {
         Ok(self
             .state
             .lock()
-            .add(Some(path.to_owned()), Rope::from_str(&text)))
+            .add(Some(path.to_owned()), DocumentBuffer::open(&text)))
     }
 
     /// Write a document to its path, or to `path` (which then becomes its path).
@@ -124,7 +124,7 @@ impl Editor {
             path: target.display().to_string(),
             source,
         })?;
-        doc.rope
+        doc.buffer
             .write_to(&mut out)
             .map_err(|source| EditorError::Io {
                 path: target.display().to_string(),
@@ -146,7 +146,7 @@ impl Editor {
         let mut state = self.state.lock();
         let (_, doc) = state.doc_mut(id)?;
         doc.edit_range(at, at)?;
-        doc.rope.insert(at, text);
+        doc.buffer.insert(at, text)?;
         doc.revision += 1;
         Ok(doc.revision)
     }
@@ -156,16 +156,80 @@ impl Editor {
         let mut state = self.state.lock();
         let (_, doc) = state.doc_mut(id)?;
         doc.edit_range(from, to)?;
-        doc.rope.remove(from..to);
+        doc.buffer.delete(from..to)?;
         doc.revision += 1;
         Ok(doc.revision)
+    }
+
+    /// Replaces the character range `from..to` with `text` as a single atomic transaction.
+    /// Returns the new revision.
+    pub fn replace(
+        &self,
+        id: Option<DocId>,
+        from: usize,
+        to: usize,
+        text: &str,
+    ) -> Result<u64, EditorError> {
+        let mut state = self.state.lock();
+        let (_, doc) = state.doc_mut(id)?;
+        doc.edit_range(from, to)?;
+        doc.buffer.replace(from..to, text)?;
+        doc.revision += 1;
+        Ok(doc.revision)
+    }
+
+    /// Reverts the latest edit transaction. Returns the new revision.
+    pub fn undo(&self, id: Option<DocId>) -> Result<u64, EditorError> {
+        let mut state = self.state.lock();
+        let (_, doc) = state.doc_mut(id)?;
+        if doc.buffer.undo()? {
+            doc.revision += 1;
+        }
+        Ok(doc.revision)
+    }
+
+    /// Re-applies the latest undone transaction. Returns the new revision.
+    pub fn redo(&self, id: Option<DocId>) -> Result<u64, EditorError> {
+        let mut state = self.state.lock();
+        let (_, doc) = state.doc_mut(id)?;
+        if doc.buffer.redo()? {
+            doc.revision += 1;
+        }
+        Ok(doc.revision)
+    }
+
+    /// Returns a slice of the document text in the range `from..to`.
+    pub fn slice(&self, id: Option<DocId>, from: usize, to: usize) -> Result<String, EditorError> {
+        let mut state = self.state.lock();
+        let (_, doc) = state.doc_mut(id)?;
+        doc.edit_range(from, to)?;
+        Ok(doc.buffer.slice(from..to)?)
+    }
+
+    /// Converts a character index to a 0-based `(line, column)` tuple.
+    pub fn line_col(
+        &self,
+        id: Option<DocId>,
+        char_idx: usize,
+    ) -> Result<(usize, usize), EditorError> {
+        let mut state = self.state.lock();
+        let (_, doc) = state.doc_mut(id)?;
+        let len = doc.buffer.len_chars();
+        if char_idx > len {
+            return Err(EditorError::OutOfRange {
+                from: char_idx,
+                to: char_idx,
+                len,
+            });
+        }
+        Ok(doc.buffer.char_to_line_col(char_idx)?)
     }
 
     /// The full document text. Allocates; prefer ranged reads for big files.
     pub fn text(&self, id: Option<DocId>) -> Result<String, EditorError> {
         let mut state = self.state.lock();
         let (_, doc) = state.doc_mut(id)?;
-        Ok(doc.rope.to_string())
+        Ok(doc.buffer.to_string())
     }
 
     pub fn info(&self, id: Option<DocId>) -> Result<DocInfo, EditorError> {
@@ -174,8 +238,8 @@ impl Editor {
         Ok(DocInfo {
             id,
             path: doc.path.as_ref().map(|p| p.display().to_string()),
-            chars: doc.rope.len_chars(),
-            lines: doc.rope.len_lines(),
+            chars: doc.buffer.len_chars(),
+            lines: doc.buffer.line_count(),
             revision: doc.revision,
             dirty: doc.revision != doc.saved_revision,
         })
@@ -198,7 +262,7 @@ impl BufferService for Editor {
     fn write_active(&self, text: &str) -> Result<(), String> {
         let mut state = self.state.lock();
         let (_, doc) = state.doc_mut(None).map_err(|e| e.to_string())?;
-        doc.rope = Rope::from_str(text);
+        doc.buffer = DocumentBuffer::open(text);
         doc.revision += 1;
         Ok(())
     }
@@ -281,6 +345,34 @@ mod tests {
         ed.write_active("new").expect("write");
         assert_eq!(ed.read_active().expect("read"), "new");
         assert_eq!(ed.info(None).expect("info").revision, 1);
+    }
+
+    #[test]
+    fn undo_redo_replace_slice_line_col() {
+        let ed = Editor::new();
+        ed.create();
+        ed.insert(None, 0, "hello world\nline two").expect("insert");
+
+        // Slice
+        assert_eq!(ed.slice(None, 0, 5).expect("slice"), "hello");
+        assert_eq!(ed.slice(None, 6, 11).expect("slice"), "world");
+
+        // Line-col
+        assert_eq!(ed.line_col(None, 0).expect("line_col 0"), (0, 0));
+        assert_eq!(ed.line_col(None, 5).expect("line_col 5"), (0, 5));
+        assert_eq!(ed.line_col(None, 12).expect("line_col 12"), (1, 0));
+
+        // Replace
+        ed.replace(None, 0, 5, "greetings").expect("replace");
+        assert_eq!(ed.text(None).expect("text"), "greetings world\nline two");
+
+        // Undo
+        ed.undo(None).expect("undo");
+        assert_eq!(ed.text(None).expect("text"), "hello world\nline two");
+
+        // Redo
+        ed.redo(None).expect("redo");
+        assert_eq!(ed.text(None).expect("text"), "greetings world\nline two");
     }
 
     #[derive(Debug, Clone)]

@@ -39,3 +39,23 @@ title = "Read document text"
 [[contributes.commands]]
 id = "editor.info"
 title = "Document info"
+
+[[contributes.commands]]
+id = "editor.undo"
+title = "Undo latest edit"
+
+[[contributes.commands]]
+id = "editor.redo"
+title = "Redo latest undone edit"
+
+[[contributes.commands]]
+id = "editor.replace"
+title = "Replace text range"
+
+[[contributes.commands]]
+id = "editor.slice"
+title = "Read text range"
+
+[[contributes.commands]]
+id = "editor.line-col"
+title = "Convert character index to line and column"

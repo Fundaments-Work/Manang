@@ -1,0 +1,19 @@
+---
+source: crates/manang-markdown/tests/kernel.rs
+expression: "typst_res[\"typst\"].as_str().unwrap()"
+---
+= Quantum Formalism
+
+A state vector $|psi rangle$ satisfies:
+
+$ i hbar \frac{d}{dt} |\psi\rangle = \hat{H} |\psi\rangle $
+
+
+
+#table(
+  columns: 2,
+  [*Observable*],
+  [*Operator*],
+  [Momentum],
+  [$-i \hbar \nabla$],
+)
