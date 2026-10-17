@@ -7,13 +7,17 @@
 mod config;
 mod error;
 pub mod fsops;
+pub mod git;
 mod paths;
+mod plugin;
 pub mod recent;
 pub mod scaffold;
 pub mod tree;
+pub mod watch;
 
 pub use config::{
     Bibliography, CONFIG_FILE, Engine, ProjectConfig, ProjectSection, TemplateBinding,
 };
 pub use error::{ConfigError, Issue, ProjectError};
 pub use paths::{MAX_PATH_BYTES, ProjectRoot, lexical_relative, to_slash};
+pub use plugin::{ProjectPlugin, manifest, plugin};
