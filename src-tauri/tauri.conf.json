@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "work.fundaments.manang",
   "build": {
-    "beforeDevCommand": "pnpm --dir frontend dev",
+    "beforeDevCommand": "pnpm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm --dir frontend build",
-    "frontendDist": "../frontend/dist"
+    "beforeBuildCommand": "pnpm run build",
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [

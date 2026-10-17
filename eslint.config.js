@@ -39,6 +39,6 @@ export default ts.config(
     },
   },
   {
-    ignores: ["dist/", "node_modules/", "src-tauri/"],
+    ignores: ["dist/", "node_modules/", "src-tauri/", "target/", "artifacts/"],
   },
 );

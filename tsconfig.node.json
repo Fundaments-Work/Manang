@@ -18,5 +18,6 @@
     "vitest.config.ts",
     "eslint.config.js",
     "svelte.config.js"
-  ]
+  ],
+  "exclude": ["node_modules", "dist", "src-tauri", "target"]
 }

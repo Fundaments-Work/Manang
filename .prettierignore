@@ -1,0 +1,12 @@
+dist/
+node_modules/
+pnpm-lock.yaml
+src-tauri/gen/schemas/
+target/
+artifacts/
+
+# Project documentation is hand-authored prose and ASCII diagrams. Prettier's
+# markdown table reflow rewrites the specification tables in AGENTS.md and
+# DESIGN.md, which are the contract rather than the output — leave them alone.
+*.md
+docs/

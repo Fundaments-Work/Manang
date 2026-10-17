@@ -7,10 +7,10 @@ node_modules
 .pnpm-store
 
 # Frontend build output
-frontend/dist
+/dist
 
 # Verification artifacts
-artifacts
+/artifacts
 
 # Tauri generated
 src-tauri/gen/schemas

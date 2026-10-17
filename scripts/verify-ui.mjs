@@ -25,7 +25,12 @@ const SHOTS = "artifacts/screens";
 const PORT = 9333;
 
 function findBrowser() {
-  const candidates = ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"];
+  const candidates = [
+    "chromium",
+    "chromium-browser",
+    "google-chrome",
+    "google-chrome-stable",
+  ];
   for (const name of candidates) {
     // `spawnSync` rather than `spawn`: the exit status has to be readable before
     // deciding, and a browser hunt should not leave a dangling child process.
@@ -57,7 +62,10 @@ class Cdp {
   }
 
   static async open(url) {
-    const socket = new WebSocket(url, { perMessageDeflate: false, maxPayload: 64 * 1024 * 1024 });
+    const socket = new WebSocket(url, {
+      perMessageDeflate: false,
+      maxPayload: 64 * 1024 * 1024,
+    });
     await new Promise((resolve, reject) => {
       socket.once("open", resolve);
       socket.once("error", reject);
@@ -97,10 +105,13 @@ async function waitForEndpoint(port, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const reachable = await new Promise((resolve) => {
-      const request = httpRequest({ host: "127.0.0.1", port, path: "/json/version" }, (res) => {
-        res.resume();
-        res.once("end", () => resolve(true));
-      });
+      const request = httpRequest(
+        { host: "127.0.0.1", port, path: "/json/version" },
+        (res) => {
+          res.resume();
+          res.once("end", () => resolve(true));
+        },
+      );
       request.once("error", () => resolve(false));
       request.setTimeout(500, () => {
         request.destroy();
@@ -141,9 +152,13 @@ async function newPage(browser, hash) {
   });
   await cdp.send("Page.navigate", { url: `${ORIGIN}/${hash}` });
   // Wait for the shell to mount rather than sleeping a guessed interval.
-  await waitFor(cdp, `document.readyState === "complete" && document.querySelector("#app")?.childElementCount > 0`, {
-    label: "app mounted",
-  });
+  await waitFor(
+    cdp,
+    `document.readyState === "complete" && document.querySelector("#app")?.childElementCount > 0`,
+    {
+      label: "app mounted",
+    },
+  );
   await sleep(600);
   return cdp;
 }
@@ -219,9 +234,12 @@ async function main() {
   );
 
   try {
-    if (!(await waitForEndpoint(PORT))) throw new Error("devtools endpoint never opened");
+    if (!(await waitForEndpoint(PORT)))
+      throw new Error("devtools endpoint never opened");
 
-    const version = await fetch(`http://127.0.0.1:${PORT}/json/version`).then((r) => r.json());
+    const version = await fetch(`http://127.0.0.1:${PORT}/json/version`).then((r) =>
+      r.json(),
+    );
     const browser = await Cdp.open(version.webSocketDebuggerUrl);
 
     /* ------------------------------------------------------------------ */
@@ -259,7 +277,9 @@ async function main() {
 
     check(
       "a whisper paints exactly one 4px square in the gutter",
-      gutter.count === 1 && Math.round(gutter.width) === 4 && Math.round(gutter.height) === 4,
+      gutter.count === 1 &&
+        Math.round(gutter.width) === 4 &&
+        Math.round(gutter.height) === 4,
       `${gutter.count} dot(s), ${gutter.width}x${gutter.height}px, ${gutter.color}`,
     );
 
@@ -281,9 +301,7 @@ async function main() {
 
     check(
       "no speed counters leak into the status bar",
-      await desk.evaluate(
-        `!/\\d+\\s?(ms|µs|μs|fps)/i.test(document.body.innerText)`,
-      ),
+      await desk.evaluate(`!/\\d+\\s?(ms|µs|μs|fps)/i.test(document.body.innerText)`),
     );
 
     check(
@@ -361,15 +379,19 @@ async function main() {
     const palette = await newPage(browser, "#palette/cit");
     await shoot(palette, "5-palette");
 
-    check("palette query is applied from the deep link", (await palette.evaluate(
-      `document.getElementById("palette-query")?.value`,
-    )) === "cit");
+    check(
+      "palette query is applied from the deep link",
+      (await palette.evaluate(`document.getElementById("palette-query")?.value`)) ===
+        "cit",
+    );
 
     check(
       "the best fuzzy match is the selected row",
-      (await palette.evaluate(
-        `document.querySelector('[role="option"][aria-selected="true"]')?.textContent ?? ''`,
-      )).includes("Verify citations") === true,
+      (
+        await palette.evaluate(
+          `document.querySelector('[role="option"][aria-selected="true"]')?.textContent ?? ''`,
+        )
+      ).includes("Verify citations") === true,
     );
 
     check(
@@ -437,7 +459,12 @@ async function main() {
       const point = (fx, fy) => ({ x: box.x + box.w * fx, y: box.y + box.h * fy });
       const a = point(0.3, 0.6);
       const b = point(0.45, 0.75);
-      const common = { button: "left", pointerType: "mouse", clickCount: 1, buttons: 1 };
+      const common = {
+        button: "left",
+        pointerType: "mouse",
+        clickCount: 1,
+        buttons: 1,
+      };
       await canvas.send("Input.dispatchMouseEvent", {
         type: "mousePressed",
         ...common,
@@ -488,19 +515,25 @@ async function main() {
         (await slides.evaluate(`document.body.innerText.includes("SLIDE 3 / 6")`)),
     );
 
-    check("slide frame is 16:9", await slides.evaluate(`(() => {
+    check(
+      "slide frame is 16:9",
+      await slides.evaluate(`(() => {
       const el = [...document.querySelectorAll("div")].find((d) =>
         d.className.includes("aspect-video"),
       );
       if (!el) return false;
       const r = el.getBoundingClientRect();
       return Math.abs(r.width / r.height - 16 / 9) < 0.02;
-    })()`));
+    })()`),
+    );
 
-    check("ArrowRight advances the deck", await (async () => {
-      await pressKey(slides, "ArrowRight", 39);
-      return slides.evaluate(`document.body.innerText.includes("SLIDE 4 / 6")`);
-    })());
+    check(
+      "ArrowRight advances the deck",
+      await (async () => {
+        await pressKey(slides, "ArrowRight", 39);
+        return slides.evaluate(`document.body.innerText.includes("SLIDE 4 / 6")`);
+      })(),
+    );
 
     /* ------------------------------------------------------------------ */
     process.stdout.write("\nInstrument shelf\n");
@@ -508,33 +541,42 @@ async function main() {
     const shelf = await newPage(browser, "#shelf");
     await shoot(shelf, "4-shelf");
 
-    check("every capability summary is reachable on hover", await shelf.evaluate(`(() => {
+    check(
+      "every capability summary is reachable on hover",
+      await shelf.evaluate(`(() => {
       const cards = [...document.querySelectorAll("li.group")];
       return cards.length === 6 && cards.every((c) => c.innerHTML.includes("Net:"));
-    })()`));
+    })()`),
+    );
 
-    check("an essential instrument cannot be disabled", await (async () => {
-      await shelf.evaluate(`(() => {
+    check(
+      "an essential instrument cannot be disabled",
+      await (async () => {
+        await shelf.evaluate(`(() => {
         const sw = [...document.querySelectorAll('[role="switch"]')][0];
         sw.click();
       })()`);
-      await sleep(200);
-      return shelf.evaluate(
-        `[...document.querySelectorAll('[role="switch"]')][0].getAttribute("aria-checked") === "true"`,
-      );
-    })());
+        await sleep(200);
+        return shelf.evaluate(
+          `[...document.querySelectorAll('[role="switch"]')][0].getAttribute("aria-checked") === "true"`,
+        );
+      })(),
+    );
 
-    check("a plugin instrument toggles", await (async () => {
-      const before = await shelf.evaluate(
-        `[...document.querySelectorAll('[role="switch"]')][1].getAttribute("aria-checked")`,
-      );
-      await shelf.evaluate(`document.querySelectorAll('[role="switch"]')[1].click()`);
-      await sleep(200);
-      const after = await shelf.evaluate(
-        `[...document.querySelectorAll('[role="switch"]')][1].getAttribute("aria-checked")`,
-      );
-      return before !== after;
-    })());
+    check(
+      "a plugin instrument toggles",
+      await (async () => {
+        const before = await shelf.evaluate(
+          `[...document.querySelectorAll('[role="switch"]')][1].getAttribute("aria-checked")`,
+        );
+        await shelf.evaluate(`document.querySelectorAll('[role="switch"]')[1].click()`);
+        await sleep(200);
+        const after = await shelf.evaluate(
+          `[...document.querySelectorAll('[role="switch"]')][1].getAttribute("aria-checked")`,
+        );
+        return before !== after;
+      })(),
+    );
 
     /* ------------------------------------------------------------------ */
     process.stdout.write("\nZen mode\n");
@@ -542,28 +584,38 @@ async function main() {
     const zen = await newPage(browser, "#zen");
     await shoot(zen, "7-zen");
 
-    check("zen dissolves every chrome element", await zen.evaluate(`(() => {
+    check(
+      "zen dissolves every chrome element",
+      await zen.evaluate(`(() => {
       return document.querySelector("header") === null &&
              document.querySelector("footer") === null &&
              document.querySelector("nav") === null;
-    })()`));
+    })()`),
+    );
 
-    check("reading column is 680px", await zen.evaluate(`(() => {
+    check(
+      "reading column is 680px",
+      await zen.evaluate(`(() => {
       const article = document.querySelector("article");
       if (!article) return false;
       return Math.round(article.getBoundingClientRect().width) === 680;
-    })()`));
+    })()`),
+    );
 
     /* ------------------------------------------------------------------ */
     process.stdout.write("\nOverlays\n");
 
-    check("overlays do not darken what sits behind them", await library.evaluate(`(() => {
+    check(
+      "overlays do not darken what sits behind them",
+      await library.evaluate(`(() => {
       const pane = document.querySelector("main");
       return pane !== null &&
              !getComputedStyle(pane).filter.includes("brightness");
-    })()`));
+    })()`),
+    );
 
-    for (const page of [desk, library, palette, canvas, slides, shelf, zen]) page.close();
+    for (const page of [desk, library, palette, canvas, slides, shelf, zen])
+      page.close();
     browser.close();
   } finally {
     child.kill("SIGTERM");
