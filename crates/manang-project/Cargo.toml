@@ -7,7 +7,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 # gix 0.89 requires Rust 1.88.
-rust-version = "1.88"
+rust-version.workspace = true
 
 [dependencies]
 gix = { version = "0.89", default-features = false, features = ["sha1", "status", "index"] }

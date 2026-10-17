@@ -9,7 +9,7 @@ edition = "2024"
 license = "MIT"
 authors = ["Fundaments.work"]
 repository = "https://github.com/Fundaments-Work/Manang"
-rust-version = "1.85"
+rust-version = "1.90"
 
 [workspace.dependencies]
 tauri = { version = "2", features = [] }
