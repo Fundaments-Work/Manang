@@ -189,3 +189,42 @@ pub fn render_svg(scene: &FigureScene, options: &SvgExportOptions) -> String;
   - Primary text `--mng-text` achieves $> 13.7:1$ (exceeds WCAG AAA 7:1) across all light surfaces.
 - **Automated Verification:** Added `src/lib/theme/contrast.test.ts` to Vitest, which dynamically reads `src/app.css`, extracts the `.theme-light` tokens, and computes exact WCAG 2.1 relative luminance and contrast ratios.
 
+---
+
+## Task 4: UI Coverage Expansion Across Seven Screens
+
+- **Files Modified/Created:**
+  - `scripts/verify-ui.mjs` (extended with 36 headless CDP checks covering all seven screens)
+  - `src/lib/components/screens.test.ts` (10 Vitest architectural and route contracts tests)
+  - `e2e/screens.spec.ts` (Playwright end-to-end test suite)
+  - `docs/notes/ag-findings.md` (report on unbound method tear-offs in `DeskHeader.svelte`)
+- **Coverage Details:**
+  1. **Command Palette (`Cmd+K` / `/`):**
+     - Slash key `/` from Desk opens the palette dialog.
+     - Deep-linked query pre-population (`#palette/cit`).
+     - Fuzzy matching and ranking (top match selected).
+     - Keyboard navigation with `ArrowDown` / `ArrowUp` selection movement.
+     - Section separation: AI Actions before Plugins & Commands.
+     - `Escape` dismisses the palette and restores focus.
+  2. **Document Switching:**
+     - In Library Shelf, clicking a document (e.g. `01_formalism.typ`) activates the document and transfers `aria-current="true"`.
+     - Active document border carries the 2px Acid lime boundary (`rgb(198, 241, 53)`).
+     - Tree filtering works via `#library-filter`.
+  3. **Vector Ink Overlay (`/draw`):**
+     - Breadcrumb bar displays exact figure path `figures / vectors / state_lattice.svg`.
+     - Pen tray tool switching activates Geometry, Arrow, and Math modes (`aria-pressed="true"`).
+     - Drawing with pen commits stroke nodes to the typed SVG scene graph.
+     - Done button closes the overlay and restores the Desk.
+  4. **Slide Studio & Carousel (`#slides`):**
+     - Deep-link selects slide (`#slides/2` -> Slide 3 / 6).
+     - 16:9 aspect ratio enforcement on slide frame.
+     - Carousel renders all 6 slide preview buttons.
+     - Clicking a carousel thumbnail navigates directly to that slide.
+     - Bidirectional navigation with `ArrowRight` and `ArrowLeft`.
+     - Close button dismisses presentation studio and returns to the Desk.
+  5. **Desk, Instrument Shelf, Zen Mode & Overlays:**
+     - Margin whisper 4px square gutter placement on broken reference line (`@landauer1961`).
+     - Essential instruments cannot be disabled; plugin instruments toggle.
+     - Zen mode dissolves header, footer, and nav, presenting a 680px reading column.
+     - Overlays preserve background clarity without artificial brightness darkening.
+

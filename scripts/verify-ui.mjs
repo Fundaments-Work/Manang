@@ -332,6 +332,18 @@ async function main() {
         "rgb(20, 20, 22)",
     );
 
+    check(
+      "slash key from desk opens command palette",
+      await (async () => {
+        await pressKey(desk, "/", 191);
+        await sleep(250);
+        const isOpen = await desk.evaluate(`document.querySelector('[role="dialog"]') !== null`);
+        await pressKey(desk, "Escape", 27);
+        await sleep(250);
+        return isOpen;
+      })(),
+    );
+
     /* ------------------------------------------------------------------ */
     process.stdout.write("\nLibrary shelf\n");
 
@@ -354,7 +366,7 @@ async function main() {
         const active = document.querySelector('[aria-current="true"]');
         if (!active) return false;
         const s = getComputedStyle(active);
-        return s.borderLeftWidth === "2px" && s.borderLeftColor === "rgb(56, 189, 248)";
+        return s.borderLeftWidth === "2px" && s.borderLeftColor === "rgb(198, 241, 53)";
       })()`),
     );
 
@@ -370,6 +382,37 @@ async function main() {
         return library.evaluate(
           `document.querySelectorAll('nav[aria-label="Project files"] button').length === 1`,
         );
+      })(),
+    );
+
+    check(
+      "document switching activates selected document and transfers lime boundary",
+      await (async () => {
+        await library.evaluate(`(() => {
+          const input = document.getElementById("library-filter");
+          if (input) {
+            input.value = "";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        })()`);
+        await sleep(200);
+        const switched = await library.evaluate(`(() => {
+          const buttons = [...document.querySelectorAll('nav[aria-label="Project files"] button')];
+          const target = buttons.find((b) => b.textContent.includes("01_formalism.typ"));
+          if (!target) return false;
+          target.click();
+          return true;
+        })()`);
+        if (!switched) return false;
+        await sleep(200);
+        return library.evaluate(`(() => {
+          const active = document.querySelector('[aria-current="true"]');
+          if (!active) return false;
+          const s = getComputedStyle(active);
+          return active.textContent.includes("01_formalism.typ") &&
+                 s.borderLeftWidth === "2px" &&
+                 s.borderLeftColor === "rgb(198, 241, 53)";
+        })()`);
       })(),
     );
 
@@ -417,6 +460,15 @@ async function main() {
           .map((h) => h.textContent.trim());
         return names[0] === "AI Actions" && names[1] === "Plugins & Commands";
       })()`),
+    );
+
+    check(
+      "Escape key dismisses command palette",
+      await (async () => {
+        await pressKey(palette, "Escape", 27);
+        await sleep(250);
+        return palette.evaluate(`document.querySelector('[role="dialog"]') === null`);
+      })(),
     );
 
     /* ------------------------------------------------------------------ */
@@ -499,6 +551,52 @@ async function main() {
       `${drew.before} -> ${drew.after} path elements`,
     );
 
+    check(
+      "header displays accurate figure breadcrumb path",
+      await canvas.evaluate(`(() => {
+        const span = document.querySelector('header span.font-mono');
+        return span?.textContent?.includes("figures / vectors / state_lattice.svg") ?? false;
+      })()`),
+    );
+
+    check(
+      "pen tray tool switching activates Geometry mode",
+      await (async () => {
+        const switched = await canvas.evaluate(`(() => {
+          const geom = [...document.querySelectorAll('[role="toolbar"] button')].find((b) =>
+            b.textContent.includes("Geometry"),
+          );
+          if (!geom) return false;
+          geom.click();
+          return true;
+        })()`);
+        if (!switched) return false;
+        await sleep(200);
+        return canvas.evaluate(`(() => {
+          const geom = [...document.querySelectorAll('[role="toolbar"] button')].find((b) =>
+            b.textContent.includes("Geometry"),
+          );
+          return geom?.getAttribute("aria-pressed") === "true";
+        })()`);
+      })(),
+    );
+
+    check(
+      "Done button closes ink canvas overlay and restores desk",
+      await (async () => {
+        await canvas.evaluate(`(() => {
+          const done = [...document.querySelectorAll("header button")].find((b) =>
+            b.textContent.includes("Done"),
+          );
+          done?.click();
+        })()`);
+        await sleep(300);
+        return canvas.evaluate(
+          `document.querySelector('section[aria-label="Vector ink canvas"]') === null`,
+        );
+      })(),
+    );
+
     /* ------------------------------------------------------------------ */
     process.stdout.write("\nPresentation studio\n");
 
@@ -528,10 +626,48 @@ async function main() {
     );
 
     check(
-      "ArrowRight advances the deck",
+      "slide carousel renders all 6 slide preview buttons",
+      (await slides.evaluate(
+        `document.querySelectorAll('nav[aria-label="Slides"] button').length`,
+      )) === 6,
+    );
+
+    check(
+      "clicking slide thumbnail navigates directly to that slide",
+      await (async () => {
+        await slides.evaluate(`(() => {
+          const thumbs = [...document.querySelectorAll('nav[aria-label="Slides"] button')];
+          thumbs[0]?.click();
+        })()`);
+        await sleep(200);
+        return slides.evaluate(`document.body.innerText.includes("SLIDE 1 / 6")`);
+      })(),
+    );
+
+    check(
+      "ArrowRight and ArrowLeft traverse slide deck bidirectionally",
       await (async () => {
         await pressKey(slides, "ArrowRight", 39);
-        return slides.evaluate(`document.body.innerText.includes("SLIDE 4 / 6")`);
+        await sleep(150);
+        const forward = await slides.evaluate(`document.body.innerText.includes("SLIDE 2 / 6")`);
+        await pressKey(slides, "ArrowLeft", 37);
+        await sleep(150);
+        const backward = await slides.evaluate(`document.body.innerText.includes("SLIDE 1 / 6")`);
+        return forward && backward;
+      })(),
+    );
+
+    check(
+      "close button exits presentation studio and restores desk",
+      await (async () => {
+        await slides.evaluate(`(() => {
+          const close = document.querySelector('button[aria-label="Close presentation studio"]');
+          close?.click();
+        })()`);
+        await sleep(300);
+        return slides.evaluate(
+          `document.querySelector('section[aria-label="Presentation studio"]') === null`,
+        );
       })(),
     );
 
