@@ -3,11 +3,16 @@
  * Problems panel, the status bar and the editor gutter.
  */
 
+import type { Text } from "@codemirror/state";
+
 import type { Diagnostic } from "$lib/editor/diagnostics";
+import type { LintFinding } from "$lib/editor/writing/bus";
 import { toEditorDiagnostics, type LintItem } from "$lib/kernel/lint";
+import { scalarLength } from "$lib/kernel/offsets";
 import type { CompileReport, WireDiagnostic } from "$lib/kernel/types";
 
-export type Severity = "error" | "warning";
+/** `info` is style advice from the writing tools; it ranks below warnings. */
+export type Severity = "error" | "warning" | "info";
 
 export interface Problem {
   readonly id: string;
@@ -19,6 +24,10 @@ export interface Problem {
   readonly line: number | null;
   readonly column: number | null;
   readonly hints: readonly string[];
+  /** Who reported it: "writing" for prose lint; absent for compiler diagnostics. */
+  readonly source?: string;
+  /** Rule id of a writing finding, e.g. `repeated-word`. */
+  readonly code?: string;
 }
 
 export interface Counts {
@@ -50,11 +59,36 @@ export function fromReport(report: CompileReport): Problem[] {
   return fromWire(report.diagnostics);
 }
 
+const RANK: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+
+/** Prose-lint findings of `file` as problems, placed by line and scalar column. */
+export function fromWriting(
+  file: string,
+  doc: Pick<Text, "lineAt">,
+  findings: readonly LintFinding[],
+): Problem[] {
+  return findings.map((finding, index) => {
+    const line = doc.lineAt(finding.from);
+    const column = scalarLength(line.text.slice(0, finding.from - line.from)) + 1;
+    return {
+      id: `writing:${index}:${finding.from}:${finding.code}`,
+      severity: finding.severity,
+      message: finding.message,
+      file,
+      line: line.number,
+      column,
+      hints: finding.hints,
+      source: "writing",
+      code: finding.code,
+    };
+  });
+}
+
 /** Errors first, then by file and position. */
 export function sortProblems(problems: readonly Problem[]): Problem[] {
   return [...problems].sort(
     (a, b) =>
-      (a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1) ||
+      RANK[a.severity] - RANK[b.severity] ||
       a.file.localeCompare(b.file) ||
       (a.line ?? 0) - (b.line ?? 0) ||
       (a.column ?? 0) - (b.column ?? 0),
@@ -66,7 +100,7 @@ export function countProblems(problems: readonly Problem[]): Counts {
   let warnings = 0;
   for (const problem of problems) {
     if (problem.severity === "error") errors += 1;
-    else warnings += 1;
+    else if (problem.severity === "warning") warnings += 1;
   }
   return { errors, warnings };
 }
@@ -90,12 +124,13 @@ export function problemsIn(problems: readonly Problem[], file: string): Problem[
 export function toGutter(text: string, problems: readonly Problem[]): Diagnostic[] {
   const items: LintItem[] = [];
   for (const problem of problems) {
-    if (problem.line === null) continue;
+    // Writing findings are underlined in the text, not marked in the gutter.
+    if (problem.line === null || problem.source === "writing") continue;
     items.push({
       file: problem.file,
       line: problem.line,
       column: problem.column ?? 1,
-      severity: problem.severity,
+      severity: problem.severity === "error" ? "error" : "warning",
       message: problem.message,
     });
   }
