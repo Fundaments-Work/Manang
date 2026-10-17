@@ -1,0 +1,41 @@
+[plugin]
+name = "editor"
+version = "0.1.0"
+description = "Document store, edits and the active-buffer service"
+tier = "native"
+
+[permissions]
+buffer = ["write:active"]
+
+[contributes]
+[[contributes.commands]]
+id = "editor.new"
+title = "New document"
+
+[[contributes.commands]]
+id = "editor.open"
+title = "Open document"
+
+[[contributes.commands]]
+id = "editor.save"
+title = "Save document"
+
+[[contributes.commands]]
+id = "editor.activate"
+title = "Switch document"
+
+[[contributes.commands]]
+id = "editor.insert"
+title = "Insert text"
+
+[[contributes.commands]]
+id = "editor.delete"
+title = "Delete range"
+
+[[contributes.commands]]
+id = "editor.text"
+title = "Read document text"
+
+[[contributes.commands]]
+id = "editor.info"
+title = "Document info"

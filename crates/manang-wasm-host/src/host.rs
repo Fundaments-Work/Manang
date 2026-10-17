@@ -2,18 +2,10 @@
 
 use std::sync::Arc;
 
-use manang_kernel::{Access, Capability, CapabilitySet};
+use manang_kernel::{Access, BufferService, Capability, CapabilitySet};
 use wasmtime::StoreLimits;
 
 use crate::runtime::bindings::manang::plugin::{buffer, types::Failure};
-
-/// The active document buffer, as the editor exposes it to plugins.
-///
-/// Implemented by the editor plugin; the WASM host only brokers access.
-pub trait BufferService: Send + Sync {
-    fn read_active(&self) -> Result<String, String>;
-    fn write_active(&self, text: &str) -> Result<(), String>;
-}
 
 /// Per-call store state.
 pub(crate) struct HostState {

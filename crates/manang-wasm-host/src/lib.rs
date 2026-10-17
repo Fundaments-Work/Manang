@@ -17,6 +17,6 @@ mod limits;
 mod runtime;
 
 pub use error::WasmError;
-pub use host::BufferService;
 pub use limits::Limits;
+pub use manang_kernel::BufferService;
 pub use runtime::{WasmPlugin, WasmRuntime};

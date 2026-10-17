@@ -18,6 +18,7 @@ pub mod kernel;
 pub mod manifest;
 pub mod payload;
 pub mod plugin;
+pub mod services;
 
 pub use capability::{Access, Capability, CapabilitySet};
 pub use error::{CapabilityError, KernelError, ManifestError, PluginError};
@@ -25,3 +26,4 @@ pub use kernel::{CommandInfo, Kernel};
 pub use manifest::{CommandSpec, Contributes, Hook, HookMode, Manifest, PluginMeta, Tier};
 pub use payload::Payload;
 pub use plugin::{Context, Plugin};
+pub use services::BufferService;
