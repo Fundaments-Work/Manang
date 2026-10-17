@@ -113,6 +113,18 @@ fn build_kernel(
         manang_git::manifest()?,
         Arc::new(manang_git::plugin(Some(events.clone()))),
     )?;
+    kernel.register(
+        manang_writing::manifest()?,
+        Arc::new(manang_writing::plugin(dirs.config.to_path_buf())),
+    )?;
+    kernel.register(
+        manang_markdown::manifest()?,
+        Arc::new(manang_markdown::plugin()),
+    )?;
+    kernel.register(
+        manang_citations::manifest()?,
+        Arc::new(manang_citations::plugin()),
+    )?;
     // One settings implementation serves three command namespaces.
     let settings = Arc::new(manang_settings::plugin(
         dirs.config.to_path_buf(),

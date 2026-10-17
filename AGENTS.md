@@ -177,7 +177,7 @@ Agents (and humans) work in parallel on one machine with limited CPU and disk. A
 
 ### 7.4. Dependencies and toolchain
 * The npm `@tauri-apps/*` packages and the Rust `tauri*` crates must be on the **same major.minor**. Upgrade both together; `tauri dev` refuses to start on a mismatch.
-* The workspace MSRV is `rust-version = "1.90"` (required by current Tauri). Crates inherit it with `rust-version.workspace = true`; do not pin lower values per crate, they force the resolver to older versions.
+* The workspace MSRV is `rust-version = "1.92"` (Tauri needs 1.90, typstyle-core 1.92). Crates inherit it with `rust-version.workspace = true`; do not pin lower values per crate, they force the resolver to older versions.
 * Verify a crate version exists on crates.io before pinning it; prefer stable releases over release candidates.
 * **Never link a crate that statically bundles a system library (HarfBuzz, ICU, FreeType, OpenSSL...) into the app binary.** Its symbols override the system copies GTK/WebKit use and crash the app at startup (this happened with Tectonic). Such engines run in a sidecar process behind a cargo feature (`manang-latex` feature `engine` builds `manang-latex-worker`). Check with `cargo tree -p manang | grep -iE "tectonic|harfbuzz"`, which must be empty.
 * Do not change anything at system level (packages, system config, environment, files outside the repo and the app's own data dirs) as part of development work.
@@ -186,5 +186,5 @@ Agents (and humans) work in parallel on one machine with limited CPU and disk. A
 * Every feature is a plugin crate under `crates/manang-<name>` exposing `manifest()` and `plugin(..)`, registered in `src-tauri/src/lib.rs`, with kernel-driven integration tests. Third-party plugins are WASM components (ADR 0003).
 * Command ids are `<plugin>.<command>`; a plugin may only provide commands under its own name.
 * UI vocabulary is fixed: **Files, Search, Figures, References, Plugins, Problems, Output, Settings**. Do not reintroduce Desk / Library Shelf / Instrument Shelf / Whispers.
-* Clippy runs with let-chains enabled (edition 2024, MSRV 1.90): write `if let .. && ..` instead of nested `if let`.
+* Clippy runs with let-chains enabled (edition 2024, MSRV 1.92): write `if let .. && ..` instead of nested `if let`.
 

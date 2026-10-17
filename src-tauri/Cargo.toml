@@ -31,5 +31,8 @@ manang-search = { path = "../crates/manang-search" }
 manang-git = { path = "../crates/manang-git" }
 manang-settings = { path = "../crates/manang-settings" }
 manang-figure = { path = "../crates/manang-figure" }
+manang-writing = { path = "../crates/manang-writing" }
+manang-markdown = { path = "../crates/manang-markdown" }
+manang-citations = { path = "../crates/manang-citations" }
 manang-plugins = { path = "../crates/manang-plugins" }
 manang-wasm-host = { path = "../crates/manang-wasm-host" }

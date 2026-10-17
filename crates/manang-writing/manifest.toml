@@ -1,0 +1,69 @@
+[plugin]
+name = "writing"
+version = "0.1.0"
+description = "Writing tools: formatting, spell check, prose lint, symbols, snippets and statistics"
+tier = "native"
+
+[permissions]
+# The user dictionary and snippets live in the config directory the host
+# injects; the plugin never discovers that path itself.
+filesystem = ["read:config", "write:config"]
+
+[contributes]
+hooks = ["on_lint"]
+
+[[contributes.commands]]
+id = "writing.format.document"
+title = "Format document"
+
+[[contributes.commands]]
+id = "writing.format.range"
+title = "Format selection"
+
+[[contributes.commands]]
+id = "writing.spell.check"
+title = "Check spelling"
+
+[[contributes.commands]]
+id = "writing.spell.suggest"
+title = "Suggest spellings"
+
+[[contributes.commands]]
+id = "writing.spell.add-word"
+title = "Add word to user dictionary"
+
+[[contributes.commands]]
+id = "writing.spell.remove-word"
+title = "Remove word from user dictionary"
+
+[[contributes.commands]]
+id = "writing.spell.words"
+title = "List user dictionary words"
+
+[[contributes.commands]]
+id = "writing.spell.languages"
+title = "List spelling languages"
+
+[[contributes.commands]]
+id = "writing.lint.prose"
+title = "Lint prose"
+
+[[contributes.commands]]
+id = "writing.symbols.search"
+title = "Search math symbols"
+
+[[contributes.commands]]
+id = "writing.snippets.list"
+title = "List snippets"
+
+[[contributes.commands]]
+id = "writing.snippets.get"
+title = "Get snippet"
+
+[[contributes.commands]]
+id = "writing.snippets.expand"
+title = "Expand snippet"
+
+[[contributes.commands]]
+id = "writing.stats.count"
+title = "Word count and statistics"
