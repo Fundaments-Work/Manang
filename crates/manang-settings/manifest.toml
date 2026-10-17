@@ -1,0 +1,65 @@
+[plugin]
+name = "settings"
+version = "0.1.0"
+description = "Typed settings registry, layered user/project values, keybindings and themes"
+tier = "native"
+
+[permissions]
+filesystem = ["write:config", "write:project"]
+
+[contributes]
+[[contributes.commands]]
+id = "settings.get"
+title = "Read settings"
+
+[[contributes.commands]]
+id = "settings.set"
+title = "Change a setting"
+
+[[contributes.commands]]
+id = "settings.reset"
+title = "Reset a setting to its default"
+
+[[contributes.commands]]
+id = "settings.schema"
+title = "Settings schema"
+
+[[contributes.commands]]
+id = "settings.register"
+title = "Register plugin settings"
+
+[[contributes.commands]]
+id = "settings.open-file"
+title = "Open settings file"
+
+[[contributes.commands]]
+id = "settings.use-project"
+title = "Select the project whose settings layer applies"
+
+[[contributes.commands]]
+id = "keybindings.list"
+title = "List keybindings"
+
+[[contributes.commands]]
+id = "keybindings.resolve"
+title = "Resolve a key press to a command"
+
+[[contributes.commands]]
+id = "keybindings.set"
+title = "Rebind a command"
+
+[[contributes.commands]]
+id = "keybindings.reset"
+title = "Reset keybindings"
+
+[[contributes.commands]]
+id = "keybindings.register"
+title = "Register plugin keybindings"
+
+[[contributes.commands]]
+id = "theme.list"
+title = "List themes"
+
+[[contributes.commands]]
+id = "theme.get"
+title = "Read a theme"

@@ -1,0 +1,29 @@
+[package]
+name = "manang-settings"
+description = "Manang's first-party settings plugin: typed settings registry, layered TOML values, keybindings and themes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version = "1.88"
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+notify = "8.2"
+notify-debouncer-full = "0.7"
+parking_lot = "0.12"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = "3"
+thiserror = { workspace = true }
+toml_edit = "0.25"
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+insta = { version = "1", features = ["json"] }
+proptest = "1"
+
+[[bench]]
+name = "resolve"
+harness = false

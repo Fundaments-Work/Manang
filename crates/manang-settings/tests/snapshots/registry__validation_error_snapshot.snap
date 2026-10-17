@@ -1,0 +1,16 @@
+---
+source: crates/manang-settings/tests/registry.rs
+expression: out
+---
+[
+    "`editor.font-size` is 99, above the maximum 48",
+    "`editor.font-size` is 2, below the minimum 8",
+    "`editor.font-size` must be an integer, found a number with a fraction",
+    "`editor.font-size` must be an integer, found a string",
+    "`editor.line-height` is 0.2, below the minimum 1",
+    "`appearance.theme` must be one of dark, light, system, found `sepia`",
+    "`appearance.theme` must be a string, found a number",
+    "`editor.word-wrap` must be a boolean, found a string",
+    "`preview.debounce-ms` must be an integer, found null",
+    "`appearance.ui-scale` must be a number, found an array",
+]
