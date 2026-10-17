@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::capability::CapabilitySet;
 use crate::error::KernelError;
+use crate::error::PluginError;
 use crate::manifest::{Hook, HookMode, Manifest};
 use crate::payload::Payload;
 use crate::plugin::{Context, Plugin};
@@ -79,7 +80,67 @@ impl Kernel {
         Ok(())
     }
 
+    /// Atomically swap the plugin registered under `manifest.plugin.name`.
+    ///
+    /// Used for hot reload. Calls already running keep their own `Arc` to the
+    /// old plugin and finish on it; calls that start after this returns see the
+    /// new one. The plugin keeps its place in hook pipeline order. On error the
+    /// old plugin stays registered untouched.
+    pub fn replace(&self, manifest: Manifest, plugin: Arc<dyn Plugin>) -> Result<(), KernelError> {
+        manifest.validate()?;
+        let capabilities = manifest.capabilities()?;
+        let name = manifest.plugin.name.clone();
+
+        let mut reg = self.registry.write();
+        let old = reg
+            .plugins
+            .get(&name)
+            .cloned()
+            .ok_or_else(|| KernelError::UnknownPlugin(name.clone()))?;
+        for command in &manifest.contributes.commands {
+            if let Some(owner) = reg.commands.get(&command.id) {
+                if owner != &name {
+                    return Err(KernelError::CommandTaken {
+                        command: command.id.clone(),
+                        owner: owner.clone(),
+                    });
+                }
+            }
+        }
+        for command in &old.manifest.contributes.commands {
+            reg.commands.remove(&command.id);
+        }
+        for command in &manifest.contributes.commands {
+            reg.commands.insert(command.id.clone(), name.clone());
+        }
+        reg.plugins.insert(
+            name,
+            Arc::new(Entry {
+                manifest,
+                capabilities,
+                plugin,
+            }),
+        );
+        Ok(())
+    }
+
+    /// Names of every registered plugin, in registration order.
+    pub fn plugin_names(&self) -> Vec<String> {
+        self.registry.read().order.clone()
+    }
+
+    /// A copy of a registered plugin's manifest.
+    pub fn manifest(&self, name: &str) -> Option<Manifest> {
+        self.registry
+            .read()
+            .plugins
+            .get(name)
+            .map(|e| e.manifest.clone())
+    }
+
     /// Remove a plugin and everything it contributed.
+    ///
+    /// Calls already running finish on the removed plugin.
     pub fn unregister(&self, name: &str) -> Result<(), KernelError> {
         let mut reg = self.registry.write();
         let entry = reg
@@ -140,11 +201,11 @@ impl Kernel {
 
     /// Dispatch a hook to its subscribers.
     ///
-    /// [`HookMode::Pipeline`] hooks return one payload (the last output);
-    /// [`HookMode::FanOut`] hooks return one `(plugin, payload)` per
-    /// subscriber. Either way the result is a list of `(plugin, payload)`:
-    /// pipelines yield at most one entry. The first failing subscriber aborts
-    /// a pipeline; a fan-out reports each subscriber's own result.
+    /// The result is a list of `(plugin, payload)`: a
+    /// [`HookMode::Pipeline`] yields at most one entry (the last output), a
+    /// [`HookMode::FanOut`] one entry per subscriber. The first failing
+    /// subscriber aborts either. Use [`Kernel::run_hook_each`] when one broken
+    /// plugin must not hide the others' results.
     pub fn run_hook(
         &self,
         hook: Hook,
@@ -171,5 +232,32 @@ impl Kernel {
                 })
                 .collect(),
         }
+    }
+
+    /// Like [`Kernel::run_hook`] but never aborts early: every subscriber
+    /// reports its own result. A pipeline passes a failing subscriber's input
+    /// through unchanged so later stages still run.
+    pub fn run_hook_each(
+        &self,
+        hook: Hook,
+        input: Payload,
+    ) -> Vec<(String, Result<Payload, PluginError>)> {
+        let subscribers = self.subscribers(hook);
+        let mut current = input.clone();
+        subscribers
+            .into_iter()
+            .map(|entry| {
+                let ctx = Context::new(&entry.manifest.plugin.name, &entry.capabilities);
+                let arg = match hook.mode() {
+                    HookMode::Pipeline => current.clone(),
+                    HookMode::FanOut => input.clone(),
+                };
+                let out = entry.plugin.on_hook(&ctx, hook, arg);
+                if let (HookMode::Pipeline, Ok(next)) = (hook.mode(), &out) {
+                    current = next.clone();
+                }
+                (entry.manifest.plugin.name.clone(), out)
+            })
+            .collect()
     }
 }

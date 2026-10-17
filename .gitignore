@@ -25,3 +25,12 @@ Thumbs.db
 .env
 .env.local
 .claude/
+# Guest fixtures and SDK crates build into their own target dirs
+**/echo-guest/target
+sdk/**/target
+plugins/**/target
+fuzz/target
+fuzz/corpus
+fuzz/artifacts
+sdk/**/dist
+plugins/**/dist

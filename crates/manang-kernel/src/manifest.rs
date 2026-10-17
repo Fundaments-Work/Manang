@@ -14,7 +14,7 @@ use crate::error::ManifestError;
 pub enum Tier {
     /// First-party, trusted, compiled into the binary.
     Native,
-    /// Third-party, sandboxed in Extism/Wasmtime. The safe default.
+    /// Third-party, sandboxed in Wasmtime. The safe default.
     #[default]
     Wasm,
 }
@@ -96,6 +96,11 @@ pub struct Manifest {
     pub contributes: Contributes,
 }
 
+/// Largest manifest the parser will look at.
+pub const MAX_MANIFEST_BYTES: usize = 64 * 1024;
+/// Most commands (or permission entries) one manifest may declare.
+pub const MAX_ENTRIES: usize = 256;
+
 fn valid_name(name: &str) -> bool {
     let mut chars = name.chars();
     chars.next().is_some_and(|c| c.is_ascii_lowercase())
@@ -103,9 +108,22 @@ fn valid_name(name: &str) -> bool {
         && !name.ends_with('-')
 }
 
+/// A relative, forward-slash path with no `..`, root or drive components.
+fn safe_entry(entry: &str) -> bool {
+    !entry.is_empty()
+        && !entry.starts_with('/')
+        && !entry.contains(['\\', '\0', ':'])
+        && entry
+            .split('/')
+            .all(|s| !s.is_empty() && s != "." && s != "..")
+}
+
 impl Manifest {
     /// Parse and fully validate a manifest.
     pub fn from_toml(source: &str) -> Result<Self, ManifestError> {
+        if source.len() > MAX_MANIFEST_BYTES {
+            return Err(ManifestError::TooLarge(source.len(), MAX_MANIFEST_BYTES));
+        }
         let manifest: Self = toml::from_str(source)?;
         manifest.validate()?;
         Ok(manifest)
@@ -116,6 +134,18 @@ impl Manifest {
         let name = &self.plugin.name;
         if !valid_name(name) {
             return Err(ManifestError::BadName(name.clone()));
+        }
+        if self.contributes.commands.len() > MAX_ENTRIES {
+            return Err(ManifestError::TooMany(MAX_ENTRIES, "commands"));
+        }
+        let p = &self.permissions;
+        if p.filesystem.len() + p.network.len() + p.buffer.len() > MAX_ENTRIES {
+            return Err(ManifestError::TooMany(MAX_ENTRIES, "permissions"));
+        }
+        if let Some(entry) = &self.plugin.entry {
+            if !safe_entry(entry) {
+                return Err(ManifestError::BadEntry(entry.clone()));
+            }
         }
         let prefix = format!("{name}.");
         let mut seen = HashSet::new();
@@ -226,6 +256,27 @@ title = "Export slides"
             Manifest::from_toml(&format!("{head}[permissions]\nsyscalls = [\"all\"]\n")).is_err()
         );
         assert!(Manifest::from_toml("[plugin]\nname = \"a\"\nversion = \"one\"\n").is_err());
+    }
+
+    #[test]
+    fn rejects_oversized_and_unsafe_entry() {
+        let big = format!(
+            "[plugin]\nname = \"a\"\nversion = \"1.0.0\"\n#{}\n",
+            "x".repeat(MAX_MANIFEST_BYTES)
+        );
+        assert!(matches!(
+            Manifest::from_toml(&big),
+            Err(ManifestError::TooLarge(..))
+        ));
+        for entry in ["../x.wasm", "/abs.wasm", "a//b", "C:\\x", "a\\b", ""] {
+            let src = format!("[plugin]\nname = \"a\"\nversion = \"1.0.0\"\nentry = {entry:?}\n");
+            assert!(
+                matches!(Manifest::from_toml(&src), Err(ManifestError::BadEntry(_))),
+                "{entry}"
+            );
+        }
+        let ok = "[plugin]\nname = \"a\"\nversion = \"1.0.0\"\nentry = \"bin/p.wasm\"\n";
+        assert!(Manifest::from_toml(ok).is_ok());
     }
 
     #[test]

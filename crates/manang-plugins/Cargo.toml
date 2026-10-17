@@ -1,0 +1,25 @@
+[package]
+name = "manang-plugins"
+description = "Discovery, loading and hot reload of Manang WASM plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+manang-wasm-host = { path = "../manang-wasm-host" }
+blake3 = "1.8"
+notify = "8"
+parking_lot = "0.12"
+rayon = "1.12"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = "3"
+wat = "1"
+wit-component = "0.262"
+wit-parser = "0.262"
