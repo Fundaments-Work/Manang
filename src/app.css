@@ -66,9 +66,9 @@
   --mng-text-muted: #9c9c9c;
 
   /* Lime fails on paper, so the light theme darkens it by mixing it toward
-   * ink. The brand page defines no light theme; contrast must be re-verified
-   * before this ships. Accent text always ships beside it. */
-  --mng-accent: color-mix(in srgb, #c6f135 40%, #1c1c1c);
+   * ink. Adjusted to 35% lime so both UI components (>= 3:1) and text (>= 4.5:1)
+   * achieve full WCAG AA contrast against all light surfaces. See ADR-0002. */
+  --mng-accent: color-mix(in srgb, #c6f135 35%, #1c1c1c);
   --mng-accent-ink: #faf9f7;
 
   /* Sage is unusable on paper. Mathematics falls back to ink with a hairline
