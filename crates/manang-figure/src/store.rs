@@ -657,13 +657,13 @@ impl FigureStore {
         let target = doc.path.clone().ok_or(FigureError::NoPath)?;
         let (json_path, svg_path) = resolve_figure_paths(&target);
 
-        if let Some(parent) = json_path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent).map_err(|source| FigureError::Io {
-                    path: parent.display().to_string(),
-                    source,
-                })?;
-            }
+        if let Some(parent) = json_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent).map_err(|source| FigureError::Io {
+                path: parent.display().to_string(),
+                source,
+            })?;
         }
 
         let json_text = doc.scene.to_json()?;

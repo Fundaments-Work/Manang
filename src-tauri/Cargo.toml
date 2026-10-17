@@ -27,5 +27,9 @@ manang-editor = { path = "../crates/manang-editor" }
 manang-project = { path = "../crates/manang-project" }
 manang-typst = { path = "../crates/manang-typst" }
 manang-latex = { path = "../crates/manang-latex" }
+manang-search = { path = "../crates/manang-search" }
+manang-git = { path = "../crates/manang-git" }
+manang-settings = { path = "../crates/manang-settings" }
+manang-figure = { path = "../crates/manang-figure" }
 manang-plugins = { path = "../crates/manang-plugins" }
 manang-wasm-host = { path = "../crates/manang-wasm-host" }
