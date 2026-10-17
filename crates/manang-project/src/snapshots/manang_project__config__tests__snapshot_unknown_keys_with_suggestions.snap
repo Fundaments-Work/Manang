@@ -1,0 +1,8 @@
+---
+source: crates/manang-project/src/config.rs
+expression: "err(\"[project]\\nengine = \\\"typst\\\"\\nmian = \\\"main.typ\\\"\\n\\n[bibliograpy]\\npaths = []\\n\\n[template]\\nid = \\\"a\\\"\\nversoin = \\\"1\\\"\\n\")"
+---
+manang.toml is invalid:
+  - `bibliograpy`: unknown key; did you mean `bibliography`? (valid keys in the top level: project, template, bibliography)
+  - `project.mian`: unknown key; did you mean `main`? (valid keys in [project]: engine, name, main)
+  - `template.versoin`: unknown key; did you mean `version`? (valid keys in [template]: id, version)
