@@ -82,6 +82,8 @@ export function createEditor(
   initialText: string,
   language: DocumentLanguage,
   callbacks: EditorCallbacks,
+  /** Extra extensions, e.g. the kernel sync listener. */
+  extra: Extension = [],
 ): EditorView {
   const languageCompartment = new Compartment();
 
@@ -116,6 +118,7 @@ export function createEditor(
     languageCompartment.of([]),
     manangTheme,
     whispers(callbacks.onFix),
+    extra,
 
     EditorView.updateListener.of((update) => {
       if (!update.docChanged) return;

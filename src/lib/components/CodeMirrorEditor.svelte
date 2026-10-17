@@ -1,6 +1,10 @@
 <script lang="ts">
   import { createEditor, syncDiagnostics } from "$lib/editor/view";
+  import { untrack } from "svelte";
+
+  import { kernelSyncExtension } from "$lib/editor/kernelSync";
   import { document } from "$lib/state/document.svelte";
+  import { session } from "$lib/state/session.svelte";
 
   /**
    * CodeMirror 6 mount.
@@ -18,12 +22,33 @@
   $effect(() => {
     if (host === undefined) return;
 
-    view = createEditor(host, document.text, document.meta.language, {
-      onChange: (text) => document.replace(text),
-      onFix: (text) => document.replace(text),
-    });
+    // The Rust editor plugin owns the document. User edits go to it as
+    // minimal commands; its own changes come back as tagged transactions.
+    // `untrack`: the initial text and language seed the view once. Reading them
+    // reactively here would rebuild the editor (and the kernel document) on
+    // every keystroke.
+    const seed = untrack(() => ({
+      text: document.text,
+      language: document.meta.language,
+    }));
+    const created = createEditor(
+      host,
+      seed.text,
+      seed.language,
+      {
+        onChange: (text) => {
+          document.replace(text);
+          session.scheduleLint();
+        },
+        onFix: (text) => document.replace(text),
+      },
+      kernelSyncExtension(session.sync),
+    );
+    view = created;
+    const detach = untrack(() => session.attach(created));
 
     return () => {
+      detach();
       view?.destroy();
       view = undefined;
     };
@@ -31,9 +56,10 @@
 
   $effect(() => {
     // Reading the derived list subscribes this effect to every re-analysis.
-    const diagnostics = document.diagnostics;
+    const local = document.diagnostics;
+    const remote = session.lint;
     if (view === undefined) return;
-    syncDiagnostics(view, diagnostics);
+    syncDiagnostics(view, [...local, ...remote]);
   });
 </script>
 
