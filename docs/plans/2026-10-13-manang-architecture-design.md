@@ -1,15 +1,17 @@
 # Manang: Architecture & System Design Specification
 
-**Document Version:** 1.0.0  
-**Date:** 2026-10-13  
+**Document Version:** 1.1.0  
+**Date:** 2026-10-17  
 **Status:** Validated  
 **Project:** Manang (The High-Performance Scientific Authoring & Illustration Suite)
+
+> **Revision 1.1.0 (2026-10-17):** Frontend stack moved from React 19 to Svelte 5 and the Excalidraw canvas replaced by an in-house SVG scene graph. Rationale and rejected alternatives: [ADR-0001](../adr/0001-frontend-and-canvas-stack.md).
 
 ---
 
 ## 1. Executive Summary & Vision
 
-**Manang** is an ultra-fast, local-first, extensible scientific document and slide authoring platform. It bridges the speed of **Typst**, the universality of **LaTeX** (powered by an embedded Rust **Tectonic** engine), and the ubiquity of **Markdown**, integrated with a unified **Visual Studio** featuring **Excalidraw** (100% MIT) and a dedicated **CeTZ / TikZ visual development environment**.
+**Manang** is an ultra-fast, local-first, extensible scientific document and slide authoring platform. It bridges the speed of **Typst**, the universality of **LaTeX** (powered by an embedded Rust **Tectonic** engine), and the ubiquity of **Markdown**, integrated with a unified **Visual Studio** featuring an in-house **vector figure studio** and a dedicated **CeTZ / TikZ visual development environment**.
 
 Built around a **Rust-first, WASM plugin-first architecture**, Manang relegates heavy computing, compilation, text buffer operations, and file I/O to a multi-threaded Rust core. The frontend remains a thin, high-framerate presentation shell running in Tauri v2. Additionally, an autonomous **Scientific Generative Agent** provides prompt-to-document synthesis, prompt-to-slides generation, citation verification against scholarly indexes (OpenAlex, Crossref, arXiv), and compiler self-healing.
 
@@ -22,7 +24,7 @@ Built around a **Rust-first, WASM plugin-first architecture**, Manang relegates 
 │                        THIN PRESENTATION LAYER                         │
 │  [Tauri v2 Webview Shell - 60/120 FPS Rendering & Event Dispatch]      │
 │  ├── CodeMirror 6 (Lightweight view, virtualized lines, SyncTeX jump)  │
-│  ├── Excalidraw Engine (MIT infinite canvas, freeform sketching)       │
+│  ├── Vector Ink Engine (native SVG scene graph, freeform sketching) │
 │  ├── CeTZ / TikZ Visualizer (Live isolated figure sandbox & gallery)   │
 │  ├── PDF & SVG Viewers (PDF.js + vector streaming)                     │
 │  └── Agent UI Panel (Prompt-to-doc co-pilot, inline diff previews)    │
@@ -41,7 +43,7 @@ Built around a **Rust-first, WASM plugin-first architecture**, Manang relegates 
 │  │   Rayon Thread Pool (CPU)    │    │    Tokio Runtime (Async I/O) │  │
 │  │  • Typst In-Memory Crate     │    │  • Multi-Provider LLM Client │  │
 │  │  • Tectonic XeTeX Engine     │    │  • Scholarly API Gateway     │  │
-│  │  • Excalidraw Headless Export│    │  • File Watcher & Git (gix)  │  │
+│  │  • Figure Headless SVG/PDF    │    │  • File Watcher & Git (gix)  │  │
 │  │  • Hayagriva BibTeX / CSL    │    │  • Yjs Binary WebSocket/P2P  │  │
 │  └──────────────────────────────┘    └──────────────────────────────┘  │
 │                                                                        │
@@ -60,11 +62,11 @@ Built around a **Rust-first, WASM plugin-first architecture**, Manang relegates 
 | Layer | Technology | Selection Rationale & Research Basis |
 | :--- | :--- | :--- |
 | **Desktop Shell** | **Tauri v2 + Rust** | ~35–50 MB idle RAM footprint (vs. Electron's 400MB+). Direct zero-overhead access to native OS threads, file system, and GPU. |
-| **Frontend UI** | **React 19 + Vite + Tailwind CSS + shadcn/ui** | Clean integration with Excalidraw React core, modular split-pane layouts (Allotment), and modern accessible primitives. |
+| **Frontend UI** | **Svelte 5 (runes) + Vite + Tailwind CSS v4** | Compiler-to-DOM output, fine-grained runes reactivity with no virtual DOM, and zero framework coupling to CodeMirror 6 (which owns its own DOM root). Avoids shipping a second framework into the bundle. See [ADR-0001](../adr/0001-frontend-and-canvas-stack.md). |
 | **Editor Core** | **CodeMirror 6** | Ultra-lightweight (~150 KB vs. Monaco's 5 MB+), instant startup (<100ms), functional immutable state architecture preventing DOM thrashing during real-time CRDT sync. |
 | **Typst Compiler** | **`typst` crate (Pure Rust)** | Sub-50ms incremental compilation through memoized syntax trees. Standalone binary with zero system dependencies. |
 | **LaTeX Compiler** | **`tectonic` crate + TeX Live Fallback** | Self-contained XeTeX engine in Rust. Auto-fetches CTAN packages on demand into a local cache without requiring 5GB+ TeX Live installs. Transparent fallback to system TeX when `--shell-escape` is needed. |
-| **Freehand Canvas** | **Excalidraw (MIT License)** | 100% free and open-source forever. No commercial licensing traps, no client watermarks. Headless export to vector SVG and PDF. |
+| **Vector Canvas** | **In-house SVG scene graph + `perfect-freehand` (MIT)** | ~2 KB gzip and zero dependencies. Emits deterministic vector SVG/PDF that the Rust core can render headlessly, honors the zero-radius/hairline design system exactly, and keeps the app free of React-bound or commercially-licensed canvas SDKs (tldraw, Fabric, Konva, Excalidraw). See [ADR-0001](../adr/0001-frontend-and-canvas-stack.md). |
 | **Mathematical Graphics**| **CeTZ (Typst) & TikZ (LaTeX)** | Mathematically precise code-based vector graphics integrated with a live preview sandbox and visual snippet gallery. |
 | **Buffer Structure**| **`ropey` (Rust B-Tree Rope)** | Handles multi-megabyte papers with $O(\log N)$ inserts and deletions. Avoids JS string reallocation bottlenecks. |
 | **Citations** | **`hayagriva` (Pure Rust)** | Typst's native CSL and BibLaTeX engine. Extremely fast sorting, formatting, and bibliography resolution. |
@@ -79,15 +81,15 @@ Built around a **Rust-first, WASM plugin-first architecture**, Manang relegates 
 
 Manang supports a **dual visual workflow**:
 
-### 4.1. Excalidraw Infinite Canvas (Freeform)
-1. Creating a diagram creates a `.excalidraw` file inside the project's `figures/` directory.
-2. The canvas is rendered in a dedicated pane or floating modal.
+### 4.1. Vector Ink Canvas (Freeform)
+1. Creating a diagram creates a `diagram.figure.json` scene file inside the project's `figures/` directory.
+2. The canvas is rendered in a dedicated pane or floating modal, backed by the typed SVG scene graph.
 3. On save, the headless Rust pipeline renders deterministic vector `.svg` and `.pdf` files.
 4. The editor auto-inserts:
    - **Typst:** `#image("figures/diagram.svg", width: 80%)`
    - **LaTeX:** `\includegraphics[width=0.8\textwidth]{figures/diagram.pdf}`
    - **Markdown:** `![diagram](figures/diagram.svg)`
-5. Clicking the rendered figure in the PDF or markdown preview automatically re-opens the editable Excalidraw canvas.
+5. Clicking the rendered figure in the PDF or markdown preview automatically re-opens the editable canvas.
 
 ### 4.2. CeTZ & TikZ Visual Studio (Mathematical Vectors)
 1. **Isolated Preview Canvas:** Live sandbox for editing CeTZ (Typst) and TikZ (LaTeX) code with instant feedback.
@@ -174,7 +176,7 @@ my-paper/
 ├── manang.toml          # Project configuration, engine target, template bindings
 ├── main.typ             # Document root (or main.tex / index.md)
 ├── figures/             # Illustration assets
-│   ├── arch.excalidraw  # Editable Excalidraw vector scene
+│   ├── arch.figure.json # Editable vector scene (Manang scene graph)
 │   ├── arch.svg         # Auto-generated vector SVG (Typst / Web)
 │   └── arch.pdf         # Auto-generated vector PDF (LaTeX)
 ├── references.bib       # BibTeX bibliography file
@@ -193,11 +195,11 @@ my-paper/
 ## 8. Implementation Phases & Milestones
 
 1. **Phase 1: Rust Core & Dual Compilers**
-   - Tauri v2 + React 19 workspace scaffolding.
+   - Tauri v2 + Svelte 5 workspace scaffolding.
    - In-memory `typst` and `tectonic` crate integration.
    - CodeMirror 6 with bidirectional SyncTeX and PDF.js viewer.
-2. **Phase 2: Visual Studio (Excalidraw & CeTZ/TikZ)**
-   - Excalidraw React embedding with headless SVG/PDF compiler.
+2. **Phase 2: Visual Studio (Vector Ink & CeTZ/TikZ)**
+   - SVG scene-graph canvas with `perfect-freehand` strokes and a headless SVG/PDF compiler.
    - CeTZ & TikZ live preview sandbox and scientific template palette.
 3. **Phase 3: WASM Plugin Engine**
    - Extism runtime integration with capability manifests.

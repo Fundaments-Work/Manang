@@ -3,7 +3,7 @@
 **Project:** Manang  
 **Role:** Canonical Visual Design & UI/UX System Specification  
 **Design System Authority:** [Fundaments.work Design System](file:///run/media/sapiens/Development/Fundaments/design-system)  
-**Version:** 2.0.0 (Visual Master Plan)  
+**Version:** 3.0.0 (Visual Master Plan)  
 
 ---
 
@@ -114,7 +114,7 @@ Triggered instantly by typing `/draw` anywhere in the manuscript or clicking `[�
 * **The Overlay Transition:** Glides smoothly into view without modal borders or backdrop darkness.
 * **The Pen Tray (Bottom Floating HUD):**
   - Centered floating bar (h-9, bg `#141416`, 1px hairline `#3d3d42`, zero radius).
-  - **`[ ✎ Freehand ]`:** Natural sketching powered by the Excalidraw plugin.
+  - **`[ ✎ Freehand ]`:** Natural sketching powered by Manang's own vector ink engine (Svelte scene graph + `perfect-freehand` stroke geometry, rendered as native SVG).
   - **`[ □ Geometry ]`:** Sharp mathematical shapes (rectangles, ellipses, coordinate grids).
   - **`[ → Arrow ]`:** Directional connectors that magnetically snap to node boundaries.
   - **`[ T Math ]`:** Type any LaTeX/Typst formula (`$|\psi\rangle$`) to stamp rendered mathematical text directly onto the figure.
@@ -167,7 +167,7 @@ Manang is **plugin-first**. Everything—compilers, drawing engines, citation ve
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
 │  ┌──────────────────────────────┐    ┌──────────────────────────────┐  │
-│  │ [✓] Typst Compiler Engine    │    │ [✓] Excalidraw Freehand Ink  │  │
+│  │ [✓] Typst Compiler Engine    │    │ [✓] Vector Ink Engine       │  │
 │  │ Native in-memory compilation │    │ Infinite vector sketch pad   │  │
 │  │ v0.12.0 · Core Instrument    │    │ v1.4.0 · Drawing Plugin      │  │
 │  └──────────────────────────────┘    └──────────────────────────────┘  │

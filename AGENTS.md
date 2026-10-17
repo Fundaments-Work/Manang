@@ -2,14 +2,14 @@
 
 **Project:** Manang (The High-Performance Scientific Authoring & Illustration Suite)  
 **Target:** AI Coding Agents (Antigravity, Cursor, Claude Code, Copilot, etc.) and Human Engineers  
-**Version:** 1.0.0  
-**Last Updated:** 2026-10-13  
+**Version:** 1.1.0  
+**Last Updated:** 2026-10-17
 
 ---
 
 ## 1. System Identity & Mission
 
-Manang is an uncompromisingly fast, local-first scientific authoring and illustration suite combining **Typst**, **LaTeX (Tectonic)**, **Markdown**, **Excalidraw (MIT)**, and a **CeTZ / TikZ Visual Studio**. 
+Manang is an uncompromisingly fast, local-first scientific authoring and illustration suite combining **Typst**, **LaTeX (Tectonic)**, **Markdown**, an in-house **vector figure studio**, and a **CeTZ / TikZ Visual Studio**. 
 
 Every line of code committed to this repository must preserve three foundational pillars:
 1. **Sub-millisecond responsiveness:** No UI thread stalls, no unnecessary memory allocations, zero-copy IPC.
@@ -49,8 +49,8 @@ When writing or modifying code in this codebase, you MUST adhere to the followin
 
 | Category | DO | DO NOT |
 | :--- | :--- | :--- |
-| **State Management** | Keep state close to the leaf components. Use immutable CodeMirror 6 transactions and Yjs docs. | Do not create massive monolithic React context providers that cause whole-page re-renders. |
-| **Canvas Integration** | Use Excalidraw's official MIT component. Save raw `.excalidraw` scenes alongside headless-rendered vector SVGs. | Do not pull in proprietary or source-available canvas SDKs that require commercial licenses or inject watermarks. |
+| **State Management** | Keep state close to the leaf components using Svelte 5 runes (`$state`, `$derived`). Use immutable CodeMirror 6 transactions and Yjs docs. | Do not create monolithic global state stores that cause whole-page re-renders. |
+| **Canvas Integration** | Use the in-house typed SVG scene graph (`manang-figure`) with `perfect-freehand` stroke geometry. Persist raw scene JSON alongside headless-rendered vector SVGs. | Do not pull in proprietary, source-available, or raster-only canvas SDKs (tldraw, Fabric/Konva, React-bound Excalidraw) that require commercial licenses, inject watermarks, or break deterministic vector export. |
 | **Styling & Assets** | Strictly adhere to the **Fundaments.work Design System** (`/run/media/sapiens/Development/Fundaments/design-system`): `--radius: 0` everywhere, 1px hairlines (`#3d3d42`), DM Sans (300/400), DM Mono (400), dark base (`#141416`), and state accent Cerulean (`#38bdf8`). | NEVER introduce rounded corners (`rounded-*`), drop shadows, arbitrary hex codes, or font weights outside 300 and 400. Depth is strictly tonal. |
 | **Bundle Size** | Keep frontend dependencies minimal. Leverage Vite code-splitting and dynamic imports for heavy viewers. | Do not import large JS libraries (e.g. Monaco, Moment.js, heavy MathJax bundles) when lighter alternatives exist. |
 
@@ -141,7 +141,7 @@ If any step fails, diagnose and fix the root cause. **Never disable lints or use
 
 * Follow **Conventional Commits**:
   - `feat(compiler): add incremental typst svg streaming`
-  - `fix(canvas): prevent race condition on excalidraw headless export`
+  - `fix(canvas): prevent race condition on figure headless export`
   - `perf(buffer): optimize ropey line indexing via SIMD search`
   - `test(crdt): add property test for concurrent cross-client edits`
   - `docs(agents): update testing harness specifications`
