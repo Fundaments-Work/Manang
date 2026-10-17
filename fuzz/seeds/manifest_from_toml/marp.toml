@@ -1,0 +1,15 @@
+[plugin]
+name = "marp-slides"
+version = "1.0.0"
+
+[permissions]
+filesystem = ["read:templates"]
+network = ["api.example.org"]
+buffer = ["read:active"]
+
+[contributes]
+hooks = ["on_lint"]
+
+[[contributes.commands]]
+id = "marp-slides.export"
+title = "Export"
