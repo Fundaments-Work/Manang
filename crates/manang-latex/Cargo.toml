@@ -20,6 +20,9 @@ tempfile = "3"
 thiserror = { workspace = true }
 wait-timeout = "0.2"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [features]
 # Links Tectonic (and its bundled HarfBuzz). Enabled only to build the
 # `manang-latex-worker` sidecar; the host app must not enable it, or the static
