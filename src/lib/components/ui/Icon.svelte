@@ -31,6 +31,7 @@
     check: "M3 8.5l3.5 3.5L13 4.5",
     branch: "M4 2.5h2v2H4z M4 11.5h2v2H4z M10 5.5h2v2h-2z M5 4.5v7 M5 9h5V7.5",
     "source-control": "M4 2.5h2v2H4z M4 11.5h2v2H4z M10 6.5h2v2h-2z M5 4.5v7 M5 9.5h4v-1",
+    outline: "M2.5 3.5h2v2h-2z M6.5 4.5h7 M4 7.5h2v2H4z M8 8.5h5.5 M5.5 11.5h2v2h-2z M9.5 12.5h4",
     present: "M4 3l9 5-9 5z",
     slides: "M2 3h12v8H2z M6 14h4 M8 11v3",
     trash: "M3.5 4.5h9 M6 4.5V3h4v1.5 M4.5 4.5l.5 9h6l.5-9",

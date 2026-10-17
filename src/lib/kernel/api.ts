@@ -596,4 +596,21 @@ export function citationsApi(kernel: Kernel) {
 
 export type CitationsApi = ReturnType<typeof citationsApi>;
 
+export interface MarkdownHeading {
+  readonly title: string;
+  readonly level: number;
+  readonly id?: string | undefined;
+  readonly line: number;
+  readonly offset: number;
+}
+
+export function markdownApi(kernel: Kernel) {
+  return {
+    outline: (source: string) =>
+      kernel.run<{ headings: readonly MarkdownHeading[] }>("markdown.outline", { source }),
+  };
+}
+
+export type MarkdownApi = ReturnType<typeof markdownApi>;
+
 
