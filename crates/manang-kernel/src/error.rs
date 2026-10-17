@@ -20,6 +20,12 @@ pub enum CapabilityError {
 pub enum ManifestError {
     #[error("manifest is not valid TOML: {0}")]
     Toml(#[from] toml::de::Error),
+    #[error("manifest is {0} bytes; the limit is {1}")]
+    TooLarge(usize, usize),
+    #[error("manifest declares more than {0} {1}")]
+    TooMany(usize, &'static str),
+    #[error("plugin entry `{0}` must be a relative path inside the plugin directory")]
+    BadEntry(String),
     #[error("plugin name `{0}` must be lowercase kebab-case starting with a letter")]
     BadName(String),
     #[error("command `{command}` must be namespaced as `{plugin}.<name>`")]
