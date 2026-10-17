@@ -11,7 +11,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use manang_kernel::{Context, EventBus, Manifest, ManifestError, Payload, Plugin, PluginError};
 use parking_lot::RwLock;
@@ -25,6 +25,7 @@ use crate::fsops;
 use crate::git;
 use crate::paths::ProjectRoot;
 use crate::recent::RecentStore;
+use crate::registry::{self, ListQuery, Patch, ProjectEntry, Registry, Sort, Thumbnails};
 use crate::scaffold::{self, NewProject};
 use crate::tree::{self, TreeQuery};
 use crate::watch::{DEFAULT_DEBOUNCE, ProjectWatcher};
@@ -56,18 +57,36 @@ struct Open {
 pub struct ProjectPlugin {
     state: RwLock<Option<Arc<Open>>>,
     recent: RecentStore,
+    registry: Registry,
+    thumbnails: Thumbnails,
     events: EventBus,
     debounce: Duration,
 }
 
 impl ProjectPlugin {
     pub fn new(config_dir: impl Into<PathBuf>, events: EventBus) -> Self {
+        let config_dir = config_dir.into();
+        let recent = RecentStore::new(&config_dir);
+        let registry = Registry::new(&config_dir);
+        // First run with the registry: carry over what the recent list knew.
+        // Best effort, since the recent list is only a convenience.
+        let _ = registry.import(legacy_entries(&recent));
         Self {
             state: RwLock::new(None),
-            recent: RecentStore::new(config_dir.into()),
+            recent,
+            registry,
+            thumbnails: Thumbnails::new(config_dir.join("cache")),
             events,
             debounce: DEFAULT_DEBOUNCE,
         }
+    }
+
+    /// Keep project thumbnails under `cache_dir` (the shell passes the user
+    /// cache directory) instead of `<config>/cache`.
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: impl Into<PathBuf>) -> Self {
+        self.thumbnails = Thumbnails::new(cache_dir.into());
+        self
     }
 
     /// Override the watcher debounce window (default 150 ms).
@@ -97,6 +116,14 @@ impl ProjectPlugin {
         if let Err(e) = self.recent.touch(root.path(), &name) {
             warnings.push(format!("could not update the recent projects list: {e}"));
         }
+        if let Err(e) = self.registry.opened(
+            &root.path().to_string_lossy(),
+            &name,
+            config.project.engine,
+            now_secs(),
+        ) {
+            warnings.push(format!("could not update the project list: {e}"));
+        }
         if !root.path().join(config.main_file()).is_file() {
             warnings.push(format!(
                 "main file `{}` does not exist yet",
@@ -114,6 +141,49 @@ impl ProjectPlugin {
         }));
         Ok(summary)
     }
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Recent projects that are still projects, as registry entries.
+fn legacy_entries(recent: &RecentStore) -> Vec<ProjectEntry> {
+    recent
+        .list()
+        .into_iter()
+        .filter_map(|r| {
+            let text = fs::read_to_string(Path::new(&r.path).join(CONFIG_FILE)).ok()?;
+            let config = ProjectConfig::parse(&text).ok()?;
+            Some(ProjectEntry {
+                path: registry::normalize_path(&r.path),
+                name: registry::clean_name(&r.name).unwrap_or_else(|_| "project".to_owned()),
+                engine: config.project.engine,
+                created: r.opened_at,
+                last_opened: r.opened_at,
+                pinned: false,
+                archived: false,
+                tags: Vec::new(),
+            })
+        })
+        .collect()
+}
+
+fn entry_json(entry: &ProjectEntry, thumbnails: &Thumbnails) -> Value {
+    json!({
+        "path": entry.path,
+        "name": entry.name,
+        "engine": entry.engine,
+        "created": entry.created,
+        "last_opened": entry.last_opened,
+        "pinned": entry.pinned,
+        "archived": entry.archived,
+        "tags": entry.tags,
+        "exists": Path::new(&entry.path).join(CONFIG_FILE).is_file(),
+        "has_thumbnail": thumbnails.exists(&entry.path),
+    })
 }
 
 fn display_name(root: &ProjectRoot, config: &ProjectConfig) -> String {
@@ -217,6 +287,38 @@ mod args {
 
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
+    pub struct List {
+        #[serde(default)]
+        pub query: Option<String>,
+        #[serde(default)]
+        pub sort: Option<crate::registry::Sort>,
+        #[serde(default)]
+        pub include_archived: bool,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Update {
+        pub path: String,
+        #[serde(default)]
+        pub name: Option<String>,
+        #[serde(default)]
+        pub pinned: Option<bool>,
+        #[serde(default)]
+        pub archived: Option<bool>,
+        #[serde(default)]
+        pub tags: Option<Vec<String>>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Thumbnail {
+        pub path: String,
+        pub svg: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     pub struct Rename {
         pub from: String,
         pub to: String,
@@ -309,6 +411,71 @@ impl Plugin for ProjectPlugin {
                     })
                     .collect();
                 Ok(Payload::Json(Value::Array(entries)))
+            }
+            "project.list" => {
+                let a: args::List = parse(input)?;
+                let query = ListQuery {
+                    query: a.query,
+                    sort: a.sort.unwrap_or(Sort::Modified),
+                    include_archived: a.include_archived,
+                };
+                let entries: Vec<Value> = registry::select(&self.registry.all(), &query)
+                    .iter()
+                    .map(|e| entry_json(e, &self.thumbnails))
+                    .collect();
+                Ok(Payload::Json(Value::Array(entries)))
+            }
+            "project.register" => {
+                let a: args::Dir = parse(input)?;
+                let root = ProjectRoot::open(Path::new(&a.path)).map_err(failed)?;
+                let config = read_config(&root).map_err(failed)?;
+                let name = display_name(&root, &config);
+                let entry = self
+                    .registry
+                    .register(
+                        &root.path().to_string_lossy(),
+                        &name,
+                        config.project.engine,
+                        now_secs(),
+                    )
+                    .map_err(failed)?;
+                Ok(Payload::Json(entry_json(&entry, &self.thumbnails)))
+            }
+            "project.update" => {
+                let a: args::Update = parse(input)?;
+                let patch = Patch {
+                    name: a.name,
+                    pinned: a.pinned,
+                    archived: a.archived,
+                    tags: a.tags,
+                };
+                match self.registry.update(&a.path, patch).map_err(failed)? {
+                    Some(entry) => Ok(Payload::Json(entry_json(&entry, &self.thumbnails))),
+                    None => Err(failed(ProjectError::NotFound(a.path))),
+                }
+            }
+            "project.forget" => {
+                let a: args::Dir = parse(input)?;
+                let removed = self.registry.forget(&a.path).map_err(failed)?;
+                if removed {
+                    self.thumbnails.remove(&a.path);
+                }
+                Ok(Payload::Json(json!({ "removed": removed })))
+            }
+            "project.thumbnail-get" => {
+                let a: args::Dir = parse(input)?;
+                Ok(match self.thumbnails.get(&a.path) {
+                    Some(bytes) => Payload::Binary(bytes.into()),
+                    None => Payload::Json(Value::Null),
+                })
+            }
+            "project.thumbnail-set" => {
+                let a: args::Thumbnail = parse(input)?;
+                if self.registry.get(&a.path).is_none() {
+                    return Err(failed(ProjectError::NotFound(a.path)));
+                }
+                self.thumbnails.set(&a.path, &a.svg).map_err(failed)?;
+                Ok(Payload::Empty)
             }
             "project.git-status" => {
                 let open = self.current().map_err(failed)?;
