@@ -1,5 +1,10 @@
 <script lang="ts">
   import scowlLicenseText from "../../../assets/licenses/LICENSE-SCOWL-en_US.txt?raw";
+  import changelogText from "../../../../CHANGELOG.md?raw";
+
+  import { appInfo, type AppInfo } from "$lib/kernel/native";
+  import { feedback } from "$lib/state/feedback.svelte";
+  import { latestChanges } from "$lib/workbench/changelog";
 
   /**
    * About & Licences View for Manang:
@@ -8,8 +13,14 @@
    * crates/manang-writing/dict/ (served from static assets).
    */
 
-  const APP_VERSION = "0.1.0";
-  const GIT_COMMIT = "7df53d9";
+  // Filled from the shell; a browser build says so instead of guessing.
+  let info = $state<AppInfo | null>(null);
+  void appInfo().then((value) => (info = value));
+  const APP_VERSION = $derived(info?.version ?? "0.1.0");
+  const GIT_COMMIT = $derived(info?.commit ?? "browser build");
+  const CHANNEL = $derived(info?.channel ?? "dev");
+  const SYSTEM = $derived(info === null ? "browser" : `${info.os} ${info.arch}`);
+  const news = latestChanges(changelogText);
 
   let showFullScowl = $state(false);
 </script>
@@ -37,6 +48,14 @@
         <span class="text-text">{APP_VERSION}</span>
       </div>
       <div class="flex justify-between px-3 py-1.5">
+        <span class="text-text-muted">Channel</span>
+        <span class="text-text">{CHANNEL}</span>
+      </div>
+      <div class="flex justify-between px-3 py-1.5">
+        <span class="text-text-muted">System</span>
+        <span class="text-text">{SYSTEM}</span>
+      </div>
+      <div class="flex justify-between px-3 py-1.5">
         <span class="text-text-muted">Commit</span>
         <span class="text-text">{GIT_COMMIT}</span>
       </div>
@@ -53,6 +72,29 @@
         <span class="text-text">Fundaments.work</span>
       </div>
     </div>
+  </div>
+
+  <!-- What's new -->
+  {#if news.items.length > 0}
+    <div data-testid="whats-new">
+      <div class="text-text mb-1">What's new</div>
+      <p class="m-0 mb-2 text-[11px] text-text-60">{news.heading}</p>
+      <ul class="m-0 list-none border border-line divide-y divide-line p-0 text-[11px]">
+        {#each news.items as item (item)}
+          <li class="px-3 py-1.5 text-text-60">{item}</li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+
+  <div>
+    <button
+      type="button"
+      class="mng-btn"
+      onclick={() => void feedback.show("feedback")}
+    >
+      Send feedback
+    </button>
   </div>
 
   <!-- Open Source Licences Overview -->
