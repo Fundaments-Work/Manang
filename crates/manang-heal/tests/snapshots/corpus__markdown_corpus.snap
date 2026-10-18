@@ -1,0 +1,16 @@
+---
+source: crates/manang-heal/tests/corpus.rs
+expression: report
+---
+{
+  "narrow_delimiter.md": {
+    "fix": "markdown.table-delimiter:31",
+    "finding": "Table delimiter row has 2 columns but the header has 3",
+    "result": "# Table\n\n| Name | Age | City |\n| ------ | ----- | --- |\n| Ada  | 36  | London |\n"
+  },
+  "unclosed_fence.md": {
+    "fix": "markdown.close-fence:21",
+    "finding": "Code fence is never closed",
+    "result": "# Notes\n\nSome code:\n\n```python\nprint(\"hi\")\n\nText that is now code.\n```\n"
+  }
+}
