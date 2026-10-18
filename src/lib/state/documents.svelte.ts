@@ -605,24 +605,45 @@ export class DocumentsStore {
   async externalChanges(changes: readonly ProjectChange[]): Promise<void> {
     for (const change of changes) {
       if (change.kind === "removed") {
-        this.#vanished(change.path);
+        await this.#vanished(change.path);
         continue;
       }
       if (change.kind === "renamed" && change.from !== undefined) {
-        this.#vanished(change.from);
+        await this.#vanished(change.from);
       }
       await this.syncWithDisk(change.path);
     }
   }
 
-  /** A file or folder left its path: the documents under it lost their file. */
-  #vanished(path: string): void {
-    for (const [key, session] of this.#sessions) {
+  /**
+   * A file or folder left its path: the documents under it lost their file.
+   * Saving replaces a file, which the watcher can report as a removal before
+   * the new one is visible, so a file counts as gone only when two reads a
+   * moment apart both find nothing.
+   */
+  async #vanished(path: string): Promise<void> {
+    for (const [key, session] of [...this.#sessions]) {
       if (key !== path && !key.startsWith(`${path}/`)) continue;
       if (session.external === "deleted") continue;
+      if (!(await this.#reallyGone(key))) continue;
+      if (this.#sessions.get(key) !== session) continue;
       session.markDeleted();
       notice.error(`${basename(key)} was deleted or moved on disk.`);
     }
+  }
+
+  /** True when the file is absent now and still absent a moment later. */
+  async #reallyGone(path: string): Promise<boolean> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await workspace.readText(path);
+        return false;
+      } catch (error) {
+        if (!isNotFoundError(error)) return false;
+      }
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return true;
   }
 
   /** Compare one open document with its file and act on the difference. */
@@ -675,7 +696,8 @@ export class DocumentsStore {
         }
         break;
       case "deleted":
-        if (session.external !== "deleted") {
+        if (session.external !== "deleted" && (await this.#reallyGone(path))) {
+          if (this.#sessions.get(path) !== session) break;
           session.markDeleted();
           notice.error(`${basename(path)} was deleted or moved on disk.`);
         }
