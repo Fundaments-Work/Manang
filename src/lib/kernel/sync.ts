@@ -15,7 +15,7 @@
  */
 
 import type { Kernel } from "./client";
-import { scalarLength, utf16ToScalar, type Sliceable } from "./offsets";
+import { diffRange, scalarLength, utf16ToScalar, type Sliceable } from "./offsets";
 
 export type KernelOp =
   | { readonly kind: "delete"; readonly from: number; readonly to: number }
@@ -80,6 +80,7 @@ export class KernelSync {
   #docId: number | null = null;
   #status: SyncStatus = "idle";
   #resyncs = 0;
+  #paused = false;
 
   constructor(kernel: Kernel, options: SyncOptions) {
     this.#kernel = kernel;
@@ -102,6 +103,64 @@ export class KernelSync {
   /** How many times local state had to be replaced from the kernel. */
   get resyncCount(): number {
     return this.#resyncs;
+  }
+
+  /**
+   * Whether the kernel's copy is being kept by something else (a live session:
+   * the Rust side applies every accepted step to it). While paused nothing is
+   * sent or compared; `resume` brings the copy up to what the editor shows.
+   */
+  get paused(): boolean {
+    return this.#paused;
+  }
+
+  /** Stop sending edits; commands already queued still run. */
+  pause(): void {
+    this.#paused = true;
+    this.#epoch += 1;
+  }
+
+  /**
+   * Carry on: make the kernel's copy equal `text` (what the editor shows now)
+   * with the smallest edit, then resume sending.
+   */
+  resume(text: string): Promise<void> {
+    return this.#enqueue(async () => {
+      if (this.#docId === null) {
+        this.#paused = false;
+        return;
+      }
+      try {
+        const kernelText = await this.#kernel.run<string>("editor.text", {
+          id: this.#docId,
+        });
+        if (kernelText !== text) {
+          const { from, to, insert } = diffRange(kernelText, text);
+          const at = utf16ToScalar(kernelText, from);
+          const removed = scalarLength(kernelText.slice(from, to));
+          if (removed > 0) {
+            await this.#kernel.run("editor.delete", {
+              id: this.#docId,
+              from: at,
+              to: at + removed,
+            });
+          }
+          if (insert.length > 0) {
+            await this.#kernel.run("editor.insert", {
+              id: this.#docId,
+              at,
+              text: insert,
+            });
+          }
+        }
+        this.#revision = (await this.#info()).revision;
+        this.#paused = false;
+        this.#setStatus("synced");
+      } catch (error) {
+        this.#paused = false;
+        this.#setStatus("offline", describe(error));
+      }
+    });
   }
 
   /** Resolves once every queued command has been sent. */
@@ -134,7 +193,7 @@ export class KernelSync {
 
   /** Queue the commands for one user transaction. Ordering is preserved. */
   submit(ops: readonly KernelOp[]): void {
-    if (ops.length === 0 || this.#status === "offline") return;
+    if (ops.length === 0 || this.#status === "offline" || this.#paused) return;
     const epoch = this.#epoch;
     void this.#enqueue(async () => {
       if (this.#docId === null) return;
@@ -169,7 +228,7 @@ export class KernelSync {
   /** Compare revisions and resync if the kernel changed behind our back. */
   check(): Promise<void> {
     return this.#enqueue(async () => {
-      if (this.#docId === null) return;
+      if (this.#docId === null || this.#paused) return;
       try {
         const info = await this.#info();
         if (info.revision !== this.#revision) await this.#resync();
@@ -181,7 +240,7 @@ export class KernelSync {
 
   /** Unconditionally replace the editor's text with the kernel's. */
   resync(): Promise<void> {
-    return this.#enqueue(() => this.#resync());
+    return this.#enqueue(() => (this.#paused ? Promise.resolve() : this.#resync()));
   }
 
   #enqueue(task: () => Promise<void>): Promise<void> {
@@ -204,6 +263,7 @@ export class KernelSync {
    * text it never saw.
    */
   async #resync(detail?: string): Promise<void> {
+    if (this.#paused) return;
     this.#epoch += 1;
     this.#setStatus("syncing", detail);
     try {

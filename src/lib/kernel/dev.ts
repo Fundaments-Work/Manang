@@ -19,6 +19,7 @@ import { citationsPlugin } from "./mockCitations";
 import { diagramPlugin } from "./mockDiagram";
 import { figurePlugin } from "./mockFigure";
 import { latexPlugin } from "./mockLatex";
+import { livePlugin } from "./mockLive";
 import { markdownPlugin } from "./mockMarkdown";
 import { gitPlugin } from "./mockGit";
 import { pluginsPlugin } from "./mockPlugins";
@@ -470,6 +471,7 @@ export function createDevKernel(
       settingsPlugin(host),
       writingPlugin(),
       agentPlugin,
+      livePlugin,
     ],
   });
   return Object.assign(kernel, { host });
