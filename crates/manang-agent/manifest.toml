@@ -1,0 +1,176 @@
+[plugin]
+name = "agent"
+version = "0.1.0"
+description = "AI agent: chat, rewrite, explain and fix with your own provider key. Writes are proposals you accept."
+tier = "native"
+settings_contexts = ["app", "project", "document"]
+
+[contributes]
+hooks = ["register_agent_tool"]
+
+[[contributes.commands]]
+id = "agent.start"
+title = "Start an AI agent session"
+
+[[contributes.commands]]
+id = "agent.cancel"
+title = "Stop an AI agent session"
+
+[[contributes.commands]]
+id = "agent.approve"
+title = "Answer an AI agent approval request"
+
+[[contributes.commands]]
+id = "agent.apply-proposal"
+title = "Accept an AI proposal"
+
+[[contributes.commands]]
+id = "agent.reject-proposal"
+title = "Reject an AI proposal"
+
+[[contributes.commands]]
+id = "agent.preview-request"
+title = "Preview exactly what would be sent to the AI provider"
+
+[[contributes.commands]]
+id = "agent.sessions"
+title = "List AI sessions"
+
+[[contributes.commands]]
+id = "agent.transcript"
+title = "Read an AI session transcript"
+
+[[contributes.commands]]
+id = "agent.models"
+title = "List the models of an AI provider"
+
+[[contributes.commands]]
+id = "agent.test-connection"
+title = "Test the AI provider connection and key"
+
+[[contributes.commands]]
+id = "agent.status"
+title = "Report whether the AI agent is ready"
+
+[[contributes.commands]]
+id = "agent.consent"
+title = "Record consent to send data to an AI provider"
+
+[[contributes.commands]]
+id = "agent.configure"
+title = "Apply AI agent settings"
+
+[[contributes.commands]]
+id = "agent.key.set"
+title = "Save an AI provider API key"
+
+[[contributes.commands]]
+id = "agent.key.status"
+title = "Report whether an AI provider key is stored, and where"
+
+[[contributes.commands]]
+id = "agent.key.clear"
+title = "Remove an AI provider API key"
+
+[[contributes.commands]]
+id = "agent.doc-read"
+title = "Agent tool: read part of a project file"
+
+[[contributes.commands]]
+id = "agent.doc-diagnostics"
+title = "Agent tool: list the editor's problems"
+
+[[contributes.commands]]
+id = "agent.doc-outline"
+title = "Agent tool: outline of a document"
+
+[[contributes.commands]]
+id = "agent.doc-propose-edit"
+title = "Agent tool: propose a text edit"
+
+[[contributes.commands]]
+id = "agent.project-search"
+title = "Agent tool: search the project"
+
+[[contributes.settings]]
+id = "agent.enabled"
+type = "bool"
+default = true
+title = "Enable the AI agent"
+description = "Nothing is sent anywhere until you pick a provider, give your consent and press Send. A project can switch the agent off for itself."
+
+[[contributes.settings]]
+id = "agent.provider"
+type = "enum"
+values = ["anthropic", "openai", "deepseek", "openrouter", "groq", "ollama", "llama_cpp", "lm_studio", "custom"]
+default = "anthropic"
+title = "Provider"
+description = "Who answers your requests. Set the key under Provider and key."
+
+[[contributes.settings]]
+id = "agent.model"
+type = "string"
+default = ""
+title = "Model"
+description = "Model id. Empty uses the provider's first listed model."
+
+[[contributes.settings]]
+id = "agent.base-url"
+type = "string"
+default = ""
+title = "Base URL"
+description = "Empty uses the provider's address. Set it for a custom or local server."
+
+[[contributes.settings]]
+id = "agent.engine"
+type = "enum"
+values = ["rig", "builtin"]
+default = "rig"
+title = "Provider engine"
+description = "rig is the default client layer; builtin is Manang's own, kept as a fallback."
+
+[[contributes.settings]]
+id = "agent.offline"
+type = "bool"
+default = false
+title = "Offline mode"
+description = "Only providers on this machine (localhost) may be contacted."
+
+[[contributes.settings]]
+id = "agent.include-thinking"
+type = "bool"
+default = false
+title = "Show the model's reasoning"
+description = "Shows the model's reasoning text dimmed in the Agent view when the provider streams it."
+
+[[contributes.settings]]
+id = "agent.max-context-tokens"
+type = "int"
+min = 1000
+max = 1000000
+default = 32000
+title = "Context limit (tokens)"
+description = "A request whose attached context is larger than this is refused before it is sent. About 3.5 characters per token."
+
+[[contributes.settings]]
+id = "agent.redact-emails"
+type = "bool"
+default = false
+title = "Redact email addresses"
+description = "Replace email addresses in what is sent. Secret-like strings are always redacted."
+
+[[contributes.settings]]
+id = "agent.redact-paths"
+type = "bool"
+default = false
+title = "Redact user names in paths"
+description = "Replace the user name in home-directory paths in what is sent."
+
+[[contributes.settings]]
+id = "agent.retention-days"
+type = "int"
+min = 0
+max = 3650
+default = 30
+title = "Keep sessions (days)"
+description = "Sessions older than this are deleted when a new one starts. 0 keeps them."
