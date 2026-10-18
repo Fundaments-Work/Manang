@@ -1,0 +1,44 @@
+[package]
+name = "manang-agent-rig"
+description = "Manang AI agent: a Rig-backed provider adapter. Rig types never leave this crate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-agent-core = { path = "../manang-agent-core" }
+# Pinned exactly: Rig changes its API in almost every release.
+# No default features: `rustls` would pull aws-lc (C code, forbidden by AGENTS.md 7.4), and we
+# supply the HTTP client ourselves, so Rig's own `reqwest` feature is not needed either.
+rig-core = { version = "=0.44.0", default-features = false }
+rig-http = "=0.44.0"
+async-stream = "0.3"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+futures-timer = "3"
+http = "1"
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
+thiserror = { workspace = true }
+url = "2"
+
+# Everything that needs an OS (sockets, DNS, TLS) is native-only, so the rest compiles for
+# wasm32-unknown-unknown (AGENTS.md section 2.5).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+rig-reqwest = { version = "=0.44.0", default-features = false }
+# rustls through ring, installed by us; same setup as manang-agent-providers.
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls-no-provider",
+    "stream",
+    "json",
+] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio = { version = "1", default-features = false, features = ["net"] }
+
+[dev-dependencies]
+manang-agent-providers = { path = "../manang-agent-providers" }
+insta = { version = "1", features = ["json"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "time", "sync", "net", "io-util"] }
