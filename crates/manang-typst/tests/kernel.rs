@@ -78,6 +78,51 @@ fn compile_render_export_through_commands() {
 }
 
 #[test]
+fn check_reports_problems_and_leaves_the_preview_alone() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path().to_str().expect("utf8");
+    let k = kernel();
+    let report = json_of(
+        k.invoke(
+            "typst.compile",
+            Payload::Json(json!({"main": "main.typ", "root": root, "sources": {"main.typ": DOC}})),
+        )
+        .expect("compile"),
+    );
+    assert_eq!(report["ok"], true);
+    let generation = report["generation"].clone();
+    let checked = json_of(
+        k.invoke(
+            "typst.check",
+            Payload::Json(json!({
+                "main": "main.typ", "root": root,
+                "sources": {"main.typ": "#figur(\"x\")"}
+            })),
+        )
+        .expect("check"),
+    );
+    let list = checked["diagnostics"].as_array().expect("list");
+    assert!(
+        list.iter()
+            .any(|d| d["severity"] == "error" && d["message"].as_str().unwrap_or("").contains("figur")),
+        "{checked}"
+    );
+    // The cached document is still the good one: it renders, and a recompile continues the count.
+    assert!(matches!(
+        k.invoke("typst.render", Payload::Json(json!({"page": 0}))),
+        Ok(Payload::Binary(_))
+    ));
+    let again = json_of(
+        k.invoke(
+            "typst.compile",
+            Payload::Json(json!({"main": "main.typ", "root": root, "sources": {"main.typ": DOC}})),
+        )
+        .expect("compile"),
+    );
+    assert_eq!(again["generation"].as_u64(), generation.as_u64().map(|g| g + 1));
+}
+
+#[test]
 fn bad_arguments_are_errors_not_panics() {
     let k = kernel();
     for (cmd, args) in [
