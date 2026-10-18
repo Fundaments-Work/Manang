@@ -14,8 +14,11 @@ use crate::ctx::Ctx;
 use crate::diff;
 use crate::error::GitError;
 use crate::history::{self, Shown};
+use crate::identity;
+use crate::restore::{self, RestoreRequest};
 use crate::status;
-use crate::writes::{self, SyncAction};
+use crate::versions;
+use crate::writes::{self, CommitRequest, SyncAction};
 
 const MANIFEST: &str = include_str!("../manifest.toml");
 
@@ -121,6 +124,57 @@ mod args {
         pub amend: bool,
         #[serde(default)]
         pub hooks: bool,
+        #[serde(default)]
+        pub trailers: Vec<String>,
+        #[serde(default)]
+        pub all: bool,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Restore {
+        pub root: Option<String>,
+        pub rev: String,
+        #[serde(default)]
+        pub paths: Vec<String>,
+        #[serde(default)]
+        pub whole: bool,
+        #[serde(default)]
+        pub save_first: bool,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct IdentitySet {
+        pub root: Option<String>,
+        pub name: String,
+        pub email: String,
+        #[serde(default)]
+        pub global: bool,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct SaveVersion {
+        pub root: Option<String>,
+        pub name: Option<String>,
+        pub message: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Versions {
+        pub root: Option<String>,
+        pub path: Option<String>,
+        pub limit: Option<usize>,
+        pub cursor: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct RevOnly {
+        pub root: Option<String>,
+        pub rev: String,
     }
 
     #[derive(Deserialize)]
@@ -291,8 +345,71 @@ impl GitPlugin {
             "git.commit" => {
                 let a: args::Commit = parse(input)?;
                 self.write(a.root.as_deref(), |c| {
-                    writes::commit(c, &a.message, a.amend, a.hooks)
+                    writes::commit_request(
+                        c,
+                        &CommitRequest {
+                            message: &a.message,
+                            amend: a.amend,
+                            hooks: a.hooks,
+                            trailers: &a.trailers,
+                            all: a.all,
+                        },
+                    )
                 })
+            }
+            "git.restore" => {
+                let a: args::Restore = parse(input)?;
+                self.write(a.root.as_deref(), |c| {
+                    restore::restore(
+                        c,
+                        &RestoreRequest {
+                            rev: &a.rev,
+                            paths: &a.paths,
+                            whole: a.whole,
+                            save_first: a.save_first,
+                        },
+                    )
+                })
+            }
+            "git.identity-get" => {
+                let a: args::Base = parse(input)?;
+                json_payload(&identity::get(&self.ctx(a.root.as_deref())?)?)
+            }
+            "git.identity-set" => {
+                let a: args::IdentitySet = parse(input)?;
+                let ctx = self.ctx(a.root.as_deref())?;
+                identity::set(&ctx, &a.name, &a.email, a.global)?;
+                json_payload(&json!({ "ok": true }))
+            }
+            "git.save-version" => {
+                let a: args::SaveVersion = parse(input)?;
+                self.write(a.root.as_deref(), |c| {
+                    versions::save_version(c, a.name.as_deref(), a.message.as_deref())
+                })
+            }
+            "git.versions" => {
+                let a: args::Versions = parse(input)?;
+                let ctx = self.ctx(a.root.as_deref())?;
+                let rel = ctx.rel(a.path.as_deref().unwrap_or(""))?;
+                json_payload(&versions::versions(
+                    &ctx,
+                    &rel,
+                    a.limit.unwrap_or(50),
+                    a.cursor.as_deref(),
+                )?)
+            }
+            "git.version-files" => {
+                let a: args::RevOnly = parse(input)?;
+                let ctx = self.ctx(a.root.as_deref())?;
+                json_payload(
+                    &json!({ "rev": a.rev, "files": versions::version_files(&ctx, &a.rev)? }),
+                )
+            }
+            "git.version-diff" => {
+                let a: args::Show = parse(input)?;
+                let ctx = self.ctx(a.root.as_deref())?;
+                let rel = ctx.rel(&a.path)?;
+                json_payload(&versions::version_diff(&ctx, &a.rev, &rel)?)
             }
             "git.checkout-branch" => {
                 let a: args::Checkout = parse(input)?;
