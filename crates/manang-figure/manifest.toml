@@ -21,6 +21,10 @@ id = "figure.save"
 title = "Save figure"
 
 [[contributes.commands]]
+id = "figure.close"
+title = "Close figure"
+
+[[contributes.commands]]
 id = "figure.list"
 title = "List open figures"
 

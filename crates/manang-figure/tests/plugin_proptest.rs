@@ -142,6 +142,8 @@ fn arb_op() -> impl Strategy<Value = FigureOp> {
                 size,
                 color,
             }),
+        ("[a-z0-9_]{1,10}", -50.0..50.0f64, -50.0..50.0f64)
+            .prop_map(|(id, dx, dy)| FigureOp::Translate { id, dx, dy }),
         Just(FigureOp::Undo),
         Just(FigureOp::Redo),
     ]
@@ -189,5 +191,33 @@ proptest! {
         prop_assert_eq!(undo2.applied, true);
         let restored_json2 = doc.scene.to_json().expect("valid json restored 2");
         prop_assert_eq!(&restored_json2, &before_json);
+    }
+
+    /// Moving a node is one undo step: the node moves exactly by the delta,
+    /// keeps its identity, and undo restores the exact previous scene.
+    #[test]
+    fn translate_is_one_exact_undo_step(
+        node in arb_node(),
+        dx in -100.0..100.0f64,
+        dy in -100.0..100.0f64,
+    ) {
+        let mut doc = FigureDocument::new(1, 800.0, 600.0);
+        doc.apply(FigureOp::AddNode { node: node.clone() }).expect("add");
+        let before = doc.scene.clone();
+        let res = doc
+            .apply(FigureOp::Translate { id: node.id().to_owned(), dx, dy })
+            .expect("translate");
+        prop_assert_eq!(res.applied, dx != 0.0 || dy != 0.0);
+        let moved = doc.scene.node_by_id(node.id()).expect("still there").clone();
+        let mut expected = node.clone();
+        if res.applied {
+            expected.translate(dx, dy);
+        }
+        prop_assert_eq!(&moved, &expected);
+        if res.applied {
+            prop_assert!(res.can_undo);
+            doc.apply(FigureOp::Undo).expect("undo");
+            prop_assert_eq!(&doc.scene, &before);
+        }
     }
 }

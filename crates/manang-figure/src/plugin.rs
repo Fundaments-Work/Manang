@@ -103,8 +103,24 @@ impl Plugin for FigurePlugin {
             "figure.create" => {
                 let width = a.get("width").and_then(Value::as_f64);
                 let height = a.get("height").and_then(Value::as_f64);
-                let id = self.store.create(width, height);
-                Ok(Payload::Json(json!({ "id": id })))
+                match a.get("path") {
+                    None | Some(Value::Null) => {
+                        let id = self.store.create(width, height);
+                        Ok(Payload::Json(json!({ "id": id })))
+                    }
+                    Some(_) => {
+                        let path = string(&a, "path")?;
+                        let (id, saved) = self
+                            .store
+                            .create_at(Path::new(path), width, height)
+                            .map_err(failed)?;
+                        Ok(Payload::Json(json!({
+                            "id": id,
+                            "json": saved.json,
+                            "svg": saved.svg,
+                        })))
+                    }
+                }
             }
             "figure.open" => {
                 let path_str = string(&a, "path")?;
@@ -114,8 +130,16 @@ impl Plugin for FigurePlugin {
             "figure.save" => {
                 let fig_id = id(&a)?;
                 let path = a.get("path").and_then(Value::as_str).map(Path::new);
-                self.store.save(fig_id, path).map_err(failed)?;
-                Ok(Payload::Empty)
+                let saved = self.store.save(fig_id, path).map_err(failed)?;
+                serde_json::to_value(saved)
+                    .map(Payload::Json)
+                    .map_err(failed)
+            }
+            "figure.close" => {
+                let fig_id =
+                    id(&a)?.ok_or_else(|| PluginError::Failed("`id` is required".to_owned()))?;
+                let closed = self.store.close(fig_id).map_err(failed)?;
+                Ok(Payload::Json(json!({ "closed": closed })))
             }
             "figure.list" => {
                 let list = self.store.list();
@@ -131,10 +155,7 @@ impl Plugin for FigurePlugin {
                 let op: FigureOp = serde_json::from_value(op_val.clone())
                     .map_err(|e| PluginError::Failed(format!("invalid `op`: {e}")))?;
                 let res = self.store.apply(fig_id, op).map_err(failed)?;
-                Ok(Payload::Json(json!({
-                    "revision": res.revision,
-                    "applied": res.applied,
-                })))
+                serde_json::to_value(res).map(Payload::Json).map_err(failed)
             }
             "figure.get" => {
                 let fig_id = id(&a)?;
