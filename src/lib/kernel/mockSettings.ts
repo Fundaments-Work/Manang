@@ -37,7 +37,16 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["theme.get", "Get full theme token definition"],
 ];
 
-const CORE_DEFINITIONS: SettingDef[] = [
+/** `crates/manang-settings/src/defaults.rs` `CATEGORY_CONTEXTS`. */
+export const CATEGORY_CONTEXTS: Readonly<Record<string, readonly string[]>> = {
+  appearance: ["app"],
+  editor: ["document", "diagram"],
+  preview: ["document", "pdf"],
+  compile: ["document"],
+  files: ["app", "project"],
+};
+
+const CORE_SETTINGS: Omit<SettingDef, "contexts">[] = [
   {
     id: "appearance.theme",
     type: "enum",
@@ -203,6 +212,11 @@ const CORE_DEFINITIONS: SettingDef[] = [
     description: "Move deleted files to the trash instead of removing them permanently.",
   },
 ];
+
+const CORE_DEFINITIONS: SettingDef[] = CORE_SETTINGS.map((d) => ({
+  ...d,
+  contexts: CATEGORY_CONTEXTS[d.category] ?? ["app"],
+}));
 
 const DEFAULT_KEYBINDINGS: KeybindingItem[] = [
   { command: "palette.open", key: "Mod+K", display: "Ctrl+K", when: "", source: "default" },
@@ -464,6 +478,7 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
               ...s,
               owner,
               category: s.id.split(".")[0] ?? "other",
+              contexts: s.contexts !== undefined && s.contexts.length > 0 ? s.contexts : ["app"],
             });
             registered += 1;
           }

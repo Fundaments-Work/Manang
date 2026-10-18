@@ -23,9 +23,14 @@
     type PluginInfo,
   } from "$lib/workbench/plugins";
   import {
+    defaultSettingsScope,
     filterSettings,
     formatCategoryLabel,
     groupSettings,
+    inContext,
+    pluginContexts,
+    scopeLabel,
+    splitMatches,
   } from "$lib/workbench/settings";
   import AboutView from "./AboutView.svelte";
   import KeybindingsTable from "./KeybindingsTable.svelte";
@@ -63,10 +68,16 @@
   const titles = $derived(new Map(commands.map((c) => [c.id, c.title])));
   const plugins = $derived(pluginEntries(info, commands));
 
+  /**
+   * Where the page was opened from. A document shows its own settings only
+   * (the mapping is each group's declared contexts); `app` shows all.
+   */
+  const origin = $derived(settingsPage.origin);
+  const scoped = $derived(origin.kind !== "app");
+  const matches = $derived(splitMatches(settings.defs, query, origin));
+
   const coreGroups = $derived(
-    groupSettings(filterSettings(settings.defs, query)).filter(
-      (g) => g.owner === "core",
-    ),
+    groupSettings(matches.here).filter((g) => g.owner === "core"),
   );
 
   /** A plugin shows when it or one of its settings matches the search. */
@@ -80,8 +91,12 @@
     );
   }
 
+  const pluginInScope = (entry: PluginEntry): boolean =>
+    inContext(pluginContexts(entry.name, info, settings.defs), origin);
+
   const pluginRows = $derived(
     plugins
+      .filter(pluginInScope)
       .map((entry) => {
         const own = settings.defs.filter((d) => d.owner === entry.name);
         if (query === "" || pluginMatches(entry, query)) return { entry, defs: own };
@@ -94,12 +109,55 @@
   );
   const nothing = $derived(coreGroups.length === 0 && pluginRows.length === 0);
 
+  /** Matches only "all settings" would show: settings, or plugins by name. */
+  const elsewhere = $derived(
+    !scoped || query === ""
+      ? 0
+      : matches.elsewhere.length +
+          plugins.filter(
+            (entry) =>
+              !pluginInScope(entry) &&
+              pluginMatches(entry, query) &&
+              !matches.elsewhere.some((d) => d.owner === entry.name),
+          ).length,
+  );
+
   $effect(() => {
     if (!hasProject && scope === "project") scope = "user";
   });
 
+  // Each opening picks the file to write to once settings are known: in a
+  // document, This project when the project overrides any shown setting.
+  let scopeChosenFor = -1;
   $effect(() => {
-    if (active === "" && coreGroups[0] !== undefined) active = coreGroups[0].id;
+    const request = settingsPage.request;
+    if (!settings.loaded || request === scopeChosenFor) return;
+    scopeChosenFor = request;
+    untrack(() => {
+      scope = defaultSettingsScope(
+        origin,
+        splitMatches(settings.defs, "", origin).here,
+        (id) => settings.source(id),
+        hasProject,
+      );
+    });
+  });
+
+  // The first shown section is current until scrolling says otherwise; a
+  // change of scope (Show all settings) starts again from the top.
+  const firstGroup = $derived(
+    coreGroups[0]?.id ??
+      (pluginRows[0] === undefined ? "" : `plugin:${pluginRows[0].entry.name}`),
+  );
+  $effect(() => {
+    void origin;
+    untrack(() => {
+      active = "";
+      if (scroller !== undefined) scroller.scrollTop = 0;
+    });
+  });
+  $effect(() => {
+    if (active === "" && firstGroup !== "") active = firstGroup;
   });
 
   // Typing a search always shows the settings (shortcuts filter their own view).
@@ -252,6 +310,24 @@
   </li>
 {/snippet}
 
+{#snippet link(label: string, onclick: () => void)}
+  <button
+    type="button"
+    class="inset-focus text-xs text-text-60 underline decoration-line underline-offset-4 hover:text-text"
+    {onclick}
+  >
+    {label}
+  </button>
+{/snippet}
+
+{#snippet more()}
+  {#if elsewhere > 0}
+    <p class="m-0 pt-6 text-xs" data-settings-more>
+      {@render link(`${elsewhere} more in all settings`, () => settingsPage.showAll())}
+    </p>
+  {/if}
+{/snippet}
+
 {#snippet rows(defs: readonly SettingDef[])}
   {#each defs as def (def.id)}
     <SettingRow
@@ -328,6 +404,24 @@
     </button>
   </header>
 
+  {#if scoped && view === "settings"}
+    <div
+      class="flex min-h-9 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-1.5 @3xl:px-6"
+      data-settings-scope
+    >
+      <p class="m-0 min-w-0 flex-1 truncate text-xs text-text-60" role="status">
+        {scopeLabel(origin)}
+      </p>
+      <button
+        type="button"
+        class="inset-focus shrink-0 text-xs text-text-60 underline decoration-line underline-offset-4 hover:text-text"
+        onclick={() => settingsPage.showAll()}
+      >
+        Show all settings
+      </button>
+    </div>
+  {/if}
+
   <div class="flex min-h-0 flex-1 flex-col @3xl:flex-row">
     <nav
       class="no-scrollbar shrink-0 overflow-x-auto border-b border-line @3xl:w-56 @3xl:overflow-x-visible @3xl:overflow-y-auto @3xl:border-r @3xl:border-b-0 @3xl:py-4"
@@ -337,7 +431,9 @@
         {#each coreGroups as group (group.id)}
           {@render navItem(group.id, group.label)}
         {/each}
-        {@render navItem("plugins", "Plugins")}
+        {#if !scoped || pluginRows.length > 0}
+          {@render navItem("plugins", "Plugins")}
+        {/if}
         {#each pluginRows as { entry } (entry.name)}
           {@const id = `plugin:${entry.name}`}
           <li class="hidden @3xl:block">
@@ -354,9 +450,11 @@
             </button>
           </li>
         {/each}
-        <li class="hidden h-4 @3xl:block" aria-hidden="true"></li>
-        {@render navItem("keyboard", "Keyboard shortcuts", "keyboard")}
-        {@render navItem("about", "About", "about")}
+        {#if !scoped}
+          <li class="hidden h-4 @3xl:block" aria-hidden="true"></li>
+          {@render navItem("keyboard", "Keyboard shortcuts", "keyboard")}
+          {@render navItem("about", "About", "about")}
+        {/if}
       </ul>
     </nav>
 
@@ -373,8 +471,9 @@
             <p class="m-0 py-6 text-xs text-text-60" role="status">Loading settings</p>
           {:else if nothing}
             <p class="m-0 py-6 text-xs text-text-60">
-              No setting or plugin matches “{query}”.
+              No setting or plugin {scoped ? "here " : ""}matches “{query}”.
             </p>
+            {@render more()}
           {:else}
             {#if settings.restartPending}
               <div
@@ -449,11 +548,13 @@
                 >
                   Plugins
                 </h2>
-                <p class="m-0 max-w-[60ch] text-xs leading-relaxed text-text-60">
-                  Everything in Manang is a plugin. Each declares in its manifest what
-                  it may access and which settings it has. Plugins from other authors
-                  run as WebAssembly in a sandbox.
-                </p>
+                {#if !scoped}
+                  <p class="m-0 max-w-[60ch] text-xs leading-relaxed text-text-60">
+                    Everything in Manang is a plugin. Each declares in its manifest what
+                    it may access and which settings it has. Plugins from other authors
+                    run as WebAssembly in a sandbox.
+                  </p>
+                {/if}
                 {#each pluginRows as { entry, defs } (entry.name)}
                   <PluginSection {entry}>
                     {#if defs.length > 0}
@@ -463,6 +564,8 @@
                 {/each}
               </section>
             {/if}
+
+            {@render more()}
 
             <div class="flex flex-wrap items-center gap-2 pt-10">
               <button
@@ -484,6 +587,15 @@
                 </button>
               {/if}
             </div>
+            {#if scoped}
+              <p
+                class="m-0 flex flex-wrap gap-x-4 pt-6 text-xs"
+                data-settings-app-links
+              >
+                {@render link("Keyboard shortcuts", () => (view = "keyboard"))}
+                {@render link("About", () => (view = "about"))}
+              </p>
+            {/if}
           {/if}
         {:else if view === "keyboard"}
           <KeybindingsTable
