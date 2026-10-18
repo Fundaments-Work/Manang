@@ -77,7 +77,7 @@
   </p>
 {:else}
   <ul class="m-0 list-none p-0" aria-label="Keyboard shortcuts">
-    {#each filtered as item (item.command)}
+    {#each filtered as item (`${item.command} ${item.key}`)}
       {@const clashes = findCommandConflicts(item.command, conflicts)}
       {@const title = titles.get(item.command)}
       <li

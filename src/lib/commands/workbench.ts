@@ -1,9 +1,12 @@
 /**
- * Workbench commands: panels, tabs, files and documents.
+ * Workbench commands: panels, tabs, files, documents, editing and help.
  *
- * One list drives both the palette and the global keyboard handler, so a
- * shortcut shown beside a command is by construction the one that runs it.
- * Commands are rebuilt each time the palette opens so `enabled` is current.
+ * One list drives the palette, the menu bar and the global keyboard handler,
+ * so a shortcut shown beside a command is by construction the one that runs
+ * it. Shortcuts come from the keybindings registry (`keymap`), which holds the
+ * defaults and the person's changes; commands whose keys the focused surface
+ * handles itself (Undo, Copy, Find) declare theirs for display only.
+ * Commands are rebuilt each time they are needed so `enabled` is current.
  */
 
 import { build } from "$lib/state/build.svelte";
@@ -14,14 +17,21 @@ import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
 import { settings } from "$lib/state/settings.svelte";
 import { settingsPage } from "$lib/state/settingsPage.svelte";
+import { shortcutOverlay } from "$lib/state/shortcutOverlay.svelte";
 import { showInPreview } from "$lib/state/sourceJump";
+import { switcher } from "$lib/state/switcher.svelte";
 import { tabs } from "$lib/state/tabs.svelte";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
+import { canOpenDevtools, inTauri, openDevtools } from "$lib/kernel/log";
 import { engineOf } from "$lib/workbench/paths";
 
+import { keymap } from "./keymap.svelte";
+import { withShortcuts } from "./keymap";
+import type { MenuBarId, MenuPlacement } from "./menu";
 import type { Command } from "./registry";
 import type { Shortcut } from "./shortcut";
+import { focusedSurface, type EditAction } from "./surface";
 
 const mod = (key: string, extra: Partial<Shortcut> = {}): Shortcut => ({
   key,
@@ -29,12 +39,11 @@ const mod = (key: string, extra: Partial<Shortcut> = {}): Shortcut => ({
   ...extra,
 });
 
-/** Opening the palette has no command of its own: it is how commands are reached. */
-export const PALETTE_COMMANDS_SHORTCUTS: readonly Shortcut[] = [
-  mod("k"),
-  mod("p", { shift: true }),
-];
-export const PALETTE_FILES_SHORTCUT: Shortcut = mod("p");
+const at = (bar: MenuBarId, group: string, order = 0): MenuPlacement => ({
+  bar,
+  group,
+  order,
+});
 
 /**
  * Where each command applies (`when` over the UI context keys, see
@@ -44,6 +53,8 @@ const WHEN: Readonly<Record<string, string>> = {
   "goto.file": "project",
   "view.files": "project",
   "view.search": "project",
+  "view.source-control": "project",
+  "view.outline": "project",
   "view.figures": "project",
   "view.references": "project",
   "view.toggle-side": "project",
@@ -71,8 +82,12 @@ const WHEN: Readonly<Record<string, string>> = {
   "doc.format": "workbench && document",
   "doc.show-in-preview": "workbench && document",
   "doc.slides": "workbench && typst",
+  "doc.present": "workbench && typst",
   "doc.convert-typst": "workbench && markdown",
   "project.close": "project",
+  ...Object.fromEntries(
+    Array.from({ length: 9 }, (_, i) => [`tab.go-${i + 1}`, "workbench"]),
+  ),
 };
 
 /**
@@ -83,6 +98,8 @@ const BRINGS_WORKBENCH: ReadonlySet<string> = new Set([
   "goto.file",
   "view.files",
   "view.search",
+  "view.source-control",
+  "view.outline",
   "view.figures",
   "view.references",
   "view.toggle-side",
@@ -99,6 +116,95 @@ function toWorkbench(): void {
   if (workspace.project !== null) home.hide();
 }
 
+/** The element focus was on, for deciding which Edit commands can run. */
+function focused(): Element | null {
+  return typeof document === "undefined" ? null : document.activeElement;
+}
+
+interface EditSpec {
+  readonly action: EditAction;
+  readonly title: string;
+  readonly keywords?: string;
+  /** Absent when the surfaces have no common key for it (Replace). */
+  readonly shortcut?: Shortcut;
+  readonly menu: MenuPlacement;
+}
+
+const EDITS: readonly (EditSpec & { readonly id: string })[] = [
+  {
+    id: "edit.undo",
+    action: "undo",
+    title: "Undo",
+    shortcut: mod("z"),
+    menu: at("edit", "1_undo", 0),
+  },
+  {
+    id: "edit.redo",
+    action: "redo",
+    title: "Redo",
+    shortcut: mod("z", { shift: true }),
+    menu: at("edit", "1_undo", 1),
+  },
+  {
+    id: "edit.cut",
+    action: "cut",
+    title: "Cut",
+    shortcut: mod("x"),
+    menu: at("edit", "2_clipboard", 0),
+  },
+  {
+    id: "edit.copy",
+    action: "copy",
+    title: "Copy",
+    shortcut: mod("c"),
+    menu: at("edit", "2_clipboard", 1),
+  },
+  {
+    id: "edit.paste",
+    action: "paste",
+    title: "Paste",
+    shortcut: mod("v"),
+    menu: at("edit", "2_clipboard", 2),
+  },
+  {
+    id: "edit.select-all",
+    action: "selectAll",
+    title: "Select all",
+    shortcut: mod("a"),
+    menu: at("edit", "3_select", 0),
+  },
+  {
+    id: "edit.find",
+    action: "find",
+    title: "Find",
+    keywords: "search document",
+    shortcut: mod("f"),
+    menu: at("edit", "4_find", 0),
+  },
+  {
+    id: "edit.replace",
+    action: "replace",
+    title: "Replace",
+    keywords: "find substitute",
+    menu: at("edit", "4_find", 1),
+  },
+];
+
+function editCommands(): Command[] {
+  const where = focused();
+  return EDITS.map((spec) => ({
+    id: spec.id,
+    title: spec.title,
+    group: "Workbench",
+    ...(spec.keywords === undefined ? {} : { keywords: spec.keywords }),
+    shortcuts: spec.shortcut === undefined ? [] : [spec.shortcut],
+    keys: "surface",
+    menu: spec.menu,
+    enabled: focusedSurface.can(spec.action, where),
+    run: () => actions.editAction(spec.action),
+  }));
+}
+
 export function workbenchCommands(
   openPalette: (mode: "commands" | "files") => void,
 ): Command[] {
@@ -112,124 +218,169 @@ export function workbenchCommands(
   const isPaged = engine === "typst" || engine === "latex";
   const list: Command[] = [
     {
+      id: "palette.commands",
+      title: "Command palette",
+      group: "Workbench",
+      keywords: "run search actions",
+      menu: at("view", "1_palette", 0),
+      run: () => openPalette("commands"),
+    },
+    {
       id: "goto.file",
       title: "Go to file",
       group: "Workbench",
       keywords: "open quick find",
-      shortcuts: [PALETTE_FILES_SHORTCUT],
       enabled: hasProject,
+      menu: at("go", "1_file", 0),
       run: () => openPalette("files"),
     },
     {
       id: "view.files",
       title: "Show files",
+      menuTitle: "Files",
       group: "Workbench",
       keywords: "explorer tree project",
-      shortcuts: [mod("e", { shift: true })],
+      menu: at("view", "2_side", 0),
       run: () => layout.showSide("files"),
     },
     {
       id: "view.search",
       title: "Search in project",
+      menuTitle: "Search",
       group: "Workbench",
       keywords: "find text",
-      shortcuts: [mod("f", { shift: true })],
+      menu: [at("view", "2_side", 1), at("edit", "4_find", 2)],
       run: () => layout.showSide("search"),
+    },
+    {
+      id: "view.source-control",
+      title: "Show source control",
+      menuTitle: "Source control",
+      group: "Workbench",
+      keywords: "git changes commit diff",
+      menu: at("view", "2_side", 2),
+      run: () => layout.showSide("source-control"),
+    },
+    {
+      id: "view.outline",
+      title: "Show outline",
+      menuTitle: "Outline",
+      group: "Workbench",
+      keywords: "headings sections structure",
+      menu: at("view", "2_side", 3),
+      run: () => layout.showSide("outline"),
     },
     {
       id: "view.figures",
       title: "Show figures",
+      menuTitle: "Figures",
       group: "Workbench",
       keywords: "draw diagrams",
+      menu: at("view", "2_side", 4),
       run: () => layout.showSide("figures"),
     },
     {
       id: "view.references",
       title: "Show references",
+      menuTitle: "References",
       group: "Workbench",
       keywords: "bibliography citations bib",
+      menu: at("view", "2_side", 5),
       run: () => layout.showSide("references"),
     },
     {
       id: "view.plugins",
       title: "Show plugins",
+      menuTitle: "Plugins",
       group: "Workbench",
       keywords: "extensions commands permissions",
-      shortcuts: [mod("x", { shift: true })],
+      menu: at("view", "2_side", 6),
       run: () => settingsPage.show("plugins"),
     },
     {
       id: "view.settings",
       title: "Open settings",
+      menuTitle: "Settings",
       group: "Workbench",
       keywords: "theme preferences",
-      shortcuts: [mod(",")],
+      menu: at("file", "6_settings", 0),
       run: () => settingsPage.show(),
     },
     {
       id: "view.toggle-side",
       title: "Toggle side panel",
       group: "Workbench",
-      shortcuts: [mod("b")],
+      menu: at("view", "3_panels", 0),
       run: () =>
         layout.sideView === null ? layout.showSide("files") : layout.closeSide(),
     },
     {
       id: "view.toggle-panel",
       title: "Toggle bottom panel",
+      menuTitle: "Toggle panel",
       group: "Workbench",
       keywords: "problems output",
-      shortcuts: [mod("j")],
+      menu: at("view", "3_panels", 1),
       run: () => layout.togglePanel(),
     },
     {
       id: "view.problems",
       title: "Show problems",
+      menuTitle: "Problems",
       group: "Workbench",
       keywords: "errors warnings diagnostics",
-      shortcuts: [mod("m", { shift: true })],
+      menu: at("build", "3_panels", 0),
       run: () => layout.showPanel("problems"),
     },
     {
       id: "view.output",
       title: "Show compile output",
+      menuTitle: "Output",
       group: "Workbench",
       keywords: "log",
+      menu: at("build", "3_panels", 1),
       run: () => layout.showPanel("output"),
     },
     {
       id: "view.preview-split",
       title: "Preview: editor and preview side by side",
+      menuTitle: "Editor and preview",
       group: "Workbench",
       keywords: "split layout",
+      menu: at("view", "4_preview", 0),
       run: () => layout.setPreview("split"),
     },
     {
       id: "view.preview-editor",
       title: "Preview: editor only",
+      menuTitle: "Editor only",
       group: "Workbench",
+      menu: at("view", "4_preview", 1),
       run: () => layout.setPreview("editor"),
     },
     {
       id: "view.preview-preview",
       title: "Preview: preview only",
+      menuTitle: "Preview only",
       group: "Workbench",
+      menu: at("view", "4_preview", 2),
       run: () => layout.setPreview("preview"),
     },
     {
       id: "view.cycle-preview",
       title: "Cycle preview layout",
       group: "Workbench",
-      shortcuts: [mod("v", { shift: true })],
+      menu: at("view", "4_preview", 3),
       run: () => layout.cyclePreview(),
     },
     {
       id: "view.zen",
       title: layout.zen ? "Leave zen mode" : "Enter zen mode",
+      menuTitle: "Zen mode",
       group: "Workbench",
       keywords: "focus distraction free fullscreen",
-      shortcuts: [mod("\\")],
       enabled: isDocument,
+      menu: at("view", "5_appearance", 0),
       run: () => layout.toggleZen(),
     },
     {
@@ -237,6 +388,7 @@ export function workbenchCommands(
       title: layout.theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
       group: "Workbench",
       keywords: "dark light appearance",
+      menu: at("view", "5_appearance", 1),
       run: () =>
         void settings.set(
           "appearance.theme",
@@ -248,24 +400,24 @@ export function workbenchCommands(
       id: "tab.next",
       title: "Next tab",
       group: "Workbench",
-      shortcuts: [mod("PageDown"), mod("Tab")],
       enabled: tabs.tabs.length > 1,
+      menu: at("go", "2_tabs", 0),
       run: () => tabs.cycle(1),
     },
     {
       id: "tab.previous",
       title: "Previous tab",
       group: "Workbench",
-      shortcuts: [mod("PageUp"), mod("Tab", { shift: true })],
       enabled: tabs.tabs.length > 1,
+      menu: at("go", "2_tabs", 1),
       run: () => tabs.cycle(-1),
     },
     {
       id: "tab.close",
       title: "Close tab",
       group: "Workbench",
-      shortcuts: [mod("w")],
       enabled: active !== undefined,
+      menu: at("go", "3_close", 0),
       run: () => actions.closeActiveTab(),
     },
     {
@@ -273,16 +425,37 @@ export function workbenchCommands(
       title: "Close other tabs",
       group: "Workbench",
       enabled: tabs.tabs.length > 1,
+      menu: at("go", "3_close", 1),
       run: () => {
         if (active !== undefined) void actions.closeOtherTabs(active.id);
+      },
+    },
+    ...Array.from({ length: 9 }, (_, i): Command => ({
+      id: `tab.go-${i + 1}`,
+      title: `Go to tab ${i + 1}`,
+      group: "Workbench",
+      palette: false,
+      enabled: tabs.tabs.length > i,
+      run: () => tabs.byShortcut(i + 1),
+    })),
+    {
+      id: "home.new-project",
+      title: "New project",
+      group: "Workbench",
+      keywords: "create start template",
+      menu: at("file", "1_new", 0),
+      run: () => {
+        settingsPage.hide();
+        home.show();
+        home.openNew();
       },
     },
     {
       id: "file.new",
       title: "New file",
       group: "Workbench",
-      shortcuts: [mod("n")],
       enabled: hasProject,
+      menu: at("file", "1_new", 1),
       run: () => void actions.newFileHere(),
     },
     {
@@ -291,6 +464,7 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "draw diagram sketch figure.create",
       enabled: hasProject,
+      menu: at("file", "1_new", 2),
       run: () => void actions.newFigure(),
     },
     {
@@ -299,7 +473,24 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "mermaid pikchr ascii svgbob flowchart sequence",
       enabled: hasProject,
+      menu: at("file", "1_new", 3),
       run: () => void newDiagram(),
+    },
+    {
+      id: "project.open-folder",
+      title: "Open folder…",
+      group: "Workbench",
+      keywords: "project open browse directory",
+      menu: at("file", "2_open", 0),
+      run: () => void actions.openFolder(),
+    },
+    {
+      id: "project.switch",
+      title: "Switch project…",
+      group: "Workbench",
+      keywords: "recent projects open",
+      menu: at("file", "2_open", 1),
+      run: () => void switcher.show(),
     },
     {
       id: "doc.copy-include",
@@ -307,24 +498,25 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "diagram image includegraphics insert",
       enabled: diagramIsActive(),
+      menu: at("edit", "5_document", 1),
       run: () => void copyIncludeLine(),
     },
     {
       id: "file.save",
       title: "Save",
       group: "Workbench",
-      shortcuts: [mod("s")],
       enabled: active !== undefined && actions.isTabDirty(active.path),
+      menu: at("file", "3_save", 0),
       run: () => void actions.saveActive(),
     },
     {
       id: "file.save-all",
       title: "Save all",
       group: "Workbench",
-      shortcuts: [mod("s", { shift: true })],
       enabled:
         documents.dirtyPaths.length > 0 ||
         tabs.tabs.some((t) => actions.isTabDirty(t.path)),
+      menu: at("file", "3_save", 1),
       run: () => void actions.saveAll(),
     },
     {
@@ -333,6 +525,7 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "welcome open folder recent",
       enabled: hasProject,
+      menu: at("file", "5_close", 0),
       run: () => void actions.closeProject(),
     },
     {
@@ -345,9 +538,11 @@ export function workbenchCommands(
     {
       id: "doc.compile",
       title: "Compile now",
+      menuTitle: "Compile",
       group: "Workbench",
       keywords: "build refresh preview",
       enabled: hasProject,
+      menu: at("build", "1_compile", 0),
       run: () => void build.compile(),
     },
     {
@@ -355,8 +550,8 @@ export function workbenchCommands(
       title: "Export PDF",
       group: "Workbench",
       keywords: "publish print download",
-      shortcuts: [mod("e")],
       enabled: isPaged,
+      menu: [at("file", "4_export", 0), at("build", "1_compile", 1)],
       run: () => actions.exportPdf(),
     },
     {
@@ -364,9 +559,8 @@ export function workbenchCommands(
       title: "Format document",
       group: "Workbench",
       keywords: "prettify tidy indent whitespace writing.format.document",
-      // Handled by the editor's own keymap; listed here so the palette shows it.
-      shortcuts: [{ key: "f", shift: true, alt: true }],
       enabled: isDocument && active.view === "text",
+      menu: at("edit", "5_document", 0),
       run: () => actions.formatDocument(),
     },
     {
@@ -374,8 +568,8 @@ export function workbenchCommands(
       title: "Show in preview",
       group: "Workbench",
       keywords: "jump sync synctex forward search locate caret cursor",
-      shortcuts: [mod("j", { alt: true })],
       enabled: isPaged && active?.kind === "document" && active.view === "text",
+      menu: at("go", "4_source", 0),
       run: () => void showInPreview(),
     },
     {
@@ -384,10 +578,21 @@ export function workbenchCommands(
         active?.kind === "document" && active.view === "slides"
           ? "Show document as text"
           : "Show document as slides",
+      menuTitle: "Slides",
       group: "Workbench",
       keywords: "deck presentation",
       enabled: isTypst,
+      menu: at("view", "5_appearance", 2),
       run: () => actions.toggleSlides(),
+    },
+    {
+      id: "doc.present",
+      title: "Present slides",
+      group: "Workbench",
+      keywords: "deck presentation fullscreen slideshow",
+      enabled: isTypst,
+      menu: at("build", "2_present", 0),
+      run: () => actions.presentSlides(),
     },
     {
       id: "doc.convert-typst",
@@ -395,6 +600,7 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "markdown export typ markdown.to-typst",
       enabled: isMarkdown,
+      menu: at("edit", "5_document", 2),
       run: () => {
         if (active !== undefined) void convertToTypst(active.path);
       },
@@ -402,26 +608,73 @@ export function workbenchCommands(
     {
       id: "home.show",
       title: "Go to Home",
+      menuTitle: "Home",
       group: "Workbench",
       keywords: "projects recent welcome",
-      run: () => {
-        settingsPage.hide();
-        home.show();
-      },
+      menu: at("go", "1_file", 1),
+      run: () => actions.toggleHome(),
     },
     {
-      id: "home.new-project",
-      title: "New project",
+      id: "help.shortcuts",
+      title: "Keyboard shortcuts",
       group: "Workbench",
-      keywords: "create start template",
-      run: () => {
-        settingsPage.hide();
-        home.show();
-        home.openNew();
-      },
+      keywords: "keys cheat sheet reference bindings",
+      menu: at("help", "1_reference", 0),
+      run: () => shortcutOverlay.toggle(),
+    },
+    {
+      id: "help.keybindings",
+      title: "Change keyboard shortcuts",
+      group: "Workbench",
+      keywords: "keybindings rebind customise",
+      menu: at("help", "1_reference", 1),
+      run: () => settingsPage.show("keyboard"),
+    },
+    {
+      id: "help.report-problem",
+      title: "Report a problem",
+      group: "Workbench",
+      keywords: "bug issue log feedback",
+      menu: at("help", "2_problem", 0),
+      run: () => void actions.revealLogs(true),
+    },
+    {
+      id: "help.open-logs",
+      title: "Open logs folder",
+      menuTitle: "Open logs",
+      group: "Workbench",
+      keywords: "log diagnostics",
+      menu: at("help", "2_problem", 1),
+      run: () => void actions.revealLogs(false),
+    },
+    {
+      id: "dev.inspect",
+      title: "Toggle developer tools",
+      group: "Workbench",
+      keywords: "inspector devtools debug",
+      enabled: canOpenDevtools(),
+      menu: at("help", "3_dev", 0),
+      run: () => openDevtools(),
+    },
+    {
+      id: "help.about",
+      title: "About Manang",
+      group: "Workbench",
+      keywords: "version licence",
+      menu: at("help", "9_about", 0),
+      run: () => settingsPage.show("about"),
+    },
+    {
+      id: "app.quit",
+      title: "Quit",
+      group: "Workbench",
+      keywords: "exit close window",
+      enabled: inTauri(),
+      menu: at("file", "9_quit", 0),
+      run: () => actions.quitApp(),
     },
   ];
-  return list.map((command) => ({
+  const wrapped = list.map((command) => ({
     ...command,
     when: WHEN[command.id],
     run: BRINGS_WORKBENCH.has(command.id)
@@ -431,18 +684,5 @@ export function workbenchCommands(
         }
       : command.run,
   }));
-}
-
-/** Every shortcut, with the command it runs, for the global key handler. */
-export function shortcutTable(
-  commands: readonly Command[],
-  applies: (when: string | undefined) => boolean = () => true,
-): { shortcut: Shortcut; run: () => void }[] {
-  const table: { shortcut: Shortcut; run: () => void }[] = [];
-  for (const command of commands) {
-    if (command.enabled === false || !applies(command.when)) continue;
-    for (const shortcut of command.shortcuts ?? [])
-      table.push({ shortcut, run: command.run });
-  }
-  return table;
+  return [...withShortcuts(wrapped, keymap.byCommand), ...editCommands()];
 }
