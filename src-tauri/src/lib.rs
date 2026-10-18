@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use manang_editor::{Editor, EditorPlugin};
 use manang_kernel::{BufferService, CommandInfo, EventBus, Kernel, KernelError, Payload};
-use manang_plugins::{ManagerConfig, PluginEvent, PluginManager, WatchHandle, WatchOptions};
+use manang_plugins::{ManagerConfig, ManagerEvent, PluginManager, WatchHandle, WatchOptions};
 use manang_settings::PluginSettingsSync;
 use manang_wasm_host::{HostServices, ProjectRoot};
 use serde::Serialize;
@@ -196,7 +196,8 @@ fn start_settings_sync(
     Ok(sync)
 }
 
-/// Load third-party WASM plugins and keep them hot-reloaded.
+/// Load third-party WASM plugins, keep them hot-reloaded, and register the
+/// `plugins` plugin that manages them (the `plugins.*` commands).
 fn start_plugins(
     kernel: &Arc<Kernel>,
     dirs: &Dirs<'_>,
@@ -207,52 +208,51 @@ fn start_plugins(
 ) -> Result<(Arc<PluginManager>, Option<WatchHandle>), BootError> {
     let mut config = ManagerConfig::new(manang_plugins::plugins_dir_in(dirs.config));
     config.cache_dir = Some(manang_plugins::cache_dir_in(dirs.cache));
+    config.registry_path = Some(manang_plugins::registry_path_in(dirs.config));
+    config.trash_dir = Some(manang_plugins::trash_dir_in(dirs.config));
     config.services = HostServices {
         buffer: Some(Arc::clone(editor) as Arc<dyn BufferService>),
         project: Arc::clone(project_root),
     };
+    // Every change, whoever caused it (the scan, the file watcher, a
+    // `plugins.*` command), reaches the shell as a `plugins.*` event with its
+    // payload, and a plugin that just loaded gets its settings.
+    let bus = events.clone();
+    let listener_settings = Arc::clone(settings);
+    config.listener = Some(Arc::new(move |event: &ManagerEvent| {
+        if let ManagerEvent::Loaded { name } | ManagerEvent::Reloaded { name } = event {
+            let _ = listener_settings.sync_plugin(name);
+        }
+        bus.emit(event.topic(), Payload::Json(event.payload()));
+    }));
     let manager = Arc::new(PluginManager::new(Arc::clone(kernel), config)?);
+    kernel.register(
+        manang_plugins::manifest()?,
+        Arc::new(manang_plugins::plugin(&manager)),
+    )?;
+    // Built-ins the user switched off last time stay off.
+    manager.reconcile_builtins();
 
     // Scanning compiles components, which is CPU-bound: never on the UI thread.
     let scanner = Arc::clone(&manager);
     let bus = events.clone();
-    let scan_settings = Arc::clone(settings);
     std::thread::Builder::new()
         .name("manang-plugin-scan".to_owned())
         .spawn(move || {
-            let topic = match scanner.scan() {
-                Ok(report) => {
-                    for info in &report.loaded {
-                        let _ = scan_settings.sync_plugin(&info.name);
-                    }
-                    "plugins.scanned"
-                }
-                Err(_) => "plugins.scan-failed",
-            };
-            bus.emit(topic, Payload::Empty);
+            if let Err(e) = scanner.scan() {
+                bus.emit(
+                    "plugins.scan-failed",
+                    Payload::Json(serde_json::json!({ "error": e.to_string() })),
+                );
+            }
         })
         .map_err(|e| manang_plugins::ManagerError::Watch {
             path: manager.plugins_dir().to_path_buf(),
             reason: e.to_string(),
         })?;
 
-    let bus = events.clone();
-    let watch_settings = Arc::clone(settings);
-    let watch = manager
-        .watch(WatchOptions::default(), move |event| {
-            if let PluginEvent::Loaded(info) | PluginEvent::Reloaded(info) = &event {
-                let _ = watch_settings.sync_plugin(&info.name);
-            }
-            let (topic, name) = match &event {
-                PluginEvent::Loaded(info) => ("plugins.loaded", info.name.clone()),
-                PluginEvent::Reloaded(info) => ("plugins.reloaded", info.name.clone()),
-                PluginEvent::Unloaded(name) => ("plugins.unloaded", name.clone()),
-                PluginEvent::Failed(_) => ("plugins.failed", String::new()),
-                PluginEvent::WatchError(_) => ("plugins.watch-error", String::new()),
-            };
-            bus.emit(topic, Payload::Json(serde_json::json!({ "name": name })));
-        })
-        .ok();
+    // The manager's listener already reports what the watcher does.
+    let watch = manager.watch(WatchOptions::default(), |_| {}).ok();
     Ok((manager, watch))
 }
 
@@ -321,6 +321,8 @@ fn point_plugins_at_project(kernel: &Kernel, opened: &Payload) {
         return;
     };
     for (command, args) in [
+        // First: a project that switches git off must do so before git.open.
+        ("plugins.use-project", serde_json::json!({ "path": root })),
         ("git.open", serde_json::json!({ "root": root })),
         ("settings.use-project", serde_json::json!({ "path": root })),
     ] {
@@ -344,6 +346,13 @@ async fn dispatch(
         let output = kernel.invoke(&name, input)?;
         if opening {
             point_plugins_at_project(&kernel, &output);
+        } else if name == "project.close" {
+            // A closed project's plugin overrides end with it.
+            if let Err(e) =
+                kernel.invoke("plugins.use-project", Payload::Json(serde_json::json!({})))
+            {
+                log::warn!("plugins.use-project on close failed: {e}");
+            }
         }
         Ok::<_, KernelError>(output)
     })
@@ -657,7 +666,10 @@ pub fn run() -> Result<(), tauri::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppInfo, Arc, Dirs, Editor, EventBus, app_info, build_kernel, check_destination};
+    use super::{
+        AppInfo, Arc, Dirs, Editor, EventBus, ProjectRoot, app_info, build_kernel,
+        check_destination, start_plugins, start_settings_sync,
+    };
     use manang_kernel::Payload;
     use serde_json::json;
 
@@ -874,5 +886,88 @@ mod tests {
         assert_eq!(json["tier"], "native");
         assert!(json["commands"].as_u64().is_some_and(|n| n > 0));
         assert!(json["permissions"]["filesystem"].is_array());
+    }
+
+    #[test]
+    fn the_plugin_manager_is_registered_and_lists_built_ins() {
+        let config = tempfile::tempdir().expect("config dir");
+        let cache = tempfile::tempdir().expect("cache dir");
+        let dirs = Dirs {
+            config: config.path(),
+            cache: cache.path(),
+        };
+        let events = EventBus::new();
+        let editor = Arc::new(Editor::new());
+        let kernel =
+            Arc::new(build_kernel(&dirs, &events, &editor).expect("first-party plugins register"));
+        let settings = start_settings_sync(&kernel, &events).expect("settings sync");
+        let (_manager, _watch) = start_plugins(
+            &kernel,
+            &dirs,
+            &events,
+            &editor,
+            &Arc::new(ProjectRoot::new(None)),
+            &settings,
+        )
+        .expect("plugin manager starts");
+
+        let ids: Vec<_> = kernel.commands().into_iter().map(|c| c.id).collect();
+        for expected in [
+            "plugins.list",
+            "plugins.inspect",
+            "plugins.install",
+            "plugins.approve",
+            "plugins.enable",
+            "plugins.disable",
+            "plugins.uninstall",
+            "plugins.reload",
+            "plugins.permissions",
+            "plugins.use-project",
+        ] {
+            assert!(ids.iter().any(|id| id == expected), "missing {expected}");
+        }
+
+        let list = |kernel: &manang_kernel::Kernel| {
+            let Ok(Payload::Json(v)) = kernel.invoke("plugins.list", Payload::Empty) else {
+                panic!("plugins.list returns JSON");
+            };
+            v
+        };
+        let find = |v: &serde_json::Value, name: &str| {
+            v["plugins"]
+                .as_array()
+                .and_then(|p| p.iter().find(|p| p["name"] == name).cloned())
+                .unwrap_or_else(|| panic!("{name} listed"))
+        };
+        let v = list(&kernel);
+        assert_eq!(find(&v, "editor")["core"], true);
+        assert_eq!(find(&v, "editor")["tier"], "native");
+        assert_eq!(find(&v, "search")["core"], false);
+        assert_eq!(find(&v, "plugins")["core"], true);
+
+        // Core plugins refuse; others can be switched off and on, and the
+        // choice is written to the registry.
+        let refused = kernel
+            .invoke(
+                "plugins.disable",
+                Payload::Json(json!({ "name": "editor" })),
+            )
+            .expect_err("core");
+        assert!(refused.to_string().contains("[core_plugin]"), "{refused}");
+        kernel
+            .invoke(
+                "plugins.disable",
+                Payload::Json(json!({ "name": "search" })),
+            )
+            .expect("search can be disabled");
+        assert!(!kernel.has_command("search.files"));
+        assert_eq!(find(&list(&kernel), "search")["status"], "disabled");
+        let registry = std::fs::read_to_string(config.path().join("manang/plugins.toml"))
+            .expect("registry written");
+        assert!(registry.contains("[plugins.search]"), "{registry}");
+        kernel
+            .invoke("plugins.enable", Payload::Json(json!({ "name": "search" })))
+            .expect("enable");
+        assert!(kernel.has_command("search.files"));
     }
 }

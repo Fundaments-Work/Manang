@@ -383,7 +383,15 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "extensions commands permissions",
       menu: at("view", "2_side", 6),
-      run: () => settingsPage.show("plugins"),
+      // A side view of the workbench; without a project there is no
+      // workbench, so the Settings page's plugin sections stand in.
+      run: () => {
+        if (workspace.project === null) settingsPage.show("plugins");
+        else {
+          toWorkbench();
+          layout.showSide("plugins");
+        }
+      },
     },
     {
       id: "view.settings",

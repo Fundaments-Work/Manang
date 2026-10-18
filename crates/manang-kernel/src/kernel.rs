@@ -142,6 +142,17 @@ impl Kernel {
             .map(|e| e.manifest.clone())
     }
 
+    /// A registered plugin's manifest and implementation, so a manager can
+    /// take it out of service with [`Kernel::unregister`] and put the very
+    /// same instance back later (disabling and re-enabling a built-in).
+    pub fn plugin_handle(&self, name: &str) -> Option<(Manifest, Arc<dyn Plugin>)> {
+        self.registry
+            .read()
+            .plugins
+            .get(name)
+            .map(|e| (e.manifest.clone(), Arc::clone(&e.plugin)))
+    }
+
     /// Remove a plugin and everything it contributed.
     ///
     /// Calls already running finish on the removed plugin.

@@ -78,6 +78,10 @@ fn word_count_counts_text_the_buffer_and_lints() {
     let (kernel, manager) = manager(tmp.path(), "one two three\nfour\n");
     let report = manager.scan().expect("scan");
     assert!(report.failed.is_empty(), "{:?}", report.failed);
+    // It asks for the active buffer, so it waits for the user's approval.
+    assert_eq!(report.held, ["word-count"]);
+    let asked = manager.state_of("word-count").expect("state").permissions;
+    manager.approve("word-count", &asked).expect("approve");
 
     // Text passed as a JSON string, and as {"text": ...}.
     let expected = json!({"words": 5, "characters": 30, "lines": 2});
