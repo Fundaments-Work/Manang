@@ -29,3 +29,7 @@ title = "Jump from preview to source"
 [[contributes.commands]]
 id = "typst.jump-from-cursor"
 title = "Jump from source to preview"
+
+[[contributes.commands]]
+id = "typst.svg-to-pdf"
+title = "Convert an SVG to a one-page PDF"

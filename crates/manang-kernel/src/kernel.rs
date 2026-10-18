@@ -174,6 +174,25 @@ impl Kernel {
 
     /// Run a command. No kernel lock is held while the plugin executes.
     pub fn invoke(&self, command: &str, input: Payload) -> Result<Payload, KernelError> {
+        self.invoke_at(command, input, 0)
+    }
+
+    /// Whether some registered plugin provides `command`.
+    pub fn has_command(&self, command: &str) -> bool {
+        self.registry.read().commands.contains_key(command)
+    }
+
+    /// [`Kernel::invoke`] at a nesting `depth`: 0 for the shell's own calls,
+    /// one more for each [`Context::invoke`] on the way.
+    pub(crate) fn invoke_at(
+        &self,
+        command: &str,
+        input: Payload,
+        depth: usize,
+    ) -> Result<Payload, KernelError> {
+        if depth > crate::plugin::MAX_CALL_DEPTH {
+            return Err(KernelError::CallTooDeep(command.to_owned()));
+        }
         let entry = {
             let reg = self.registry.read();
             let owner = reg
@@ -185,7 +204,12 @@ impl Kernel {
                 .cloned()
                 .ok_or_else(|| KernelError::UnknownPlugin(owner.clone()))?
         };
-        let ctx = Context::new(&entry.manifest.plugin.name, &entry.capabilities);
+        let ctx = Context::new(
+            &entry.manifest.plugin.name,
+            &entry.capabilities,
+            self,
+            depth,
+        );
         Ok(entry.plugin.invoke(&ctx, command, input)?)
     }
 
@@ -217,7 +241,8 @@ impl Kernel {
                 let mut current = input;
                 let mut last = None;
                 for entry in subscribers {
-                    let ctx = Context::new(&entry.manifest.plugin.name, &entry.capabilities);
+                    let ctx =
+                        Context::new(&entry.manifest.plugin.name, &entry.capabilities, self, 0);
                     current = entry.plugin.on_hook(&ctx, hook, current)?;
                     last = Some(entry.manifest.plugin.name.clone());
                 }
@@ -226,7 +251,8 @@ impl Kernel {
             HookMode::FanOut => subscribers
                 .into_iter()
                 .map(|entry| {
-                    let ctx = Context::new(&entry.manifest.plugin.name, &entry.capabilities);
+                    let ctx =
+                        Context::new(&entry.manifest.plugin.name, &entry.capabilities, self, 0);
                     let out = entry.plugin.on_hook(&ctx, hook, input.clone())?;
                     Ok((entry.manifest.plugin.name.clone(), out))
                 })
@@ -247,7 +273,7 @@ impl Kernel {
         subscribers
             .into_iter()
             .map(|entry| {
-                let ctx = Context::new(&entry.manifest.plugin.name, &entry.capabilities);
+                let ctx = Context::new(&entry.manifest.plugin.name, &entry.capabilities, self, 0);
                 let arg = match hook.mode() {
                     HookMode::Pipeline => current.clone(),
                     HookMode::FanOut => input.clone(),

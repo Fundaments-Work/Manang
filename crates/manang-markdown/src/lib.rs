@@ -14,6 +14,7 @@
 #![deny(missing_docs)]
 
 pub mod diagnostics;
+pub mod diagrams;
 pub mod error;
 pub mod frontmatter;
 pub mod html;
@@ -22,9 +23,13 @@ pub mod plugin;
 pub mod typst;
 
 pub use diagnostics::Diagnostic;
+pub use diagrams::{DiagramFence, diagram_fences, fence_key, fence_language};
 pub use error::MarkdownError;
 pub use frontmatter::{Frontmatter, parse_frontmatter};
-pub use html::{RenderOptions, escape_html, is_unsafe_url, render_to_html};
+pub use html::{
+    RenderOptions, diagram_placeholder, escape_html, is_unsafe_url, render_to_html,
+    render_to_html_at,
+};
 pub use outline::{Heading, extract_outline};
 pub use plugin::{MarkdownPlugin, manifest, plugin};
-pub use typst::markdown_to_typst;
+pub use typst::{FenceFigure, markdown_to_typst, markdown_to_typst_with};

@@ -18,5 +18,8 @@ toml = "0.8"
 yaml-rust = "0.4"
 
 [dev-dependencies]
+manang-diagram = { path = "../manang-diagram" }
+manang-project = { path = "../manang-project" }
+tempfile = "3"
 insta = { version = "1", features = ["json"] }
 proptest = "1"

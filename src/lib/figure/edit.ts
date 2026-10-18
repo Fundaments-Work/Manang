@@ -71,10 +71,15 @@ export function svgPathFor(figurePath: string): string {
   return figurePath.replace(/\.figure\.json$/, ".svg");
 }
 
+/** The PDF Manang writes next to a figure's SVG in LaTeX projects. */
+export function pdfPathFor(svgPath: string): string {
+  return svgPath.replace(/\.svg$/i, ".pdf");
+}
+
 /**
- * The line that embeds a figure's rendered SVG (a project-relative path) in a
- * document of the given engine. LaTeX needs the `svg` package, since pdfTeX
- * and XeTeX cannot read SVG through `\includegraphics`.
+ * The line that embeds a figure (its project-relative SVG path) in a document
+ * of the given engine. LaTeX takes the PDF written next to the SVG on save
+ * (pdfTeX and XeTeX cannot read SVG, and `\includesvg` needs Inkscape).
  */
 export function embedLine(
   svgPath: string,
@@ -84,7 +89,7 @@ export function embedLine(
     case "typst":
       return `#figure(image("${svgPath}", width: 80%))`;
     case "latex":
-      return `\\includesvg[width=0.8\\linewidth]{${svgPath}}`;
+      return `\\includegraphics[width=0.8\\linewidth]{${pdfPathFor(svgPath)}}`;
     case "markdown":
       return `![](${svgPath})`;
   }

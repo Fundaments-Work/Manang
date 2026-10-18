@@ -16,3 +16,7 @@ title = "Extract Markdown document outline"
 [[contributes.commands]]
 id = "markdown.to-typst"
 title = "Convert Markdown to Typst markup"
+
+[[contributes.commands]]
+id = "markdown.diagrams"
+title = "List the diagram fences of a Markdown document"

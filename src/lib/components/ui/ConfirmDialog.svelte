@@ -1,5 +1,6 @@
 <script lang="ts">
   import { dialog } from "$lib/state/dialog.svelte";
+  import { stepChoice } from "$lib/workbench/dialogRequest";
 
   /**
    * Modal confirmation (`alertdialog`). Focus lands on the first action (or the
@@ -92,6 +93,43 @@
             }}
           />
         </label>
+      {/if}
+      {#if request.choice !== undefined}
+        {@const choice = request.choice}
+        <div class="mb-5 flex flex-col gap-1.5 text-xs text-text-60">
+          <span id="dialog-choice">{choice.label}</span>
+          <div
+            class="flex border border-line"
+            role="radiogroup"
+            aria-labelledby="dialog-choice"
+          >
+            {#each choice.options as option, index (option.id)}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={dialog.choice === option.id}
+                tabindex={dialog.choice === option.id ? 0 : -1}
+                class="inset-focus h-7 min-w-0 flex-1 truncate px-2 text-xs {index > 0
+                  ? 'border-l border-line'
+                  : ''} {dialog.choice === option.id
+                  ? 'bg-surface-hi text-text'
+                  : 'text-text-60 hover:text-text'}"
+                onclick={() => (dialog.choice = option.id)}
+                onkeydown={(event) => {
+                  const next = stepChoice(choice.options, dialog.choice, event.key);
+                  if (next === null) return;
+                  event.preventDefault();
+                  dialog.choice = next;
+                  const group = event.currentTarget.parentElement;
+                  group?.querySelector<HTMLElement>(`[data-choice="${next}"]`)?.focus();
+                }}
+                data-choice={option.id}
+              >
+                {option.label}
+              </button>
+            {/each}
+          </div>
+        </div>
       {/if}
       <div class="flex flex-wrap justify-end gap-2">
         <button type="button" class="mng-btn" onclick={() => dialog.answer("cancel")}

@@ -1,0 +1,20 @@
+---
+source: crates/manang-markdown/tests/diagrams.rs
+expression: diagrams
+---
+[
+  {
+    "language": "mermaid",
+    "source": "flowchart TD\n  A[Start] --> B[Done]\n",
+    "line": 7,
+    "endLine": 10,
+    "key": "eb6cef84b22f9023"
+  },
+  {
+    "language": "svgbob",
+    "source": "+--+\n|  |\n+--+\n",
+    "line": 14,
+    "endLine": 18,
+    "key": "60673589cb320f72"
+  }
+]

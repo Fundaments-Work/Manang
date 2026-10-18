@@ -14,8 +14,15 @@
  */
 
 import { kernel, errorMessage, reportError } from "$lib/kernel";
-import { latexApi, markdownApi, typstApi } from "$lib/kernel/api";
+import { diagramApi, latexApi, markdownApi, typstApi } from "$lib/kernel/api";
+import { browserUrls } from "$lib/kernel/artifact";
 import type { Engine } from "$lib/kernel/types";
+import {
+  fenceProblems,
+  fillPlaceholders,
+  FenceRenderer,
+  PAPER_DIAGRAM_THEME,
+} from "$lib/workbench/markdownDiagrams";
 import { join } from "$lib/workbench/paths";
 import {
   countProblems,
@@ -23,6 +30,7 @@ import {
   fromLatexReport,
   fromMarkdown,
   fromReport,
+  sortProblems,
   type Counts,
   type EngineFailure,
   type Problem,
@@ -110,6 +118,11 @@ export class BuildState {
   /** From the preview.* settings; see `setPreviewPrefs`. */
   #autoCompile = true;
   #debounceMs: number | null = null;
+  readonly #fences = new FenceRenderer({
+    api: diagramApi(kernel),
+    urls: browserUrls,
+    onError: (error) => reportError("markdown diagrams", error),
+  });
   readonly #scheduler = createScheduler(() => this.compile(), DEBOUNCE_MS.typst);
 
   /** The file the preview shows, or null when nothing previews. */
@@ -316,16 +329,23 @@ export class BuildState {
     const started = performance.now();
     const rendered = await markdown.renderHtml(source);
     if (run !== this.#run) return;
-    this.html = rendered.html;
+    // Diagram fences: each placeholder gets its picture (re-rendered only
+    // when the fence or the theme changed) or an error box and a Problem.
+    const fences = rendered.diagrams ?? [];
+    const pictures = await this.#fences.prepare(fences, PAPER_DIAGRAM_THEME);
+    if (run !== this.#run) return;
+    this.html = fillPlaceholders(rendered.html, pictures);
     this.#finish(
       main,
-      fromMarkdown(rendered.diagnostics, main),
+      sortProblems([
+        ...fromMarkdown(rendered.diagnostics, main),
+        ...fenceProblems(main, fences, pictures),
+      ]),
       true,
       performance.now() - started,
       1,
     );
   }
-
   #finish(
     main: string,
     problems: readonly Problem[],

@@ -30,5 +30,5 @@ pub use manifest::{
     SettingSpec, Tier,
 };
 pub use payload::Payload;
-pub use plugin::{Context, Plugin};
+pub use plugin::{Context, MAX_CALL_DEPTH, Plugin};
 pub use services::BufferService;

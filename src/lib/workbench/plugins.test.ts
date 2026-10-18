@@ -50,11 +50,12 @@ describe("plugins panel model", () => {
       "typst.jump-from-click",
       "typst.jump-from-cursor",
       "typst.render",
+      "typst.svg-to-pdf",
     ]);
-    // citations 7, diagram 4, editor 8, figure 10, git 15, latex 4, markdown 3,
-    // project 18, search 6, settings 14, typst 5, writing 14.
+    // citations 7, diagram 4, editor 8, figure 10, git 15, latex 4, markdown 4,
+    // project 22, search 6, settings 14, typst 6, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      7 + 4 + 8 + 10 + 15 + 4 + 3 + 18 + 6 + 14 + 5 + 14,
+      7 + 4 + 8 + 10 + 15 + 4 + 4 + 22 + 6 + 14 + 6 + 14,
     );
   });
 

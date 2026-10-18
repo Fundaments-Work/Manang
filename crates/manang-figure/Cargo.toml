@@ -17,6 +17,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+manang-project = { path = "../manang-project" }
+manang-typst = { path = "../manang-typst" }
 insta = { version = "1", features = ["json"] }
 proptest = "1"
 tempfile = "3"

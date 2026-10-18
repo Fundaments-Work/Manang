@@ -21,6 +21,7 @@ use serde_json::{Value, json};
 
 use crate::config::{CONFIG_FILE, ProjectConfig};
 use crate::error::ProjectError;
+use crate::export;
 use crate::fsops;
 use crate::git;
 use crate::paths::ProjectRoot;
@@ -319,6 +320,22 @@ mod args {
 
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
+    pub struct InlineDiagram {
+        pub language: String,
+        pub source: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct ExportPdf {
+        pub path: String,
+        /// Write the PDF even when the project does not use LaTeX.
+        #[serde(default)]
+        pub force: bool,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
     pub struct Rename {
         pub from: String,
         pub to: String,
@@ -328,7 +345,7 @@ mod args {
 impl Plugin for ProjectPlugin {
     fn invoke(
         &self,
-        _ctx: &Context<'_>,
+        ctx: &Context<'_>,
         command: &str,
         input: Payload,
     ) -> Result<Payload, PluginError> {
@@ -480,6 +497,33 @@ impl Plugin for ProjectPlugin {
             "project.git-status" => {
                 let open = self.current().map_err(failed)?;
                 json_payload(&git::status(open.root.path()).map_err(failed)?)
+            }
+            "project.stat" => {
+                let a: args::File = parse(input)?;
+                let open = self.current().map_err(failed)?;
+                json_payload(&fsops::stat(&open.root, &a.path).map_err(failed)?)
+            }
+            "project.export-diagram" => {
+                let a: args::File = parse(input)?;
+                let open = self.current().map_err(failed)?;
+                let pdf = export::wants_pdf(&open.root, open.config.project.engine);
+                json_payload(
+                    &export::export_diagram(ctx, &open.root, &a.path, pdf).map_err(failed)?,
+                )
+            }
+            "project.cache-diagram" => {
+                let a: args::InlineDiagram = parse(input)?;
+                let open = self.current().map_err(failed)?;
+                json_payload(
+                    &export::cache_diagram(ctx, &open.root, &a.language, &a.source)
+                        .map_err(failed)?,
+                )
+            }
+            "project.export-pdf" => {
+                let a: args::ExportPdf = parse(input)?;
+                let open = self.current().map_err(failed)?;
+                let wanted = a.force || export::wants_pdf(&open.root, open.config.project.engine);
+                json_payload(&export::export_pdf(ctx, &open.root, &a.path, wanted).map_err(failed)?)
             }
             other => Err(PluginError::UnknownCommand(other.to_owned())),
         }
