@@ -8,7 +8,7 @@ command in `crates/manang-diagram` (`diagram.layout`).
 ## Context
 
 The figure plugin started as a sketch pad: freehand strokes, rectangles,
-ellipses, unbound arrows and formulas, one scene per `.figure.json` with an
+ellipses, unbound arrows and formulas, one scene per `.figure` (or legacy `.figure.json`) with an
 SVG written beside it. The product owner wants it to become Manang's
 distinctive feature: an Excalidraw/tldraw-class diagramming canvas that also
 understands Mermaid and that AI agents (and other plugins) can drive through
@@ -91,7 +91,7 @@ obstacles, presentation mode over frames.
 
 ### Scene format v2
 
-One JSON object per `<name>.figure.json`, pretty-printed with two-space
+One JSON object per `<name>.figure` (or legacy `<name>.figure.json`), pretty-printed with two-space
 indentation and a final newline, keys in a fixed order, numbers rounded to
 two decimals on write, defaults omitted, so a one-shape edit is a small
 diff:

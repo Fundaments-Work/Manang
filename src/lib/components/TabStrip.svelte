@@ -281,20 +281,32 @@
     <div
       role="radiogroup"
       aria-label="Document view"
-      class="flex shrink-0 items-center gap-px border-l border-line px-2"
+      tabindex="0"
+      class="flex shrink-0 items-center gap-px border-l border-line px-2 focus-visible:outline-none"
+      onkeydown={(e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          if (!slidesOn) toggleSlides();
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          if (slidesOn) toggleSlides();
+        }
+      }}
     >
       <button
         type="button"
         role="radio"
         aria-checked={!slidesOn}
-        class="mng-btn h-6 px-2"
+        tabindex={!slidesOn ? 0 : -1}
+        class="mng-btn inset-focus h-6 px-2"
         onclick={() => slidesOn && toggleSlides()}>Text</button
       >
       <button
         type="button"
         role="radio"
         aria-checked={slidesOn}
-        class="mng-btn h-6 px-2"
+        tabindex={slidesOn ? 0 : -1}
+        class="mng-btn inset-focus h-6 px-2"
         onclick={() => !slidesOn && toggleSlides()}>Slides</button
       >
     </div>

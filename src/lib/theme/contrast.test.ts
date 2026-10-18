@@ -150,3 +150,85 @@ describe("Light theme WCAG 2.1 contrast audit", () => {
     expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe("Dark base WCAG 2.1 contrast audit", () => {
+  const cssUrl = new URL("../../app.css", import.meta.url);
+  const appCss = readFileSync(cssUrl, "utf-8");
+
+  const darkThemeBlock = appCss.match(/:root,\s*\.theme-dark\s*\{([^}]+)\}/)?.[1];
+  if (!darkThemeBlock) {
+    throw new Error("Could not find :root, .theme-dark block in src/app.css");
+  }
+
+  function extractToken(varName: string): string {
+    const regex = new RegExp(`${varName}:\\s*([^;]+);`);
+    const match = darkThemeBlock?.match(regex);
+    const tokenVal = match?.[1];
+    if (!tokenVal) throw new Error(`Token ${varName} not found in :root, .theme-dark`);
+    return tokenVal.trim();
+  }
+
+  const bgHex = extractToken("--mng-bg");
+  const surfaceHex = extractToken("--mng-surface");
+  const surfaceHiHex = extractToken("--mng-surface-hi");
+  const surfaceMutedHex = extractToken("--mng-surface-muted");
+  const textHex = extractToken("--mng-text");
+  const text60Hex = extractToken("--mng-text-60");
+  const textMutedHex = extractToken("--mng-text-muted");
+  const lineHex = extractToken("--mng-line");
+  const accentHex = extractToken("--mng-accent");
+  const accentInkHex = extractToken("--mng-accent-ink");
+
+  const surfaces = [
+    { name: "--mng-bg", rgb: parseHex(bgHex), hex: bgHex },
+    { name: "--mng-surface", rgb: parseHex(surfaceHex), hex: surfaceHex },
+    { name: "--mng-surface-hi", rgb: parseHex(surfaceHiHex), hex: surfaceHiHex },
+    { name: "--mng-surface-muted", rgb: parseHex(surfaceMutedHex), hex: surfaceMutedHex },
+  ];
+
+  it("ensures primary text (--mng-text) exceeds WCAG AAA (7:1) across all dark surfaces", () => {
+    const textRgb = parseHex(textHex);
+    for (const surface of surfaces) {
+      const ratio = contrastRatio(textRgb, surface.rgb);
+      expect(ratio).toBeGreaterThanOrEqual(7.0);
+    }
+  });
+
+  it("ensures secondary text (--mng-text-60) exceeds WCAG AA (4.5:1) across primary dark surfaces", () => {
+    const text60Rgb = parseHex(text60Hex);
+    for (const surface of surfaces.filter((s) => s.name !== "--mng-surface-muted")) {
+      const ratio = contrastRatio(text60Rgb, surface.rgb);
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("ensures accent (--mng-accent) exceeds WCAG AAA (7:1) across all dark surfaces", () => {
+    const accentRgb = parseHex(accentHex);
+    for (const surface of surfaces) {
+      const ratio = contrastRatio(accentRgb, surface.rgb);
+      expect(ratio).toBeGreaterThanOrEqual(7.0);
+    }
+  });
+
+  it("ensures accent ink (--mng-accent-ink) on accent background exceeds WCAG AAA (7:1)", () => {
+    const accentInkRgb = parseHex(accentInkHex);
+    const accentRgb = parseHex(accentHex);
+    const ratio = contrastRatio(accentInkRgb, accentRgb);
+    expect(ratio).toBeGreaterThanOrEqual(7.0);
+  });
+
+  it("audits line and text-muted contrast against dark base", () => {
+    const bgRgb = parseHex(bgHex);
+    const lineRgb = parseHex(lineHex);
+    const textMutedRgb = parseHex(textMutedHex);
+
+    const lineRatio = contrastRatio(lineRgb, bgRgb);
+    const textMutedRatio = contrastRatio(textMutedRgb, bgRgb);
+
+    // Hairline borders are subtle separators (1.70:1); SC 1.4.11 notes subtle structural hairlines
+    expect(lineRatio).toBeCloseTo(1.7, 1);
+    // text-muted is 4.29:1, so it is strictly restricted to disabled/decorative elements
+    expect(textMutedRatio).toBeCloseTo(4.29, 1);
+    expect(textMutedRatio).toBeLessThan(4.5);
+  });
+});

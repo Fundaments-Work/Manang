@@ -850,6 +850,8 @@
           <button
             type="button"
             class="flex items-center gap-1.5 text-[11px]"
+            aria-expanded={showHistory}
+            aria-label="Toggle history"
             onclick={() => (showHistory = !showHistory)}
           >
             <Icon name={showHistory ? "chevron-down" : "chevron-right"} size={12} />

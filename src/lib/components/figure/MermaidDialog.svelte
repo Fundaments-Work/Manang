@@ -17,9 +17,14 @@
   );
   let busy = $state(false);
   let field: HTMLTextAreaElement | undefined = $state();
+  let box: HTMLDivElement | undefined = $state();
+  let returnTo: HTMLElement | null = null;
 
   $effect(() => {
+    returnTo =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     field?.focus();
+    return () => returnTo?.focus();
   });
 
   async function insert(mode: "shapes" | "block"): Promise<void> {
@@ -35,9 +40,26 @@
     if (event.key === "Escape") {
       event.preventDefault();
       figure.mermaidDialog = false;
-    } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      return;
+    }
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       void insert("shapes");
+      return;
+    }
+    if (event.key === "Tab" && box !== undefined) {
+      const focusable = [
+        ...box.querySelectorAll<HTMLElement>("textarea, button:not([disabled])"),
+      ];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
     }
   }
 </script>
@@ -50,6 +72,7 @@
   }}
 >
   <div
+    bind:this={box}
     class="flex w-[28rem] max-w-[calc(100%-2rem)] flex-col gap-2 border border-line bg-surface p-3 text-[12px] text-text"
     role="dialog"
     aria-modal="true"
