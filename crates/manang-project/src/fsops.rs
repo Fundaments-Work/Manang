@@ -52,6 +52,44 @@ fn read_limited(root: &ProjectRoot, raw: &str) -> Result<Vec<u8>, ProjectError> 
     Ok(bytes)
 }
 
+/// Size, modification time and kind of a project entry, without reading it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Stat {
+    /// Bytes for a file; 0 for a directory.
+    pub size: u64,
+    /// Milliseconds since the Unix epoch, when the platform reports it.
+    pub modified: Option<u64>,
+    /// `file`, `dir` or `other` (a socket, a device...).
+    pub kind: &'static str,
+}
+
+/// Stat an entry inside the project. A symlink is followed when its target
+/// is inside the project, as for reads.
+pub fn stat(root: &ProjectRoot, raw: &str) -> Result<Stat, ProjectError> {
+    let path = root.resolve(raw)?;
+    let meta = fs::metadata(&path).map_err(|e| match e.kind() {
+        io::ErrorKind::NotFound => ProjectError::NotFound(display(raw)),
+        _ => ProjectError::io(format!("inspecting {}", display(raw)), e),
+    })?;
+    let kind = if meta.is_dir() {
+        "dir"
+    } else if meta.is_file() {
+        "file"
+    } else {
+        "other"
+    };
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .and_then(|d| u64::try_from(d.as_millis()).ok());
+    Ok(Stat {
+        size: if meta.is_dir() { 0 } else { meta.len() },
+        modified,
+        kind,
+    })
+}
+
 /// Read a UTF-8 text file inside the project.
 pub fn read_text(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> {
     let bytes = read_limited(root, raw)?;

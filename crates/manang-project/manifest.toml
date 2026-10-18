@@ -79,3 +79,19 @@ title = "Read a project thumbnail"
 [[contributes.commands]]
 id = "project.thumbnail-set"
 title = "Store a project thumbnail"
+
+[[contributes.commands]]
+id = "project.stat"
+title = "File size, date and kind"
+
+[[contributes.commands]]
+id = "project.export-diagram"
+title = "Write a diagram's SVG (and PDF for LaTeX) next to it"
+
+[[contributes.commands]]
+id = "project.cache-diagram"
+title = "Render an inline diagram to the project cache"
+
+[[contributes.commands]]
+id = "project.export-pdf"
+title = "Write a PDF next to an SVG for LaTeX"

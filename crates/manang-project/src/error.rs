@@ -83,6 +83,9 @@ pub enum ProjectError {
     Git(String),
     #[error("file watcher: {0}")]
     Watch(String),
+    /// Another plugin this command relies on failed or is missing.
+    #[error("{0}")]
+    Delegate(String),
 }
 
 impl ProjectError {
