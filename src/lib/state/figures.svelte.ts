@@ -299,6 +299,9 @@ export class FiguresStore {
       ],
     });
     if (choice === "overwrite") {
+      await project
+        .backup(path)
+        .catch((e: unknown) => reportError("figures.backup", e));
       figure.external = null;
       return true;
     }

@@ -20,6 +20,7 @@ import type {
   RecentProject,
   TreeEntry,
 } from "$lib/kernel/types";
+import { notice } from "./notice.svelte";
 import { dirname, engineOf, fileKind, join, moved } from "$lib/workbench/paths";
 import { parseBibtex, type BibEntry } from "$lib/workbench/references";
 import {
@@ -125,6 +126,9 @@ export class WorkspaceState {
   }
 
   #adopt(summary: ProjectSummary): ProjectInfo {
+    // A damaged or newer list file was set aside or is read-only: say so once.
+    const formats = summary.format_warnings ?? [];
+    if (formats.length > 0) notice.error(formats.join(" "));
     const info: ProjectInfo = {
       root: summary.root,
       name: summary.name,

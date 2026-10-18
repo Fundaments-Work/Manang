@@ -333,12 +333,21 @@ impl SearchPlugin {
     fn replace_apply(&self, a: &args::Apply) -> Result<Value, SearchError> {
         let pool = self.pool()?;
         let plan = self.plans.take(&a.plan_id)?;
-        let results = replace::apply(pool, &plan, a.files.as_deref(), &self.limits);
+        // Originals are copied here before any file is replaced. If the safety
+        // folder cannot be made, nothing is replaced.
+        let backup = manang_project::fsops::backup_slot(&plan.root).map_err(|e| {
+            SearchError::io("making a safety copy folder", std::io::Error::other(e))
+        })?;
+        let results = replace::apply(pool, &plan, a.files.as_deref(), &self.limits, &backup);
         let applied = results.iter().filter(|r| r.ok).count();
         let failed = results.len() - applied;
+        let kept = (applied > 0).then(|| backup.path());
+        if applied == 0 {
+            backup.remove_if_empty();
+        }
         // Freshly written files may change what the index should contain.
         self.indexes.invalidate(plan.root.path());
-        Ok(json!({ "applied": applied, "failed": failed, "files": results }))
+        Ok(json!({ "applied": applied, "failed": failed, "files": results, "backup": kept }))
     }
 
     fn in_text(&self, a: &args::InText) -> Result<Value, SearchError> {

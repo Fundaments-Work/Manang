@@ -56,9 +56,9 @@ describe("plugins panel model", () => {
       "typst.svg-to-pdf",
     ]);
     // citations 7, diagram 5, editor 8, figure 21, git 22, latex 4, markdown 4,
-    // plugins 10, project 29, recovery 4, search 6, settings 14, typst 7, writing 14.
+    // plugins 10, project 30, recovery 4, search 6, settings 14, typst 7, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      7 + 5 + 8 + 21 + 22 + 4 + 4 + 10 + 29 + 4 + 6 + 14 + 7 + 14,
+      7 + 5 + 8 + 21 + 22 + 4 + 4 + 10 + 30 + 4 + 6 + 14 + 7 + 14,
     );
   });
 

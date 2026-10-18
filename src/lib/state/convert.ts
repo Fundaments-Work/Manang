@@ -6,7 +6,7 @@
  */
 
 import { errorMessage, kernel, reportError } from "$lib/kernel";
-import { markdownApi, type MarkdownApi } from "$lib/kernel/api";
+import { markdownApi, projectApi, type MarkdownApi } from "$lib/kernel/api";
 import { convertedMessage, typstPathFor } from "$lib/workbench/convert";
 import { basename, dirname } from "$lib/workbench/paths";
 
@@ -37,13 +37,16 @@ export async function convertToTypst(path: string): Promise<string | null> {
       actions: [{ id: "replace", label: "Replace" }],
     });
     if (choice !== "replace") return null;
+    // The file being replaced is copied to the project trash first.
+    await projectApi(kernel).backup(target);
   }
   try {
     const source = documents.get(path)?.text() ?? (await workspace.readFile(path));
     api ??= markdownApi(kernel);
     const result = await api.toTypst(source);
     await workspace.createFile(dirname(target), basename(target), result.typst);
-    // An open tab of the old file would otherwise keep showing it.
+    // An open tab of the old file would otherwise keep showing it. Its
+    // unsaved edits are not lost: the snapshot store still holds them.
     documents.drop(target);
     await workspace.reveal(target);
     await openFile(target);

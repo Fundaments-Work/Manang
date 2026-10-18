@@ -473,6 +473,7 @@ function summary(fs: MockProjectFs): ProjectSummary {
     main: fs.main,
     config: configOf(fs),
     warnings: [],
+    format_warnings: [],
     tree: listTree(fs, {}),
   };
 }
@@ -488,6 +489,7 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["project.write-file", "Write text file"],
   ["project.read-text", "Read text file with its fingerprint"],
   ["project.diff-text", "Line diff of a file on disk against given text"],
+  ["project.backup", "Copy a file to the project trash before changing it"],
   ["project.rename", "Rename or move file"],
   ["project.delete", "Move file to trash"],
   ["project.recent", "Recent projects"],
@@ -651,6 +653,15 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
             size: new TextEncoder().encode(content).length,
             modified: modified.get(path) ?? opened,
           };
+        },
+        "project.backup": (args) => {
+          const fs = host.require();
+          const path = confine(args["path"]);
+          const value = fs.files.get(path);
+          if (value === undefined) return { backup_to: null };
+          const copy = `.manang/trash/${Date.now()}-${modified.size}/${path}`;
+          fs.files.set(copy, value);
+          return { backup_to: copy };
         },
         "project.diff-text": (args) => {
           const fs = host.require();

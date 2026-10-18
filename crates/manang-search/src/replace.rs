@@ -294,7 +294,12 @@ pub struct ApplyResult {
     pub error: Option<String>,
 }
 
-fn apply_file(root: &ProjectRoot, file: &PlanFile, limits: &Limits) -> Result<usize, String> {
+fn apply_file(
+    root: &ProjectRoot,
+    file: &PlanFile,
+    limits: &Limits,
+    backup: &fsops::BackupSlot,
+) -> Result<usize, String> {
     let abs = root
         .resolve_for_write(&file.path)
         .map_err(|e| e.to_string())?;
@@ -325,22 +330,29 @@ fn apply_file(root: &ProjectRoot, file: &PlanFile, limits: &Limits) -> Result<us
     if out.len() > MAX_WRITE_BYTES {
         return Err("the result would be too large".to_owned());
     }
+    // The original is kept before the file is replaced: a replace across the
+    // project is undone by copying these back.
+    backup
+        .save(&file.path, &bytes)
+        .map_err(|e| format!("could not keep a safety copy, so the file was not changed: {e}"))?;
     fsops::atomic_write(&abs, &out).map_err(|e| e.to_string())?;
     Ok(file.edits.len())
 }
 
 /// Apply `plan` (optionally only `only` paths), one atomic write per file.
+/// Each file's original is saved into `backup` first.
 pub fn apply(
     pool: &ThreadPool,
     plan: &Plan,
     only: Option<&[String]>,
     limits: &Limits,
+    backup: &fsops::BackupSlot,
 ) -> Vec<ApplyResult> {
     pool.install(|| {
         plan.files
             .par_iter()
             .filter(|f| only.is_none_or(|o| o.iter().any(|p| p == &f.path)))
-            .map(|f| match apply_file(&plan.root, f, limits) {
+            .map(|f| match apply_file(&plan.root, f, limits, backup) {
                 Ok(n) => ApplyResult {
                     path: f.path.clone(),
                     ok: true,

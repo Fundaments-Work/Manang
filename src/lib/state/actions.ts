@@ -518,6 +518,8 @@ export async function trashEntry(path: string): Promise<void> {
   const lost = tabs.tabs.filter(
     (t) => (t.path === path || t.path.startsWith(`${path}/`)) && isTabDirty(t.path),
   );
+  // Unsaved edits go into the file first, so the trashed copy is the latest text.
+  for (const tab of lost) await save(tab.path);
   try {
     await workspace.trash(path);
   } catch (error) {
@@ -533,7 +535,7 @@ export async function trashEntry(path: string): Promise<void> {
   viewers.dropUnder(path);
   notice.show(
     lost.length > 0
-      ? `Moved ${basename(path)} to the trash. Unsaved changes in it were discarded.`
+      ? `Moved ${basename(path)} to the trash, with its latest edits.`
       : `Moved ${basename(path)} to the trash.`,
   );
   build.noteDiskChange();
