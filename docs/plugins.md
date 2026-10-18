@@ -148,9 +148,9 @@ The figure plugin's tools are the reference implementation
 | Tool | Command | Does |
 | :--- | :--- | :--- |
 | `figure_describe` | `figure.describe` | shapes, connections, frames and a text summary |
-| `figure_add_shapes` | `figure.add-shapes` | add labelled shapes, auto-placed and auto-sized |
+| `figure_add_shapes` | `figure.add-shapes` | add labelled shapes (and `formula` shapes: `source`, `language` typst or latex, `size`), auto-placed and auto-sized |
 | `figure_connect` | `figure.connect` | bound arrows between shapes, by id or label |
-| `figure_update` | `figure.update` | change label, kind, box, rotation, style, routing |
+| `figure_update` | `figure.update` | change label, kind, box, rotation, style, routing, formula source, language, size |
 | `figure_remove` | `figure.remove` | remove by id or label |
 | `figure_layout` | `figure.layout` | layered (dagre) layout, `TB`/`LR`/`BT`/`RL` |
 | `figure_from_mermaid` | `figure.from-mermaid` | Mermaid to native shapes, or a Mermaid block |
