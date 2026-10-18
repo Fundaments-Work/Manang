@@ -737,9 +737,20 @@ fn nested_svg(document: &str, r: &Rect) -> Option<String> {
             rest.find('"').map(|j| &rest[..j])
         })
         .unwrap_or("0 0 100 100");
+    // The renderer scopes its `<style>` rules to the root's id (`#mng-… .node
+    // rect`); without the id on the nested element they match nothing and
+    // every shape falls back to a black fill.
+    let id = root
+        .find(" id=\"")
+        .and_then(|i| {
+            let rest = &root[i + 5..];
+            rest.find('"').map(|j| &rest[..j])
+        })
+        .map(|id| format!(" id=\"{id}\""))
+        .unwrap_or_default();
     let inner = document[open_end + 1..close].trim();
     Some(format!(
-        "<svg x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"{}\" preserveAspectRatio=\"xMidYMid meet\">{inner}</svg>",
+        "<svg{id} x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"{}\" preserveAspectRatio=\"xMidYMid meet\">{inner}</svg>",
         format_coord(r.x),
         format_coord(r.y),
         format_coord(r.width),

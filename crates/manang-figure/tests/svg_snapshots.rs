@@ -251,3 +251,21 @@ fn every_export_is_well_formed_xml() {
         }
     }
 }
+
+#[test]
+fn a_mermaid_embed_keeps_the_id_its_style_rules_are_scoped_to() {
+    let mut scene = FigureScene::new(400.0, 200.0);
+    scene
+        .nodes
+        .push(shape("mermaid", "m", 20.0, 20.0, None, Style::default()));
+    let mut embeds = BTreeMap::new();
+    embeds.insert(
+        "m".to_owned(),
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"mng-abc\" viewBox=\"0 0 50 20\"><style>#mng-abc .node rect{fill:#fff}</style><g class=\"node\"><rect width=\"50\" height=\"20\"/></g></svg>".to_owned(),
+    );
+    let svg = render_svg_with(&scene, &SvgExportOptions::default(), &embeds);
+    assert!(
+        svg.contains("<svg id=\"mng-abc\" x="),
+        "the nested svg lost its id, so its #id-scoped styles match nothing: {svg}"
+    );
+}
