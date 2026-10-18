@@ -237,15 +237,15 @@
       Reading bibliography files…
     </p>
   {:else if error}
-    <div class="m-3 border border-text-60 bg-surface p-3 text-xs text-text">
+    <div class="m-3 border border-line bg-surface p-3 text-xs text-text" role="alert">
       <div class="flex items-center gap-1.5 text-text">
         <Icon name="error" size={13} />
         <span>Failed to load references</span>
       </div>
-      <p class="mt-1 m-0 text-text-60 leading-relaxed">{error}</p>
+      <p class="mt-1 mb-2 leading-relaxed text-text-60">{error}</p>
       <button
         type="button"
-        class="mng-btn mt-2 text-xs"
+        class="mng-btn text-xs"
         onclick={() => void loadBibliographyFiles()}
       >
         Retry
@@ -274,10 +274,22 @@
     </p>
 
     {#if entries.length === 0}
-      <p class="m-0 px-4 text-xs text-text-60">
-        Nothing matches "{query.trim()}". Try an author's surname, year, or part of the
-        title.
-      </p>
+      <div class="px-4 py-2 text-xs text-text-60">
+        <p class="m-0">
+          Nothing matches "{query.trim()}". Try an author's surname, year, or part of the
+          title.
+        </p>
+        <button
+          type="button"
+          class="mng-btn mt-2 text-xs"
+          onclick={() => {
+            query = "";
+            void performSearch("");
+          }}
+        >
+          Clear filter
+        </button>
+      </div>
     {/if}
 
     <ul class="m-0 list-none p-0" aria-label="References">

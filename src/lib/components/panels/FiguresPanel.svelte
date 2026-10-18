@@ -39,8 +39,23 @@
 </div>
 
 <div class="min-h-0 flex-1 overflow-y-auto pb-4">
-  {#if workspace.all === null}
-    <p class="m-0 px-4 text-xs text-text-muted" role="status">Loading figures</p>
+  {#if workspace.error !== ""}
+    <div class="m-3 border border-line bg-surface p-3 text-xs text-text" role="alert">
+      <div class="flex items-center gap-1.5 text-text">
+        <Icon name="error" size={13} />
+        <span>Could not read figures</span>
+      </div>
+      <p class="mt-1 mb-2 leading-relaxed text-text-60">{workspace.error}</p>
+      <button
+        type="button"
+        class="mng-btn text-xs"
+        onclick={() => void workspace.ensureAll()}
+      >
+        Retry
+      </button>
+    </div>
+  {:else if workspace.all === null}
+    <p class="m-0 px-4 pt-2 text-xs text-text-muted" role="status">Loading figures…</p>
   {:else if workspace.figures.length === 0}
     <div class="px-4 text-xs leading-relaxed text-text-60">
       <p class="m-0">
