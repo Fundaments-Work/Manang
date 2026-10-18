@@ -18,7 +18,7 @@ Architecture plan v1.0.0 specified **React 19 + shadcn/ui** for the frontend and
 
 1. **The frontend is Svelte 5 (runes) + Vite + Tailwind CSS v4.** No React anywhere in the bundle.
 2. **The freeform canvas is an in-house typed SVG scene graph**, using `perfect-freehand` (MIT, 2 KB gzip) for pressure-sensitive stroke geometry.
-3. **Figures use Manang's own `.figure.json` scene format** rendered to deterministic SVG/PDF by the Rust core, rather than the `.excalidraw` format.
+3. **Figures use Manang's own `.figure` scene format (and legacy `.figure.json`)** rendered to deterministic SVG/PDF by the Rust core, rather than the `.excalidraw` format.
 4. **Plain Svelte, not SvelteKit.** Manang is a local-first desktop application; SvelteKit's server/routing/SSR machinery is dead weight inside a Tauri webview. This matches the official `create-tauri-app` Svelte template.
 
 ---

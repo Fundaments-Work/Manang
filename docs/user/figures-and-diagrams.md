@@ -4,14 +4,14 @@ You can sketch vector figures in the built-in figure studio, write text-based di
 
 ## 1. Use the vector figure studio
 
-Manang includes an in-house vector figure studio built specifically for scientific figures. Figures are stored as human-readable JSON scene files (`<name>.figure.json`), and saving automatically produces a companion deterministic SVG (`<name>.svg`) alongside a companion PDF for LaTeX documents.
+Manang includes an in-house vector figure studio built specifically for scientific figures. Figures are stored as human-readable JSON scene files (`<name>.figure`), and saving automatically produces a companion deterministic SVG (`<name>.svg`) alongside a companion PDF for LaTeX documents. (Existing `<name>.figure.json` files continue to open transparently.)
 
 ### Create a new figure
 1. Choose **File > New figure** from the menu bar.
    - Or open the command palette (`Ctrl+K` (`Cmd+K`)), type `New figure`, and press `Enter`.
    - Or click the **Figures** icon in the Activity bar and click the **+** (New figure) button in the panel header.
 2. Enter a figure name (for example, `circuit`).
-3. Manang creates `figures/circuit.figure.json` and opens it in an editor tab.
+3. Manang creates `figures/circuit.figure` and opens it in an editor tab.
 
 ### Tools and keyboard shortcuts
 Select tools from the top toolbar or press single keys while the canvas is focused:
@@ -28,7 +28,7 @@ Select tools from the top toolbar or press single keys while the canvas is focus
 - **Frame (`F`):** Drag to draw labeled container frames that group and organize nested elements.
 - **Eraser (`E`):** Click or drag across shapes to delete them.
 - **Laser pointer (`K`):** Temporary glowing laser trail for live presentations and walkthroughs.
-- **Formula (`M`):** *Math formulas with LaTeX rendering are coming soon.*
+- **Formula (`M`):** Insert mathematical formulas typeset with Typst or LaTeX syntax, rendered deterministically as vector math nodes.
 
 ### Bound arrows and connectors
 1. Drag with the **Arrow (`A`)** or **Line (`L`)** tool from one shape to another.
@@ -55,15 +55,14 @@ Select tools from the top toolbar or press single keys while the canvas is focus
 ### Shape styling and colors
 When one or more shapes are selected, the context properties panel lets you configure styles:
 - **Stroke widths:** Choose between hairline (`1 pt`), regular (`1.5 pt`), medium (`2.5 pt`), and bold (`4 pt`).
-- **Tonal palette:** Select stroke and fill colors from the balanced scientific palette (*ink*, *muted*, *red*, *orange*, *yellow*, *green*, *teal*, *blue*, *purple*, *magenta*).
-- *Custom colour picker and hex values are coming soon.*
+- **Tonal palette & custom colors:** Select stroke and fill colors from the balanced scientific palette (*ink*, *muted*, *red*, *orange*, *yellow*, *green*, *teal*, *blue*, *purple*, *magenta*), or enter custom hex color values (`#rrggbb`). The palette automatically saves recent custom colors for quick reuse.
 
 ### Import Mermaid diagrams
 Click **Insert Mermaid** in the figure toolbar to open the Mermaid importer. Enter your diagram definition to import it directly onto the canvas as editable shapes and bound arrows.
 
 ### Save and embed figures
 1. Press `Ctrl+S` (`Cmd+S`) or click **Save** in the figure toolbar.
-2. Saving writes `<name>.figure.json` and produces the companion vector `<name>.svg` directly beside it.
+2. Saving writes `<name>.figure` and produces the companion vector `<name>.svg` directly beside it.
 3. Click **Copy embed line** in the figure toolbar.
 4. Paste the generated inclusion snippet directly into your Typst, LaTeX, or Markdown source file.
 

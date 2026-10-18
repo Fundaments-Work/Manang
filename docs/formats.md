@@ -41,7 +41,7 @@ read-only and lose nothing. Tests: `crates/*/tests/formats.rs`.
 | `.manang/plugins.toml` | project | 1 (read-only for Manang) | n/a | read leniently | error |
 | `projects.toml` | user config dir | 1 | chain ready, `.bak-vN` | listed, writes refused, warning | `.corrupt`, empty list, warning |
 | `recent-projects.toml` | user config dir | 1 | as above | as above | as above |
-| `*.figure.json` | project | 2 (v1 -> v2 migration shipped) | migrated on open; `.bak-v1` kept on first save | refused at open | error, file untouched |
+| `*.figure` / `*.figure.json` | project | 2 (v1 -> v2 migration shipped) | migrated on open; `.bak-v1` kept on first save | refused at open | error, file untouched |
 | recovery snapshots | `<app data>/recovery/<project>/<file>.json` | 1 | chain ready | not offered, not deleted | `.corrupt`, others still listed |
 | `.manang/cache`, thumbnails | project / user cache | by content key | disposable: rebuilt | rebuilt | rebuilt |
 | `.manang/trash/` | project | folders `<id>/<original path>` | n/a | n/a | never touched automatically |

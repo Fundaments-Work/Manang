@@ -29,7 +29,7 @@ Manang routes files to the appropriate viewer based on their format:
 
 1. **Text documents (`.typ`, `.tex`, `.md`, `.bib`, `.json`, `.toml`, `.yaml`, `.txt`):**
    - Open directly in the CodeMirror text editor.
-2. **Vector figures (`.figure.json`):**
+2. **Vector figures (`.figure`, `.figure.json`):**
    - Open in the interactive figure editor canvas with vector drawing tools and bound connectors.
 3. **Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`):**
    - Open in a dedicated File Viewer tab.
@@ -71,7 +71,7 @@ Manang ensures that both individual files and entire authoring projects can be d
 5. Empty trash:
    - Click the **Empty trash** button in the Trash section header to purge all trashed project entries at once.
 
-*Version history snapshots and "Save a version" are coming soon.*
+For detailed workflows on deleting and restoring projects, see [The Trash](trash.md). For capturing milestone snapshots and reverting project states, see [Version History and Restore](version-history.md).
 
 ## 4. Use the Source Control view
 
