@@ -58,6 +58,7 @@ describe("contextual settings", () => {
       "editor",
       "preview",
       "compile",
+      "files",
       "agent",
       "citations",
       "heal",
@@ -121,13 +122,14 @@ describe("contextual settings", () => {
       "editor",
       "preview",
       "compile",
+      "files",
       "agent",
       "citations",
       "heal",
       "writing",
     ]);
     expect(elsewhere.map((d) => d.category).sort()).toEqual(
-      ["appearance", "figure", "files", "latex", "live", "search"].sort(),
+      ["appearance", "figure", "latex", "live", "search"].sort(),
     );
     expect(splitMatches(DEFS, "sample", APP_ORIGIN).elsewhere).toEqual([]);
     expect(splitMatches(DEFS, "appearance", typst)).toEqual({
