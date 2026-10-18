@@ -18,9 +18,9 @@ import type {
 } from "./types";
 
 const COMMANDS: readonly (readonly [string, string])[] = [
-  ["diagram.check", "Check a diagram source"],
-  ["diagram.key", "Cache key of a rendered diagram"],
-  ["diagram.languages", "List the diagram languages"],
+  ["diagram.check", "Check a diagram source for errors"],
+  ["diagram.key", "Cache key for a rendered diagram"],
+  ["diagram.languages", "List supported diagram languages"],
   ["diagram.render", "Render a diagram to SVG"],
 ];
 
