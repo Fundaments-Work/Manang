@@ -1,41 +1,81 @@
-# Manang
+<h1 align="center">Manang</h1>
 
-> _The High-Performance Scientific Authoring & Illustration Suite_  
-> **Made by Fundaments.work**
+<p align="center">
+  <strong>Write papers, theses and slides in Typst, LaTeX or Markdown. Draw the figures too.<br>
+  Fast, local-first, with AI that only proposes and live co-editing that stays private.</strong>
+</p>
 
-Manang combines **Typst**, **LaTeX (Tectonic)**, **Markdown**, an in-house **vector figure studio**, and a dedicated **CeTZ / TikZ Visual Studio** into a local-first, ultra-fast authoring suite.
+<p align="center">
+  <a href="docs/user/index.md">User guide</a> ·
+  <a href="docs/plugins.md">Plugins</a> ·
+  <a href="docs/beta/tester-guide.md">Beta tester guide</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="docs/plans/2026-10-18-roadmap.md">Roadmap</a>
+</p>
 
----
+<p align="center">
+  <img src="docs/screenshots/editor-and-preview.png" alt="Manang: a Typst document with its live PDF preview" width="860">
+</p>
 
-## Architecture & Documentation
+> **Status: private beta.** Manang is being opened to invited testers on Linux,
+> Windows and macOS, and updated from their feedback. There is no public
+> download yet; invitations come from [Fundaments.work](https://fundaments.work).
+> The screenshots on this page come
+> from the browser build with sample data; the desktop app is the real product.
 
-- **[Architecture & Design Plan](docs/plans/2026-10-13-manang-architecture-design.md)** — Core engine design, research benchmarks, concurrency model, and phased roadmap.
-- **[System Design Specification (DESIGN.md)](DESIGN.md)** — Domain entities, IPC interfaces, and visual tokens governed by the Fundaments.work design system.
-- **[Agent Guidelines & Testing Harness (AGENTS.md)](AGENTS.md)** — Invariants, testing pyramid (`proptest`, `insta`, `cargo-fuzz`, `criterion`), and Do's & Don'ts.
-- **[ADR-0001: Frontend & Canvas Stack](docs/adr/0001-frontend-and-canvas-stack.md)** — Why the shell is Svelte 5 and the figure studio is an in-house SVG scene graph.
+## Why Manang
 
----
+Scientific writing is split across tools: an editor for the text, a cloud service
+to compile it, a drawing program for the figures, a reference manager, a chat
+window for AI help. Manang puts them in one fast desktop app that keeps your
+files as plain text on your own disk.
 
-## User guide
+- **One app for three formats.** Typst, LaTeX and Markdown, each with a live
+  preview and a real PDF viewer: text selection, search, outline, zoom, and
+  click-to-jump between source and page (SyncTeX).
+- **Figures are part of the document.** A built-in vector figure studio (shapes,
+  connectors that stay attached, formulas typeset with LaTeX or Typst syntax,
+  Mermaid diagrams) saves a `.figure` source and a clean SVG that your document
+  includes. Text diagrams (Mermaid, Pikchr, ASCII) render as you type.
+- **Local-first.** Your project is a normal folder of UTF-8 files you can put in
+  Git. No account, no server needed to write, no telemetry.
+- **Your work is never lost.** Crash recovery for unsaved edits, a prompt when a
+  file changes on disk, safety copies before anything destructive, version
+  history with restore, and a Trash for projects and files.
+- **AI that asks first.** Bring your own key (OpenAI-compatible providers
+  including DeepSeek, Anthropic, local models). The agent proposes changes as
+  a diff you accept or reject; you see exactly what will be sent before it goes;
+  keys live in your operating system's keychain; one switch turns it all off.
+- **Write together.** Version-based sharing through Git, and live co-editing with
+  end-to-end encrypted updates (in development for the beta).
+- **A platform, not a pile of features.** Everything in Manang is a plugin.
+  Third-party plugins run as sandboxed WebAssembly components that declare the
+  permissions they need and cannot touch your system beyond them.
 
-A guide for authors in [`docs/user/`](docs/user/index.md):
+<p align="center">
+  <img src="docs/screenshots/figure-studio.png" alt="The figure studio: shapes, a bound arrow, a formula and the properties panel" width="425">
+  <img src="docs/screenshots/ai-proposal.png" alt="An AI proposal shown as an inline diff with Accept and Reject" width="425">
+</p>
 
-- **[Getting started](docs/user/getting-started.md)** — Running from source, Home view, creating projects, and window layout.
-- **[Writing](docs/user/writing.md)** — Typst, LaTeX, and Markdown editing, spell check, formatting, snippets, and word counts.
-- **[Preview and PDF](docs/user/preview-and-pdf.md)** — Preview layouts, live recompile, SyncTeX jumps, PDF export, and TeX Live setup.
-- **[Figures and diagrams](docs/user/figures-and-diagrams.md)** — Vector figure editor, text diagrams (Mermaid, Pikchr, ASCII), and document includes.
-- **[References](docs/user/references.md)** — Bibliographies, citation styles, inserting citations, and online verification.
-- **[Projects and files](docs/user/projects-and-files.md)** — File tree, openers, system apps, and Git source control.
-- **[Crash recovery](docs/user/crash-recovery.md)** — Hot exit snapshots, restoring unsaved edits after crashes, and safety copies.
-- **[Version history](docs/user/version-history.md)** — Project milestone snapshots, diff inspection, and restoring drafts.
-- **[The Trash](docs/user/trash.md)** — Project trash on Home screen, purging, and restoring workspace files.
-- **[Templates](docs/user/templates.md)** — Built-in Typst, LaTeX, and Markdown starter templates and offline setup.
-- **[Settings and shortcuts](docs/user/settings-and-shortcuts.md)** — User vs project scope, preferences, and keyboard shortcuts.
-- **[Menus and shortcuts](docs/user/menus-and-shortcuts.md)** — Menu bar hierarchy, keyboard mnemonics, and surface keybindings.
-- **[Plugins](docs/user/plugins.md)** — Built-in and sandboxed WebAssembly plugins, permissions, and status indicators.
-- **[Troubleshooting](docs/user/troubleshooting.md)** — Log file locations, developer tools, and common problem fixes.
+## What it is built on
 
----
+Rust for the engine (Typst compiler, buffers, search, citations, agent
+orchestration), Tauri 2 for the desktop shell, Svelte 5 and CodeMirror 6 for the
+interface, Wasmtime for plugin sandboxes. LaTeX compiles with your installed TeX
+distribution; an optional built-in engine is planned for zero-install setups.
+
+## Documentation
+
+- **[User guide](docs/user/index.md)**: getting started, writing, preview and
+  PDF, figures and diagrams, references, projects and files, crash recovery,
+  version history, the Trash, templates, settings and shortcuts, plugins,
+  troubleshooting.
+- **[Plugins](docs/plugins.md)**: the manifest, capabilities and the plugin SDK.
+- **[Design system additions](docs/design-system-additions.md)** and
+  **[DESIGN.md](DESIGN.md)**: how Manang looks, on the Fundaments.work design system.
+- **[Architecture plan](docs/plans/2026-10-13-manang-architecture-design.md)**,
+  **[decision records](docs/adr/)** and **[AGENTS.md](AGENTS.md)**: invariants,
+  testing pyramid and contribution rules.
 
 ## Development
 
@@ -77,40 +117,14 @@ cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo test --all
 ```
 
-### Layout
-
-```
-Cargo.toml          Rust workspace (release profile lives here, not in a member)
-index.html          Frontend entry document
-package.json        Frontend and Tauri CLI scripts
-src/                Svelte 5 presentation shell
-  app.css           Design tokens — the single source of UI truth
-  lib/editor/       CodeMirror 6 mount, theme, Margin Whispers
-  lib/ink/          Figure scene graph and geometry (pure, unit tested)
-  lib/commands/     Command registry and fuzzy matcher
-  lib/state/        Rune-based view state, kept close to the leaves
-src-tauri/          Tauri shell: lifecycle and IPC surface only
-scripts/            Headless UI verification
-docs/plans/         Architecture and roadmap
-docs/adr/           Architecture decision records
-```
-
-### Keyboard
-
-| Shortcut | Action |
-| :--- | :--- |
-| `Ctrl/Cmd + K`, or `/` | Command palette |
-| `Ctrl/Cmd + P` | Library shelf |
-| `Ctrl/Cmd + \` | Zen mode |
-| `F5` | Presentation mode |
-| `←` `→` | Navigate slides while the studio is open |
-| `Esc` | Dismiss the topmost overlay |
-
-Screens are also addressable by hash, which is what the verification harness
-drives: `#library`, `#draw`, `#shelf`, `#slides/2`, `#zen`, `#palette/cit`.
-
 ---
 
-### License & Attribution
+## Contributing
 
-Part of the [Fundaments.work](https://fundaments.work) laboratory tools ecosystem.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) first. Work
+happens on branches with Conventional Commits; the quality gates above must pass.
+Bug reports and feature requests use the issue templates.
+
+## License
+
+MIT, as declared in the workspace. Made by [Fundaments.work](https://fundaments.work).
