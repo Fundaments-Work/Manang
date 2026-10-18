@@ -529,7 +529,9 @@ async function liveSection(browser) {
     page,
     "sharing without a relay says so and offers the Settings",
     `(() => { const el = document.querySelector('[data-testid="live-setup"]'); return !!el && el.innerText.includes("Set a relay in Settings") && !!el.querySelector('[data-testid="live-open-settings"]'); })()`,
-    { show: `document.querySelector('[data-testid="live-setup"]')?.innerText` },
+    {
+      show: `JSON.stringify({ setup: document.querySelector('[data-testid="live-setup"]')?.innerText, bar: !!document.querySelector('[data-testid="live-bar"]'), tab: document.querySelector('[role="tab"][aria-selected="true"]')?.dataset.tab, dialog: document.querySelector('[role="alertdialog"],[role="dialog"]')?.innerText?.slice(0, 120), status: document.querySelector('footer')?.innerText?.slice(0, 120) })`,
+    },
   );
   check("no session was started", (await run("live.status")).active === false);
   await shoot(page, "live-1-no-relay");
