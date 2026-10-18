@@ -12,11 +12,11 @@ import {
 
 describe("engine wording", () => {
   it("rounds sizes the way a button label wants", () => {
-    expect(formatSize(14_413_048)).toBe("14.4 MB");
+    expect(formatSize(14_413_816)).toBe("14.4 MB");
     expect(formatSize(250_000_000)).toBe("250 MB");
-    expect(aboutSize(14_413_048)).toBe("about 14 MB");
+    expect(aboutSize(14_413_816)).toBe("about 14 MB");
     expect(aboutSize(100)).toBe("about 1 MB");
-    expect(downloadLabel(14_413_048)).toBe(
+    expect(downloadLabel(14_413_816)).toBe(
       "Download the built-in engine (about 14 MB)",
     );
     expect(downloadLabel(undefined)).toBe("Download the built-in engine");

@@ -7,8 +7,8 @@
     "linux-x86_64": {
       "status": "built",
       "file": "manang-latex-worker-linux-x86_64",
-      "size": 0,
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      "size": 14413816,
+      "sha256": "d15d3cb6391be939dd56dcd5cfb264207b3d927d8434e713a8fbf9bffd317f6e"
     },
     "linux-aarch64": {
       "status": "planned",

@@ -585,3 +585,45 @@ fn an_unpublished_base_url_offers_no_download() {
         invoke(&kernel, "latex.engine-install", json!({ "consent": true })).expect_err("cannot");
     assert!(err.contains("[engine_not_published]"), "{err}");
 }
+
+/// The real Tectonic worker through the real installer. Skipped unless
+/// `MANANG_REAL_WORKER` names a built `manang-latex-worker` (see
+/// `docs/ops/engine-release.md`); `MANANG_LATEX_CACHE` may point at a warm
+/// package cache so no network is needed.
+#[test]
+fn the_real_worker_installs_and_compiles_the_corpus_article() {
+    let Some(worker) = std::env::var_os("MANANG_REAL_WORKER") else {
+        eprintln!("SKIP: MANANG_REAL_WORKER is not set");
+        return;
+    };
+    let bytes = std::fs::read(&worker).expect("read the worker");
+    let server = serve(bytes.clone(), Mode::Normal);
+    let dir = tempfile::tempdir().expect("tmp");
+    let cache = std::env::var_os("MANANG_LATEX_CACHE")
+        .map_or_else(|| dir.path().join("cache"), std::path::PathBuf::from);
+    let config = LatexConfig {
+        engines_dir: Some(dir.path().join("engines")),
+        engine_source: Some(source_for(&server, &bytes)),
+        cache_dir: Some(cache),
+        ..LatexConfig::default()
+    };
+    let plugin = LatexPlugin::with_tools(config, TexTools::default());
+    let kernel = Kernel::new();
+    kernel
+        .register(manifest().expect("manifest"), Arc::new(plugin))
+        .expect("register");
+    invoke(&kernel, "latex.engine-install", json!({ "consent": true })).expect("installs");
+    let main = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/corpus/latex-article/main.tex"
+    );
+    let report = invoke(
+        &kernel,
+        "latex.compile",
+        json!({ "main": main, "allow_network": true }),
+    )
+    .expect("compiles");
+    assert_eq!(report["ok"], true, "{report}");
+    assert_eq!(report["backend"], "tectonic");
+    assert_eq!(report["tex_version"], "Tectonic 9.9.9");
+}
