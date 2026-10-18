@@ -77,6 +77,7 @@
     eraser: "M2.5 13.5h11 M5 12l-2-2 6.5-6.5 3 3L7 12z M6.5 6l3 3",
     laser: "M2.5 13.5l6-6 M10.5 2v2.5 M14 5.5h-2.5 M13 3l-1.5 1.5 M8.5 5.5l2 2",
     mermaid: "M2.5 2.5h4v3h-4z M9.5 10.5h4v3h-4z M4.5 5.5v6h5",
+    share: "M2.5 6h4v4h-4z M9.5 2.5h4v4h-4z M9.5 9.5h4v4h-4z M6.5 7l3-2 M6.5 9l3 2",
     fit: "M2 5V2h3 M11 2h3v3 M14 11v3h-3 M5 14H2v-3 M5.5 5.5h5v5h-5z",
     "zoom-in": "M2.5 2.5h7v7h-7z M9.5 9.5l4 4 M6 4v4 M4 6h4",
     "zoom-out": "M2.5 2.5h7v7h-7z M9.5 9.5l4 4 M4 6h4",

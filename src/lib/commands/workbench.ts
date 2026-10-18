@@ -22,6 +22,7 @@ import { live } from "$lib/state/live.svelte";
 import { scm } from "$lib/state/scm.svelte";
 import { settings } from "$lib/state/settings.svelte";
 import { settingsPage } from "$lib/state/settingsPage.svelte";
+import { sharePopover } from "$lib/state/sharePopover.svelte";
 import { shortcutOverlay } from "$lib/state/shortcutOverlay.svelte";
 import { showInPreview } from "$lib/state/sourceJump";
 import { switcher } from "$lib/state/switcher.svelte";
@@ -100,6 +101,7 @@ const WHEN: Readonly<Record<string, string>> = {
   "tab.close-others": "workbench",
   "file.save": "workbench",
   "file.save-all": "project",
+  "share.open": "project",
   "live.share": "workbench && document",
   "live.join-session": "project",
   "live.copy-invite": "workbench",
@@ -738,6 +740,19 @@ export function workbenchCommands(
       enabled: hasProject,
       menu: at("file", "3_save", 2),
       run: () => void saveVersion(),
+    },
+    {
+      id: "share.open",
+      title: "Share",
+      menuTitle: "Share…",
+      group: "Workbench",
+      keywords: "collaborate together live invite versions get updates co-author",
+      enabled: hasProject,
+      menu: at("file", "4_live", -1),
+      run: () => {
+        toWorkbench();
+        sharePopover.toggle();
+      },
     },
     {
       id: "live.share",

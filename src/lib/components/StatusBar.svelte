@@ -4,7 +4,10 @@
   import { build } from "$lib/state/build.svelte";
   import { documents } from "$lib/state/documents.svelte";
   import { layout } from "$lib/state/layout.svelte";
+  import { live } from "$lib/state/live.svelte";
   import { notice } from "$lib/state/notice.svelte";
+  import { sharePopover } from "$lib/state/sharePopover.svelte";
+  import { liveChipText } from "$lib/workbench/live";
   import { tabs } from "$lib/state/tabs.svelte";
   import { writing } from "$lib/state/writing.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
@@ -82,7 +85,9 @@
       class="mng-status"
       class:text-text={build.status === "failed"}
       title="Show problems"
-      aria-label="Compilation status: {compileText}{warnings ? `, ${countLabel(build.counts)}` : ''}. Show problems panel"
+      aria-label="Compilation status: {compileText}{warnings
+        ? `, ${countLabel(build.counts)}`
+        : ''}. Show problems panel"
       onclick={() => layout.showPanel("problems")}
     >
       {#if build.status === "failed"}<Icon
@@ -104,6 +109,26 @@
   >
     {notice.text}
   </span>
+
+  {#if live.active}
+    <button
+      type="button"
+      class="mng-status"
+      class:text-text={live.connection === "error"}
+      data-testid="live-chip"
+      title="Live session. Open Share"
+      aria-label="{liveChipText(
+        live.connection === 'off' ? 'connecting' : live.connection,
+        live.peers,
+      )}. Open Share"
+      onclick={() => sharePopover.show()}
+    >
+      {liveChipText(
+        live.connection === "off" ? "connecting" : live.connection,
+        live.peers,
+      )}
+    </button>
+  {/if}
 
   {#if isDocument}
     <span class="mng-status-text font-mono"

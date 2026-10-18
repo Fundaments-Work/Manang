@@ -544,10 +544,56 @@ async function liveSection(browser) {
   );
   await press(page, "Escape");
   await press(page, "Escape");
+  // -- The Share button and popover, before any relay is set. ------------
+  const popover = `document.querySelector('[data-testid="share-popover"]')`;
+  const openShare = () => click(page, '[data-testid="share-button"]');
+  await openShare();
+  await expectEventually(
+    page,
+    "the Share popover says what live editing needs and where to get it",
+    `(() => { const p = ${popover}; return !!p && p.innerText.includes("Edit together live") && p.innerText.includes("Ask whoever runs your team's relay for its address") && !!p.querySelector('[data-testid="share-open-settings"]') && !p.querySelector('[data-testid="share-start"]'); })()`,
+    { show: `${popover}?.innerText` },
+  );
+  check(
+    "the Share button is a labelled, expandable control with its shortcut in the tooltip",
+    await page.evaluate(
+      `(() => { const b = document.querySelector('[data-testid="share-button"]'); return b.getAttribute("aria-expanded") === "true" && /Share \\(.*Alt\\+L\\)/.test(b.title); })()`,
+    ),
+  );
+  await shoot(page, "live-0-share-setup");
+  await press(page, "Escape");
+  check(
+    "Escape closes the popover and focus returns to the Share button",
+    (await page.evaluate(`${popover} === null`)) &&
+      (await page.evaluate(
+        `document.activeElement === document.querySelector('[data-testid="share-button"]')`,
+      )),
+  );
+  await press(page, "l", { ctrl: true, alt: true, wait: 300 });
+  check(
+    "Ctrl+Alt+L opens the Share popover",
+    await page.evaluate(`${popover} !== null`),
+  );
+  await press(page, "Escape");
+  check(
+    "no live chip while there is no session",
+    !(await exists(page, '[data-testid="live-chip"]')),
+  );
   await run("settings.set", { id: "live.relay-url", value: "wss://relay.example.org" });
 
   // -- Share. ----------------------------------------------------------------
-  await palette("Share this file live");
+  await openShare();
+  await expectEventually(
+    page,
+    "with a relay set, the popover offers to share the open file",
+    `!!${popover}?.querySelector('[data-testid="share-start"]:not(:disabled)') && ${popover}.innerText.includes("main.typ")`,
+    { show: `${popover}?.innerText` },
+  );
+  await click(page, '[data-testid="share-start"]');
+  check(
+    "starting a session closes the popover",
+    await page.evaluate(`${popover} === null`),
+  );
   await expectEventually(page, "the session bar appears", `${bar} !== null`, {
     show: `document.querySelector("footer")?.innerText`,
   });
@@ -585,7 +631,28 @@ async function liveSection(browser) {
       `[...${bar}.querySelectorAll("button")].every((b) => getComputedStyle(b).backgroundColor !== "rgb(198, 241, 53)")`,
     ),
   );
+  check(
+    "the status bar chip says Live: just you, and opens the popover",
+    await page.evaluate(
+      `document.querySelector('[data-testid="live-chip"]')?.innerText.trim() === "Live: just you"`,
+    ),
+  );
   await shoot(page, "live-2-bar");
+  await click(page, '[data-testid="live-chip"]');
+  await expectEventually(
+    page,
+    "the chip opens the popover with the invite and Leave while live",
+    `(() => { const p = ${popover}; return !!p && !!p.querySelector('[data-testid="share-copy"]') && !!p.querySelector('[data-testid="share-leave"]') && p.innerText.includes("Invite link"); })()`,
+    { show: `${popover}?.innerText` },
+  );
+  await click(page, '[data-testid="share-copy"]');
+  await expectEventually(
+    page,
+    "Copy invite link in the popover confirms",
+    `${popover}?.querySelector('[data-testid="share-copy"]')?.innerText.trim() === "Copied" || (document.querySelector('footer[aria-label="Status"]')?.innerText.includes("Invite copied") ?? false)`,
+  );
+  await shoot(page, "live-2b-popover");
+  await press(page, "Escape");
 
   // -- A collaborator arrives, types and moves a caret. -------------------
   const ada = await run("dev.live-peer-join", { name: "Ada Lovelace", slot: 3 });
@@ -731,7 +798,8 @@ async function liveSection(browser) {
   const beforeJoin = await docText();
   const hostText = `${afterLeave}\nHOST LINE\n`;
   const made = await run("dev.live-make-invite", { text: hostText, file: "main.typ" });
-  await palette("Join a live session");
+  await openShare();
+  await click(page, '[data-testid="share-join"]');
   await expectEventually(
     page,
     "Join asks for the invite in a dialog",
@@ -829,8 +897,17 @@ async function liveSection(browser) {
       `(() => { for (const el of [${bar}, ...${bar}.querySelectorAll("*")]) { const s = getComputedStyle(el); if (s.borderTopLeftRadius !== "0px" || s.boxShadow !== "none" || !["300", "400"].includes(s.fontWeight)) return el.outerHTML.slice(0, 80); } return true; })()`,
     ),
   );
-  await click(page, '[data-testid="live-leave"]');
-  await expectEventually(page, "the last session ends cleanly", `${bar} === null`);
+  await openShare();
+  await click(page, '[data-testid="share-leave"]');
+  await expectEventually(
+    page,
+    "Leave in the popover ends the session cleanly",
+    `${bar} === null`,
+  );
+  check(
+    "the chip is gone after leaving",
+    !(await exists(page, '[data-testid="live-chip"]')),
+  );
   check(
     "no page errors were thrown during live editing",
     page.errors.length === 0,
