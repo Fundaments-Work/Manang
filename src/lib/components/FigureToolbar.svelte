@@ -92,6 +92,9 @@
   const stop = (tool: Tool): 0 | -1 => (figure.tool === tool ? 0 : -1);
 
   const SIZE = $derived(narrow ? "h-6 w-6" : "h-7 w-7");
+  const GAP = $derived(narrow ? "gap-0" : "gap-0.5");
+  const DIV = $derived(narrow ? "mx-0.5" : "mx-1");
+  const PAD = $derived(narrow ? "px-1" : "px-2");
 </script>
 
 {#snippet tool(t: Tool)}
@@ -111,12 +114,12 @@
 {/snippet}
 
 {#snippet divider()}
-  <span class="mx-1 h-4 w-px shrink-0 bg-line" aria-hidden="true"></span>
+  <span class="{DIV} h-4 w-px shrink-0 bg-line" aria-hidden="true"></span>
 {/snippet}
 
 <div
   bind:this={bar}
-  class="flex h-9 shrink-0 items-center gap-0.5 border-b border-line px-2"
+  class="flex h-9 shrink-0 items-center {GAP} border-b border-line {PAD}"
   role="toolbar"
   aria-label="Figure tools"
   tabindex="-1"
@@ -142,13 +145,13 @@
 
   {#each GROUPS as group, i (group.name)}
     {#if i > 0}{@render divider()}{/if}
-    <div class="flex gap-0.5" role="group" aria-label={group.name}>
+    <div class="flex {GAP}" role="group" aria-label={group.name}>
       {#each group.tools as t (t)}{@render tool(t)}{/each}
     </div>
   {/each}
 
   {@render divider()}
-  <div class="flex gap-0.5" role="group" aria-label="Text, formulas and diagrams">
+  <div class="flex {GAP}" role="group" aria-label="Text, formulas and diagrams">
     {@render tool("text")}
     {@render tool("math")}
     <button
@@ -165,7 +168,7 @@
   </div>
 
   {@render divider()}
-  <div class="flex gap-0.5" role="group" aria-label="History">
+  <div class="flex {GAP}" role="group" aria-label="History">
     <button
       type="button"
       class="mng-icon-btn {SIZE}"
@@ -193,7 +196,7 @@
   </div>
 
   {@render divider()}
-  <div class="flex items-center gap-0.5" role="group" aria-label="Zoom">
+  <div class="flex items-center {GAP}" role="group" aria-label="Zoom">
     {#if !narrow}
       <button
         type="button"
@@ -210,7 +213,7 @@
     <button
       type="button"
       class="mng-lime-hover h-7 shrink-0 bg-transparent px-1 text-center font-mono text-[11px] text-text-60 {narrow
-        ? 'w-10'
+        ? 'w-9'
         : 'w-12'}"
       data-zoom
       title="Zoom to 100% (Ctrl+0)"
