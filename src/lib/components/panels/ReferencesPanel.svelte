@@ -78,9 +78,7 @@
 
       const root = workspace.project?.root;
       if (bibPaths.length > 0 && root) {
-        const fullPaths = bibPaths.map((p) =>
-          p.startsWith("/") ? p : `${root}/${p}`,
-        );
+        const fullPaths = bibPaths.map((p) => (p.startsWith("/") ? p : `${root}/${p}`));
         const res = await api.load({ paths: fullPaths });
         totalIndexed = res.total;
       } else if (bibPaths.length > 0) {
@@ -219,8 +217,8 @@
       Reading bibliography files…
     </p>
   {:else if error}
-    <div class="m-3 border border-red-500/40 bg-surface p-3 text-xs text-text">
-      <div class="flex items-center gap-1.5 text-red-400 font-medium">
+    <div class="m-3 border border-text-60 bg-surface p-3 text-xs text-text">
+      <div class="flex items-center gap-1.5 text-text">
         <Icon name="error" size={13} />
         <span>Failed to load references</span>
       </div>
@@ -236,8 +234,8 @@
   {:else if totalIndexed === 0}
     <div class="px-4 pt-3 text-xs leading-relaxed text-text-60">
       <p class="m-0">
-        No references found. Add a <span class="font-mono text-[11px]">.bib</span> or
-        CSL-JSON file to the project and its entries appear here, ready to cite.
+        No references found. Add a <span class="font-mono text-[11px]">.bib</span> or CSL-JSON
+        file to the project and its entries appear here, ready to cite.
       </p>
     </div>
   {:else}
@@ -274,7 +272,7 @@
           <div class="group px-3 py-2 hover:bg-surface-hi">
             <!-- Header: Authors and Year -->
             <div class="flex items-baseline justify-between gap-2">
-              <span class="truncate text-xs font-medium text-text">
+              <span class="truncate text-xs text-text">
                 {authorSummary(entry.authors)}
               </span>
               {#if entry.year !== undefined}
@@ -303,7 +301,7 @@
               <span class="font-mono text-[10px] text-text-muted">
                 {entry.key}
               </span>
-              <span class="text-[10px] uppercase tracking-wider text-text-muted">
+              <span class="text-[10px] text-text-muted">
                 {entry.entry_type}
               </span>
             </div>
@@ -319,7 +317,7 @@
                   <span>{vBadge.label}</span>
                 </span>
                 {#if vResult?.status === "error" && vResult.message}
-                  <span class="truncate text-[10px] text-red-400">
+                  <span class="truncate text-[10px] text-text">
                     {vResult.message}
                   </span>
                 {/if}
@@ -327,8 +325,8 @@
 
               <!-- Mismatch differences -->
               {#if vResult?.status === "mismatch" && vResult.differences.length > 0}
-                <div class="mt-1 border border-amber-400/30 bg-surface p-1.5 text-[10px]">
-                  <span class="font-medium text-amber-400">Metadata differences:</span>
+                <div class="mt-1 border border-line bg-surface p-1.5 text-[10px]">
+                  <span class="text-text">Metadata differences:</span>
                   <ul class="m-0 mt-0.5 list-disc pl-3 text-text-60">
                     {#each vResult.differences as diff (diff.field)}
                       <li>{formatDifference(diff)}</li>
@@ -368,10 +366,7 @@
                 aria-label={isExpanded ? "Collapse details" : "Expand details"}
                 onclick={() => void toggleDetails(entry.key)}
               >
-                <Icon
-                  name={isExpanded ? "chevron-down" : "chevron-right"}
-                  size={12}
-                />
+                <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={12} />
               </button>
             </div>
 
@@ -383,7 +378,7 @@
                 <!-- Full Authors -->
                 {#if entry.authors && entry.authors.length > 0}
                   <div class="mb-1">
-                    <span class="font-medium text-text">Authors:</span>
+                    <span class="text-text">Authors:</span>
                     <span>
                       {entry.authors.map((a) => a.name).join(", ")}
                     </span>
@@ -393,12 +388,12 @@
                 <!-- DOI -->
                 {#if entry.doi}
                   <div class="mb-1 flex items-baseline gap-1">
-                    <span class="font-medium text-text">DOI:</span>
+                    <span class="text-text">DOI:</span>
                     <a
                       href="https://doi.org/{entry.doi}"
                       target="_blank"
                       rel="noreferrer"
-                      class="truncate font-mono text-[10px] text-accent underline"
+                      class="truncate font-mono text-[10px] text-text-60 underline hover:text-text"
                     >
                       {entry.doi}
                     </a>
@@ -408,12 +403,12 @@
                 <!-- URL -->
                 {#if entry.url}
                   <div class="mb-1 flex items-baseline gap-1">
-                    <span class="font-medium text-text">URL:</span>
+                    <span class="text-text">URL:</span>
                     <a
                       href={entry.url}
                       target="_blank"
                       rel="noreferrer"
-                      class="truncate font-mono text-[10px] text-accent underline"
+                      class="truncate font-mono text-[10px] text-text-60 underline hover:text-text"
                     >
                       {entry.url}
                     </a>
@@ -423,7 +418,7 @@
                 <!-- arXiv ID -->
                 {#if entry.arxiv_id}
                   <div class="mb-1">
-                    <span class="font-medium text-text">arXiv:</span>
+                    <span class="text-text">arXiv:</span>
                     <span class="font-mono text-[10px]">{entry.arxiv_id}</span>
                   </div>
                 {/if}
@@ -431,7 +426,7 @@
                 <!-- Abstract -->
                 {#if entry.abstract_text}
                   <div class="mb-2 mt-1">
-                    <span class="font-medium text-text">Abstract:</span>
+                    <span class="text-text">Abstract:</span>
                     <p class="m-0 mt-0.5 line-clamp-4 leading-normal text-text-muted">
                       {entry.abstract_text}
                     </p>
@@ -441,14 +436,14 @@
                 <!-- Formatted Citation Preview -->
                 <div class="mt-2 border border-line bg-surface p-2">
                   <div class="flex items-center justify-between pb-1">
-                    <span class="text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                    <span class="text-[10px] text-text-muted">
                       Formatted citation
                     </span>
                     <div class="flex items-center gap-1">
                       <button
                         type="button"
                         class="px-1 py-0.5 text-[10px] {formatStyle === 'apa'
-                          ? 'bg-surface-hi text-text font-medium'
+                          ? 'bg-surface-hi text-text'
                           : 'text-text-muted hover:text-text'}"
                         onclick={() => void handleStyleChange(entry.key, "apa")}
                       >
@@ -458,7 +453,7 @@
                       <button
                         type="button"
                         class="px-1 py-0.5 text-[10px] {formatStyle === 'numeric'
-                          ? 'bg-surface-hi text-text font-medium'
+                          ? 'bg-surface-hi text-text'
                           : 'text-text-muted hover:text-text'}"
                         onclick={() => void handleStyleChange(entry.key, "numeric")}
                       >
@@ -487,7 +482,7 @@
                   {:else}
                     <button
                       type="button"
-                      class="text-[10px] text-accent underline"
+                      class="text-[10px] text-text-60 underline hover:text-text"
                       onclick={() => void fetchFormatted(entry.key, formatStyle)}
                     >
                       Generate formatted citation
