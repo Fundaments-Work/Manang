@@ -5660,6 +5660,7 @@ dependencies = [
 name = "manang-figure"
 version = "0.1.0"
 dependencies = [
+ "criterion 0.8.2",
  "insta",
  "manang-kernel",
  "manang-project",
@@ -5667,6 +5668,7 @@ dependencies = [
  "parking_lot",
  "perfect_freehand",
  "proptest",
+ "quick-xml 0.42.0",
  "serde",
  "serde_json",
  "tempfile",

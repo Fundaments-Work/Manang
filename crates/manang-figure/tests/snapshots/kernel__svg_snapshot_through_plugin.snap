@@ -1,8 +1,0 @@
----
-source: crates/manang-figure/tests/kernel.rs
-expression: svg_str
----
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
-  <rect x="0.5" y="0.5" width="399" height="299" fill="none" stroke="#3d3d42" stroke-width="1"/>
-  <rect id="box_snap" x="20" y="30" width="120" height="80" fill="#141416" stroke="#c6f135" stroke-width="1"/>
-</svg>
