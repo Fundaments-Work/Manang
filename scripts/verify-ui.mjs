@@ -590,6 +590,18 @@ async function autosaveSection(browser) {
   await sleep(600);
   check("losing focus saves the document", !(await unsaved()));
   await setMode("off");
+
+  // The setting is easy to find: Settings opened from a document lists it.
+  await press(page, "k", { ctrl: true, wait: 300 });
+  await insertText(page, "Open settings");
+  await press(page, "Enter", { wait: 700 });
+  check(
+    "Settings opened from a document lists the Autosave setting",
+    await page.evaluate(
+      `(document.querySelector('section[aria-label="Settings"]')?.innerText ?? "").includes("When modified documents are saved automatically")`,
+    ),
+  );
+  await press(page, "Escape", { wait: 300 });
 }
 
 /**
@@ -1102,268 +1114,315 @@ async function liveSection(browser) {
 }
 
 async function healSection(browser) {
-section("Self-healing fixes");
-const hp = await newPage(browser);
-current = hp;
-const kernelRun = (command, args) =>
-  hp.evaluate(
-    `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
+  section("Self-healing fixes");
+  const hp = await newPage(browser);
+  current = hp;
+  const kernelRun = (command, args) =>
+    hp.evaluate(
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
+    );
+  const editorText = () =>
+    hp.evaluate(`document.querySelector(".cm-content").innerText`);
+  const fixButtons = `document.querySelectorAll("#bottom-panel [data-fix]")`;
+  const clickFixOf = (pkg) =>
+    hp.evaluate(
+      `[...${fixButtons}].find((b) => b.getAttribute("aria-label").includes(${JSON.stringify(pkg)}))?.click()`,
+    );
+
+  await waitFor(hp, `!!document.querySelector('[data-project$="thesis-draft"]')`, {
+    label: "Home lists the LaTeX demo project",
+  });
+  await click(hp, '[data-project$="thesis-draft"] button');
+  await expectEventually(
+    hp,
+    "the LaTeX project opens in the editor",
+    `document.querySelector(".cm-content")?.textContent.includes("Introduction") === true`,
+    { timeout: 20000 },
   );
-const editorText = () => hp.evaluate(`document.querySelector(".cm-content").innerText`);
-const fixButtons = `document.querySelectorAll("#bottom-panel [data-fix]")`;
-const clickFixOf = (pkg) =>
-  hp.evaluate(
-    `[...${fixButtons}].find((b) => b.getAttribute("aria-label").includes(${JSON.stringify(pkg)}))?.click()`,
+  await focusEditor(hp);
+  await press(hp, "Home", { ctrl: true });
+  await press(hp, "ArrowDown");
+  await press(hp, "ArrowDown");
+  await insertText(hp, "\\includegraphics{fig}\n\\toprule\n");
+  await press(hp, "s", { ctrl: true, wait: 600 });
+  await expectEventually(
+    hp,
+    "saving reports the two missing-package errors",
+    `/2 errors/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    {
+      timeout: 10000,
+      show: `document.querySelector('footer[aria-label="Status"]').innerText`,
+    },
   );
+  await clickText(hp, 'footer[aria-label="Status"] button', "error");
+  await expectEventually(
+    hp,
+    "each missing-package error has a Fix button next to Fix with AI",
+    `${fixButtons}.length === 2 && document.querySelectorAll("#bottom-panel [data-fix-with-ai]").length === 2`,
+    { show: `document.querySelector("#bottom-panel")?.innerText.slice(0, 400)` },
+  );
+  check(
+    "the Fix button says what it will change",
+    (await hp.evaluate(
+      `[...${fixButtons}].map((b) => b.getAttribute("aria-label")).sort().join("|")`,
+    )) === "Fix: Add \\usepackage{booktabs}|Fix: Add \\usepackage{graphicx}",
+  );
+  check(
+    "the group offers Fix all for the two certain fixes",
+    (await hp.evaluate(
+      `document.querySelector("#bottom-panel [data-fix-all]")?.textContent.trim()`,
+    )) === "Fix all (2)",
+  );
+  await shoot(hp, "heal-1-problems");
 
-await waitFor(hp, `!!document.querySelector('[data-project$="thesis-draft"]')`, {
-  label: "Home lists the LaTeX demo project",
-});
-await click(hp, '[data-project$="thesis-draft"] button');
-await expectEventually(
-  hp,
-  "the LaTeX project opens in the editor",
-  `document.querySelector(".cm-content")?.textContent.includes("Introduction") === true`,
-  { timeout: 20000 },
-);
-await focusEditor(hp);
-await press(hp, "Home", { ctrl: true });
-await press(hp, "ArrowDown");
-await press(hp, "ArrowDown");
-await insertText(hp, "\\includegraphics{fig}\n\\toprule\n");
-await press(hp, "s", { ctrl: true, wait: 600 });
-await expectEventually(
-  hp,
-  "saving reports the two missing-package errors",
-  `/2 errors/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
-  { timeout: 10000, show: `document.querySelector('footer[aria-label="Status"]').innerText` },
-);
-await clickText(hp, 'footer[aria-label="Status"] button', "error");
-await expectEventually(
-  hp,
-  "each missing-package error has a Fix button next to Fix with AI",
-  `${fixButtons}.length === 2 && document.querySelectorAll("#bottom-panel [data-fix-with-ai]").length === 2`,
-  { show: `document.querySelector("#bottom-panel")?.innerText.slice(0, 400)` },
-);
-check(
-  "the Fix button says what it will change",
-  (await hp.evaluate(
-    `[...${fixButtons}].map((b) => b.getAttribute("aria-label")).sort().join("|")`,
-  )) === "Fix: Add \\usepackage{booktabs}|Fix: Add \\usepackage{graphicx}",
-);
-check(
-  "the group offers Fix all for the two certain fixes",
-  (await hp.evaluate(`document.querySelector("#bottom-panel [data-fix-all]")?.textContent.trim()`)) ===
-    "Fix all (2)",
-);
-await shoot(hp, "heal-1-problems");
+  // One fix: the package goes after \documentclass, with an Undo in the notice.
+  await clickFixOf("graphicx");
+  await expectEventually(
+    hp,
+    "Fix adds \\usepackage{graphicx} right after \\documentclass",
+    `/\\\\documentclass\\{article\\}\\s*\\\\usepackage\\{graphicx\\}\\s*\\\\begin\\{document\\}/.test(document.querySelector(".cm-content").innerText)`,
+    { show: `document.querySelector(".cm-content").innerText.slice(0, 160)` },
+  );
+  const statusAfterFix = await statusText(hp);
+  check(
+    "the notice says what was added and offers Undo",
+    statusAfterFix.includes("Added \\usepackage{graphicx}.") &&
+      (await exists(hp, "[data-notice-action]")),
+    statusAfterFix,
+  );
+  await expectEventually(
+    hp,
+    "the recompile runs and one error is left",
+    `/1 error\\b/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    {
+      timeout: 10000,
+      show: `document.querySelector('footer[aria-label="Status"]').innerText`,
+    },
+  );
+  await shoot(hp, "heal-2-fixed-one");
 
-// One fix: the package goes after \documentclass, with an Undo in the notice.
-await clickFixOf("graphicx");
-await expectEventually(
-  hp,
-  "Fix adds \\usepackage{graphicx} right after \\documentclass",
-  `/\\\\documentclass\\{article\\}\\s*\\\\usepackage\\{graphicx\\}\\s*\\\\begin\\{document\\}/.test(document.querySelector(".cm-content").innerText)`,
-  { show: `document.querySelector(".cm-content").innerText.slice(0, 160)` },
-);
-const statusAfterFix = await statusText(hp);
-check(
-  "the notice says what was added and offers Undo",
-  statusAfterFix.includes("Added \\usepackage{graphicx}.") &&
-    (await exists(hp, "[data-notice-action]")),
-  statusAfterFix,
-);
-await expectEventually(
-  hp,
-  "the recompile runs and one error is left",
-  `/1 error\\b/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
-  { timeout: 10000, show: `document.querySelector('footer[aria-label="Status"]').innerText` },
-);
-await shoot(hp, "heal-2-fixed-one");
-
-// Undo puts the text back (and the recompile follows).
-await click(hp, "[data-notice-action]");
-await expectEventually(
-  hp,
-  "Undo removes the added package and the error returns",
-  `!document.querySelector(".cm-content").innerText.includes("graphicx{") ||
+  // Undo puts the text back (and the recompile follows).
+  await click(hp, "[data-notice-action]");
+  await expectEventually(
+    hp,
+    "Undo removes the added package and the error returns",
+    `!document.querySelector(".cm-content").innerText.includes("graphicx{") ||
     !document.querySelector(".cm-content").innerText.includes("usepackage{graphicx}")`,
-);
-await expectEventually(
-  hp,
-  "both errors are back after the undo",
-  `/2 errors/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
-  { timeout: 10000 },
-);
+  );
+  await expectEventually(
+    hp,
+    "both errors are back after the undo",
+    `/2 errors/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    { timeout: 10000 },
+  );
 
-// Fix all: one transaction, one undo.
-await expectEventually(hp, "Fix all is offered again", `!!document.querySelector("#bottom-panel [data-fix-all]")`);
-await click(hp, "#bottom-panel [data-fix-all]");
-await expectEventually(
-  hp,
-  "Fix all adds both packages",
-  `(() => { const t = document.querySelector(".cm-content").innerText; return t.includes("\\\\usepackage{graphicx}") && t.includes("\\\\usepackage{booktabs}"); })()`,
-);
-await expectEventually(
-  hp,
-  "the document compiles after Fix all",
-  `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
-  { timeout: 10000, show: `document.querySelector('footer[aria-label="Status"]').innerText` },
-);
-await focusEditor(hp);
-await press(hp, "z", { ctrl: true });
-check(
-  "one Ctrl+Z undoes all of Fix all",
-  !(await editorText()).includes("\\usepackage{"),
-  (await editorText()).slice(0, 120),
-);
-await press(hp, "s", { ctrl: true, wait: 600 });
-await expectEventually(
-  hp,
-  "saving the undone text brings the errors back",
-  `/2 errors/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
-  { timeout: 10000 },
-);
+  // Fix all: one transaction, one undo.
+  await expectEventually(
+    hp,
+    "Fix all is offered again",
+    `!!document.querySelector("#bottom-panel [data-fix-all]")`,
+  );
+  await click(hp, "#bottom-panel [data-fix-all]");
+  await expectEventually(
+    hp,
+    "Fix all adds both packages",
+    `(() => { const t = document.querySelector(".cm-content").innerText; return t.includes("\\\\usepackage{graphicx}") && t.includes("\\\\usepackage{booktabs}"); })()`,
+  );
+  await expectEventually(
+    hp,
+    "the document compiles after Fix all",
+    `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    {
+      timeout: 10000,
+      show: `document.querySelector('footer[aria-label="Status"]').innerText`,
+    },
+  );
+  await focusEditor(hp);
+  await press(hp, "z", { ctrl: true });
+  check(
+    "one Ctrl+Z undoes all of Fix all",
+    !(await editorText()).includes("\\usepackage{"),
+    (await editorText()).slice(0, 120),
+  );
+  await press(hp, "s", { ctrl: true, wait: 600 });
+  await expectEventually(
+    hp,
+    "saving the undone text brings the errors back",
+    `/2 errors/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    { timeout: 10000 },
+  );
 
-// Keyboard: Ctrl+. on the \toprule line fixes it without the mouse.
-await focusEditor(hp);
-await press(hp, "Home", { ctrl: true });
-await press(hp, "ArrowDown");
-await press(hp, "ArrowDown");
-await press(hp, "ArrowDown");
-await press(hp, ".", { ctrl: true, wait: 600 });
-await expectEventually(
-  hp,
-  "Ctrl+. applies the quick fix of the error at the caret",
-  `document.querySelector(".cm-content").innerText.includes("\\\\usepackage{booktabs}")`,
-  { show: `document.querySelector(".cm-content").innerText.slice(0, 200)` },
-);
-check(
-  "and does not touch the other error",
-  !(await editorText()).includes("\\usepackage{graphicx}"),
-);
+  // Keyboard: Ctrl+. on the \toprule line fixes it without the mouse.
+  await focusEditor(hp);
+  await press(hp, "Home", { ctrl: true });
+  await press(hp, "ArrowDown");
+  await press(hp, "ArrowDown");
+  await press(hp, "ArrowDown");
+  await press(hp, ".", { ctrl: true, wait: 600 });
+  await expectEventually(
+    hp,
+    "Ctrl+. applies the quick fix of the error at the caret",
+    `document.querySelector(".cm-content").innerText.includes("\\\\usepackage{booktabs}")`,
+    { show: `document.querySelector(".cm-content").innerText.slice(0, 200)` },
+  );
+  check(
+    "and does not touch the other error",
+    !(await editorText()).includes("\\usepackage{graphicx}"),
+  );
 
-// A command two packages provide: a chooser, not a guess.
-await expectEventually(hp, "the booktabs error is gone, graphicx remains", `/1 error\\b/.test(document.querySelector('footer[aria-label="Status"]').innerText)`, { timeout: 10000 });
-await focusEditor(hp);
-await press(hp, "End", { ctrl: true });
-await insertText(hp, "\\url{http://example.org}\n");
-await press(hp, "s", { ctrl: true, wait: 600 });
-await expectEventually(
-  hp,
-  "a command two packages provide gets a Fix… chooser",
-  `!!document.querySelector("#bottom-panel [data-fix-menu-button]")`,
-  { timeout: 10000, show: `document.querySelector("#bottom-panel")?.innerText.slice(0, 300)` },
-);
-await click(hp, "#bottom-panel [data-fix-menu-button]");
-check(
-  "the chooser lists both packages",
-  (await hp.evaluate(
-    `[...document.querySelectorAll("#bottom-panel [data-fix-option]")].map((o) => o.textContent.replace(/\\s+/g, " ").trim()).join("|")`,
-  )).startsWith("Add \\usepackage{hyperref} likely|Add \\usepackage{url}"),
-);
-await hp.evaluate(`document.querySelector("#bottom-panel [data-fix-option]").focus()`);
-await press(hp, "ArrowDown");
-check(
-  "the arrow keys move through the chooser",
+  // A command two packages provide: a chooser, not a guess.
+  await expectEventually(
+    hp,
+    "the booktabs error is gone, graphicx remains",
+    `/1 error\\b/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    { timeout: 10000 },
+  );
+  await focusEditor(hp);
+  await press(hp, "End", { ctrl: true });
+  await insertText(hp, "\\url{http://example.org}\n");
+  await press(hp, "s", { ctrl: true, wait: 600 });
+  await expectEventually(
+    hp,
+    "a command two packages provide gets a Fix… chooser",
+    `!!document.querySelector("#bottom-panel [data-fix-menu-button]")`,
+    {
+      timeout: 10000,
+      show: `document.querySelector("#bottom-panel")?.innerText.slice(0, 300)`,
+    },
+  );
+  await click(hp, "#bottom-panel [data-fix-menu-button]");
+  check(
+    "the chooser lists both packages",
+    (
+      await hp.evaluate(
+        `[...document.querySelectorAll("#bottom-panel [data-fix-option]")].map((o) => o.textContent.replace(/\\s+/g, " ").trim()).join("|")`,
+      )
+    ).startsWith("Add \\usepackage{hyperref} likely|Add \\usepackage{url}"),
+  );
   await hp.evaluate(
-    `document.activeElement?.textContent.includes("\\\\usepackage{url}") === true`,
-  ),
-);
-await press(hp, "Escape");
-check(
-  "Escape closes the chooser and returns to its button",
-  !(await exists(hp, '#bottom-panel [role="menu"]')) &&
-    (await hp.evaluate(`document.activeElement?.hasAttribute("data-fix-menu-button")`)),
-);
-await click(hp, "#bottom-panel [data-fix-menu-button]");
-await hp.evaluate(
-  `[...document.querySelectorAll("#bottom-panel [data-fix-option]")].find((o) => o.textContent.includes("{url}")).click()`,
-);
-await expectEventually(
-  hp,
-  "choosing a package from the chooser applies that one",
-  `document.querySelector(".cm-content").innerText.includes("\\\\usepackage{url}") && !document.querySelector(".cm-content").innerText.includes("\\\\usepackage{hyperref}")`,
-);
+    `document.querySelector("#bottom-panel [data-fix-option]").focus()`,
+  );
+  await press(hp, "ArrowDown");
+  check(
+    "the arrow keys move through the chooser",
+    await hp.evaluate(
+      `document.activeElement?.textContent.includes("\\\\usepackage{url}") === true`,
+    ),
+  );
+  await press(hp, "Escape");
+  check(
+    "Escape closes the chooser and returns to its button",
+    !(await exists(hp, '#bottom-panel [role="menu"]')) &&
+      (await hp.evaluate(
+        `document.activeElement?.hasAttribute("data-fix-menu-button")`,
+      )),
+  );
+  await click(hp, "#bottom-panel [data-fix-menu-button]");
+  await hp.evaluate(
+    `[...document.querySelectorAll("#bottom-panel [data-fix-option]")].find((o) => o.textContent.includes("{url}")).click()`,
+  );
+  await expectEventually(
+    hp,
+    "choosing a package from the chooser applies that one",
+    `document.querySelector(".cm-content").innerText.includes("\\\\usepackage{url}") && !document.querySelector(".cm-content").innerText.includes("\\\\usepackage{hyperref}")`,
+  );
 
-// Settings: off hides every Fix; auto-apply fixes certain errors on save.
-await expectEventually(hp, "one error is left (graphicx)", `/1 error\\b/.test(document.querySelector('footer[aria-label="Status"]').innerText)`, { timeout: 10000 });
-await kernelRun("settings.set", { id: "heal.enabled", value: false });
-await expectEventually(
-  hp,
-  "with heal.enabled off there is no Fix button",
-  `${fixButtons}.length === 0 && document.querySelectorAll("#bottom-panel [data-fix-with-ai]").length >= 1`,
-);
-await kernelRun("settings.set", { id: "heal.enabled", value: true });
-await expectEventually(hp, "and it returns when turned on", `${fixButtons}.length === 1`);
-await kernelRun("settings.set", { id: "heal.auto-apply", value: true });
-await focusEditor(hp);
-await press(hp, "End", { ctrl: true });
-await insertText(hp, "% edit\n");
-await press(hp, "s", { ctrl: true, wait: 800 });
-await expectEventually(
-  hp,
-  "with heal.auto-apply the certain fix is applied on save",
-  `document.querySelector(".cm-content").innerText.includes("\\\\usepackage{graphicx}")`,
-  { timeout: 12000, show: `document.querySelector('footer[aria-label="Status"]').innerText` },
-);
-await expectEventually(
-  hp,
-  "and the document then compiles",
-  `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
-  { timeout: 12000, show: `document.querySelector('footer[aria-label="Status"]').innerText` },
-);
-await kernelRun("settings.set", { id: "heal.auto-apply", value: false });
-await shoot(hp, "heal-3-auto-applied");
-check(
-  "no page errors during the LaTeX fixes",
-  hp.errors.length === 0,
-  hp.errors.slice(0, 2).join(" | "),
-);
-hp.close();
+  // Settings: off hides every Fix; auto-apply fixes certain errors on save.
+  await expectEventually(
+    hp,
+    "one error is left (graphicx)",
+    `/1 error\\b/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    { timeout: 10000 },
+  );
+  await kernelRun("settings.set", { id: "heal.enabled", value: false });
+  await expectEventually(
+    hp,
+    "with heal.enabled off there is no Fix button",
+    `${fixButtons}.length === 0 && document.querySelectorAll("#bottom-panel [data-fix-with-ai]").length >= 1`,
+  );
+  await kernelRun("settings.set", { id: "heal.enabled", value: true });
+  await expectEventually(
+    hp,
+    "and it returns when turned on",
+    `${fixButtons}.length === 1`,
+  );
+  await kernelRun("settings.set", { id: "heal.auto-apply", value: true });
+  await focusEditor(hp);
+  await press(hp, "End", { ctrl: true });
+  await insertText(hp, "% edit\n");
+  await press(hp, "s", { ctrl: true, wait: 800 });
+  await expectEventually(
+    hp,
+    "with heal.auto-apply the certain fix is applied on save",
+    `document.querySelector(".cm-content").innerText.includes("\\\\usepackage{graphicx}")`,
+    {
+      timeout: 12000,
+      show: `document.querySelector('footer[aria-label="Status"]').innerText`,
+    },
+  );
+  await expectEventually(
+    hp,
+    "and the document then compiles",
+    `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+    {
+      timeout: 12000,
+      show: `document.querySelector('footer[aria-label="Status"]').innerText`,
+    },
+  );
+  await kernelRun("settings.set", { id: "heal.auto-apply", value: false });
+  await shoot(hp, "heal-3-auto-applied");
+  check(
+    "no page errors during the LaTeX fixes",
+    hp.errors.length === 0,
+    hp.errors.slice(0, 2).join(" | "),
+  );
+  hp.close();
 
-// Markdown: an unclosed code fence is found by a scan and fixed in one click.
-const mp = await newPage(browser);
-current = mp;
-await waitFor(mp, `!!document.querySelector('[data-project$="lecture-notes"]')`, {
-  label: "Home lists the Markdown demo project",
-});
-await click(mp, '[data-project$="lecture-notes"] button');
-await expectEventually(
-  mp,
-  "the Markdown project opens in the editor",
-  `document.querySelector(".cm-content")?.textContent.includes("Lecture notes") === true`,
-  { timeout: 20000 },
-);
-await focusEditor(mp);
-await caretToEnd(mp);
-await insertText(mp, "\n```js\nlet x = 1;\n");
-await press(mp, "j", { ctrl: true, wait: 400 });
-await expectEventually(
-  mp,
-  "an unclosed fence is listed in Problems with a Fix",
-  `(document.querySelector("#bottom-panel")?.innerText.includes("Code fence is never closed") ?? false) && !!document.querySelector("#bottom-panel [data-fix]")`,
-  { timeout: 8000, show: `document.querySelector("#bottom-panel")?.innerText.slice(0, 300) ?? "no panel"` },
-);
-await shoot(mp, "heal-4-markdown-fence");
-await click(mp, "#bottom-panel [data-fix]");
-await expectEventually(
-  mp,
-  "Fix closes the fence at the end of the document",
-  `document.querySelector(".cm-content").innerText.trimEnd().endsWith("\`\`\`")`,
-);
-await expectEventually(
-  mp,
-  "and the finding is gone",
-  `!(document.querySelector("#bottom-panel")?.innerText.includes("Code fence is never closed"))`,
-  { timeout: 8000 },
-);
-check(
-  "no page errors during the Markdown fix",
-  mp.errors.length === 0,
-  mp.errors.slice(0, 2).join(" | "),
-);
-mp.close();
+  // Markdown: an unclosed code fence is found by a scan and fixed in one click.
+  const mp = await newPage(browser);
+  current = mp;
+  await waitFor(mp, `!!document.querySelector('[data-project$="lecture-notes"]')`, {
+    label: "Home lists the Markdown demo project",
+  });
+  await click(mp, '[data-project$="lecture-notes"] button');
+  await expectEventually(
+    mp,
+    "the Markdown project opens in the editor",
+    `document.querySelector(".cm-content")?.textContent.includes("Lecture notes") === true`,
+    { timeout: 20000 },
+  );
+  await focusEditor(mp);
+  await caretToEnd(mp);
+  await insertText(mp, "\n```js\nlet x = 1;\n");
+  await press(mp, "j", { ctrl: true, wait: 400 });
+  await expectEventually(
+    mp,
+    "an unclosed fence is listed in Problems with a Fix",
+    `(document.querySelector("#bottom-panel")?.innerText.includes("Code fence is never closed") ?? false) && !!document.querySelector("#bottom-panel [data-fix]")`,
+    {
+      timeout: 8000,
+      show: `document.querySelector("#bottom-panel")?.innerText.slice(0, 300) ?? "no panel"`,
+    },
+  );
+  await shoot(mp, "heal-4-markdown-fence");
+  await click(mp, "#bottom-panel [data-fix]");
+  await expectEventually(
+    mp,
+    "Fix closes the fence at the end of the document",
+    `document.querySelector(".cm-content").innerText.trimEnd().endsWith("\`\`\`")`,
+  );
+  await expectEventually(
+    mp,
+    "and the finding is gone",
+    `!(document.querySelector("#bottom-panel")?.innerText.includes("Code fence is never closed"))`,
+    { timeout: 8000 },
+  );
+  check(
+    "no page errors during the Markdown fix",
+    mp.errors.length === 0,
+    mp.errors.slice(0, 2).join(" | "),
+  );
+  mp.close();
 }
 
 async function main() {
