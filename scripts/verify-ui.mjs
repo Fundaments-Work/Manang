@@ -384,6 +384,11 @@ async function mouse(cdp, type, x, y, button = "left", clickCount = 1) {
 
 /** A real pointer click at the centre of an element. */
 async function click(cdp, selector, button = "left") {
+  // A control inside a scrolling panel may be below the fold; a pointer at its
+  // coordinates would hit whatever is there instead.
+  await cdp.evaluate(
+    `document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: "nearest" })`,
+  );
   const r = await rect(cdp, selector);
   if (r === null) throw new Error(`no element for ${selector}`);
   await mouse(cdp, "mouseMoved", r.x, r.y);
@@ -2088,6 +2093,24 @@ async function main() {
         return { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2, bottom: r.bottom, right: r.right };
       })()`);
       const nodeTotal = async () => (await nodeIds()).length;
+      // The plugin's own copy of the open figure: the canvas culls what is out
+      // of view, so DOM counts change when the view does.
+      const kernelEval = (body) =>
+        page.evaluate(`(async () => {
+          const { kernel } = await import("/src/lib/kernel/index.ts");
+          const list = await kernel.run("figure.list");
+          const fig = list.find((f) => (f.path ?? "").endsWith("state_lattice.figure.json"));
+          ${body}
+        })()`);
+      const sceneNodes = () =>
+        kernelEval(`return (await kernel.run("figure.get", { id: fig.id })).nodes;`);
+      const sceneCountExpr = `(async () => {
+        const { kernel } = await import("/src/lib/kernel/index.ts");
+        const list = await kernel.run("figure.list");
+        const fig = list.find((f) => (f.path ?? "").endsWith("state_lattice.figure.json"));
+        return (await kernel.run("figure.get", { id: fig.id })).nodes.length;
+      })()`;
+      const sceneCount = () => page.evaluate(sceneCountExpr);
       async function pickTool(name) {
         await click(page, `${FIG_TOOLS} button[aria-label="${name}"]`);
       }
@@ -2229,15 +2252,14 @@ async function main() {
       );
 
       // Multi-select with Shift, then align their tops from the properties panel.
-      // Escape first: the properties panel of the moved shape covers the left.
       await press(page, "Escape", { wait: 250 });
       const r1 = await nodeBox(drawn.rect);
       const e1 = await nodeBox(drawn.ellipse);
       await tap(r1.cx, r1.cy);
       await tap(e1.cx, e1.cy, { shift: true });
       check(
-        "properties appear only for a selection",
-        await exists(page, 'aside[aria-label="Shape properties"]'),
+        "the selection's controls appear in the properties column",
+        await exists(page, "aside[data-properties] [data-properties-selection]"),
       );
       await click(
         page,
@@ -2262,8 +2284,9 @@ async function main() {
       const empty = at(0.97, 0.05);
       await tap(empty.x, empty.y);
       check(
-        "properties disappear when nothing is selected",
-        !(await exists(page, 'aside[aria-label="Shape properties"]')),
+        "the selection's controls give way to the page settings when nothing is selected",
+        !(await exists(page, "aside[data-properties] [data-properties-selection]")) &&
+          (await exists(page, "aside[data-properties] [data-page-settings]")),
       );
       const total = await nodeTotal();
       await tap(r2.cx, r2.cy);
@@ -2320,7 +2343,7 @@ async function main() {
       await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
 
       // Pasting Mermaid offers to turn it into shapes.
-      const countBeforeMermaid = await nodeTotal();
+      const countBeforeMermaid = await sceneCount();
       await page.evaluate(`(() => {
       const target = document.querySelector('${CANVAS}');
       target.focus();
@@ -2337,8 +2360,8 @@ async function main() {
       await expectEventually(
         page,
         "Insert as shapes adds native shapes and bound arrows",
-        `document.querySelectorAll('${CANVAS} g[data-node-id]').length === ${countBeforeMermaid + 5}`,
-        { show: `document.querySelectorAll('${CANVAS} g[data-node-id]').length` },
+        `${sceneCountExpr}.then((n) => n === ${countBeforeMermaid + 5})`,
+        { show: sceneCountExpr },
       );
       check(
         "the Mermaid labels are on the canvas",
@@ -2350,10 +2373,10 @@ async function main() {
       await press(page, "z", { ctrl: true, wait: 400 });
       check(
         "undo takes the whole Mermaid insert back",
-        (await nodeTotal()) === countBeforeMermaid,
+        (await sceneCount()) === countBeforeMermaid,
       );
       await press(page, "z", { ctrl: true, shift: true, wait: 400 });
-      check("redo restores it", (await nodeTotal()) === countBeforeMermaid + 5);
+      check("redo restores it", (await sceneCount()) === countBeforeMermaid + 5);
 
       check(
         "drawing marks the tab dirty",
@@ -2364,6 +2387,660 @@ async function main() {
         "Ctrl+S saves the scene as JSON and its SVG",
         !(await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
       );
+
+      /* ---------------------------------------------------------------- */
+      /* Formulas, colours and the polish items (figure studio follow-up) */
+      /* ---------------------------------------------------------------- */
+      section("Figure studio: formulas, colours, layout");
+      const PROPS = "aside[data-properties]";
+      const exportSvg = () =>
+        kernelEval(`
+          const bytes = await kernel.runBinary("figure.export-svg", { id: fig.id });
+          return new TextDecoder().decode(bytes);`);
+      async function dbl(x, y) {
+        await mouse(page, "mouseMoved", x, y);
+        await mouse(page, "mousePressed", x, y, "left", 1);
+        await mouse(page, "mouseReleased", x, y, "left", 1);
+        await mouse(page, "mousePressed", x, y, "left", 2);
+        await mouse(page, "mouseReleased", x, y, "left", 2);
+        await sleep(350);
+      }
+      async function shiftDrag(x1, y1, x2, y2) {
+        const ev = (type, x, y) =>
+          page.send("Input.dispatchMouseEvent", {
+            type,
+            x,
+            y,
+            button: "left",
+            buttons: type === "mouseReleased" ? 0 : 1,
+            clickCount: 1,
+            modifiers: 8,
+          });
+        await ev("mouseMoved", x1, y1);
+        await ev("mousePressed", x1, y1);
+        for (let i = 1; i <= 5; i += 1) {
+          await ev("mouseMoved", x1 + ((x2 - x1) * i) / 5, y1 + ((y2 - y1) * i) / 5);
+        }
+        await ev("mouseReleased", x2, y2);
+        await sleep(300);
+      }
+      const attr = (id, sel, name) =>
+        page.evaluate(
+          `document.querySelector('${CANVAS} g[data-node-id="${id}"] ${sel}')?.getAttribute("${name}") ?? null`,
+        );
+      const clearSelection = async () => {
+        const e = at(0.97, 0.02);
+        await tap(e.x, e.y);
+      };
+      await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
+      await clearSelection();
+
+      // --- The properties column docks to the right and never covers the drawing.
+      {
+        const s0 = await rect(page, CANVAS);
+        const p0 = await rect(page, PROPS);
+        check(
+          "the properties column is docked to the right edge of the canvas area",
+          p0 !== null &&
+            p0.w >= 200 &&
+            p0.w <= 300 &&
+            Math.abs(p0.right - 1280) < 4 &&
+            s0.right <= p0.left + 1,
+          JSON.stringify({ s0, p0 }),
+        );
+        const ids = await nodeIds();
+        let covered = 0;
+        for (const id of ids) {
+          const b = await nodeBox(id);
+          if (b === null || b.w === 0) continue;
+          const hit = await page.evaluate(
+            `!!document.elementFromPoint(${b.cx}, ${b.cy})?.closest('${PROPS}')`,
+          );
+          if (hit) covered += 1;
+        }
+        check("no shape is hidden behind the properties column", covered === 0);
+        check(
+          "with nothing selected the column holds the page settings",
+          await exists(page, `${PROPS} [data-page-settings]`),
+        );
+        await click(page, `${PROPS} [data-properties-toggle]`);
+        const collapsed = await rect(page, PROPS);
+        const s1 = await rect(page, CANVAS);
+        check(
+          "the column collapses to a strip and the canvas takes the room",
+          collapsed.w < 48 && s1.w > s0.w + 150,
+          JSON.stringify({ before: s0.w, after: s1.w, strip: collapsed.w }),
+        );
+        await click(page, `${PROPS} [data-properties-toggle]`);
+        check("the toggle opens it again", (await rect(page, PROPS)).w >= 200);
+        await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
+      }
+
+      // --- Typst formula: tool, inline editor, live preview, measured box.
+      const mathIds = () => nodeIds("math");
+      const mathBefore = await mathIds();
+      const mathCountBefore = mathBefore.length;
+      await pickTool("Formula");
+      const f1At = at(0.1, 0.42);
+      await tap(f1At.x, f1At.y);
+      await expectEventually(
+        page,
+        "the formula tool creates a formula and opens its inline editor",
+        `document.querySelector("[data-formula-editor]") !== null && document.querySelectorAll('${CANVAS} g[data-kind="math"]').length === ${mathCountBefore + 1}`,
+      );
+      check(
+        "the editor defaults to the project's engine (Typst) and offers both languages",
+        await page.evaluate(
+          `document.querySelector('[data-formula-editor] button[data-language="typst"]')?.getAttribute("aria-pressed") === "true" && document.querySelector('[data-formula-editor] button[data-language="latex"]')?.getAttribute("aria-pressed") === "false"`,
+        ),
+      );
+      check(
+        "the editor field is DM Mono and the help line shows Typst and LaTeX syntax",
+        await page.evaluate(
+          `(() => { const t = document.querySelector('[data-formula-editor] textarea'); return getComputedStyle(t).fontFamily.includes("DM Mono") && document.querySelector("[data-formula-editor]").innerText.includes("Typst:"); })()`,
+        ),
+      );
+      await insertText(page, "a^2 + b^2 = c^2");
+      await expectEventually(
+        page,
+        "typing re-renders the formula on the canvas after a short pause",
+        `[...document.querySelectorAll('${CANVAS} [data-math-image]')].some((i) => i.getAttribute("href")?.startsWith("blob:"))`,
+      );
+      await shoot(page, "17d-figure-formula-editor");
+      await press(page, "Enter", { ctrl: true, wait: 500 });
+      const mathNow = await mathIds();
+      const f1 = mathNow.find((id) => !mathBefore.includes(id));
+      check(
+        "Ctrl+Enter applies the formula and closes the editor",
+        !(await exists(page, "[data-formula-editor]")) && f1 !== undefined,
+      );
+      const f1Box = await nodeBox(f1);
+      check(
+        "a formula is a selectable node with a measured box",
+        f1Box !== null && f1Box.w > 20 && f1Box.h > 10,
+        JSON.stringify(f1Box),
+      );
+      check(
+        "the formula is drawn as an image of vector paths, not as text",
+        (await page.evaluate(
+          `document.querySelectorAll('${CANVAS} g[data-node-id="${f1}"] text').length`,
+        )) === 0 &&
+          (await attr(f1, "[data-math-image]", "data-math-language")) === "typst",
+      );
+
+      // --- LaTeX formula, and the language switch re-renders.
+      await pickTool("Formula");
+      const f2At = at(0.34, 0.42);
+      await tap(f2At.x, f2At.y);
+      await waitFor(page, `document.querySelector("[data-formula-editor]") !== null`);
+      await click(page, '[data-formula-editor] button[data-language="latex"]');
+      await insertText(page, "\\frac{1}{2} + \\sqrt{x}");
+      await expectEventually(
+        page,
+        "switching to LaTeX re-renders as a LaTeX formula",
+        `!!document.querySelector('${CANVAS} [data-math-image][data-math-language="latex"]')`,
+      );
+      // The editor's textarea lost focus to the button; a click on the canvas commits.
+      const empty2 = at(0.97, 0.02);
+      await tap(empty2.x, empty2.y);
+      await sleep(300);
+      const f2 = (await mathIds()).find((id) => !mathNow.includes(id));
+      check(
+        "clicking away applies the formula (LaTeX)",
+        f2 !== undefined && !(await exists(page, "[data-formula-editor]")),
+      );
+      // Align them: both are formula nodes the alignment machinery accepts.
+      const b1 = await nodeBox(f1);
+      const b2 = await nodeBox(f2);
+      await tap(b1.cx, b1.cy);
+      await tap(b2.cx, b2.cy, { shift: true });
+      await click(page, `${PROPS} button[aria-label="Align middle"]`);
+      await sleep(300);
+      const a1 = await nodeBox(f1);
+      const a2 = await nodeBox(f2);
+      check(
+        "formulas align like any shape",
+        Math.abs(a1.cy - a2.cy) < 2.5,
+        `${a1.cy} vs ${a2.cy}`,
+      );
+      await clearSelection();
+
+      // --- An invalid source shows the error and keeps the old rendering, dimmed.
+      {
+        const c = await nodeBox(f2);
+        await dbl(c.cx, c.cy);
+        await waitFor(page, `document.querySelector("[data-formula-editor]") !== null`);
+        check(
+          "double-clicking a formula edits it, on its own language",
+          await page.evaluate(
+            `document.querySelector('[data-formula-editor] button[data-language="latex"]')?.getAttribute("aria-pressed") === "true"`,
+          ),
+        );
+        await insertText(page, "\\frac{1");
+        await expectEventually(
+          page,
+          "an invalid formula shows its error inside the editor, with a position",
+          `/line 1/.test(document.querySelector("[data-formula-error]")?.innerText ?? "")`,
+          { show: `document.querySelector("[data-formula-error]")?.innerText` },
+        );
+        check(
+          "the previous rendering stays on screen, dimmed",
+          (await page.evaluate(
+            `Number(document.querySelector('${CANVAS} g[data-node-id="${f2}"] [data-math-image]')?.getAttribute("opacity") ?? 1)`,
+          )) < 0.6,
+        );
+        await shoot(page, "17e-figure-formula-error");
+        await press(page, "Escape", { wait: 300 });
+        check(
+          "Escape drops the draft and restores the rendering",
+          !(await exists(page, "[data-formula-editor]")) &&
+            (await page.evaluate(
+              `Number(document.querySelector('${CANVAS} g[data-node-id="${f2}"] [data-math-image]')?.getAttribute("opacity") ?? 1)`,
+            )) === 1,
+        );
+        // Committed through the panel, a broken source is stored and reported there.
+        await tap(c.cx, c.cy);
+        await page.evaluate(`(() => {
+          const t = document.querySelector('${PROPS} textarea[aria-label="Formula source"]');
+          t.focus();
+          t.value = "\\\\frac{1";
+          t.dispatchEvent(new Event("change", { bubbles: true }));
+        })()`);
+        await expectEventually(
+          page,
+          "a broken formula's error appears in the properties panel",
+          `!!document.querySelector('${PROPS} [data-formula-error]')`,
+        );
+        await page.evaluate(`(() => {
+          const t = document.querySelector('${PROPS} textarea[aria-label="Formula source"]');
+          t.focus();
+          t.value = "\\\\frac{3}{4}";
+          t.dispatchEvent(new Event("change", { bubbles: true }));
+        })()`);
+        await expectEventually(
+          page,
+          "fixing the source clears the error",
+          `!document.querySelector('${PROPS} [data-formula-error]')`,
+        );
+        await clearSelection();
+      }
+
+      // --- Scaling a formula by its handle scales its size.
+      {
+        const before = await nodeBox(f1);
+        await tap(before.cx, before.cy);
+        const handle = await rect(page, `${CANVAS} [data-handle="se"]`);
+        const sizeBefore = await page.evaluate(
+          `document.querySelector('${PROPS} select[aria-label="Formula size"]')?.value`,
+        );
+        await drag(handle.x, handle.y, handle.x + 80, handle.y + 40);
+        const after = await nodeBox(f1);
+        check(
+          "a formula's corner handle scales the formula",
+          after.w > before.w * 1.3 &&
+            Math.abs(after.w / before.w - after.h / before.h) < 0.12,
+          JSON.stringify({ before: before.w, after: after.w }),
+        );
+        check(
+          "scaling changes the formula's size (not just its box)",
+          (await page.evaluate(
+            `document.querySelector('${PROPS} select[aria-label="Formula size"]')?.value`,
+          )) !== sizeBefore,
+        );
+        await clearSelection();
+      }
+
+      // --- A rectangle with a label: colours.
+      let boxId;
+      {
+        const before = await nodeIds("rect");
+        await pickTool("Rectangle");
+        const a = at(0.08, 0.62);
+        await drag(a.x, a.y, a.x + svg.w * 0.16, a.y + svg.h * 0.1);
+        boxId = (await nodeIds("rect")).find((id) => !before.includes(id));
+        const bb = await nodeBox(boxId);
+        await dbl(bb.cx, bb.cy);
+        await waitFor(page, `document.querySelector("[data-label-editor]") !== null`);
+        await insertText(page, "Box");
+        await press(page, "Enter", { ctrl: true, wait: 300 });
+        await tap(bb.cx, bb.cy);
+        check(
+          "the drawn rectangle is selected with its colour controls",
+          await exists(page, `${PROPS} [data-colour-control="Stroke"]`),
+        );
+        // Custom stroke colour through the HSL picker's hex field.
+        await click(page, `${PROPS} button[aria-label="Stroke custom colour"]`);
+        check(
+          "the + swatch opens a square HSL picker with a hex field",
+          await page.evaluate(
+            `(() => { const p = document.querySelector("[data-colour-picker]"); if (!p) return false; return getComputedStyle(p).borderRadius === "0px" && p.querySelectorAll('input[type="range"]').length === 3 && !!p.querySelector('input[aria-label="Stroke hex"]'); })()`,
+          ),
+        );
+        await page.evaluate(`(() => {
+          const i = document.querySelector('${PROPS} input[aria-label="Stroke hex"]');
+          i.focus();
+          i.select();
+        })()`);
+        await insertText(page, "#D95F02");
+        await press(page, "Enter", { wait: 400 });
+        check(
+          "the picker sets the node's stroke to the exact hex (lowercase)",
+          (await attr(boxId, "path", "stroke")) === "#d95f02",
+          String(await attr(boxId, "path", "stroke")),
+        );
+        check(
+          "custom swatches are marked and sit after the tokens",
+          await page.evaluate(
+            `(() => { const row = document.querySelector('${PROPS} [data-colour-control="Stroke"] [role="group"]'); const c = row.querySelector('button[data-custom="#d95f02"]'); if (!c) return false; const kids = [...row.children]; return c.classList.contains("mng-custom") && kids.indexOf(c) > kids.findIndex((k) => k.dataset.token === "ink") && getComputedStyle(c, "::after").content !== "none"; })()`,
+          ),
+        );
+        check(
+          "the recent colours row remembers it per user (localStorage, not the scene)",
+          (
+            await page.evaluate(
+              `JSON.parse(localStorage.getItem("manang.figure.recent-colours") ?? "[]")`,
+            )
+          ).includes("#d95f02"),
+        );
+        // Nine more colours: the row keeps the latest eight, newest first.
+        for (let i = 0; i < 9; i += 1) {
+          const hex = `#${(0x102030 + i * 0x0a0b0c).toString(16)}`;
+          await page.evaluate(`(() => {
+            const i = document.querySelector('${PROPS} input[aria-label="Stroke hex"]');
+            i.focus();
+            i.select();
+          })()`);
+          await insertText(page, hex);
+          await press(page, "Enter", { wait: 200 });
+        }
+        const recent = await page.evaluate(
+          `JSON.parse(localStorage.getItem("manang.figure.recent-colours") ?? "[]")`,
+        );
+        check(
+          "the recent row holds the last eight custom colours, newest first",
+          recent.length === 8 &&
+            recent[0] === `#${(0x102030 + 8 * 0x0a0b0c).toString(16)}`,
+          JSON.stringify(recent),
+        );
+        // Set the stroke back to the first custom colour from the recent row.
+        await click(
+          page,
+          `${PROPS} [data-colour-control="Stroke"] button[data-custom="${recent[7]}"]`,
+        );
+        check(
+          "clicking a recent colour applies it",
+          (await attr(boxId, "path", "stroke")) === recent[7],
+        );
+        // Text colour is separate from the stroke.
+        const strokeNow = await attr(boxId, "path", "stroke");
+        await click(page, `${PROPS} button[aria-label="Text blue"]`);
+        const textFill = await attr(boxId, "text", "fill");
+        check(
+          "the label colour is its own setting, apart from the stroke",
+          textFill !== null &&
+            textFill !== strokeNow &&
+            (await attr(boxId, "path", "stroke")) === strokeNow,
+          `${textFill} vs ${strokeNow}`,
+        );
+        await clickText(
+          page,
+          `${PROPS} [data-colour-control="Text"] button`,
+          "Follows stroke",
+        );
+        await sleep(250);
+        check(
+          '"Follows stroke" puts the text back on the stroke colour',
+          (await attr(boxId, "text", "fill")) === (await attr(boxId, "path", "stroke")),
+        );
+        // Fill: a custom fill, a separate opacity, then none.
+        await click(page, `${PROPS} button[aria-label="Fill blue"]`);
+        check(
+          "a hue fill paints as the tint",
+          (await attr(boxId, "path", "fill-opacity")) === "0.2",
+        );
+        await page.evaluate(`(() => {
+          const r = document.querySelector('${PROPS} input[aria-label="Fill opacity"]');
+          r.value = "70";
+          r.dispatchEvent(new Event("change", { bubbles: true }));
+        })()`);
+        await sleep(250);
+        check(
+          "fill opacity is separate from the overall opacity",
+          (await attr(boxId, "path", "fill-opacity")) === "0.7" &&
+            (await page.evaluate(
+              `document.querySelector('${CANVAS} g[data-node-id="${boxId}"]')?.getAttribute("opacity")`,
+            )) === null,
+        );
+        await click(page, `${PROPS} button[aria-label="Fill none"]`);
+        check(
+          "No fill removes the fill",
+          (await attr(boxId, "path", "fill")) === "none",
+        );
+        await shoot(page, "17f-figure-colours");
+      }
+
+      // --- One colour for a multi-selection is one undo step.
+      {
+        const a = await nodeBox(boxId);
+        const other = (await nodeIds("ellipse"))[0];
+        const e = await nodeBox(other);
+        await tap(a.cx, a.cy);
+        await tap(e.cx, e.cy, { shift: true });
+        const oldA = await attr(boxId, "path", "stroke");
+        const oldE = await attr(other, "path", "stroke");
+        await click(page, `${PROPS} button[aria-label="Stroke green"]`);
+        const gA = await attr(boxId, "path", "stroke");
+        const gE = await attr(other, "path", "stroke");
+        check(
+          "a colour applies to every selected node",
+          gA === gE && gA !== oldA,
+          `${gA} ${gE}`,
+        );
+        await press(page, "z", { ctrl: true, wait: 400 });
+        check(
+          "and one undo takes it back on all of them",
+          (await attr(boxId, "path", "stroke")) === oldA &&
+            (await attr(other, "path", "stroke")) === oldE,
+        );
+        await clearSelection();
+      }
+
+      // --- Canvas background: applies to the export; print export keeps working.
+      {
+        await click(page, `${PROPS} button[aria-label="Background paper"]`);
+        await sleep(300);
+        const pageFill = await page.evaluate(
+          `document.querySelector('${CANVAS} rect[data-page]')?.getAttribute("fill")`,
+        );
+        const svgText = await exportSvg();
+        const exportStroke = await attr(boxId, "path", "stroke");
+        check(
+          "the page shows its background and the export draws it behind everything",
+          pageFill !== "none" &&
+            /<rect x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" fill="#ffffff"\/>/.test(
+              svgText,
+            ),
+          String(pageFill),
+        );
+        check(
+          "the export keeps the print theme, the custom stroke and the formulas",
+          svgText.includes(`stroke="${exportStroke}"`) &&
+            svgText.includes("data-approximate-math") &&
+            !svgText.includes("var(--"),
+        );
+        await press(page, "z", { ctrl: true, wait: 400 });
+        check(
+          "undo removes the background again",
+          (await page.evaluate(
+            `document.querySelector('${CANVAS} rect[data-page]')?.getAttribute("fill")`,
+          )) === "none" && !(await exportSvg()).includes('fill="#ffffff"/>'),
+        );
+      }
+
+      // --- The diamond label no longer breaks mid-word.
+      let dId;
+      {
+        dId = (await nodeIds("diamond"))[0];
+        const d = await nodeBox(dId);
+        await tap(d.cx, d.cy);
+        await page.evaluate(`(() => {
+          const i = document.querySelector('${PROPS} input[aria-label="Label"]');
+          i.focus();
+          i.value = "Validate input";
+          i.dispatchEvent(new Event("change", { bubbles: true }));
+        })()`);
+        await sleep(300);
+        const tspans = await page.evaluate(
+          `[...document.querySelectorAll('${CANVAS} g[data-node-id="${dId}"] tspan')].map((t) => t.textContent)`,
+        );
+        check(
+          "a diamond label breaks only at spaces",
+          tspans.join(" ") === "Validate input",
+          JSON.stringify(tspans),
+        );
+        await shoot(page, "17g-figure-diamond");
+        await clearSelection();
+      }
+
+      // --- Resizing a multi-selection scales it (Shift keeps the proportions).
+      {
+        const ids = [boxId, (await nodeIds("ellipse"))[0]];
+        const boxes0 = [await nodeBox(ids[0]), await nodeBox(ids[1])];
+        await tap(boxes0[0].cx, boxes0[0].cy);
+        await tap(boxes0[1].cx, boxes0[1].cy, { shift: true });
+        const sel0 = await rect(page, `${CANVAS} [data-selection-bounds]`);
+        const h = await rect(page, `${CANVAS} [data-multi-handle][data-handle="se"]`);
+        await drag(h.x, h.y, h.x + 100, h.y + 20);
+        const boxes1 = [await nodeBox(ids[0]), await nodeBox(ids[1])];
+        const sx = boxes1[0].w / boxes0[0].w;
+        const sx2 = boxes1[1].w / boxes0[1].w;
+        const sy = boxes1[0].h / boxes0[0].h;
+        check(
+          "dragging a multi-selection handle scales every selected node",
+          sx > 1.1 && Math.abs(sx - sx2) < 0.1 && sy >= 1 && Math.abs(sx - sy) > 0.02,
+          JSON.stringify({ sx, sx2, sy }),
+        );
+        await press(page, "z", { ctrl: true, wait: 400 });
+        const back = await nodeBox(ids[0]);
+        check(
+          "scaling is one undo step",
+          Math.abs(back.w - boxes0[0].w) < 1.5 && Math.abs(back.h - boxes0[0].h) < 1.5,
+          JSON.stringify({ back: back.w, was: boxes0[0].w }),
+        );
+        const sel1 = await rect(page, `${CANVAS} [data-selection-bounds]`);
+        const h2 = await rect(page, `${CANVAS} [data-multi-handle][data-handle="se"]`);
+        await shiftDrag(h2.x, h2.y, h2.x + 90, h2.y + 10);
+        const boxes2 = [await nodeBox(ids[0])];
+        const px = boxes2[0].w / boxes0[0].w;
+        const py = boxes2[0].h / boxes0[0].h;
+        check(
+          "Shift keeps the proportions while scaling",
+          px > 1.05 && Math.abs(px - py) < 0.05,
+          JSON.stringify({ px, py, sel0, sel1 }),
+        );
+        await press(page, "z", { ctrl: true, wait: 400 });
+        await clearSelection();
+      }
+
+      // --- Mermaid inserted from the UI lands in free space, selected and in view.
+      {
+        const before = await sceneNodes();
+        const boundsOf = (n) => {
+          const xs = n.points?.map((p) => p.x);
+          const ys = n.points?.map((p) => p.y);
+          return n.points === undefined
+            ? { x: n.x, y: n.y, r: n.x + n.width, b: n.y + n.height }
+            : {
+                x: Math.min(...xs),
+                y: Math.min(...ys),
+                r: Math.max(...xs),
+                b: Math.max(...ys),
+              };
+        };
+        await page.evaluate(`(() => {
+          const target = document.querySelector('${CANVAS}');
+          target.focus();
+          const data = new DataTransfer();
+          data.setData("text/plain", "flowchart LR\\n  P[Plan] --> Q{Ready?}\\n  Q -->|yes| R[Ship]\\n");
+          target.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+        })()`);
+        await waitFor(page, `document.querySelector("[data-mermaid-prompt]") !== null`);
+        await clickText(page, "[data-mermaid-prompt] button", "Insert as shapes");
+        await waitFor(
+          page,
+          `${sceneCountExpr}.then((n) => n === ${before.length + 5})`,
+        );
+        await sleep(400);
+        const after = await sceneNodes();
+        const oldIds = new Set(before.map((n) => n.id));
+        const added = after.filter((n) => !oldIds.has(n.id));
+        const shapes = added.filter((n) => n.points === undefined);
+        const overlap = shapes.some((n) =>
+          before
+            .filter((o) => o.kind !== "frame")
+            .map(boundsOf)
+            .some((o) => {
+              const a = boundsOf(n);
+              return a.x < o.r && o.x < a.r && a.y < o.b && o.y < a.b;
+            }),
+        );
+        check(
+          "Mermaid lands in free space, overlapping nothing",
+          added.length === 5 && !overlap,
+          JSON.stringify({ added: added.length, overlap }),
+        );
+        const view = await rect(page, CANVAS);
+        const boxes = [];
+        for (const n of shapes) boxes.push(await nodeBox(n.id));
+        check(
+          "the inserted Mermaid is selected and scrolled into view",
+          (await page.evaluate(
+            `document.querySelectorAll('${CANVAS} [data-selected]').length`,
+          )) === added.length &&
+            boxes.every(
+              (n) =>
+                n !== null &&
+                n.x >= view.left - 2 &&
+                n.right <= view.right + 2 &&
+                n.y >= view.top - 2 &&
+                n.bottom <= view.bottom + 2,
+            ),
+          JSON.stringify({ view, first: boxes[0] }),
+        );
+        await shoot(page, "17h-figure-mermaid-placed");
+        await press(page, "z", { ctrl: true, wait: 400 });
+        await clearSelection();
+        await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
+      }
+
+      // --- Both themes: the figure's own colours stay readable on the canvas.
+      {
+        const runCmd = async (query) => {
+          await press(page, "k", { ctrl: true, wait: 300 });
+          await insertText(page, query);
+          await press(page, "Enter", { wait: 600 });
+        };
+        const lum = (rgb) => {
+          const [r, g, b] = rgb.map((c) => {
+            const s = c / 255;
+            return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const ratio = (a, b) => {
+          const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+          return (x + 0.05) / (y + 0.05);
+        };
+        const parse = (css) =>
+          (css.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+        for (const theme of ["light", "dark"]) {
+          await runCmd(`Switch to ${theme} theme`);
+          await sleep(400);
+          const colours = await page.evaluate(`(() => {
+            const host = document.querySelector('${CANVAS}').parentElement;
+            const bg = getComputedStyle(host.closest(".bg-bg") ?? document.body).backgroundColor;
+            const g = document.querySelector('${CANVAS} g[data-node-id="${dId}"]');
+            const toRgb = (c) => { const d = document.createElement("span"); d.style.color = c; document.body.appendChild(d); const v = getComputedStyle(d).color; d.remove(); return v; };
+            return {
+              bg,
+              stroke: toRgb(g.querySelector("path").getAttribute("stroke")),
+              text: toRgb(g.querySelector("text")?.getAttribute("fill") ?? "currentColor"),
+            };
+          })()`);
+          const bg = parse(colours.bg);
+          check(
+            `${theme} theme: the figure's stroke has visible contrast against the canvas`,
+            ratio(parse(colours.stroke), bg) >= 3,
+            `${colours.stroke} on ${colours.bg}: ${ratio(parse(colours.stroke), bg).toFixed(2)}`,
+          );
+          check(
+            `${theme} theme: label text reads against the canvas (4.5:1)`,
+            ratio(parse(colours.text), bg) >= 4.5,
+            `${colours.text} on ${colours.bg}: ${ratio(parse(colours.text), bg).toFixed(2)}`,
+          );
+          const inkCheck = await page.evaluate(`(() => {
+            const toRgb = (c) => { const d = document.createElement("span"); d.style.color = c; document.body.appendChild(d); const v = getComputedStyle(d).color; d.remove(); return v; };
+            const panel = document.querySelector('${PROPS}');
+            return { panelBg: getComputedStyle(panel).backgroundColor, text: getComputedStyle(panel).color };
+          })()`);
+          check(
+            `${theme} theme: the properties text reads on its panel`,
+            ratio(parse(inkCheck.text), parse(inkCheck.panelBg)) >= 4.5,
+            `${inkCheck.text} on ${inkCheck.panelBg}`,
+          );
+          await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
+          await shoot(page, `17i-figure-${theme}`);
+        }
+        await clearSelection();
+        await runCmd("Switch to dark theme");
+        await sleep(300);
+        await clearSelection();
+        await press(page, "s", { ctrl: true, wait: 500 });
+        check(
+          "Ctrl+S saves the figure with its formulas and colours",
+          !(await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
+        );
+      }
     }
 
     // A figure whose SVG was never written: Copy embed line writes it first.
@@ -4162,5 +4839,11 @@ async function main() {
 
 main().catch((error) => {
   process.stderr.write(`${error.stack ?? error}\n`);
+  if (current !== undefined && current.errors.length > 0) {
+    // What the page itself reported before the run died: usually the cause.
+    process.stderr.write(
+      `page reported: ${current.errors.slice(0, 5).join(" | ").slice(0, 1500)}\n`,
+    );
+  }
   process.exit(1);
 });

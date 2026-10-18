@@ -27,7 +27,8 @@
   const hs = $derived(HANDLE_PX / z);
   const g = $derived(figure.gesture);
   const one = $derived(
-    figure.gesture === null || figure.gesture.kind === "move"
+    (figure.gesture === null || figure.gesture.kind === "move") &&
+      figure.formula === null
       ? figure.selected
       : undefined,
   );

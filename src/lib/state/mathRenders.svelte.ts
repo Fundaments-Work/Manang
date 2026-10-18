@@ -26,7 +26,8 @@ const api = figureApi(kernel);
 
 export class MathRenders {
   readonly #renders = new SvelteMap<string, MathRender>();
-  readonly #pending = new SvelteMap<string, Promise<MathRender>>();
+  /** Renders in flight. A plain record, not reactive: `get` runs inside deriveds. */
+  readonly #pending: Record<string, Promise<MathRender> | undefined> = {};
   readonly #order: string[] = [];
   readonly #limit: number;
 
@@ -60,12 +61,12 @@ export class MathRenders {
     const key = mathKey(language, source, size, colour);
     const found = untrack(() => this.#renders.get(key));
     if (found !== undefined) return Promise.resolve(found);
-    const running = this.#pending.get(key);
+    const running = this.#pending[key];
     if (running !== undefined) return running;
-    const task = this.#render(key, language, source, size, colour).finally(() =>
-      this.#pending.delete(key),
-    );
-    this.#pending.set(key, task);
+    const task = this.#render(key, language, source, size, colour).finally(() => {
+      this.#pending[key] = undefined;
+    });
+    this.#pending[key] = task;
     return task;
   }
 
