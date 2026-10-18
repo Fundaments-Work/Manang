@@ -112,9 +112,10 @@ fn presence_flow<E: TextCrdt>() {
         .find("méthode")
         .map(|b| SEED[..b].encode_utf16().count())
         .expect("find");
-    let out = sim.clients[0]
-        .session
-        .set_selection(Some((caret, caret + 7)));
+    let out = {
+        let c = &mut sim.clients[0];
+        c.session.set_selection(&c.rope, Some((caret, caret + 7)))
+    };
     assert!(out.iter().any(|o| matches!(o, Output::Send(_))));
     let frames: Vec<Vec<u8>> = out
         .into_iter()
@@ -129,7 +130,10 @@ fn presence_flow<E: TextCrdt>() {
         let o = c.session.handle(now, Input::Frame(f), &mut c.rope);
         assert!(o.contains(&Output::PresenceChanged));
     }
-    let sels = sim.clients[1].session.remote_selections();
+    let sels = {
+        let c = &sim.clients[1];
+        c.session.remote_selections(&c.rope)
+    };
     assert_eq!(sels.len(), 1);
     assert_eq!((sels[0].anchor, sels[0].head), (caret, caret + 7));
     assert_eq!(sels[0].name, "peer0");
@@ -137,9 +141,15 @@ fn presence_flow<E: TextCrdt>() {
     // Peer 1 types before the caret: the stable position moves with the text.
     sim.edit(1, 0, 0, "😀😀").expect("edit"); // 4 UTF-16 units
     sim.advance(1_000);
-    let sels = sim.clients[1].session.remote_selections();
+    let sels = {
+        let c = &sim.clients[1];
+        c.session.remote_selections(&c.rope)
+    };
     assert_eq!((sels[0].anchor, sels[0].head), (caret + 4, caret + 11));
-    let sels0 = sim.clients[0].session.remote_selections();
+    let sels0 = {
+        let c = &sim.clients[0];
+        c.session.remote_selections(&c.rope)
+    };
     assert!(sels0.is_empty(), "own caret is never listed as remote");
 
     // Presence is ephemeral: not in the persisted document state.

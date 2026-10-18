@@ -45,7 +45,7 @@ mod tests {
             applied.unit,
             applied.changes
         );
-        a.delete(1, 2).expect("delete");
+        a.delete(1, 4).expect("delete");
         let updates = a.take_local_updates().expect("updates");
         let applied = b.apply_update(&updates[0]).expect("apply");
         println!(

@@ -57,7 +57,7 @@ fn run<E: TextCrdt>(edits: &[(u16, u8, u8)], seed_idx: u8) -> Result<(), TestCas
                 .map_err(|e| TestCaseError::fail(e.to_string()))?;
         }
         prop_assert_eq!(a.engine().text(), ra.to_string());
-        prop_assert_eq!(a.engine().len_utf16(), ra.len_utf16());
+        prop_assert_eq!(a.engine().len_bytes(), ra.len_bytes());
         for update in a
             .take_local_updates()
             .map_err(|e| TestCaseError::fail(e.to_string()))?
@@ -73,7 +73,7 @@ fn run<E: TextCrdt>(edits: &[(u16, u8, u8)], seed_idx: u8) -> Result<(), TestCas
         }
         prop_assert_eq!(rb.to_string(), ra.to_string());
         prop_assert_eq!(String::from_utf16_lossy(&view_b), ra.to_string());
-        prop_assert_eq!(view_b.len(), rb.len_utf16());
+        prop_assert_eq!(view_b.len(), rb.len_utf16_cu());
         prop_assert_eq!(b.engine().text(), ra.to_string());
     }
     Ok(())
@@ -104,7 +104,7 @@ fn rope_primitives_agree_on_known_text() {
     // "a😀é日" = a(1) 😀(2) é(1) 日(1) UTF-16 units; 4 chars; 12 UTF-8 bytes? no: 1+4+2+3
     let r = Rope::from_str("a😀é日");
     assert_eq!(r.len_chars(), 4);
-    assert_eq!(r.len_utf16(), 5);
+    assert_eq!(r.len_utf16_cu(), 5);
     assert_eq!(r.len_bytes(), 10);
     assert_eq!(r.char_to_utf16(2), 3);
     assert_eq!(r.utf16_to_char(3), 2);

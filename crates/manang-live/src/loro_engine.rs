@@ -157,16 +157,16 @@ impl TextCrdt for LoroEngine {
         self.text.to_string()
     }
 
-    fn len_utf16(&self) -> usize {
-        self.text.len_utf16()
+    fn len_bytes(&self) -> usize {
+        self.text.len_utf8()
     }
 
     fn insert(&mut self, at: usize, text: &str) -> Result<(), LiveError> {
-        self.text.insert_utf16(at, text).map_err(engine_err)
+        self.text.insert_utf8(at, text).map_err(engine_err)
     }
 
     fn delete(&mut self, at: usize, len: usize) -> Result<(), LiveError> {
-        self.text.delete_utf16(at, len).map_err(engine_err)
+        self.text.delete_utf8(at, len).map_err(engine_err)
     }
 
     fn take_local_updates(&mut self) -> Result<Vec<Vec<u8>>, LiveError> {
@@ -196,6 +196,12 @@ impl TextCrdt for LoroEngine {
             .map_err(engine_err)
     }
 
+    fn compact_memory(&mut self) {
+        self.doc.compact_change_store();
+        self.doc.free_history_cache();
+        self.doc.free_diff_calculator();
+    }
+
     fn apply_update(&mut self, bytes: &[u8]) -> Result<Applied, LiveError> {
         self.import_events.lock().clear();
         let status = self.doc.import(bytes).map_err(decode_err)?;
@@ -210,7 +216,7 @@ impl TextCrdt for LoroEngine {
     fn cursor_at(&self, at: usize) -> Option<Vec<u8>> {
         let unicode = self
             .text
-            .convert_pos(at, PosType::Utf16, PosType::Unicode)?;
+            .convert_pos(at, PosType::Bytes, PosType::Unicode)?;
         self.text
             .get_cursor(unicode, Side::Middle)
             .map(|c| c.encode())
@@ -220,6 +226,6 @@ impl TextCrdt for LoroEngine {
         let cursor = Cursor::decode(cursor).ok()?;
         let unicode = self.doc.get_cursor_pos(&cursor).ok()?.current.pos;
         self.text
-            .convert_pos(unicode, PosType::Unicode, PosType::Utf16)
+            .convert_pos(unicode, PosType::Unicode, PosType::Bytes)
     }
 }

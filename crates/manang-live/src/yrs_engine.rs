@@ -35,7 +35,7 @@ fn options(peer: u64) -> Result<Options, LiveError> {
     }
     Ok(Options {
         client_id: ClientID::new(peer),
-        offset_kind: OffsetKind::Utf16,
+        offset_kind: OffsetKind::Bytes,
         ..Options::default()
     })
 }
@@ -91,7 +91,7 @@ impl YrsEngine {
                             Out::Any(Any::String(s)) => s.to_string(),
                             _ => String::new(),
                         };
-                        let n: usize = insert.chars().map(char::len_utf16).sum();
+                        let n = insert.len();
                         changes.push(RawChange {
                             start: pos,
                             delete: 0,
@@ -123,8 +123,17 @@ impl TextCrdt for YrsEngine {
     fn seeded(peer: u64, text: &str) -> Result<Self, LiveError> {
         let seed = Self::build(SEED_PEER)?;
         if !text.is_empty() {
+            // yrs converts a UTF-16 offset to a string index by scanning the
+            // block it lands in, so one block holding a whole file makes every
+            // edit O(file size). Seed in small blocks (about a line) so edits
+            // scan only a few hundred bytes. Identical text gives identical
+            // blocks, so the deterministic-seed property holds.
             let mut txn = seed.doc.transact_mut();
-            seed.text.insert(&mut txn, 0, text);
+            let mut at = 0u32;
+            for chunk in seed_chunks(text) {
+                seed.text.insert(&mut txn, at, chunk);
+                at += chunk.len() as u32;
+            }
         }
         let bytes = seed
             .doc
@@ -151,7 +160,7 @@ impl TextCrdt for YrsEngine {
         self.text.get_string(&self.doc.transact())
     }
 
-    fn len_utf16(&self) -> usize {
+    fn len_bytes(&self) -> usize {
         self.text.len(&self.doc.transact()) as usize
     }
 
@@ -217,7 +226,7 @@ impl TextCrdt for YrsEngine {
         let pending = self.import(bytes)?;
         let batches = std::mem::take(&mut *self.remote_events.lock());
         Ok(Applied {
-            unit: IndexUnit::Utf16,
+            unit: IndexUnit::Bytes,
             changes: Self::deltas_to_changes(batches),
             pending,
         })
@@ -246,4 +255,31 @@ fn fnv1a(bytes: &[u8]) -> u64 {
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
     h
+}
+
+/// Split `text` into pieces of at most `SEED_CHUNK` bytes, preferring to end
+/// after a newline, never inside a character.
+fn seed_chunks(text: &str) -> impl Iterator<Item = &str> {
+    const SEED_CHUNK: usize = 8192;
+    let mut rest = text;
+    std::iter::from_fn(move || {
+        if rest.is_empty() {
+            return None;
+        }
+        let mut cut = rest.len().min(SEED_CHUNK);
+        while !rest.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        if cut < rest.len()
+            && let Some(nl) = rest[..cut].rfind('\n')
+        {
+            cut = nl + 1;
+        }
+        if cut == 0 {
+            cut = rest.chars().next().map_or(rest.len(), char::len_utf8);
+        }
+        let (head, tail) = rest.split_at(cut);
+        rest = tail;
+        Some(head)
+    })
 }
