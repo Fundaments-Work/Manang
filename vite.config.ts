@@ -1,5 +1,6 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
+import { realpathSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 
@@ -32,6 +33,12 @@ export default defineConfig(() => ({
     port: 1420,
     strictPort: true,
     host: host || "127.0.0.1",
+    fs: {
+      allow: [
+        ROOT,
+        realpathSync(fileURLToPath(new URL("./node_modules", import.meta.url))),
+      ],
+    },
     hmr: host
       ? {
           protocol: "ws",
