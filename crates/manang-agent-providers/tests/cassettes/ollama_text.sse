@@ -1,0 +1,10 @@
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"llama3.2","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"llama3.2","choices":[{"index":0,"delta":{"content":" there"},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"llama3.2","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":null}
+
+data: {"id":"x","choices":[],"usage":{"prompt_tokens":9,"completion_tokens":3,"total_tokens":12}}
+
+data: [DONE]
+

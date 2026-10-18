@@ -13,6 +13,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+manang-agent-core = { path = "../crates/manang-agent-core" }
 manang-diagram = { path = "../crates/manang-diagram" }
 manang-kernel = { path = "../crates/manang-kernel" }
 manang-wasm-host = { path = "../crates/manang-wasm-host" }
@@ -35,6 +36,13 @@ bench = false
 [[bin]]
 name = "diagram_render"
 path = "fuzz_targets/diagram_render.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sse_parser"
+path = "fuzz_targets/sse_parser.rs"
 test = false
 doc = false
 bench = false

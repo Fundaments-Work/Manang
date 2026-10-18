@@ -1,0 +1,5 @@
+---
+source: crates/manang-agent-core/tests/core.rs
+expression: line
+---
+{"ts_ms":1760000000000,"session":"s-1","event":{"request":{"provider":"anthropic","model":"claude-sonnet-5-5","request_id":"req_01","payload_sha256":"78b0e11c6754fc9671c2034f4a068d3a0e53c1c22a5a33900dd46bc8cd9136f3","payload_bytes":13,"redactions":2,"payload":null}}}
