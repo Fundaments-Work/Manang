@@ -59,6 +59,7 @@ import { build } from "./build.svelte";
 import { diagram } from "./diagram.svelte";
 import { heal } from "./heal.svelte";
 import { exportDiagramsOnSave } from "./diagramFiles";
+import { autosave } from "./autosave.svelte";
 import { dialog } from "./dialog.svelte";
 import { documents } from "./documents.svelte";
 import { blankFigure } from "./figure.svelte";
@@ -888,6 +889,7 @@ export async function boot(): Promise<void> {
   routeExternalLinks();
   documents.onEdit(() => build.schedule("edit"));
   recovery.start();
+  autosave.start();
   live.listen();
   void live.reset();
   window.addEventListener("pagehide", () => void recovery.flushAll());

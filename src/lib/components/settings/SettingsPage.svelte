@@ -108,6 +108,9 @@
           query === "" || defs.length > 0 || pluginMatches(entry, query),
       ),
   );
+  // Live editing's settings are their own page, "Collaboration", not a plugin entry.
+  const collab = $derived(pluginRows.find((r) => r.entry.name === "live"));
+  const otherPlugins = $derived(pluginRows.filter((r) => r.entry.name !== "live"));
   const nothing = $derived(coreGroups.length === 0 && pluginRows.length === 0);
 
   /** Matches only "all settings" would show: settings, or plugins by name. */
@@ -203,7 +206,8 @@
       if (section === "keyboard" || section === "about") view = section;
       else {
         view = "settings";
-        if (section === "plugins") void reveal("plugins");
+        if (section === "plugins" || section === "collaboration") void reveal(section);
+        else if (section === "live") void reveal("collaboration");
         else if (section !== null)
           void reveal(
             settings.defs.some((d) => d.category === section && d.owner === "core")
@@ -218,11 +222,15 @@
     view = "settings";
     active = id;
     await tick();
-    if (scroller === undefined) return;
-    const target = scroller.querySelector<HTMLElement>(
-      `[data-group="${CSS.escape(id)}"]`,
-    );
-    if (target !== null) scroller.scrollTop = target.offsetTop - 8;
+    const find = (): HTMLElement | null =>
+      scroller?.querySelector<HTMLElement>(`[data-group="${CSS.escape(id)}"]`) ?? null;
+    // Opened at a section before the settings arrived: wait for them (up to 1 s).
+    for (let i = 0; i < 20 && find() === null; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const target = find();
+    if (target !== null && scroller !== undefined)
+      scroller.scrollTop = target.offsetTop - 8;
   }
 
   /**
@@ -448,10 +456,13 @@
         {#each coreGroups as group (group.id)}
           {@render navItem(group.id, group.label)}
         {/each}
-        {#if !scoped || pluginRows.length > 0}
+        {#if collab !== undefined}
+          {@render navItem("collaboration", "Collaboration")}
+        {/if}
+        {#if !scoped || otherPlugins.length > 0}
           {@render navItem("plugins", "Plugins")}
         {/if}
-        {#each pluginRows as { entry } (entry.name)}
+        {#each otherPlugins as { entry } (entry.name)}
           {@const id = `plugin:${entry.name}`}
           <li class="hidden @3xl:block">
             <button
@@ -582,7 +593,31 @@
               </section>
             {/each}
 
-            {#if pluginRows.length > 0}
+            {#if collab !== undefined}
+              <section
+                data-group="collaboration"
+                data-testid="settings-collaboration"
+                aria-labelledby="settings-group-collaboration"
+              >
+                <h2
+                  id="settings-group-collaboration"
+                  class="m-0 pt-8 pb-1 text-[15px] font-light text-text"
+                >
+                  Collaboration
+                </h2>
+                <p class="m-0 max-w-[60ch] text-xs leading-relaxed text-text-60">
+                  Edit one file together, live. People meet through a relay, a small
+                  server that your team or lab runs. Set its address once to start
+                  sessions; to join one you only need the invite. The relay passes on
+                  encrypted data only: it can see that a session exists and roughly how
+                  much is sent, but never your text, your name, the file's name or the
+                  key.
+                </p>
+                {@render rows(collab.defs)}
+              </section>
+            {/if}
+
+            {#if otherPlugins.length > 0}
               <section data-group="plugins" aria-labelledby="settings-plugins">
                 <h2
                   id="settings-plugins"
@@ -597,7 +632,7 @@
                     run as WebAssembly in a sandbox.
                   </p>
                 {/if}
-                {#each pluginRows as { entry, defs } (entry.name)}
+                {#each otherPlugins as { entry, defs } (entry.name)}
                   <PluginSection {entry}>
                     {#if entry.name === "agent"}
                       <AgentSettings {defs} {rows} />
