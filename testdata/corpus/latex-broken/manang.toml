@@ -1,0 +1,4 @@
+[project]
+engine = "latex"
+name = "Deliberately Broken LaTeX Document"
+main = "main.tex"

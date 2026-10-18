@@ -1,0 +1,3 @@
+engine = "latex"
+main = "main.tex"
+compile = true
