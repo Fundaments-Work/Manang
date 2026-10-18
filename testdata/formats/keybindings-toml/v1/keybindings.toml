@@ -1,0 +1,9 @@
+# Mine
+[[bindings]]
+command = "editor.save"
+keys = ["Mod+Alt+S"]
+
+[[bindings]]
+command = "a.other"
+keys = ["Mod+J"]
+when = "editorFocus"

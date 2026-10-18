@@ -193,7 +193,8 @@ fn layers_stack_and_project_scope_is_enforced() {
     let events = topics(&sub);
     assert_eq!(events[0].1["scope"], "project");
     let written = fs::read_to_string(project.path().join(".manang/settings.toml")).expect("file");
-    assert_eq!(written, "[editor]\ntab-size = 8\n");
+    // The first write stamps the format version.
+    assert_eq!(written, "version = 1\n\n[editor]\ntab-size = 8\n");
 
     // Leaving the project falls back to the user value and says so.
     rig.ok("settings.use-project", json!({"path": null}));
@@ -226,7 +227,8 @@ fn comments_survive_and_unknown_keys_are_kept_and_reported() {
     );
     assert_eq!(
         fs::read_to_string(rig.user_file()).expect("file"),
-        seed.replace("12", "16")
+        // Only the version stamp is added; comments, order and unknown keys stay.
+        format!("version = 1\n{}", seed.replace("12", "16"))
     );
 }
 
