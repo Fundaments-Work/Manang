@@ -64,6 +64,10 @@ pub struct PluginMeta {
     /// shown only when Settings is opened for the whole application.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub settings_contexts: Vec<String>,
+    /// Who published the plugin, as the author declares it. Unverified until
+    /// plugin signatures land (ADR 0003 follow-up): display it as a claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publisher: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
