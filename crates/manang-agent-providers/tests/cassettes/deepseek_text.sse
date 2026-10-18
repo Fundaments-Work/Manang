@@ -1,0 +1,12 @@
+: keep-alive
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"content":" there"},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"prompt_cache_hit_tokens":60,"prompt_cache_miss_tokens":40,"prompt_tokens_details":{"cached_tokens":60},"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+

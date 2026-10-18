@@ -1,0 +1,49 @@
+---
+source: crates/manang-agent-providers/tests/anthropic.rs
+expression: body
+---
+{
+  "model": "claude-sonnet-5-5",
+  "max_tokens": 1024,
+  "stream": true,
+  "system": [
+    {
+      "type": "text",
+      "text": "You are a careful scientific editor.",
+      "cache_control": {
+        "type": "ephemeral"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "hi",
+          "cache_control": {
+            "type": "ephemeral"
+          }
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "figure__add_shape",
+      "description": "Adds a shape",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          }
+        }
+      },
+      "cache_control": {
+        "type": "ephemeral"
+      }
+    }
+  ]
+}
