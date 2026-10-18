@@ -525,6 +525,17 @@ async function liveSection(browser) {
   await palette("Share this file live");
   // The palette opens late on a page that has just loaded in a long run.
   await sleep(1200);
+  // If it swallowed the command, close it and ask again (up to three times).
+  for (
+    let i = 0;
+    i < 3 && !(await exists(page, '[data-testid="live-setup"]'));
+    i += 1
+  ) {
+    await press(page, "Escape", { wait: 300 });
+    await focusEditor(page);
+    await palette("Share this file live");
+    await sleep(1200);
+  }
   await expectEventually(
     page,
     "sharing without a relay says so and offers the Settings",
@@ -910,6 +921,10 @@ async function liveSection(browser) {
     ),
   );
   await shoot(page, "live-7-narrow");
+  // Under 800 px the side panel floats over the editor; put it away first.
+  if (await exists(page, "#side-panel, aside"))
+    await press(page, "b", { ctrl: true, wait: 400 });
+  await shoot(page, "live-7a-narrow-strip");
   await openShare();
   check(
     "at 420 px the Share button is icon-only with its name kept for screen readers, and the popover fits the window",
