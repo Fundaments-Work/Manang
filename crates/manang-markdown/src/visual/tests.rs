@@ -214,6 +214,20 @@ fn opening_a_fence_swallows_what_follows() {
 }
 
 #[test]
+fn indented_blocks_keep_their_indentation_in_a_window() {
+    let t = "intro\n\n    # not a heading\n\n- a\n\n  continued\n\nend\n";
+    for at in 0..t.len() {
+        let mut s = MarkdownSession::new(t);
+        s.edit(at..at, "").expect("edit");
+        assert_eq!(
+            dump_session(&s),
+            dump_session(&MarkdownSession::new(t)),
+            "at {at}"
+        );
+    }
+}
+
+#[test]
 fn reference_links_stay_source_text() {
     let t = "[a][r] and [r]\n\n[r]: https://x.org\n";
     let spans = dump_session(&MarkdownSession::new(t));
@@ -276,6 +290,34 @@ fn works_through_the_host_with_utf16_offsets() {
     assert_eq!(plan.changes.len(), 2, "unbold removes both delimiters");
 }
 
+#[test]
+fn the_manifest_declares_exactly_what_the_adapter_implements() {
+    let manifest = crate::manifest().expect("manifest");
+    let spec = manifest
+        .contributes
+        .format_adapters
+        .iter()
+        .find(|a| a.id == "markdown")
+        .expect("the manifest contributes the adapter");
+    let adapter = MarkdownAdapter::new();
+    let info = adapter.info();
+    assert_eq!(spec.id, info.id);
+    assert_eq!(spec.title, info.title);
+    assert_eq!(spec.extensions, info.extensions);
+    assert_eq!(spec.kinds, info.kinds);
+    assert_eq!(spec.commands, info.commands);
+    // Every declared command is implemented, and the session offers them all.
+    let s = adapter.open("x").expect("open");
+    let states: Vec<String> = s
+        .command_state(0..0)
+        .into_iter()
+        .map(|c| c.command)
+        .collect();
+    for c in &spec.commands {
+        assert!(states.contains(c), "`{c}` has no command state");
+    }
+}
+
 // ---------------------------------------------------------------- proptests
 
 fn token() -> impl Strategy<Value = String> {
@@ -304,6 +346,10 @@ fn token() -> impl Strategy<Value = String> {
         Just("[r]".to_owned()),
         Just("---\na: b\n---\n".to_owned()),
         Just("<div>\n".to_owned()),
+        Just("    indented\n".to_owned()),
+        Just("  ".to_owned()),
+        Just("- a\n\n  b\n".to_owned()),
+        Just("A\n===\n".to_owned()),
         Just("*".to_owned()),
         Just("#".to_owned()),
         Just(" ".to_owned()),
