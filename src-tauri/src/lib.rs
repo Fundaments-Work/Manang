@@ -6,6 +6,7 @@
 //! `crates/`.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use manang_editor::{Editor, EditorPlugin};
 use manang_kernel::{BufferService, CommandInfo, EventBus, Kernel, KernelError, Payload};
@@ -321,8 +322,10 @@ async fn dispatch(
     let kernel = Arc::clone(&shell.kernel);
     let input = args.map_or(Payload::Empty, Payload::Json);
     let opening = matches!(command.as_str(), "project.open" | "project.create");
-    let output = tauri::async_runtime::spawn_blocking(move || {
-        let output = kernel.invoke(&command, input)?;
+    let started = Instant::now();
+    let name = command.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let output = kernel.invoke(&name, input)?;
         if opening {
             point_plugins_at_project(&kernel, &output);
         }
@@ -331,8 +334,10 @@ async fn dispatch(
     .await
     .map_err(|e| IpcError {
         message: format!("command task failed: {e}"),
-    })?
-    .map_err(IpcError::from)?;
+    })
+    .and_then(|r| r.map_err(IpcError::from));
+    log_dispatch(&command, started.elapsed(), result.as_ref().err());
+    let output = result?;
     // WASM plugins granted `fs` may only touch the open project's directory.
     if opening
         && let Payload::Json(value) = &output
@@ -341,6 +346,31 @@ async fn dispatch(
         shell.project_root.set(Some(root.into()));
     }
     Ok(output)
+}
+
+/// A command slower than this is logged even when it succeeds.
+const SLOW_COMMAND: Duration = Duration::from_millis(200);
+
+/// Failures and slow commands always, so the terminal running `pnpm app:dev`
+/// shows what went wrong and what was slow; every command only at trace level
+/// (one per keystroke would drown the rest).
+fn log_dispatch(command: &str, took: Duration, error: Option<&IpcError>) {
+    let ms = took.as_secs_f64() * 1000.0;
+    match error {
+        Some(e) => log::warn!("{command} failed after {ms:.1} ms: {}", e.message),
+        None if took >= SLOW_COMMAND => log::info!("{command} slow: {ms:.1} ms"),
+        None => log::trace!("{command} {ms:.1} ms"),
+    }
+}
+
+/// Open the web inspector (F12 / Ctrl+Shift+I). Debug builds only; a release
+/// build has no inspector and ignores the call.
+#[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) {
+    #[cfg(debug_assertions)]
+    window.open_devtools();
+    #[cfg(not(debug_assertions))]
+    let _ = window;
 }
 
 /// Run a command whose result is structured data.
@@ -449,8 +479,26 @@ fn forward_events(app: tauri::AppHandle, events: &EventBus) -> std::io::Result<(
         .map(|_| ())
 }
 
+/// How much the shell itself logs: everything while developing.
+const OWN_LEVEL: log::LevelFilter = if cfg!(debug_assertions) {
+    log::LevelFilter::Debug
+} else {
+    log::LevelFilter::Info
+};
+
+/// Panics are bugs: put them in the log (with where they happened) before the
+/// default hook prints them, so they land in the log file too.
+fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::error!("panic: {info}");
+        default(info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), tauri::Error> {
+    log_panics();
     let builder = tauri::Builder::default();
     // First, so a second launch hands over to the running window and exits
     // before it builds a second kernel.
@@ -464,11 +512,13 @@ pub fn run() -> Result<(), tauri::Error> {
         }
     }));
     builder
-        // Logs go to the platform log folder (and the terminal in debug builds);
-        // the web view forwards its uncaught errors here too.
+        // Logs go to the terminal and the platform log folder. The web view
+        // forwards its errors and warnings here too (src/lib/kernel/log.ts).
+        // Debug builds log the shell's own debug messages too.
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
+                .level_for("manang_lib", OWN_LEVEL)
                 .max_file_size(2_000_000)
                 .build(),
         )
@@ -509,7 +559,8 @@ pub fn run() -> Result<(), tauri::Error> {
             kernel_plugins,
             kernel_invoke,
             kernel_invoke_binary,
-            save_binary_artifact
+            save_binary_artifact,
+            open_devtools
         ])
         .run(tauri::generate_context!())
 }

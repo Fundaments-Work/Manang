@@ -10,6 +10,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { reportError } from "./log";
+
 /** A command contributed by a plugin manifest, as listed for the palette. */
 export interface KernelCommand {
   readonly id: string;
@@ -88,23 +90,36 @@ export interface Kernel {
   onEvent(handler: (event: KernelEvent) => void): Promise<Unlisten>;
 }
 
+/**
+ * Every IPC call goes through here, so a failure is logged with the command
+ * that failed even when the caller catches it and carries on.
+ */
+async function call<T>(ipc: string, label: string, args?: Args): Promise<T> {
+  try {
+    return await (args === undefined ? invoke<T>(ipc) : invoke<T>(ipc, args));
+  } catch (error) {
+    reportError(`${label} failed`, error);
+    throw error;
+  }
+}
+
 export const kernel: Kernel = {
   commands(): Promise<KernelCommand[]> {
-    return invoke<KernelCommand[]>("kernel_commands");
+    return call<KernelCommand[]>("kernel_commands", "kernel_commands");
   },
 
   plugins(): Promise<PluginInfo[]> {
-    return invoke<PluginInfo[]>("kernel_plugins");
+    return call<PluginInfo[]>("kernel_plugins", "kernel_plugins");
   },
 
   /** Run a command that returns structured data. */
   run<T = unknown>(command: string, args?: Args): Promise<T> {
-    return invoke<T>("kernel_invoke", { command, args });
+    return call<T>("kernel_invoke", command, { command, args });
   },
 
   /** Run a command that returns a binary artefact. */
   async runBinary(command: string, args?: Args): Promise<Uint8Array> {
-    const bytes = await invoke<ArrayBuffer>("kernel_invoke_binary", {
+    const bytes = await call<ArrayBuffer>("kernel_invoke_binary", command, {
       command,
       args,
     });
@@ -116,7 +131,8 @@ export const kernel: Kernel = {
       return await listen<KernelEvent>("kernel://event", (message) =>
         handler(message.payload),
       );
-    } catch {
+    } catch (error) {
+      reportError("kernel events are unavailable", error);
       return () => undefined;
     }
   },

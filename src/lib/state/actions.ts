@@ -16,7 +16,6 @@ import { writingApi } from "$lib/kernel/api";
 import type { Engine, ProjectChanged } from "$lib/kernel/types";
 import type { Problem } from "$lib/workbench/problems";
 import {
-  forwardErrorsToLog,
   hasNativeDialogs,
   openExternal,
   pickFolder,
@@ -601,7 +600,6 @@ export async function boot(): Promise<void> {
   applyPreferences();
   void settings.load(null);
   void guardWindowClose();
-  void forwardErrorsToLog();
   routeExternalLinks();
   documents.onEdit(() => build.schedule("edit"));
   void kernel.onEvent(onKernelEvent);
