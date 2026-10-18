@@ -133,24 +133,3 @@ export async function relaunchApp(): Promise<boolean> {
   await relaunch();
   return true;
 }
-
-/**
- * Send uncaught errors from the web view to the app's log file (the log
- * plugin writes it in the platform log folder), so a bug report from the
- * desktop app carries the frontend's side too.
- */
-export async function forwardErrorsToLog(): Promise<void> {
-  if (!inTauri()) return;
-  const { error } = await import("@tauri-apps/plugin-log");
-  window.addEventListener("error", (event) => {
-    void error(`[web] ${event.message} (${event.filename}:${event.lineno})`);
-  });
-  window.addEventListener("unhandledrejection", (event) => {
-    const reason: unknown = event.reason;
-    const text =
-      reason instanceof Error
-        ? (reason.stack ?? reason.message)
-        : JSON.stringify(reason);
-    void error(`[web] unhandled rejection: ${text}`);
-  });
-}

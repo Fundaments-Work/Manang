@@ -10,6 +10,7 @@
 
 import { kernel as tauriKernel, type Kernel } from "./client";
 import { createDevKernel } from "./dev";
+import { inTauri } from "./log";
 
 export type {
   Args,
@@ -21,8 +22,6 @@ export type {
 } from "./client";
 export { errorMessage, isKernelError } from "./client";
 
-export function inTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
+export { inTauri, reportError, reportWarning } from "./log";
 
 export const kernel: Kernel = inTauri() ? tauriKernel : createDevKernel();
