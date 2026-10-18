@@ -113,6 +113,7 @@ fn freedraw(id: String) -> impl Strategy<Value = FigureNode> {
             style: Style::default(),
             groups: Vec::new(),
             locked: false,
+            hidden: false,
         })
     })
 }

@@ -84,6 +84,7 @@ fn every_kind(roughness: u8) -> FigureScene {
             style: Style::default(),
             groups: Vec::new(),
             locked: false,
+            hidden: false,
         }),
         {
             let mut m = MathNode::new("x", 620.0, 220.0, "E = m c^2", MathLanguage::Typst, 20.0);
@@ -268,4 +269,34 @@ fn a_mermaid_embed_keeps_the_id_its_style_rules_are_scoped_to() {
         svg.contains("<svg id=\"mng-abc\" x="),
         "the nested svg lost its id, so its #id-scoped styles match nothing: {svg}"
     );
+}
+
+#[test]
+fn a_hidden_node_is_not_exported_and_does_not_grow_the_page() {
+    let mut only = FigureScene::new(400.0, 400.0);
+    only.nodes
+        .push(shape("rect", "shown", 10.0, 10.0, None, Style::default()));
+    let mut scene = only.clone();
+    let mut far = shape("rect", "far", 900.0, 900.0, None, Style::default());
+    if let FigureNode::Rect(s) = &mut far {
+        s.hidden = true;
+    }
+    scene.nodes.push(far);
+    let options = SvgExportOptions::default();
+    let svg = render_svg(&scene, &options);
+    assert!(svg.contains("viewBox=\"0 0 400 400\""), "{svg}");
+    assert_eq!(svg, render_svg(&only, &options));
+}
+
+#[test]
+fn hidden_round_trips_through_json_and_is_omitted_when_false() {
+    let json = r#"{"version":2,"width":10,"height":10,"nodes":[
+        {"kind":"rect","id":"a","x":0,"y":0,"width":5,"height":5,"hidden":true},
+        {"kind":"rect","id":"b","x":0,"y":0,"width":5,"height":5}]}"#;
+    let scene: FigureScene = serde_json::from_str(json).expect("parses");
+    assert!(scene.nodes[0].hidden());
+    assert!(!scene.nodes[1].hidden());
+    let out = serde_json::to_string(&scene).expect("serialises");
+    assert_eq!(out.matches("\"hidden\":true").count(), 1, "{out}");
+    assert!(!out.contains("\"hidden\":false"), "{out}");
 }

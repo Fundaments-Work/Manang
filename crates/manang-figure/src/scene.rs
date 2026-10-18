@@ -334,6 +334,9 @@ pub struct ShapeNode {
     /// Locked nodes cannot be selected on the canvas.
     #[serde(default, skip_serializing_if = "is_false")]
     pub locked: bool,
+    /// Hidden nodes are not drawn on the canvas or in exports.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
 }
 
 impl ShapeNode {
@@ -352,6 +355,7 @@ impl ShapeNode {
             style: Style::default(),
             groups: Vec::new(),
             locked: false,
+            hidden: false,
         }
     }
 
@@ -469,6 +473,9 @@ pub struct ConnectorNode {
     /// Locked.
     #[serde(default, skip_serializing_if = "is_false")]
     pub locked: bool,
+    /// Hidden nodes are not drawn on the canvas or in exports.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
 }
 
 impl ConnectorNode {
@@ -485,6 +492,7 @@ impl ConnectorNode {
             style: Style::default(),
             groups: Vec::new(),
             locked: false,
+            hidden: false,
         }
     }
 }
@@ -508,6 +516,9 @@ pub struct FreedrawNode {
     /// Locked.
     #[serde(default, skip_serializing_if = "is_false")]
     pub locked: bool,
+    /// Hidden nodes are not drawn on the canvas or in exports.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
 }
 
 /// The language a formula is written in.
@@ -582,6 +593,9 @@ pub struct MathNode {
     /// Locked.
     #[serde(default, skip_serializing_if = "is_false")]
     pub locked: bool,
+    /// Hidden nodes are not drawn on the canvas or in exports.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
 }
 
 impl MathNode {
@@ -606,6 +620,7 @@ impl MathNode {
             style: Style::default(),
             groups: Vec::new(),
             locked: false,
+            hidden: false,
         }
     }
 
@@ -829,6 +844,22 @@ impl FigureNode {
             Self::Arrow(c) | Self::Line(c) => c.locked,
             Self::Freedraw(f) => f.locked,
             Self::Math(m) => m.locked,
+        }
+    }
+
+    /// Whether the node is hidden (not drawn, not exported).
+    pub fn hidden(&self) -> bool {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => s.hidden,
+            Self::Arrow(c) | Self::Line(c) => c.hidden,
+            Self::Freedraw(f) => f.hidden,
+            Self::Math(m) => m.hidden,
         }
     }
 
