@@ -23,12 +23,25 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request as httpRequest } from "node:http";
+import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 
 const ORIGIN = process.env.MANANG_ORIGIN ?? "http://127.0.0.1:1420";
 const SHOTS = "artifacts/screens";
-const PORT = Number(process.env.MANANG_CDP_PORT ?? 9333);
+/**
+ * The browser's DevTools port: MANANG_CDP_PORT when set, otherwise a free one,
+ * so two suites (agents, CI, a developer) never talk to each other's browser.
+ */
+let PORT = Number(process.env.MANANG_CDP_PORT ?? 0);
+
+async function freePort() {
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
 
 function findBrowser() {
   for (const name of [
@@ -464,6 +477,7 @@ async function main() {
     process.exit(1);
   }
   mkdirSync(SHOTS, { recursive: true });
+  if (PORT === 0) PORT = await freePort();
   // Recent Chrome ignores --remote-debugging-port on the default profile, and a
   // throwaway profile keeps the suite away from the user's own browser data.
   const profile = mkdtempSync(join(tmpdir(), "manang-ui-"));
