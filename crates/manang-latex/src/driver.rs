@@ -260,9 +260,13 @@ fn read_optional(path: &Path) -> Option<Vec<u8>> {
 }
 
 /// `Output written on main.xdv (3 pages, 12345 bytes).`
+///
+/// TeX hard-wraps its log at 79 columns, and the build folder's path is long
+/// enough to split this very line, so the log is un-wrapped first.
 fn page_count(log: &str) -> Option<u32> {
-    let line = log
-        .lines()
+    let lines = crate::diagnostics::unwrap_lines(log);
+    let line = lines
+        .iter()
         .rev()
         .find(|l| l.starts_with("Output written on"))?;
     let after = line.split('(').nth(1)?;
@@ -581,6 +585,24 @@ mod tests {
             Some(1)
         );
         assert_eq!(page_count("nothing"), None);
+    }
+
+    #[test]
+    fn counts_pages_when_tex_wrapped_the_line() {
+        // TeX breaks the log at 79 columns; a long build path splits the line
+        // right inside "(1 page".
+        let line = "Output written on /home/sapiens/.cache/work.fundaments.manang/manang/latex/builds/0123456789abcdef/main.pdf (1 page, 70193 bytes).";
+        let wrapped = format!("{}\n{}\n", &line[..79], &line[79..]);
+        assert!(
+            wrapped
+                .lines()
+                .next()
+                .is_some_and(|l| l.chars().count() == 79)
+        );
+        assert_eq!(page_count(&wrapped), Some(1));
+        let many = line.replace("(1 page", "(12 pages");
+        let wrapped = format!("{}\n{}\n", &many[..79], &many[79..]);
+        assert_eq!(page_count(&wrapped), Some(12));
     }
 
     #[test]
