@@ -22,3 +22,7 @@ title = "Render a diagram to SVG"
 [[contributes.commands]]
 id = "diagram.key"
 title = "Cache key for a rendered diagram"
+
+[[contributes.commands]]
+id = "diagram.layout"
+title = "Lay out a Mermaid diagram as shapes"
