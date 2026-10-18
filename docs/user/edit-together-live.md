@@ -17,6 +17,8 @@ Everything about working with other people is behind one button: **Share**, at t
 - **Invite link** and **Leave live session**, while a session is running.
 - **Share versions**: send your saved versions to co-authors and get theirs (see [Share and get updates](share-and-get-updates.md)).
 
+![The Share panel during a live session](../screenshots/share-popover.png)
+
 The same actions are in the **File** menu and the command palette. Escape closes the panel and puts you back where you were.
 
 While you are in a session you also see:
