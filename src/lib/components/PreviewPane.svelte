@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
 
   import DiagramPreview from "$lib/components/DiagramPreview.svelte";
+  import EngineOffer from "$lib/components/EngineOffer.svelte";
   import PdfControls from "$lib/components/PdfControls.svelte";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
@@ -250,9 +251,7 @@
         {/if}
         <div class="mt-3 flex gap-2">
           {#if build.failure.code === "no_tex"}
-            <button type="button" class="mng-btn" disabled title="Not available yet"
-              >Download the optional built-in engine</button
-            >
+            <EngineOffer />
           {/if}
           {#if build.failure.code === "bundle_unavailable"}
             <button type="button" class="mng-btn" onclick={() => build.allowNetwork()}

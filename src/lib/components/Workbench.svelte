@@ -13,6 +13,7 @@
   import TopBar from "./TopBar.svelte";
   import Home from "./Home.svelte";
   import ProjectSwitcher from "./ProjectSwitcher.svelte";
+  import EngineDialog from "./EngineDialog.svelte";
   import ConfirmDialog from "./ui/ConfirmDialog.svelte";
   import FeedbackDialog from "./FeedbackDialog.svelte";
   import RecoveryReview from "./RecoveryReview.svelte";
@@ -258,6 +259,7 @@
   <CommandPalette />
   <ProjectSwitcher />
   <ConfirmDialog />
+  <EngineDialog />
   <FeedbackDialog />
   <RecoveryReview />
   <ShortcutOverlay />
