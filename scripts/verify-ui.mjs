@@ -2540,6 +2540,32 @@ async function main() {
       !(await exists(page, "[data-pdf-find]")) && !(await exists(page, ".mng-hit")),
     );
 
+    // Edit > Find and Select all reach the PDF viewer while it has the focus.
+    await click(page, `${viewerSel} [data-page="1"]`);
+    await click(page, 'header [data-menu="edit"]');
+    await click(page, 'header [data-command="edit.find"]');
+    await expectEventually(
+      page,
+      "Edit > Find opens the PDF's find bar while the viewer has the focus",
+      `!!document.querySelector("[data-pdf-find]")`,
+    );
+    await press(page, "Escape", { wait: 200 });
+    await click(page, `${viewerSel} [data-page="1"]`);
+    await click(page, 'header [data-menu="edit"]');
+    await click(page, 'header [data-command="edit.select-all"]');
+    check(
+      "Edit > Select all selects the PDF's text",
+      await page.evaluate(
+        `(document.getSelection()?.toString() ?? "").includes("Quantum thermodynamic bounds")`,
+      ),
+      await page.evaluate(`(document.getSelection()?.toString() ?? "").slice(0, 80)`),
+    );
+    await page.evaluate(`document.getSelection()?.removeAllRanges()`);
+    // The menu clicks moved the focus; the zoom checks below use the viewer's keys.
+    await page.evaluate(
+      `document.querySelector("${viewerSel}").focus({ preventScroll: true })`,
+    );
+
     // Ctrl+wheel zooms at the pointer, without zooming the page itself.
     await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 300`);
     await sleep(300);
