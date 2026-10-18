@@ -150,7 +150,9 @@
   function hostKeydown(event: KeyboardEvent): void {
     const el = event.target;
     if (el === surface || !(el instanceof HTMLElement)) return;
-    if (el.closest("input, textarea, select, [contenteditable]") !== null) return;
+    const spin = el.matches('input[role="spinbutton"]') && /^[zy]$/i.test(event.key);
+    if (!spin && el.closest("input, textarea, select, [contenteditable]") !== null)
+      return;
     const chord = event.ctrlKey || event.metaKey || event.key === "Delete";
     if (chord && figure.key(event)) event.preventDefault();
   }

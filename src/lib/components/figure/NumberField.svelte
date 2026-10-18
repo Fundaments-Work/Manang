@@ -116,8 +116,9 @@
       );
       input?.select();
     } else {
-      // Typing stays in the field: the canvas shortcuts must not see it.
-      event.stopPropagation();
+      // Typing stays in the field: the canvas shortcuts must not see it,
+      // except Ctrl chords (undo, redo, save), which belong to the document.
+      if (!event.ctrlKey && !event.metaKey) event.stopPropagation();
     }
   }
 
