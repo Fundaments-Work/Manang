@@ -1,12 +1,13 @@
 //! Kernel plugin interface for the citations engine.
 
 use manang_kernel::{Context, Manifest, Payload, Plugin, PluginError};
+use parking_lot::RwLock;
 use serde_json::{Map, Value, json};
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::extract::extract_keys;
-use crate::format::format_entry;
+use crate::format::{format_entry, is_supported_style};
 use crate::http::{BlockingHttpClient, HttpClient};
 use crate::index::CitationIndex;
 use crate::parser::parse_file;
@@ -38,10 +39,23 @@ pub fn plugin_with_store(
 }
 
 /// Exposes bibliographic management, CSL-JSON & BibTeX index, formatting, and verification as kernel commands.
+///
+/// Clones share the index and the configured settings.
 #[derive(Clone)]
 pub struct CitationsPlugin {
     index: Arc<CitationIndex>,
     http_client: Arc<dyn HttpClient>,
+    /// `citations.style`: used when `citations.format` names no style.
+    style: Arc<RwLock<String>>,
+}
+
+/// Setting id declared in `manifest.toml`.
+const SETTING_STYLE: &str = "citations.style";
+/// Built-in default of `citations.style`.
+pub const DEFAULT_STYLE: &str = "apa";
+
+fn default_style() -> Arc<RwLock<String>> {
+    Arc::new(RwLock::new(DEFAULT_STYLE.to_owned()))
 }
 
 impl Default for CitationsPlugin {
@@ -56,6 +70,7 @@ impl CitationsPlugin {
         Self {
             index: Arc::new(CitationIndex::new()),
             http_client: Arc::new(BlockingHttpClient::new()),
+            style: default_style(),
         }
     }
 
@@ -64,12 +79,46 @@ impl CitationsPlugin {
         Self {
             index: Arc::new(CitationIndex::new()),
             http_client,
+            style: default_style(),
         }
     }
 
     /// Creates a citations plugin with a custom index and HTTP client.
     pub fn with_store(index: Arc<CitationIndex>, http_client: Arc<dyn HttpClient>) -> Self {
-        Self { index, http_client }
+        Self {
+            index,
+            http_client,
+            style: default_style(),
+        }
+    }
+
+    /// The configured default citation style.
+    pub fn style(&self) -> String {
+        self.style.read().clone()
+    }
+
+    /// `citations.configure {values: {id: value}}`; all-or-nothing, unknown
+    /// ids ignored.
+    fn configure(&self, obj: &Map<String, Value>) -> Result<Value, PluginError> {
+        check_allowed_keys(obj, &["values"])?;
+        let values = obj
+            .get("values")
+            .and_then(Value::as_object)
+            .ok_or_else(|| PluginError::Failed("`values` must be an object".to_owned()))?;
+        let mut style = self.style();
+        if let Some(value) = values.get(SETTING_STYLE) {
+            let name = value.as_str().ok_or_else(|| {
+                PluginError::Failed(format!("`{SETTING_STYLE}` must be a string"))
+            })?;
+            if !is_supported_style(name) {
+                return Err(PluginError::Failed(format!(
+                    "`{SETTING_STYLE}`: unsupported citation style `{name}`"
+                )));
+            }
+            style = name.to_owned();
+        }
+        *self.style.write() = style.clone();
+        Ok(json!({ SETTING_STYLE: style }))
     }
 
     /// Returns the underlying index.
@@ -117,6 +166,7 @@ impl Plugin for CitationsPlugin {
         })?;
 
         match command {
+            "citations.configure" => self.configure(obj).map(Payload::Json),
             "citations.load" => {
                 check_allowed_keys(obj, &["paths", "path"])?;
 
@@ -208,7 +258,14 @@ impl Plugin for CitationsPlugin {
                     .and_then(Value::as_str)
                     .ok_or_else(|| PluginError::Failed("`key` must be a string".to_string()))?;
 
-                let style = obj.get("style").and_then(Value::as_str).unwrap_or("apa");
+                let configured;
+                let style = match obj.get("style").and_then(Value::as_str) {
+                    Some(style) => style,
+                    None => {
+                        configured = self.style();
+                        configured.as_str()
+                    }
+                };
 
                 let entry = self
                     .index

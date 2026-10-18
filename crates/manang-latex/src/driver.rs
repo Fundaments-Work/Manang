@@ -22,7 +22,9 @@ const DEFAULT_BUILD_EPOCH: u64 = 1_700_000_000;
 /// Upper bound on virtual source files handed to one compile.
 const MAX_SOURCE_BYTES: usize = 64 * 1024 * 1024;
 
-/// Plugin-wide settings, fixed when the plugin is constructed.
+/// Plugin-wide settings. The host sets the paths at construction; the user
+/// settings (`backend`, `engine`, `latexmk`, `timeout`) are updated at
+/// runtime through `latex.configure`.
 #[derive(Debug, Clone)]
 pub struct LatexConfig {
     /// The `manang-latex-worker` executable. `None` searches

@@ -20,7 +20,7 @@ use manang_kernel::{
     Context, EventBus, Manifest, ManifestError, Payload, Plugin, PluginError, Subscription,
 };
 use manang_project::ProjectRoot;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -63,9 +63,23 @@ struct Watch {
     seen_dropped: u64,
 }
 
+/// Setting ids declared in `manifest.toml`.
+const SETTING_EXCLUDE: &str = "search.exclude";
+const SETTING_HIDDEN: &str = "search.include-hidden";
+
+/// User settings, applied by `search.configure`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchConfig {
+    /// Globs excluded from text search and replace, after the request's own.
+    pub exclude: Vec<String>,
+    /// Include dotfiles when a request does not say.
+    pub include_hidden: bool,
+}
+
 /// Implements [`Plugin`] for the `search.*` commands.
 pub struct SearchPlugin {
     pool: Result<Arc<ThreadPool>, String>,
+    config: RwLock<SearchConfig>,
     limits: Limits,
     indexes: IndexCache,
     registry: Registry,
@@ -97,6 +111,7 @@ impl SearchPlugin {
         });
         Self {
             pool,
+            config: RwLock::new(SearchConfig::default()),
             indexes: IndexCache::new(ttl, limits.max_index_entries),
             limits,
             registry: Registry::default(),
@@ -161,12 +176,54 @@ impl SearchPlugin {
         )
     }
 
+    /// A snapshot of the user settings applied by `search.configure`.
+    pub fn config(&self) -> SearchConfig {
+        self.config.read().clone()
+    }
+
+    /// `search.configure {values: {id: value}}`; all-or-nothing, unknown
+    /// ids ignored.
+    fn configure(&self, a: &args::Configure) -> Result<Value, SearchError> {
+        let mut next = self.config();
+        for (id, value) in &a.values {
+            match id.as_str() {
+                SETTING_EXCLUDE => {
+                    let globs: Vec<String> =
+                        serde_json::from_value(value.clone()).map_err(|_| {
+                            SearchError::BadSetting {
+                                id: SETTING_EXCLUDE,
+                                reason: "must be a list of glob strings".to_owned(),
+                            }
+                        })?;
+                    // Compile once now so a bad glob fails here, not on
+                    // every later search.
+                    PathFilter::with_configured(&[], &[], &globs, &self.limits)?;
+                    next.exclude = globs;
+                }
+                SETTING_HIDDEN => {
+                    next.include_hidden = value.as_bool().ok_or(SearchError::BadSetting {
+                        id: SETTING_HIDDEN,
+                        reason: "must be a boolean".to_owned(),
+                    })?;
+                }
+                _ => {}
+            }
+        }
+        let out = json!({
+            SETTING_EXCLUDE: next.exclude,
+            SETTING_HIDDEN: next.include_hidden,
+        });
+        *self.config.write() = next;
+        Ok(out)
+    }
+
     fn files(&self, a: args::Files) -> Result<Value, SearchError> {
         let started = Instant::now();
         let pool = self.pool()?;
         let root = ProjectRoot::open(Path::new(&a.root))?;
         let limit = self.limits.clamp_results(a.limit);
-        let index = self.indexes.get(&root, a.hidden);
+        let hidden = a.hidden.unwrap_or(self.config.read().include_hidden);
+        let index = self.indexes.get(&root, hidden);
         let hits = fuzzy::rank(pool, &index.entries, &a.query, limit);
         let results: Vec<Value> = hits
             .into_iter()
@@ -193,12 +250,16 @@ impl SearchPlugin {
         let root = ProjectRoot::open(Path::new(&a.root))?;
         let spec = a.spec();
         let matcher = compile(&spec, Mode::Lines, &self.limits)?;
-        let filter = PathFilter::new(&a.include, &a.exclude, &self.limits)?;
+        let config = self.config();
+        let filter =
+            PathFilter::with_configured(&a.include, &a.exclude, &config.exclude, &self.limits)?;
         self.sync_events();
         let ticket = self.registry.begin();
         let limit = self.limits.clamp_results(a.limit);
         let budget = self.budget(ticket.cancel.clone(), limit);
-        let index = self.indexes.get(&root, a.hidden);
+        let index = self
+            .indexes
+            .get(&root, a.hidden.unwrap_or(config.include_hidden));
         let outcome = text::run(
             &TextJob {
                 pool,
@@ -231,7 +292,9 @@ impl SearchPlugin {
         let root = ProjectRoot::open(Path::new(&text.root))?;
         let spec = text.spec();
         let matcher = compile(&spec, Mode::Lines, limits)?;
-        let filter = PathFilter::new(&text.include, &text.exclude, limits)?;
+        let config = self.config();
+        let filter =
+            PathFilter::with_configured(&text.include, &text.exclude, &config.exclude, limits)?;
         self.sync_events();
         let ticket = self.registry.begin();
         let cap = text
@@ -239,7 +302,9 @@ impl SearchPlugin {
             .unwrap_or(limits.max_edits)
             .clamp(1, limits.max_edits);
         let budget = self.budget(ticket.cancel.clone(), cap);
-        let index = self.indexes.get(&root, text.hidden);
+        let index = self
+            .indexes
+            .get(&root, text.hidden.unwrap_or(config.include_hidden));
         let replacement = Replacement {
             text: replacement,
             expand: text.regex,
@@ -333,7 +398,7 @@ mod args {
         pub limit: Option<usize>,
         /// Include dotfiles (`.git` and `.manang` stay excluded).
         #[serde(default)]
-        pub hidden: bool,
+        pub hidden: Option<bool>,
     }
 
     #[derive(Deserialize)]
@@ -356,7 +421,7 @@ mod args {
         #[serde(default)]
         pub context_lines: usize,
         #[serde(default)]
-        pub hidden: bool,
+        pub hidden: Option<bool>,
     }
 
     impl Text {
@@ -390,7 +455,7 @@ mod args {
         #[serde(default)]
         pub limit: Option<usize>,
         #[serde(default)]
-        pub hidden: bool,
+        pub hidden: Option<bool>,
         pub replacement: String,
     }
 
@@ -421,6 +486,12 @@ mod args {
         /// Apply only these project-relative paths of the plan.
         #[serde(default)]
         pub files: Option<Vec<String>>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Configure {
+        pub values: serde_json::Map<String, serde_json::Value>,
     }
 
     #[derive(Deserialize)]
@@ -461,6 +532,7 @@ impl Plugin for SearchPlugin {
             }
             "search.text" => self.text(parse(input)?).map_err(failed)?,
             "search.cancel" => self.cancel(&parse(input)?),
+            "search.configure" => self.configure(&parse(input)?).map_err(failed)?,
             "search.replace-preview" => self.replace_preview(parse(input)?).map_err(failed)?,
             "search.replace-apply" => self.replace_apply(&parse(input)?).map_err(failed)?,
             "search.in-text" => self.in_text(&parse(input)?).map_err(failed)?,
