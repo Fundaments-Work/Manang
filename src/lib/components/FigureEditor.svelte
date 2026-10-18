@@ -3,6 +3,7 @@
   import FigureNodeView from "./figure/FigureNodeView.svelte";
   import FigureOverlay from "./figure/FigureOverlay.svelte";
   import FigureProperties from "./figure/FigureProperties.svelte";
+  import LayersPanel from "./figure/LayersPanel.svelte";
   import FormulaEditor from "./figure/FormulaEditor.svelte";
   import MermaidDialog from "./figure/MermaidDialog.svelte";
   import { handleCursor } from "$lib/figure/handles";
@@ -13,6 +14,7 @@
   import { focusedSurface } from "$lib/commands/surface";
   import { reportError } from "$lib/kernel";
   import { figures } from "$lib/state/figures.svelte";
+  import { figureUi, GRID_STEP } from "$lib/state/figureUi.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import type { FigureState, PointerInfo } from "$lib/state/figure.svelte";
 
@@ -36,6 +38,7 @@
 
   let host: HTMLDivElement | undefined = $state();
   let surface: SVGSVGElement | undefined = $state();
+  let rootWidth = $state(0);
   let hostWidth = $state(0);
   let hostHeight = $state(0);
 
@@ -43,6 +46,12 @@
     figure.setSize(hostWidth, hostHeight);
   });
 
+  /** Under this width the side panels open over the canvas instead of beside it. */
+  const narrow = $derived(rootWidth > 0 && rootWidth < 860);
+  /** From this width the file actions carry text labels. */
+  const roomy = $derived(rootWidth >= 940);
+
+  const view = $derived(figure.view);
   const scene = $derived(figure.display);
   const byId = $derived(new Map(scene.nodes.map((n) => [n.id, n] as const)));
   const visible = $derived(
@@ -338,10 +347,19 @@
   );
 </script>
 
-<div class="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-bg">
-  <FigureToolbar {figure} onsave={() => void figures.save(figure.path)} />
+<div
+  class="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-bg"
+  bind:clientWidth={rootWidth}
+>
+  <FigureToolbar
+    {figure}
+    {narrow}
+    {roomy}
+    onsave={() => void figures.save(figure.path)}
+  />
 
-  <div class="flex min-h-0 flex-1" onkeydown={hostKeydown} role="presentation">
+  <div class="relative flex min-h-0 flex-1" onkeydown={hostKeydown} role="presentation">
+    <LayersPanel {figure} overlay={narrow} />
     <div
       bind:this={host}
       bind:clientWidth={hostWidth}
@@ -384,6 +402,33 @@
           stroke-width="1"
           vector-effect="non-scaling-stroke"
         />
+
+        {#if figureUi.grid && view.zoom * GRID_STEP >= 6}
+          <defs>
+            <pattern
+              id="figure-grid"
+              width={GRID_STEP}
+              height={GRID_STEP}
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d="M{GRID_STEP} 0H0V{GRID_STEP}"
+                fill="none"
+                stroke="var(--mng-line)"
+                stroke-width={1 / view.zoom}
+              />
+            </pattern>
+          </defs>
+          <rect
+            data-grid
+            x="0"
+            y="0"
+            width={figure.scene.width}
+            height={figure.scene.height}
+            fill="url(#figure-grid)"
+            pointer-events="none"
+          />
+        {/if}
 
         {#each visible as node (node.id)}
           <FigureNodeView
@@ -453,15 +498,8 @@
       {#if figure.mermaidDialog}
         <MermaidDialog {figure} />
       {/if}
-
-      <p
-        class="pointer-events-none absolute bottom-2 left-4 m-0 font-mono text-[10px] text-text-muted"
-      >
-        {figure.nodeCount}
-        {figure.nodeCount === 1 ? "node" : "nodes"} in {figure.path}
-      </p>
     </div>
 
-    <FigureProperties {figure} {theme} />
+    <FigureProperties {figure} {theme} overlay={narrow} />
   </div>
 </div>

@@ -10,12 +10,7 @@ import { keepAspect } from "./fields";
 import type { FigureEditOp } from "./ops";
 import { scaleSelection } from "./scale";
 import { selectionBounds } from "./selection";
-import {
-  isShape,
-  type FigureNode,
-  type FigureScene,
-  type Rect,
-} from "./scene";
+import { isShape, type FigureNode, type FigureScene, type Rect } from "./scene";
 
 export type LayoutField = "x" | "y" | "width" | "height";
 
@@ -119,7 +114,10 @@ export function layerName(node: FigureNode): string {
       : node.kind === "freedraw"
         ? undefined
         : node.label;
-  const line = text?.split("\n").find((l) => l.trim() !== "")?.trim();
+  const line = text
+    ?.split("\n")
+    .find((l) => l.trim() !== "")
+    ?.trim();
   if (line !== undefined && line !== "") {
     return line.length > NAME_LIMIT ? `${line.slice(0, NAME_LIMIT - 1)}…` : line;
   }
@@ -144,7 +142,8 @@ export function filterLayers(
   const q = query.trim().toLowerCase();
   if (q === "") return nodes;
   return nodes.filter(
-    (n) => layerName(n).toLowerCase().includes(q) || kindName(n).toLowerCase().includes(q),
+    (n) =>
+      layerName(n).toLowerCase().includes(q) || kindName(n).toLowerCase().includes(q),
   );
 }
 
@@ -195,4 +194,17 @@ export function moveLayerOp(
 /** Shapes carry an angle; the Rotation field is for them. */
 export function canRotate(nodes: readonly FigureNode[]): boolean {
   return nodes.length > 0 && nodes.every(isShape);
+}
+
+/**
+ * The ids of the layers between `from` and `to` as a panel lists them
+ * (topmost first), both included: a Shift-click range. Empty when either is
+ * not in the scene.
+ */
+export function displayRange(scene: FigureScene, from: string, to: string): string[] {
+  const order = layerOrder(scene).map((n) => n.id);
+  const a = order.indexOf(from);
+  const b = order.indexOf(to);
+  if (a === -1 || b === -1) return [];
+  return order.slice(Math.min(a, b), Math.max(a, b) + 1);
 }
