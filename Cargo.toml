@@ -33,13 +33,31 @@ rust-version = "1.92"
 
 [workspace.dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
+tauri-plugin-opener = "2.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 
-# Release profile must live in the workspace root manifest, not in a member
-# crate, or Cargo silently ignores it.
+# Profiles must live in the workspace root manifest, not in a member crate, or
+# Cargo silently ignores them.
+
+# Development builds: our own crates stay quick to rebuild, but every
+# dependency (Typst, Wasmtime, gix, the TeX parsers...) is optimised, because
+# an unoptimised Typst compiles 10-50x slower and makes `tauri dev` feel
+# nothing like the real app. Dependencies rebuild rarely, so the cost is paid
+# once. Line tables only keep backtraces readable while cutting link time.
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = false
+
+# Build scripts and proc macros run at compile time only; optimising them
+# speeds up builds of crates that lean on them (serde, typst macros).
+[profile.dev.build-override]
+opt-level = 3
 [profile.release]
 codegen-units = 1
 lto = true
