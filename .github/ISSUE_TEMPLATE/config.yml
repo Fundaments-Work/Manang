@@ -6,3 +6,6 @@ contact_links:
   - name: Known Issues
     url: https://github.com/Fundaments-Work/Manang/blob/main/docs/beta/known-issues.md
     about: Check known issues and workarounds before opening a ticket.
+  - name: Report a security vulnerability
+    url: https://github.com/Fundaments-Work/Manang/security/advisories/new
+    about: Private report. Never open a public issue for a vulnerability.

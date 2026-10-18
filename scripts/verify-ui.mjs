@@ -19,7 +19,9 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { request as httpRequest } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
@@ -462,6 +464,9 @@ async function main() {
     process.exit(1);
   }
   mkdirSync(SHOTS, { recursive: true });
+  // Recent Chrome ignores --remote-debugging-port on the default profile, and a
+  // throwaway profile keeps the suite away from the user's own browser data.
+  const profile = mkdtempSync(join(tmpdir(), "manang-ui-"));
 
   const child = spawn(
     browserBin,
@@ -469,6 +474,7 @@ async function main() {
       "--headless=new",
       "--disable-gpu",
       "--no-sandbox",
+      `--user-data-dir=${profile}`,
       "--hide-scrollbars",
       `--remote-debugging-port=${PORT}`,
       "--remote-allow-origins=*",
@@ -6464,7 +6470,15 @@ async function main() {
     page.close();
     browser.close();
   } finally {
+    const exited = new Promise((resolve) => child.once("exit", resolve));
     child.kill("SIGTERM");
+    await Promise.race([exited, sleep(5000)]);
+    // The browser may still be flushing its cache; a leftover temp dir is not a failure.
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
+    } catch {
+      /* removed with the OS temp dir */
+    }
   }
 
   const failed = results.filter((entry) => !entry.passed);

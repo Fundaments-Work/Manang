@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: If you use Manang in your work, please cite it as below.
+title: Manang
+type: software
+license: MIT
+repository-code: https://github.com/Fundaments-Work/Manang
+abstract: Local-first scientific writing in Typst, LaTeX and Markdown, with a built-in vector figure studio, AI that proposes diffs, and encrypted live co-editing.
+keywords:
+  - typst
+  - latex
+  - markdown
+  - scientific writing
+  - local-first
+authors:
+  - name: Fundaments.work
