@@ -5559,6 +5559,144 @@ async function main() {
         `(() => { const g = getComputedStyle(document.querySelector('#side-panel [role="radiogroup"]')); const b = getComputedStyle(document.querySelector('#side-panel [role="radio"]')); return g.borderTopWidth === "1px" && g.borderTopLeftRadius === "0px" && b.boxShadow === "none"; })()`,
       ),
     );
+    /* ------------------------------------------------------------------ */
+    section("Share and get updates");
+    const SHARE = 'section[aria-label="Share and get updates"]';
+    const shareFlag = (value) =>
+      page.evaluate(
+        value === null
+          ? `localStorage.removeItem("manang.mock.git-share")`
+          : `localStorage.setItem("manang.mock.git-share", ${JSON.stringify(value)})`,
+      );
+    const shareText = () => page.evaluate(`document.querySelector('${SHARE}')?.innerText ?? ""`);
+    const limeButtons = () =>
+      page.evaluate(
+        `[...document.querySelectorAll('${SHARE} button')].filter((b) => b.className.includes("bg-accent")).map((b) => b.textContent.trim())`,
+      );
+    check(
+      "the Versions view has a Share group asking for an address on first use",
+      (await exists(page, SHARE)) && (await exists(page, `${SHARE} input#share-address`)),
+    );
+    check(
+      "before connecting there is no Share or Get updates button",
+      !(await shareText()).includes("Get updates"),
+      await shareText(),
+    );
+    await click(page, `${SHARE} input#share-address`);
+    await insertText(page, "not an address");
+    await clickText(page, `${SHARE} button`, "Connect");
+    await expectEventually(
+      page,
+      "an address with spaces is refused with a reason, inline",
+      `document.querySelector('${SHARE} [role="alert"]')?.innerText.includes("no spaces")`,
+    );
+    await page.evaluate(
+      `(() => { const i = document.querySelector('${SHARE} input'); i.focus(); i.select(); })()`,
+    );
+    await insertText(page, "https://example.org/team/paper.git");
+    await clickText(page, `${SHARE} button`, "Connect");
+    await expectEventually(
+      page,
+      "a good address connects and shows a status line",
+      `document.querySelector('${SHARE} [data-testid="share-status"]')?.innerText.includes("Not shared yet")`,
+      { show: `document.querySelector('${SHARE}')?.innerText` },
+    );
+    check(
+      "exactly one action is lime: Share",
+      JSON.stringify(await limeButtons()) === '["Share"]',
+      JSON.stringify(await limeButtons()),
+    );
+    await shoot(page, "35-share-first");
+    await clickText(page, `${SHARE} button`, "Share");
+    await expectEventually(
+      page,
+      "Share reports what it shared and the status becomes Up to date",
+      `document.querySelector('${SHARE} [data-testid="share-status"]')?.innerText === "Up to date"`,
+      { show: `document.querySelector('${SHARE}')?.innerText` },
+    );
+    check(
+      "a status message says Shared",
+      (await statusText(page)).includes("Shared "),
+      await statusText(page),
+    );
+    check(
+      "nothing is lime once everything is shared",
+      (await limeButtons()).length === 0,
+      JSON.stringify(await limeButtons()),
+    );
+
+    // Someone else shared: Share is refused in plain words, Get updates is suggested.
+    await shareFlag("behind");
+    await clickText(page, `${SHARE} button`, "Share");
+    await expectEventually(
+      page,
+      "Share when others have shared first says to get updates first",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes("get updates first")`,
+    );
+    await expectEventually(
+      page,
+      "the status line says Updates available and Get updates is the lime one",
+      `document.querySelector('${SHARE} [data-testid="share-status"]')?.innerText.includes("Updates available")`,
+      { show: `document.querySelector('${SHARE}')?.innerText` },
+    );
+    check(
+      "exactly one action is lime: Get updates",
+      JSON.stringify(await limeButtons()) === '["Get updates"]',
+      JSON.stringify(await limeButtons()),
+    );
+    await shoot(page, "36-share-updates-available");
+    await clickText(page, `${SHARE} button`, "Get updates");
+    await expectEventually(
+      page,
+      "Get updates reports what arrived",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes("Got 2 updates")`,
+      { show: `document.querySelector('footer[aria-label="Status"]').innerText` },
+    );
+    check(
+      "after getting updates the status no longer says Updates available",
+      !(await shareText()).includes("Updates available"),
+      await shareText(),
+    );
+
+    // Both changed the same file: stops, names it, changes nothing.
+    await shareFlag("conflicts");
+    await clickText(page, `${SHARE} button`, "Get updates");
+    await expectEventually(
+      page,
+      "a clash opens an explanation instead of an error",
+      `document.querySelector("#dialog-title")?.textContent === "These changes cannot be combined automatically"`,
+    );
+    check(
+      "it names the file and says nothing was changed",
+      (await dialogText()).includes("main.") && (await dialogText()).includes("Nothing was changed"),
+      await dialogText(),
+    );
+    await shoot(page, "37-share-conflict");
+    await pressPrimary();
+
+    // The host cannot be reached.
+    await shareFlag("unreachable");
+    await clickText(page, `${SHARE} button`, "Share");
+    await expectEventually(
+      page,
+      "an unreachable host is explained in plain words",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes("could not be reached")`,
+      { show: `document.querySelector('footer[aria-label="Status"]').innerText` },
+    );
+    await shareFlag(null);
+    check(
+      "the group uses no git jargon",
+      !/\b(push|pull|fetch|merge|rebase|upstream|origin|commit)\b/i.test(await shareText()),
+      await shareText(),
+    );
+    check(
+      "the Share group obeys the brand: hairline buttons, no radius, no shadow",
+      await page.evaluate(
+        `(() => { const b = getComputedStyle(document.querySelector('${SHARE} button')); const g = getComputedStyle(document.querySelector('${SHARE}')); return b.borderTopLeftRadius === "0px" && b.boxShadow === "none" && g.borderBottomWidth === "1px"; })()`,
+      ),
+    );
+    check("no dialog is left open", !(await dialogOpen()));
+
     await noStrayEdits(page, "Versions");
     await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
     if (!(await exists(page, 'aside[aria-label="Files panel"]')))

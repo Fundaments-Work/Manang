@@ -215,7 +215,8 @@ export function gitPlugin(host: MockProjectHost): MockPluginFactory {
   let remoteUrl: string | null = null;
   /** Newest version the shared copy has; `null` while it has none of ours. */
   let sharedHash: string | null = null;
-  let received = false;
+  /** The flag value whose incoming updates were already received. */
+  let receivedFlag = "";
   const DEFAULT_IDENTITY = { name: "Rolf Landauer", email: "landauer@ibm.com" };
 
   function currentIdentity(): { name: string; email: string } | null {
@@ -345,7 +346,7 @@ export function gitPlugin(host: MockProjectHost): MockPluginFactory {
   function shareBehind(): number {
     const flag = shareFlag();
     const incoming = flag === "behind" || flag === "diverged" || flag === "conflicts";
-    return incoming && !received ? 2 : 0;
+    return incoming && receivedFlag !== flag ? 2 : 0;
   }
 
   function requireRemote(): void {
@@ -1029,7 +1030,7 @@ export function gitPlugin(host: MockProjectHost): MockPluginFactory {
           safety = saveVersion(fs, "Before getting updates").sha;
         }
         recordCommit(fs, "Updates from collaborators", false);
-        received = true;
+        receivedFlag = shareFlag();
         const merged = ahead > 0 || safety !== null;
         if (!merged) sharedHash = commits[0]?.hash ?? null;
         emit("git.changed", { root: fs.root });
