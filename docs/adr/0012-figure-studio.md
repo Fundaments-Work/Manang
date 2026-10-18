@@ -121,7 +121,8 @@ diff:
   counter, so replaying a session gives byte-identical files.
 * Common optional fields: `angle` (degrees, clockwise, about the bounding
   box centre), `groups` (group ids, innermost first, Excalidraw's model:
-  groups are not nodes, so z-order stays one flat list), `locked`, `style`,
+  groups are not nodes, so z-order stays one flat list), `locked`, `hidden`
+  (not drawn, not exported, not selectable; the layers panel's eye), `style`,
   `label`.
 * Kinds: `rect`, `diamond`, `ellipse`, `text`, `frame`, `image`, `mermaid`
   (box kinds: `x`, `y`, `width`, `height`); `arrow`, `line` (absolute
