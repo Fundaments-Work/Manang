@@ -224,7 +224,7 @@ describe("helpers", () => {
   });
 
   it("invites an action in every empty state", () => {
-    expect(emptyState("projects", "", 0).action).toBe("new");
+    expect(emptyState("projects", "", 0).action).toBe("sample");
     expect(emptyState("projects", "zz", 3).action).toBe("clear");
     expect(emptyState("pinned", "", 3).title).toBe("Nothing pinned");
     expect(emptyState("recent", "", 3).action).toBe("open");

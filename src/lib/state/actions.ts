@@ -335,6 +335,32 @@ export function createProject(
   return startProject(() => workspace.create(path, name, engine, template));
 }
 
+/** Open or create the built-in Welcome sample project for first-run onboarding. */
+export async function openSampleProject(): Promise<boolean> {
+  let location = "";
+  if (hasNativeDialogs()) {
+    try {
+      const { documentDir, homeDir } = await import("@tauri-apps/api/path");
+      const base = (await documentDir()) || (await homeDir());
+      if (base) location = base;
+    } catch {
+      /* fallback */
+    }
+  }
+  if (!location) {
+    location = "/home/author/manang-projects";
+  }
+  const baseFolder = `${location.replace(/\/+$/, "")}/welcome-to-manang`;
+  let folder = baseFolder;
+  let counter = 1;
+  const existingPaths = new Set(home.entries.map((e) => e.path));
+  while (existingPaths.has(folder)) {
+    counter += 1;
+    folder = `${baseFolder}-${counter}`;
+  }
+  return createProject(folder, "Welcome to Manang", "typst", "welcome");
+}
+
 /** Show Home over the open project without closing it. */
 /**
  * Open a project folder: the native picker on the desktop, otherwise (or if

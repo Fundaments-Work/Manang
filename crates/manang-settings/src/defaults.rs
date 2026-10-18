@@ -83,6 +83,13 @@ pub fn definitions() -> Vec<SettingDef> {
             "Replace transitions with instant changes. `system` follows the operating system.",
         ),
         def(
+            "appearance.coach-lines",
+            SettingType::Bool,
+            json!(true),
+            User,
+            "Show onboarding coach lines on the editor, preview, and figures.",
+        ),
+        def(
             "editor.font-size",
             int(8, 48),
             json!(14),
