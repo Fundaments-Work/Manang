@@ -204,6 +204,7 @@
         </div>
         <select
           id="new-project-template"
+          aria-label="Template"
           class="mng-field h-9 text-[12px]"
           value={selectedTemplate ?? ""}
           onchange={(e) => onTemplateChange(e.currentTarget.value || null)}
