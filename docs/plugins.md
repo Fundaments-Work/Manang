@@ -93,11 +93,77 @@ imports `fs` without any `filesystem` permission is **rejected at load** with
 | `on_compile_pre`      | pipeline | Each subscriber's output feeds the next, in directory-name order. |
 | `on_compile_post`     | pipeline | As above. |
 | `on_lint`             | fan-out  | Every subscriber sees the same input; one failing plugin does not hide the others' results. |
-| `register_agent_tool` | fan-out  | |
+| `register_agent_tool` | fan-out  | Answer `{ "tools": [...] }`; see [Agent tools](#agent-tools). |
 
 Hook and command payloads are JSON for small structured data, or raw bytes for
 artefacts (PDF, SVG). Payload shapes per hook are owned by the plugin that
 fires the hook; `word-count` documents its `on_lint` contract in its source.
+
+### Agent tools
+
+Plugins expose commands to AI agents (and to other plugins) as **agent
+tools** (ADR 0012). Subscribe to `register_agent_tool` and answer the hook
+with:
+
+```json
+{ "tools": [
+  {
+    "name": "figure_add_shapes",
+    "title": "Add shapes to a figure",
+    "description": "What it does and when to use it, written for a model.",
+    "input_schema": { "type": "object", "properties": { }, "required": [], "additionalProperties": false },
+    "output_schema": { "type": "object", "properties": { } },
+    "command": "figure.add-shapes"
+  }
+] }
+```
+
+* `name` matches `^[a-zA-Z0-9_-]{1,64}$` (what MCP clients and model APIs
+  accept; use `<plugin>_<verb>`) and is unique across plugins: a name
+  declared twice is dropped.
+* `command` is one of **your own** registered commands; the tool runs it
+  with the (validated) input as its JSON payload.
+* `input_schema` is a JSON Schema (draft 2020-12) object schema;
+  `output_schema` describes the command's JSON answer. Together with `name`,
+  `title` and `description` this is MCP's `Tool` (`inputSchema`,
+  `outputSchema`), so a shell can forward the list to an MCP client.
+* `Kernel::agent_tools()` collects every declaration and lists rejected ones
+  under `problems` (one bad plugin never hides the others). The desktop shell
+  exposes it as the `kernel_agent_tools` IPC command.
+* `Kernel::call_agent_tool(name, input)` validates `input` before running the
+  command and fails with `InvalidInput { issues: [{ path, message }] }`
+  (JSON-pointer paths), so an agent can correct its call. The validator
+  supports `type`, `properties`, `required`, `additionalProperties`, `enum`,
+  `const`, `items`, `minItems`/`maxItems`, `minimum`/`maximum`,
+  `minLength`/`maxLength`, `anyOf`, `oneOf` and `$ref` to `#/$defs/...`.
+
+Write tools for a model, not for a programmer: accept forgiving input
+(labels as well as ids, optional positions), make each call one undo step,
+and fail with a message that names what would work, prefixed with a tag
+(`[not_found]`, `[ambiguous]`, `[invalid_argument]`, `[unavailable]`).
+
+The figure plugin's tools are the reference implementation
+(`crates/manang-figure/src/agent_tools.json`):
+
+| Tool | Command | Does |
+| :--- | :--- | :--- |
+| `figure_describe` | `figure.describe` | shapes, connections, frames and a text summary |
+| `figure_add_shapes` | `figure.add-shapes` | add labelled shapes, auto-placed and auto-sized |
+| `figure_connect` | `figure.connect` | bound arrows between shapes, by id or label |
+| `figure_update` | `figure.update` | change label, kind, box, rotation, style, routing |
+| `figure_remove` | `figure.remove` | remove by id or label |
+| `figure_layout` | `figure.layout` | layered (dagre) layout, `TB`/`LR`/`BT`/`RL` |
+| `figure_from_mermaid` | `figure.from-mermaid` | Mermaid to native shapes, or a Mermaid block |
+| `figure_to_mermaid` | `figure.to-mermaid` | the figure as a Mermaid flowchart |
+| `figure_style` | `figure.style` | named presets or explicit style |
+| `figure_export` | `figure.export` | save; write the SVG (and PDF, and one frame) |
+
+Every figure tool takes `path` (a `.figure.json`, opened when needed) or
+`figure` (an open figure's id); without either it works on the active
+figure. Edits are announced as `figure.changed { id, revision }` so an open
+editor tab picks them up. A typical session: `figure_add_shapes`, then
+`figure_connect` (by label), `figure_layout`, `figure_describe` to check,
+`figure_export`.
 
 ## The WIT world
 

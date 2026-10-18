@@ -132,7 +132,7 @@ fn build_kernel(
     )?;
     kernel.register(
         manang_figure::manifest()?,
-        Arc::new(manang_figure::plugin()),
+        Arc::new(manang_figure::plugin_with_events(events.clone())),
     )?;
     kernel.register(
         manang_search::manifest()?,
@@ -293,6 +293,13 @@ fn plugin_summaries(kernel: &Kernel) -> Vec<PluginSummary> {
         .collect();
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
+}
+
+/// Every agent tool plugins declare (ADR 0012), with the declarations that
+/// were rejected and why.
+#[tauri::command]
+fn kernel_agent_tools(shell: State<'_, Shell>) -> manang_kernel::AgentToolList {
+    shell.kernel.agent_tools()
 }
 
 /// Every registered plugin (first-party and WASM), sorted by name.
@@ -635,6 +642,7 @@ pub fn run() -> Result<(), tauri::Error> {
             app_info,
             kernel_commands,
             kernel_plugins,
+            kernel_agent_tools,
             kernel_invoke,
             kernel_invoke_binary,
             save_binary_artifact,
@@ -797,6 +805,24 @@ mod tests {
             panic!("diagram.render returns binary SVG");
         };
         assert!(svg.starts_with(b"<svg"));
+    }
+
+    #[test]
+    fn first_party_agent_tools_are_all_valid() {
+        let tmp = std::env::temp_dir();
+        let dirs = Dirs {
+            config: &tmp,
+            cache: &tmp,
+        };
+        let kernel = build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
+            .expect("first-party plugins register");
+        let list = kernel.agent_tools();
+        assert!(list.problems.is_empty(), "{:?}", list.problems);
+        assert!(
+            list.tools
+                .iter()
+                .any(|t| t.tool.name == "figure_add_shapes")
+        );
     }
 
     #[test]
