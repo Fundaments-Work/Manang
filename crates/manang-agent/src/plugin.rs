@@ -1,11 +1,12 @@
 //! The `agent.*` commands.
 
+use crate::commands::{self, SlashCommand};
 use crate::context::{
-    ChipInput, ChipKind, ResolvedChip, check_total, diagnostics_text, render_user_message,
-    resolve_chip,
+    HeaderInfo, MENTION_CAP, Mention, ResolvedPart, SELECTION_CAP, TurnInput, View,
+    diagnostics_text, load_instructions, render_header, render_turn, resolve_part,
 };
 use crate::error::AgentError;
-use crate::prompt::{Feature, system_prompt};
+use crate::prompt::SYSTEM_PROMPT;
 use crate::provider::{ProviderFactory, ProviderSpec, RealFactory, friendly};
 use crate::risk::{Decision, RiskTable};
 use crate::session::{TurnPlan, commit, run};
@@ -17,8 +18,8 @@ use crate::storage::{
     GlobalStore, SessionMeta, SessionStore, list_sessions, now_ms, project_agent_dir,
     prune_sessions, read_project_policy,
 };
-use crate::text::{estimate_tokens, outline};
-use crate::tools::{Selection, ToolContext};
+use crate::text::{clip_chars, estimate_tokens};
+use crate::tools::{self, ToolContext};
 use manang_agent_core::{
     AuditEntry, AuditEvent, ChatRequest, EffectivePolicy, Message, PolicyLayer, PriceTable,
     ProviderEvent, ProviderKind, ProviderPreset, RedactionConfig, ToolNameMap, ToolSpec, Usage,
@@ -29,7 +30,7 @@ use manang_keystore::{KeyCommands, KeyId, SecretString};
 use parking_lot::Mutex;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -39,6 +40,11 @@ use tokio_util::sync::CancellationToken;
 const MANIFEST: &str = include_str!("../manifest.toml");
 const MAX_PROMPT_CHARS: usize = 20_000;
 const MAX_RUNNING: usize = 4;
+/// Entries of the file tree in the session header.
+const HEADER_FILES: usize = 60;
+/// Open buffers the UI may send, and the biggest one.
+const MAX_BUFFERS: usize = 40;
+const MAX_BUFFER_BYTES: usize = 2_000_000;
 
 /// The plugin's manifest.
 pub fn manifest() -> Result<Manifest, ManifestError> {
@@ -109,8 +115,6 @@ struct Options {
     model: Option<String>,
     max_iterations: Option<u32>,
     max_tokens: Option<u32>,
-    max_total_tokens: Option<u64>,
-    target_language: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,15 +122,29 @@ struct Options {
 struct StartArgs {
     #[serde(default)]
     session_id: Option<String>,
-    feature: Feature,
+    /// What the author typed (after the command name, when there is one).
     #[serde(default)]
     prompt: Option<String>,
+    /// A slash command: its template becomes the author's message.
     #[serde(default)]
-    context: Vec<ChipInput>,
+    command: Option<String>,
+    #[serde(default)]
+    context: TurnInput,
     #[serde(default)]
     options: Options,
     #[serde(default)]
     project_root: Option<String>,
+    /// Run the conversation again as it stands (after a connection error): nothing is appended.
+    #[serde(default)]
+    retry: bool,
+}
+
+/// An @-mention resolved to text.
+struct MentionText {
+    kind: &'static str,
+    label: String,
+    path: Option<String>,
+    body: String,
 }
 
 struct Prepared {
@@ -134,19 +152,23 @@ struct Prepared {
     preset: ProviderPreset,
     spec: ProviderSpec,
     model: String,
-    chips: Vec<ResolvedChip>,
+    parts: Vec<ResolvedPart>,
     prompt_redactions: u32,
     system: String,
     tools: Vec<ToolSpec>,
     names: ToolNameMap,
     user_message: Message,
+    /// The author's message as sent (after command expansion and redaction), for the title.
+    request_text: String,
+    header: String,
     existing: Option<Arc<Session>>,
     project_root: Option<PathBuf>,
     options: Options,
-    feature: Feature,
     redaction: RedactionConfig,
     context_tokens: u64,
-    diagnostics: Vec<crate::context::Diagnostic>,
+    window: u64,
+    effort: Option<String>,
+    tool_ctx: ToolContext,
 }
 
 impl AgentPlugin {
@@ -163,6 +185,7 @@ impl AgentPlugin {
             .build()
             .map_err(|e| AgentError::unavailable(format!("the tool pool failed: {e}")))?;
         let shared = Arc::new(Shared::new(SharedInit {
+            config_dir: options.config_dir.clone(),
             events: options.events,
             global: GlobalStore::new(&options.config_dir),
             keys: options.keys,
@@ -263,6 +286,7 @@ impl AgentPlugin {
         settings: &Settings,
         policy: &EffectivePolicy,
         require_key: bool,
+        effort: Option<&str>,
     ) -> Result<(ProviderSpec, ProviderPreset), AgentError> {
         let preset = settings.preset()?;
         policy.check_provider(&preset.id)?;
@@ -301,6 +325,7 @@ impl AgentPlugin {
                 api_key,
                 offline: settings.offline,
                 engine: settings.engine,
+                effort: effort.map(str::to_owned),
             },
             preset,
         ))
@@ -322,45 +347,17 @@ impl AgentPlugin {
 
     // ---- context ---------------------------------------------------------------------------
 
-    fn chip_text(
+    /// The text of an @-mentioned file when the UI sent none.
+    fn mention_text(
         &self,
         ctx: &Context<'_>,
-        chip: &ChipInput,
-        all: &[ChipInput],
-    ) -> Result<String, AgentError> {
-        if let Some(text) = &chip.text {
-            return Ok(text.clone());
-        }
-        match chip.kind {
-            ChipKind::Diagnostics => Ok(diagnostics_text(&chip.diagnostics)),
-            ChipKind::Figure => {
-                let args = chip
-                    .path
-                    .as_ref()
-                    .map_or(json!({}), |p| json!({ "path": p }));
-                let out = ctx
-                    .invoke("figure.describe", Payload::Json(args))
-                    .map_err(|e| {
-                        AgentError::unavailable(format!("the figure could not be described: {e}"))
-                    })?;
-                let Payload::Json(v) = out else {
-                    return Err(AgentError::unavailable("the figure has no description"));
-                };
-                Ok(v.get("summary")
-                    .and_then(Value::as_str)
-                    .map_or_else(|| v.to_string(), str::to_owned))
-            }
-            ChipKind::Outline => {
-                let path = chip
-                    .path
-                    .as_deref()
-                    .ok_or_else(|| AgentError::invalid("an outline chip needs a path"))?;
-                let known = all
-                    .iter()
-                    .find(|c| c.kind == ChipKind::File && c.path.as_deref() == Some(path))
-                    .and_then(|c| c.text.clone());
-                let text = match known {
-                    Some(t) => t,
+        mention: &Mention,
+    ) -> Result<Option<MentionText>, AgentError> {
+        match mention {
+            Mention::File { path, text } => {
+                let path = tools::clean_path(path).map_err(AgentError::invalid)?;
+                let body = match text {
+                    Some(t) => t.clone(),
                     None => match ctx
                         .invoke("project.read-file", Payload::Json(json!({ "path": path })))
                     {
@@ -370,47 +367,103 @@ impl AgentPlugin {
                         }
                     },
                 };
-                Ok(outline(path, &text)
-                    .iter()
-                    .map(|h| {
-                        format!(
-                            "{}{} (line {})",
-                            "  ".repeat(usize::from(h.level) - 1),
-                            h.title,
-                            h.line
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"))
+                Ok(Some(MentionText {
+                    kind: "file",
+                    label: path.clone(),
+                    path: Some(path),
+                    body,
+                }))
             }
-            ChipKind::BibliographyKeys => {
+            Mention::Problems { diagnostics } => {
+                if diagnostics.is_empty() {
+                    return Ok(None);
+                }
+                Ok(Some(MentionText {
+                    kind: "problems",
+                    label: "Problems".to_owned(),
+                    path: None,
+                    body: diagnostics_text(diagnostics),
+                }))
+            }
+            Mention::Figure { path } => {
+                let args = path.as_ref().map_or(json!({}), |p| json!({ "path": p }));
                 let out = ctx
-                    .invoke(
-                        "citations.search",
-                        Payload::Json(json!({ "query": "", "limit": 200 })),
-                    )
+                    .invoke("figure.describe", Payload::Json(args))
                     .map_err(|e| {
-                        AgentError::unavailable(format!("the bibliography could not be read: {e}"))
+                        AgentError::unavailable(format!("the figure could not be described: {e}"))
                     })?;
                 let Payload::Json(v) = out else {
-                    return Ok(String::new());
+                    return Err(AgentError::unavailable("the figure has no description"));
                 };
-                let keys: Vec<&str> = v
-                    .get("results")
-                    .and_then(Value::as_array)
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|r| r.get("key").and_then(Value::as_str))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                Ok(keys.join(", "))
+                let summary = v
+                    .get("summary")
+                    .and_then(Value::as_str)
+                    .map_or_else(|| v.to_string(), str::to_owned);
+                Ok(Some(MentionText {
+                    kind: "figure",
+                    label: format!("Figure {}", path.as_deref().unwrap_or("")),
+                    path: path.clone(),
+                    body: summary,
+                }))
             }
-            kind => Err(AgentError::invalid(format!(
-                "the {} chip has no text",
-                kind.as_str()
-            ))),
         }
+    }
+
+    /// The session header: project name, formats, file tree, instructions, problem count.
+    fn header(
+        &self,
+        ctx: &Context<'_>,
+        tc: &ToolContext,
+        settings: &Settings,
+        problems: usize,
+        redaction: &RedactionConfig,
+    ) -> String {
+        let files = tools::project_files(ctx, tc, "").unwrap_or_default();
+        let shown = &files[..files.len().min(HEADER_FILES)];
+        let mut formats: Vec<String> = Vec::new();
+        for (ext, name) in [
+            ("typ", "Typst"),
+            ("tex", "LaTeX"),
+            ("md", "Markdown"),
+            ("bib", "BibTeX"),
+            ("figure", "figures"),
+        ] {
+            if files.iter().any(|f| f.path.ends_with(&format!(".{ext}"))) {
+                formats.push(name.to_owned());
+            }
+        }
+        let mut tree = tools::render_tree(shown);
+        if files.len() > shown.len() {
+            tree.push_str(&format!(
+                "[{} more files: use list_files with dir]\n",
+                files.len() - shown.len()
+            ));
+        }
+        let name = tc
+            .project_root
+            .as_ref()
+            .and_then(|r| r.file_name())
+            .map_or_else(
+                || "project".to_owned(),
+                |n| n.to_string_lossy().into_owned(),
+            );
+        let instructions = load_instructions(
+            tc.project_root.as_deref(),
+            &self.shared.config_dir,
+            settings.use_agents_md,
+        )
+        .into_iter()
+        .map(|(source, text)| (source, redact(&text, redaction).text))
+        .collect();
+        render_header(&HeaderInfo {
+            name,
+            formats,
+            tree,
+            shown: shown.len(),
+            total: files.len(),
+            problems,
+            instructions,
+        })
     }
 
     fn prepare(
@@ -421,7 +474,32 @@ impl AgentPlugin {
     ) -> Result<Prepared, AgentError> {
         let root = self.root_of(args.project_root.as_deref());
         let (settings, policy) = self.policy(root.as_deref())?;
-        let (spec, preset) = self.spec(&settings, &policy, sending)?;
+        let existing = match &args.session_id {
+            Some(id) => Some(self.load_session(id, root.as_deref())?),
+            None => None,
+        };
+        let command = match args.command.as_deref().filter(|c| !c.is_empty()) {
+            Some(name) => Some(
+                self.slash_commands(root.as_deref())
+                    .into_iter()
+                    .find(|c| c.name == name)
+                    .ok_or_else(|| {
+                        AgentError::new("unknown_command", format!("there is no command `/{name}`"))
+                    })?,
+            ),
+            None => None,
+        };
+        // Reasoning effort is fixed when the session starts.
+        let effort = match &existing {
+            Some(s) if s.inner.lock().effort.is_some() => s.inner.lock().effort.clone(),
+            _ => Some(
+                settings
+                    .reasoning_effort
+                    .resolve(command.is_some())
+                    .to_owned(),
+            ),
+        };
+        let (spec, preset) = self.spec(&settings, &policy, sending, effort.as_deref())?;
         if sending && !self.shared.global.has_consent(&preset.id) {
             return Err(AgentError::new(
                 "consent_required",
@@ -432,87 +510,166 @@ impl AgentPlugin {
             ));
         }
         let model = Self::model_of(&settings, &preset, &args.options)?;
-        let prompt = args.prompt.clone().unwrap_or_default();
-        if prompt.chars().count() > MAX_PROMPT_CHARS {
+        let typed = args.prompt.clone().unwrap_or_default();
+        if typed.chars().count() > MAX_PROMPT_CHARS {
             return Err(AgentError::invalid("the message is too long"));
+        }
+        let request_text = match &command {
+            Some(c) => commands::expand(c, &typed),
+            None => typed.trim().to_owned(),
+        };
+        if request_text.is_empty() && !args.retry {
+            return Err(AgentError::invalid("write a message first"));
         }
         let redaction = RedactionConfig {
             secrets: true,
             emails: settings.redact_emails,
             paths: settings.redact_paths,
         };
-        let mut chips = Vec::with_capacity(args.context.len());
-        for (i, chip) in args.context.iter().enumerate() {
-            let text = self.chip_text(ctx, chip, &args.context)?;
-            chips.push(resolve_chip(chip, i, &text, &redaction));
+        let turn = args.context;
+
+        // What the tools may look at: the editor's buffers, then the disk.
+        let mut buffers: BTreeMap<String, String> = BTreeMap::new();
+        for (path, body) in &turn.buffers {
+            if buffers.len() >= MAX_BUFFERS || body.len() > MAX_BUFFER_BYTES {
+                continue;
+            }
+            if let Ok(clean) = tools::clean_path(path) {
+                buffers.insert(clean, body.clone());
+            }
         }
-        let request_text = if prompt.trim().is_empty() {
-            args.feature
-                .default_request(args.options.target_language.as_deref())
-        } else {
-            prompt
+        let tool_ctx = ToolContext {
+            session_id: existing.as_ref().map_or_else(String::new, |s| s.id.clone()),
+            project_root: root.clone(),
+            active: turn.active.as_ref().map(|a| a.path.clone()),
+            buffers,
+            diagnostics: turn.diagnostics.clone(),
+            user_text: request_text.clone(),
+            pending: Vec::new(),
         };
+
+        // Turn context: the selection and the @-mentions.
+        let mut parts: Vec<ResolvedPart> = Vec::new();
+        if let Some(sel) = &turn.selection {
+            let mut part = resolve_part(
+                "selection",
+                "Selection",
+                Some(&sel.path),
+                &sel.text,
+                SELECTION_CAP,
+                &redaction,
+            );
+            part.lines = sel
+                .line_from
+                .zip(sel.line_to)
+                .or(sel.line_from.map(|l| (l, l)));
+            parts.push(part);
+        }
+        for mention in &turn.mentions {
+            if let Some(m) = self.mention_text(ctx, mention)? {
+                parts.push(resolve_part(
+                    m.kind,
+                    &m.label,
+                    m.path.as_deref(),
+                    &m.body,
+                    MENTION_CAP,
+                    &redaction,
+                ));
+            }
+        }
+
         let request_redaction = redact(&request_text, &redaction);
-        let limit = policy
-            .max_context_tokens
-            .unwrap_or(settings.max_context_tokens);
-        let context_tokens = check_total(&chips, estimate_tokens(&request_redaction.text), limit)?;
-        let user_text = render_user_message(&chips, &request_redaction.text);
+        let context_tokens =
+            parts.iter().map(|p| p.tokens).sum::<u64>() + estimate_tokens(&request_redaction.text);
+        if let Some(limit) = policy.max_context_tokens
+            && context_tokens > limit
+        {
+            return Err(AgentError::new(
+                "context_too_large",
+                format!(
+                    "the attached context is about {context_tokens} tokens; this project's limit is {limit}. Select less text or remove a mention."
+                ),
+            ));
+        }
+
+        // The session header goes in the first message only.
+        let first = existing
+            .as_ref()
+            .is_none_or(|s| s.inner.lock().history.is_empty());
+        let header = if first {
+            let mut header_ctx = tool_ctx.clone();
+            header_ctx.session_id.clear();
+            self.header(
+                ctx,
+                &header_ctx,
+                &settings,
+                turn.diagnostics.len(),
+                &redaction,
+            )
+        } else {
+            String::new()
+        };
+        let turn_text = render_turn(&request_redaction.text, turn.active.as_ref(), &parts);
+        let user_text = if header.is_empty() {
+            turn_text
+        } else {
+            format!("{header}\n\n{turn_text}")
+        };
         let user_message = Message::user_text(&user_text)?;
 
         let kernel = self.shared.kernel()?;
-        let has_figure = chips.iter().any(|c| c.kind == ChipKind::Figure);
+        let figure_view = turn.view == View::Figure;
         let mut tools = Vec::new();
         for registered in kernel.agent_tools().tools {
             let t = registered.tool;
             let Some(info) = self.shared.risk.get(&t.name) else {
                 continue;
             };
-            if !args.feature.offers(&t.name, has_figure) {
+            if t.name.starts_with("figure_") && !figure_view {
                 continue;
             }
+            // What goes on the wire: a name, a description and an input schema. No title, no
+            // output schema (the model never reads them, and they cost tokens on every request).
             tools.push(ToolSpec {
                 name: t.name,
-                title: Some(t.title),
+                title: None,
                 description: t.description,
                 input_schema: t.input_schema,
-                output_schema: Some(t.output_schema),
+                output_schema: None,
                 risk: info.risk,
             });
         }
         let names = ToolNameMap::new(tools.iter().map(|t| t.name.as_str()))?;
-        let existing = match &args.session_id {
-            Some(id) => Some(self.load_session(id, root.as_deref())?),
-            None => None,
-        };
+        let window = policy
+            .max_context_tokens
+            .map_or(settings.context_window, |m| m.min(settings.context_window));
         Ok(Prepared {
-            system: system_prompt(args.feature, args.options.target_language.as_deref()),
+            system: SYSTEM_PROMPT.to_owned(),
             prompt_redactions: u32::try_from(request_redaction.spans.len()).unwrap_or(u32::MAX),
             settings,
             preset,
             spec,
             model,
-            chips,
+            parts,
             tools,
             names,
             user_message,
+            request_text: request_redaction.text,
+            header,
             existing,
             project_root: root,
-            feature: args.feature,
             options: args.options,
             redaction,
             context_tokens,
-            diagnostics: args
-                .context
-                .iter()
-                .flat_map(|c| c.diagnostics.clone())
-                .collect(),
+            window,
+            effort,
+            tool_ctx,
         })
     }
 
     fn plan(&self, p: &Prepared) -> Result<TurnPlan, AgentError> {
         let provider = self.shared.factory.build(&p.spec)?;
-        let redaction_count: usize = p.chips.iter().map(|c| c.redactions.len()).sum::<usize>()
+        let redaction_count: usize = p.parts.iter().map(|c| c.redactions.len()).sum::<usize>()
             + p.prompt_redactions as usize;
         Ok(TurnPlan {
             provider,
@@ -522,14 +679,18 @@ impl AgentPlugin {
             tools: p.tools.clone(),
             names: p.names.clone(),
             max_tokens: p.options.max_tokens.unwrap_or(8192).clamp(256, 32_768),
-            max_iterations: p.options.max_iterations.unwrap_or(8).clamp(1, 16),
-            max_total_tokens: p.options.max_total_tokens.unwrap_or(400_000),
+            max_iterations: p.options.max_iterations.unwrap_or(12).clamp(1, 24),
+            window: p.window,
             include_thinking: p.settings.include_thinking,
             cache: p.preset.kind == ProviderKind::Anthropic,
             redaction: p.redaction,
             redaction_count: u32::try_from(redaction_count).unwrap_or(u32::MAX),
             prices: PriceTable::builtin(),
         })
+    }
+
+    fn slash_commands(&self, root: Option<&Path>) -> Vec<SlashCommand> {
+        commands::load(root, &self.shared.config_dir)
     }
 
     // ---- sessions --------------------------------------------------------------------------
@@ -547,18 +708,24 @@ impl AgentPlugin {
             .ok_or_else(|| AgentError::not_found(format!("no session `{id}`")))?;
         let entries = store.read_transcript()?;
         let meta = store.read_meta();
+        let history: Vec<Message> = entries.iter().map(|e| e.message.clone()).collect();
+        let header = header_of(&history);
         let session = Arc::new(Session {
             id: id.to_owned(),
             inner: Mutex::new(SessionInner {
                 seq: entries.last().map_or(0, |e| e.seq),
-                history: entries.into_iter().map(|e| e.message).collect(),
+                view: history.clone(),
+                history,
+                header,
+                cleared: false,
+                last_fill: 0,
+                effort: None,
                 running: false,
                 cancel: None,
                 remembered: BTreeSet::new(),
                 tainted: false,
                 usage: Usage::default(),
                 cost_micro: 0,
-                feature: Feature::Chat,
                 provider: meta
                     .as_ref()
                     .map_or_else(String::new, |m| m.provider.clone()),
@@ -578,6 +745,7 @@ impl AgentPlugin {
 
     fn start(&self, ctx: &Context<'_>, value: Value) -> Result<Value, AgentError> {
         let args: StartArgs = parse(value)?;
+        let retry = args.retry;
         let prepared = self.prepare(ctx, args, true)?;
         let running = self
             .shared
@@ -605,6 +773,11 @@ impl AgentPlugin {
                     store,
                     inner: Mutex::new(SessionInner {
                         history: Vec::new(),
+                        view: Vec::new(),
+                        header: prepared.header.clone(),
+                        cleared: false,
+                        last_fill: 0,
+                        effort: prepared.effort.clone(),
                         seq: 0,
                         running: false,
                         cancel: None,
@@ -612,7 +785,6 @@ impl AgentPlugin {
                         tainted: false,
                         usage: Usage::default(),
                         cost_micro: 0,
-                        feature: prepared.feature,
                         provider: prepared.preset.id.clone(),
                         model: prepared.model.clone(),
                         title: String::new(),
@@ -630,53 +802,38 @@ impl AgentPlugin {
             if inner.running {
                 return Err(AgentError::new("busy", "this session is still answering"));
             }
+            if retry
+                && inner
+                    .history
+                    .last()
+                    .is_none_or(|m| m.role != manang_agent_core::Role::User)
+            {
+                return Err(AgentError::invalid(
+                    "there is nothing to retry: send a new message instead",
+                ));
+            }
             inner.running = true;
             inner.cancel = Some(cancel.clone());
-            inner.feature = prepared.feature;
             inner.provider.clone_from(&prepared.preset.id);
             inner.model.clone_from(&prepared.model);
+            if inner.effort.is_none() {
+                inner.effort.clone_from(&prepared.effort);
+            }
+            if inner.header.is_empty() && !prepared.header.is_empty() {
+                inner.header.clone_from(&prepared.header);
+            }
             if inner.title.is_empty() {
-                let text = prepared.user_message.text();
-                let first = text
-                    .split("<user_request>")
-                    .nth(1)
-                    .unwrap_or(&text)
-                    .trim()
-                    .lines()
-                    .next()
-                    .unwrap_or("");
-                inner.title = crate::text::clip_chars(first, 60).0;
+                let first = prepared.request_text.trim().lines().next().unwrap_or("");
+                inner.title = clip_chars(first, 60).0;
             }
         }
-        // What the tools may see: the text the user attached, so proposals match the editor.
+        // What the tools may see: the editor's text, so proposals match what is on screen.
         {
-            let mut tc = ToolContext {
-                project_root: prepared.project_root.clone(),
-                strict_markup: prepared.feature.strict_markup(),
-                ..ToolContext::default()
-            };
-            for chip in &prepared.chips {
-                match (chip.kind, &chip.path) {
-                    (ChipKind::File, Some(path)) => {
-                        tc.files.insert(path.clone(), chip.source.clone());
-                    }
-                    (ChipKind::Selection, Some(path)) => {
-                        if let Some([from, to]) = chip.range {
-                            tc.selections.push(Selection {
-                                path: path.clone(),
-                                from,
-                                to,
-                                text: chip.source.clone(),
-                            });
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            tc.diagnostics.clone_from(&prepared.diagnostics);
+            let mut tc = prepared.tool_ctx.clone();
+            tc.session_id.clone_from(&session.id);
             *self.shared.tool_ctx.write() = tc;
         }
-        if let Err(e) = commit(&session, prepared.user_message.clone()) {
+        if !retry && let Err(e) = commit(&session, prepared.user_message.clone()) {
             let mut inner = session.inner.lock();
             inner.running = false;
             inner.cancel = None;
@@ -689,9 +846,10 @@ impl AgentPlugin {
             &sid,
             json!({
                 "provider": prepared.preset.id, "model": prepared.model,
-                "feature": prepared.feature.as_str(),
+                "effort": prepared.effort,
                 "context_tokens": prepared.context_tokens,
-                "chips": prepared.chips.iter().map(|c| json!({
+                "window": prepared.window,
+                "parts": prepared.parts.iter().map(|c| json!({
                     "id": c.id, "kind": c.kind, "label": c.label, "tokens": c.tokens
                 })).collect::<Vec<_>>(),
             }),
@@ -706,13 +864,13 @@ impl AgentPlugin {
         let args: StartArgs = parse(value)?;
         let prepared = self.prepare(ctx, args, false)?;
         let plan = self.plan_for_preview(&prepared);
-        let mut history = prepared
+        let mut view = prepared
             .existing
             .as_ref()
-            .map(|s| s.inner.lock().history.clone())
+            .map(|s| s.inner.lock().view.clone())
             .unwrap_or_default();
-        history.push(prepared.user_message.clone());
-        let request = plan.request(&history);
+        view.push(prepared.user_message.clone());
+        let request = plan.request(&view);
         let spec = prepared.spec.clone();
         let wire_request = request.clone();
         let factory = Arc::clone(&self.shared.factory);
@@ -732,8 +890,8 @@ impl AgentPlugin {
             "system": request.system,
             "messages": request.messages,
             "tools": prepared.tools.iter().map(|t| json!({"name": t.name, "risk": t.risk})).collect::<Vec<_>>(),
-            "chips": prepared.chips,
-            "redaction_count": prepared.chips.iter().map(|c| c.redactions.len()).sum::<usize>()
+            "parts": prepared.parts,
+            "redaction_count": prepared.parts.iter().map(|c| c.redactions.len()).sum::<usize>()
                 + prepared.prompt_redactions as usize,
             "tokens": { "context": prepared.context_tokens, "request": estimate.input },
             "cost": {
@@ -841,6 +999,18 @@ impl AgentPlugin {
         }
     }
 
+    fn commands_list(&self, value: Value) -> Result<Value, AgentError> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct A {
+            #[serde(default)]
+            project_root: Option<String>,
+        }
+        let a: A = parse(value)?;
+        let root = self.root_of(a.project_root.as_deref());
+        Ok(json!({ "commands": self.slash_commands(root.as_deref()) }))
+    }
+
     fn sessions(&self, value: Value) -> Result<Value, AgentError> {
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
@@ -903,7 +1073,7 @@ impl AgentPlugin {
         let fail = |e: &AgentError| {
             Ok(json!({ "ok": false, "code": e.code, "message": friendly(e.code, &e.message) }))
         };
-        let (spec, preset) = match self.spec(&settings, &policy, true) {
+        let (spec, preset) = match self.spec(&settings, &policy, true, None) {
             Ok(v) => v,
             Err(e) => return fail(&e),
         };
@@ -1021,17 +1191,11 @@ impl AgentPlugin {
             .unwrap_or_default();
         let consent_text = if preset.local || is_local_host(&host) {
             format!(
-                "When you press Send, Manang sends the text you attach as context and your \
-                 message to the server at {host}, which is on this machine. Nothing is sent in \
-                 the background. You can turn the agent off in Settings."
+                "When you press Send, Manang sends your message, the text you select and the parts of your project the assistant reads to the server at {host}, which is on this machine. Nothing is sent in the background. You can turn the agent off in Settings."
             )
         } else {
             format!(
-                "When you press Send, Manang sends the text you attach as context (the selection, \
-                 file, problems or figure you choose in the context tray) and your message to \
-                 {} at {host}. Nothing is sent in the background, and you can preview exactly \
-                 what will be sent. The provider may bill you; your key stays in your system \
-                 keychain. You can turn the agent off in Settings.",
+                "When you press Send, Manang sends your message, the text you select and the parts of your project the assistant reads (through its read tools) to {} at {host}. Nothing is sent in the background, and you can preview exactly what will be sent. The provider may bill you; your key stays in your system keychain. You can turn the agent off in Settings.",
                 preset.display_name
             )
         };
@@ -1050,7 +1214,7 @@ impl AgentPlugin {
             "key": key,
             "consent": consent,
             "consent_text": consent_text,
-            "max_context_tokens": settings.max_context_tokens,
+            "context_window": settings.context_window,
             "include_thinking": settings.include_thinking,
             "presets": presets().iter().map(|p| json!({
                 "id": p.id, "name": p.display_name, "models": p.models, "base_url": p.base_url,
@@ -1087,10 +1251,26 @@ impl AgentPlugin {
         *self.shared.settings.write() = next;
         Ok(json!({ "applied": values.len() }))
     }
+
+    /// The tool context with the running session's pending proposals laid over the editor text.
+    fn tool_context(&self) -> ToolContext {
+        let mut tc = self.shared.tool_ctx.read().clone();
+        tc.pending = self.shared.pending_edits(&tc.session_id);
+        tc
+    }
 }
 
 fn is_local_host(host: &str) -> bool {
     host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
+}
+
+/// The `<project ...>...</project>` header at the start of a stored first message, if any.
+fn header_of(history: &[Message]) -> String {
+    let text = history.first().map(Message::text).unwrap_or_default();
+    match (text.starts_with("<project"), text.find("</project>")) {
+        (true, Some(end)) => text[..end + "</project>".len()].to_owned(),
+        _ => String::new(),
+    }
 }
 
 struct PreviewPlan {
@@ -1102,7 +1282,7 @@ struct PreviewPlan {
 }
 
 impl PreviewPlan {
-    fn request(&self, history: &[Message]) -> ChatRequest {
+    fn request(&self, view: &[Message]) -> ChatRequest {
         use manang_agent_core::CacheBreakpoint;
         let mut breakpoints = Vec::new();
         if self.cache {
@@ -1114,7 +1294,7 @@ impl PreviewPlan {
         ChatRequest {
             model: self.model.clone(),
             system: Some(self.system.clone()),
-            messages: history.to_vec(),
+            messages: view.to_vec(),
             tools: self.tools.clone(),
             max_tokens: self.max_tokens,
             cache_breakpoints: breakpoints,
@@ -1131,7 +1311,6 @@ pub fn write_meta(session: &Session, state: &str) -> Result<(), AgentError> {
             id: session.id.clone(),
             created_ms: inner.created_ms,
             updated_ms: now_ms(),
-            feature: inner.feature.as_str().to_owned(),
             provider: inner.provider.clone(),
             model: inner.model.clone(),
             title: inner.title.clone(),
@@ -1140,6 +1319,10 @@ pub fn write_meta(session: &Session, state: &str) -> Result<(), AgentError> {
         }
     };
     session.store.write_meta(&meta)
+}
+
+fn plain(result: Result<Value, String>) -> Result<Payload, PluginError> {
+    result.map(Payload::Json).map_err(PluginError::Failed)
 }
 
 impl Plugin for AgentPlugin {
@@ -1160,6 +1343,7 @@ impl Plugin for AgentPlugin {
             "agent.apply-proposal" => self.decide(value, true),
             "agent.reject-proposal" => self.decide(value, false),
             "agent.preview-request" => self.preview(ctx, value),
+            "agent.commands" => self.commands_list(value),
             "agent.sessions" => self.sessions(value),
             "agent.transcript" => self.transcript(value),
             "agent.models" => self.models(value),
@@ -1167,26 +1351,20 @@ impl Plugin for AgentPlugin {
             "agent.status" => self.status(value),
             "agent.consent" => self.consent(value),
             "agent.configure" => self.configure(value),
-            "agent.doc-read" => {
-                let tc = self.shared.tool_ctx.read().clone();
-                crate::tools::doc_read(ctx, &tc, &value)
+            "agent.list-files" => {
+                return plain(tools::list_files(ctx, &self.tool_context(), &value));
             }
-            "agent.doc-diagnostics" => {
-                let tc = self.shared.tool_ctx.read().clone();
-                crate::tools::doc_diagnostics(&tc, &value)
+            "agent.read-file" => return plain(tools::read_file(ctx, &self.tool_context(), &value)),
+            "agent.search" => return plain(tools::search(ctx, &self.tool_context(), &value)),
+            "agent.outline" => {
+                return plain(tools::outline_tool(ctx, &self.tool_context(), &value));
             }
-            "agent.doc-outline" => {
-                let tc = self.shared.tool_ctx.read().clone();
-                crate::tools::doc_outline(ctx, &tc, &value)
+            "agent.diagnostics" => {
+                return plain(tools::diagnostics(ctx, &self.tool_context(), &value));
             }
-            "agent.doc-propose-edit" => {
-                let tc = self.shared.tool_ctx.read().clone();
-                crate::tools::doc_propose_edit(ctx, &tc, &value)
-            }
-            "agent.project-search" => {
-                let tc = self.shared.tool_ctx.read().clone();
-                crate::tools::project_search(ctx, &tc, &value)
-            }
+            "agent.bib-search" => return plain(tools::bib_search(ctx, &value)),
+            "agent.edit-text" => return plain(tools::edit_text(ctx, &self.tool_context(), &value)),
+            "agent.ask-user" => return plain(tools::ask_user(&value)),
             other => return Err(PluginError::UnknownCommand(other.to_owned())),
         }?;
         Ok(Payload::Json(out))
@@ -1199,7 +1377,7 @@ impl Plugin for AgentPlugin {
         input: Payload,
     ) -> Result<Payload, PluginError> {
         match hook {
-            Hook::RegisterAgentTool => Ok(Payload::Json(crate::tools::declarations())),
+            Hook::RegisterAgentTool => Ok(Payload::Json(tools::declarations())),
             _ => Ok(input),
         }
     }

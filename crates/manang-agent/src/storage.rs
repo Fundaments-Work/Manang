@@ -61,7 +61,6 @@ pub struct SessionMeta {
     pub id: String,
     pub created_ms: u64,
     pub updated_ms: u64,
-    pub feature: String,
     pub provider: String,
     pub model: String,
     pub title: String,
