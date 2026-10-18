@@ -76,9 +76,34 @@ impl PriceTable {
                 "claude-haiku-5-5".to_owned(),
                 Price::new(100_000, 500_000, 10_000, 125_000),
             ),
+            // DeepSeek (api-docs.deepseek.com/quick_start/pricing, 2026-10-18).
+            // These are the PEAK rates (01:00-04:00 and 06:00-10:00 UTC, Mon-Fri);
+            // off-peak is half, so the estimate never flatters. Cache hits are
+            // billed at the cache-read rate, misses at the input rate, and there
+            // is no separate cache-write fee. Legacy names map to flash.
+            (
+                "deepseek-flash".to_owned(),
+                Price::new(300_000, 1_200_000, 6_000, 300_000),
+            ),
+            (
+                "deepseek-v4-flash".to_owned(),
+                Price::new(300_000, 1_200_000, 6_000, 300_000),
+            ),
+            (
+                "deepseek-chat".to_owned(),
+                Price::new(300_000, 1_200_000, 6_000, 300_000),
+            ),
+            (
+                "deepseek-reasoner".to_owned(),
+                Price::new(300_000, 1_200_000, 6_000, 300_000),
+            ),
+            (
+                "deepseek-v4-pro".to_owned(),
+                Price::new(1_320_000, 3_960_000, 44_000, 1_320_000),
+            ),
         ]);
         Self {
-            source: "Anthropic pricing page, 2026-10-18".to_owned(),
+            source: "Anthropic pricing page and api-docs.deepseek.com/quick_start/pricing, 2026-10-18 (DeepSeek at peak rates)".to_owned(),
             models,
         }
     }

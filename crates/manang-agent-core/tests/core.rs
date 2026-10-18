@@ -433,3 +433,64 @@ fn mock_provider_replays_cassette_turns() {
         cassette
     );
 }
+
+// ---- presets and DeepSeek prices ----------------------------------------------
+
+#[test]
+fn presets_are_consistent() {
+    let all = presets();
+    let ids: Vec<&str> = all.iter().map(|p| p.id.as_str()).collect();
+    for id in [
+        "anthropic",
+        "openai",
+        "deepseek",
+        "openrouter",
+        "groq",
+        "ollama",
+        "llama_cpp",
+        "lm_studio",
+        "custom",
+    ] {
+        assert!(ids.contains(&id), "{id}");
+    }
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(sorted.len(), ids.len(), "ids are unique");
+    let ds = preset_by_id("deepseek").unwrap();
+    assert_eq!(ds.base_url.as_deref(), Some("https://api.deepseek.com"));
+    assert!(ds.reasoning_passback && ds.key_required);
+    let ollama = preset_by_id("ollama").unwrap();
+    assert!(!ollama.key_required && ollama.local);
+    assert_eq!(
+        ollama.base_url.as_deref(),
+        Some("http://localhost:11434/v1")
+    );
+    assert!(preset_by_id("custom").unwrap().base_url.is_none());
+    assert_eq!(
+        preset_by_id("anthropic").unwrap().models[0],
+        "claude-sonnet-5-5"
+    );
+    let json = serde_json::to_string(&all).unwrap();
+    assert_eq!(
+        serde_json::from_str::<Vec<ProviderPreset>>(&json).unwrap(),
+        all
+    );
+}
+
+#[test]
+fn deepseek_cache_hits_are_cheaper_than_misses() {
+    let t = PriceTable::builtin();
+    let miss = Usage {
+        input: 1_000_000,
+        ..Usage::default()
+    };
+    let hit = Usage {
+        cache_read: 1_000_000,
+        ..Usage::default()
+    };
+    let m = t.estimate("deepseek-flash", &miss).unwrap().micro_usd;
+    let h = t.estimate("deepseek-flash", &hit).unwrap().micro_usd;
+    assert_eq!((m, h), (300_000, 6_000));
+    assert!(t.estimate("deepseek-v4-pro", &miss).unwrap().micro_usd > m);
+}

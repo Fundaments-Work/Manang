@@ -11,6 +11,7 @@ pub mod log;
 pub mod mock;
 pub mod names;
 pub mod policy;
+pub mod presets;
 pub mod price;
 pub mod provider;
 pub mod redact;
@@ -27,6 +28,7 @@ pub use log::{
 pub use mock::{Cassette, MockProvider};
 pub use names::{ToolNameMap, from_wire, to_wire};
 pub use policy::{EffectivePolicy, PolicyLayer};
+pub use presets::{MaxTokensField, ProviderKind, ProviderPreset, preset_by_id, presets};
 pub use price::{CostEstimate, Price, PriceTable};
 pub use provider::{EventStream, Provider};
 pub use redact::{Redaction, RedactionConfig, RedactionKind, RedactionSpan, redact};
