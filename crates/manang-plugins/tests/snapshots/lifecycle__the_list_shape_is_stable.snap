@@ -1,0 +1,171 @@
+---
+source: crates/manang-plugins/tests/lifecycle.rs
+expression: "serde_json::to_string_pretty(&value).expect(\"pretty\")"
+---
+{
+  "plugins": [
+    {
+      "name": "alpha",
+      "version": "0.1.0",
+      "running_version": "0.1.0",
+      "description": "Test plugin alpha",
+      "tier": "wasm",
+      "core": false,
+      "permissions": {
+        "filesystem": [],
+        "network": [
+          "example.org"
+        ],
+        "buffer": []
+      },
+      "granted": {
+        "filesystem": [],
+        "network": [
+          "example.org"
+        ],
+        "buffer": []
+      },
+      "new_permissions": {
+        "filesystem": [],
+        "network": [],
+        "buffer": []
+      },
+      "enabled": true,
+      "status": "loaded",
+      "dir": "<dir>",
+      "source": "alpha",
+      "signed": false,
+      "installed_at": 0,
+      "commands": [
+        {
+          "id": "alpha.run",
+          "title": "Run"
+        }
+      ],
+      "settings": [],
+      "contexts": [
+        "app"
+      ],
+      "update_pending": false
+    },
+    {
+      "name": "broken",
+      "version": "0.1.0",
+      "description": "Test plugin broken",
+      "tier": "wasm",
+      "core": false,
+      "permissions": {
+        "filesystem": [],
+        "network": [],
+        "buffer": []
+      },
+      "granted": {
+        "filesystem": [],
+        "network": [],
+        "buffer": []
+      },
+      "new_permissions": {
+        "filesystem": [],
+        "network": [],
+        "buffer": []
+      },
+      "enabled": true,
+      "status": "failed",
+      "error": "<error>",
+      "dir": "<dir>",
+      "signed": false,
+      "commands": [
+        {
+          "id": "broken.run",
+          "title": "Run"
+        }
+      ],
+      "settings": [],
+      "contexts": [
+        "app"
+      ],
+      "update_pending": false
+    },
+    {
+      "name": "editor",
+      "version": "0.1.0",
+      "running_version": "0.1.0",
+      "description": "Built-in editor",
+      "tier": "native",
+      "core": true,
+      "permissions": {
+        "filesystem": [],
+        "network": [],
+        "buffer": []
+      },
+      "granted": {
+        "filesystem": [],
+        "network": [],
+        "buffer": []
+      },
+      "new_permissions": {
+        "filesystem": [],
+        "network": [],
+        "buffer": []
+      },
+      "enabled": true,
+      "status": "loaded",
+      "signed": false,
+      "commands": [
+        {
+          "id": "editor.run",
+          "title": "Run"
+        }
+      ],
+      "settings": [],
+      "contexts": [
+        "app"
+      ],
+      "update_pending": false
+    },
+    {
+      "name": "waiting",
+      "version": "0.3.0",
+      "description": "Test plugin waiting",
+      "tier": "wasm",
+      "core": false,
+      "permissions": {
+        "filesystem": [],
+        "network": [
+          "api.example"
+        ],
+        "buffer": []
+      },
+      "granted": {
+        "filesystem": [],
+        "network": [],
+        "buffer": []
+      },
+      "new_permissions": {
+        "filesystem": [],
+        "network": [
+          "api.example"
+        ],
+        "buffer": []
+      },
+      "enabled": true,
+      "status": "needs_approval",
+      "dir": "<dir>",
+      "source": "waiting",
+      "signed": false,
+      "installed_at": 0,
+      "commands": [
+        {
+          "id": "waiting.run",
+          "title": "Run"
+        }
+      ],
+      "settings": [],
+      "contexts": [
+        "app"
+      ],
+      "update_pending": true
+    }
+  ],
+  "warnings": []
+}

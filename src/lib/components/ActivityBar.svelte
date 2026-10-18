@@ -40,6 +40,12 @@
     { view: "outline", label: "Outline", icon: "outline" },
     { view: "figures", label: "Figures", icon: "figures" },
     { view: "references", label: "References", icon: "references" },
+    {
+      view: "plugins",
+      label: "Plugins",
+      icon: "plugins",
+      shortcut: formatShortcut({ key: "x", mod: true, shift: true }, platform),
+    },
   ];
   const bottom: Item = {
     view: "settings",

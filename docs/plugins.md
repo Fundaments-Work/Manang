@@ -252,6 +252,36 @@ the package is rejected with `IncompatibleApi`; rebuild it.
   running and the error is reported.
 - Delete the directory to unload the plugin.
 
+### The Plugins view and `.manangplugin` archives
+
+Users manage plugins in the **Plugins** view (activity bar, Ctrl+Shift+X), or
+through the `plugins.*` commands (`plugins.list`, `plugins.inspect`,
+`plugins.install`, `plugins.approve`, `plugins.enable`, `plugins.disable`,
+`plugins.uninstall`, `plugins.reload`).
+
+- **Distribute** a plugin as a `.manangplugin`: a plain **zip** of the plugin
+  folder, either with the files at the archive root or all inside one folder
+  named after the plugin. Only `manifest.toml`, `plugin.wasm`, `README*`,
+  `LICENSE*` and an `assets/` tree are accepted (at most 256 files; wasm up to
+  64 MiB, manifest 64 KiB, other files 8 MiB). Paths with `..`, absolute paths,
+  hidden names, symbolic links and duplicate names are refused, and the archive
+  is checked before anything is written. Installing never runs plugin code.
+- **Consent.** An installed plugin is *needs approval* until the user has read
+  the access it asks for (the `[permissions]` table, in plain language) and
+  approved it. It then runs with exactly the approved permissions. A later
+  version that asks for anything not approved before waits beside the running
+  one, which keeps running, until approved.
+- **State** lives in `<config>/manang/plugins.toml`: enabled or not, the
+  approved permissions, the source. Disabling keeps the files. Uninstalling
+  moves them to `<config>/manang/plugins-trash/`; nothing is deleted.
+- A project may switch plugins off for itself with
+  `<project>/.manang/plugins.toml` (`disabled = ["name"]`); it can never switch
+  on what the user disabled.
+- Plugins dropped into the plugins directory by hand load at once when they
+  ask for no permissions, and wait for approval when they ask for any.
+- `publisher` in `[plugin]` is a claim, shown as unverified until signatures
+  land (ADR 0003 follow-up).
+
 ## Cold start and integrity
 
 Compiled machine code is cached in `<cache>/manang/wasm` as `.cwasm`, keyed by

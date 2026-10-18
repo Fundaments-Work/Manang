@@ -55,6 +55,41 @@ pub fn manifest_toml(name: &str) -> String {
     )
 }
 
+/// A manifest with a version and network permissions.
+pub fn manifest_with(name: &str, version: &str, network: &[&str]) -> String {
+    let hosts: Vec<String> = network.iter().map(|h| format!("\"{h}\"")).collect();
+    format!(
+        "[plugin]\nname = \"{name}\"\nversion = \"{version}\"\ndescription = \"Test plugin {name}\"\n\
+         [permissions]\nnetwork = [{}]\n\
+         [[contributes.commands]]\nid = \"{name}.run\"\ntitle = \"Run\"\n",
+        hosts.join(", ")
+    )
+}
+
+/// Write a plugin source folder `<parent>/<name>` and return its path.
+pub fn folder(parent: &Path, name: &str, manifest: &str, wasm: &[u8]) -> PathBuf {
+    let dir = parent.join(name);
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    std::fs::write(dir.join("manifest.toml"), manifest).expect("manifest");
+    std::fs::write(dir.join("plugin.wasm"), wasm).expect("wasm");
+    dir
+}
+
+/// A `.manangplugin` archive at `path` holding `entries` (name, bytes).
+pub fn archive(path: &Path, entries: &[(&str, &[u8])]) -> PathBuf {
+    use std::io::Write;
+    let file = std::fs::File::create(path).expect("create archive");
+    let mut zip = zip::ZipWriter::new(file);
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for (name, bytes) in entries {
+        zip.start_file(*name, options).expect("start file");
+        zip.write_all(bytes).expect("write entry");
+    }
+    zip.finish().expect("finish");
+    path.to_path_buf()
+}
+
 /// Install a plugin directory under `plugins`.
 pub fn install(plugins: &Path, name: &str, wasm: &[u8]) -> PathBuf {
     let dir = plugins.join(name);

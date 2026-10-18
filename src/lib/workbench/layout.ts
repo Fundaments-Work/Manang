@@ -7,7 +7,13 @@
  */
 
 export type SideView =
-  "files" | "search" | "source-control" | "outline" | "figures" | "references";
+  | "files"
+  | "search"
+  | "source-control"
+  | "outline"
+  | "figures"
+  | "references"
+  | "plugins";
 export type PanelTab = "problems" | "output";
 export type PreviewMode = "split" | "editor" | "preview";
 export type Theme = "dark" | "light";
@@ -19,6 +25,7 @@ export const SIDE_VIEWS: readonly SideView[] = [
   "outline",
   "figures",
   "references",
+  "plugins",
 ];
 
 export const SIDE_VIEW_ICONS: Record<SideView, string> = {
@@ -28,6 +35,7 @@ export const SIDE_VIEW_ICONS: Record<SideView, string> = {
   outline: "outline",
   figures: "figures",
   references: "references",
+  plugins: "plugins",
 };
 
 export interface LayoutModel {
@@ -133,8 +141,9 @@ export function cyclePreview(mode: PreviewMode): PreviewMode {
 
 /**
  * Whether the side panel for `view` can be shown. Panels that browse the
- * project need one open. Settings, with the plugin list, is a page rather
- * than a side panel (see `state/settingsPage.svelte.ts`).
+ * project need one open. Settings is a page rather than a side panel (see
+ * `state/settingsPage.svelte.ts`). The side panels live in the workbench,
+ * which exists only while a project is open.
  */
 export function sidePanelVisible(
   view: SideView | null,

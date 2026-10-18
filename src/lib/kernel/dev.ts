@@ -14,6 +14,7 @@ import { figurePlugin } from "./mockFigure";
 import { latexPlugin } from "./mockLatex";
 import { markdownPlugin } from "./mockMarkdown";
 import { gitPlugin } from "./mockGit";
+import { pluginsPlugin } from "./mockPlugins";
 import { searchPlugin } from "./mockSearch";
 import { settingsPlugin } from "./mockSettings";
 import { typstPlugin } from "./mockTypst";
@@ -456,6 +457,7 @@ export function createDevKernel(
       figurePlugin(host),
       gitPlugin(host),
       searchPlugin(host),
+      pluginsPlugin(),
       settingsPlugin(host),
       writingPlugin(),
     ],
