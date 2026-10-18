@@ -28,6 +28,9 @@ Manang is a fast, local-first scientific authoring and illustration desktop appl
 - **[Projects and files](projects-and-files.md)**  
   Manage files in the sidebar tree, view images and PDFs, launch external system applications, delete files safely, use Home trash, and commit changes with the source control panel.
 
+- **[Edit together live](edit-together-live.md)**  
+  Share one text file for real-time co-editing with an encrypted invite, see collaborators' carets, keep working through a dropped connection, and understand what the relay can and cannot see.
+
 - **[Crash recovery and safety copies](crash-recovery.md)**  
   Understand automatic hot exit recovery snapshots, recover unsaved work after unexpected quits, and inspect automatic safety copies.
 
