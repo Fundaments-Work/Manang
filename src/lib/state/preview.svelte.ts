@@ -14,6 +14,7 @@ import { kernel, errorMessage } from "$lib/kernel";
 import { latexApi, typstApi } from "$lib/kernel/api";
 import { ArtifactUrl, sniffArtifact } from "$lib/kernel/artifact";
 import { join } from "$lib/workbench/paths";
+import { svgPageSize } from "$lib/workbench/sourceJump";
 import { documentName } from "$lib/workbench/target";
 
 import { build } from "./build.svelte";
@@ -25,6 +26,20 @@ const typst = typstApi(kernel);
 const latex = latexApi(kernel);
 
 export type PreviewKind = "svg" | "pdf" | "html" | "none";
+
+/** A spot on the pages to outline briefly: 0-based page, a box in points. */
+export interface PreviewMark {
+  readonly page: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  /** Distinguishes two marks at the same place, so each one shows. */
+  readonly id: number;
+}
+
+/** How long a mark stays on the page. */
+export const MARK_MS = 1600;
 
 export class PreviewState {
   /** 0-based. For a PDF it follows the scroll position. */
@@ -43,6 +58,13 @@ export class PreviewState {
   error = $state("");
   rendering = $state(false);
   exporting = $state(false);
+  /** Size in points of the shown SVG page (Typst), for mapping clicks. */
+  pageSize = $state.raw<{ w: number; h: number } | null>(null);
+  /** The spot "Show in preview" points at, while it shows. */
+  mark = $state.raw<PreviewMark | null>(null);
+
+  #markId = 0;
+  #markTimer: ReturnType<typeof setTimeout> | undefined;
 
   readonly #holder = new ArtifactUrl();
   #generation = 0;
@@ -94,6 +116,7 @@ export class PreviewState {
         return;
       }
       this.url = this.#holder.set(bytes, artifact.mime);
+      this.pageSize = artifact.kind === "svg" ? svgPageSize(bytes) : null;
       this.shownTarget = build.target;
       this.error = "";
     } catch (error) {
@@ -115,6 +138,19 @@ export class PreviewState {
     if (next === this.page) return;
     this.page = next;
     void this.render();
+  }
+
+  /** Go to the mark's page and outline the box there for a moment. */
+  showMark(box: Omit<PreviewMark, "id">): void {
+    this.#markId += 1;
+    this.mark = { ...box, id: this.#markId };
+    // A PDF scrolls to the mark on the `jump` this bumps.
+    this.go(box.page);
+    clearTimeout(this.#markTimer);
+    const id = this.#markId;
+    this.#markTimer = setTimeout(() => {
+      if (this.mark?.id === id) this.mark = null;
+    }, MARK_MS);
   }
 
   zoomIn(): void {
@@ -173,6 +209,8 @@ export class PreviewState {
     this.url = null;
     this.pdf = null;
     this.pdfPages = 0;
+    this.pageSize = null;
+    this.mark = null;
   }
 }
 

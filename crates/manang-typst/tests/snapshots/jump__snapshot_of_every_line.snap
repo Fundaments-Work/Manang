@@ -1,0 +1,79 @@
+---
+source: crates/manang-typst/tests/jump.rs
+expression: lines
+---
+[
+  [
+    1,
+    [],
+    null
+  ],
+  [
+    2,
+    [
+      [
+        0,
+        10.0,
+        19.93
+      ]
+    ],
+    {
+      "kind": "file",
+      "path": "main.typ",
+      "line": 2,
+      "column": 3
+    }
+  ],
+  [
+    3,
+    [],
+    null
+  ],
+  [
+    4,
+    [
+      [
+        0,
+        10.0,
+        35.42
+      ]
+    ],
+    {
+      "kind": "file",
+      "path": "main.typ",
+      "line": 4,
+      "column": 1
+    }
+  ],
+  [
+    5,
+    [],
+    null
+  ],
+  [
+    6,
+    [],
+    null
+  ],
+  [
+    7,
+    [
+      [
+        1,
+        10.0,
+        17.24
+      ]
+    ],
+    {
+      "kind": "file",
+      "path": "main.typ",
+      "line": 7,
+      "column": 1
+    }
+  ],
+  [
+    8,
+    [],
+    null
+  ]
+]

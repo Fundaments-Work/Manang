@@ -13,6 +13,7 @@ import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
 import { settings } from "$lib/state/settings.svelte";
 import { settingsPage } from "$lib/state/settingsPage.svelte";
+import { showInPreview } from "$lib/state/sourceJump";
 import { tabs } from "$lib/state/tabs.svelte";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
@@ -65,6 +66,7 @@ const WHEN: Readonly<Record<string, string>> = {
   "file.save-all": "project",
   "doc.export-pdf": "workbench && document",
   "doc.format": "workbench && document",
+  "doc.show-in-preview": "workbench && document",
   "doc.slides": "workbench && typst",
   "doc.convert-typst": "workbench && markdown",
   "project.close": "project",
@@ -346,6 +348,15 @@ export function workbenchCommands(
       shortcuts: [{ key: "f", shift: true, alt: true }],
       enabled: isDocument && active.view === "text",
       run: () => actions.formatDocument(),
+    },
+    {
+      id: "doc.show-in-preview",
+      title: "Show in preview",
+      group: "Workbench",
+      keywords: "jump sync synctex forward search locate caret cursor",
+      shortcuts: [mod("j", { alt: true })],
+      enabled: isPaged && active?.kind === "document" && active.view === "text",
+      run: () => void showInPreview(),
     },
     {
       id: "doc.slides",
