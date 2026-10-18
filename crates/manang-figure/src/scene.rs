@@ -216,6 +216,37 @@ impl FigureNode {
             FigureNode::Math(m) => &m.id,
         }
     }
+
+    /// Moves the node by `(dx, dy)` scene units. Every coordinate shifts, so
+    /// sizes, radii and stroke pressure are unchanged.
+    pub fn translate(&mut self, dx: f64, dy: f64) {
+        match self {
+            FigureNode::Stroke(s) => {
+                for p in &mut s.points {
+                    p.x += dx;
+                    p.y += dy;
+                }
+            }
+            FigureNode::Rect(r) => {
+                r.x += dx;
+                r.y += dy;
+            }
+            FigureNode::Ellipse(e) => {
+                e.cx += dx;
+                e.cy += dy;
+            }
+            FigureNode::Arrow(a) => {
+                a.from.x += dx;
+                a.from.y += dy;
+                a.to.x += dx;
+                a.to.y += dy;
+            }
+            FigureNode::Math(m) => {
+                m.x += dx;
+                m.y += dy;
+            }
+        }
+    }
 }
 
 /// The complete Figure scene data model.

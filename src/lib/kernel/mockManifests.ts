@@ -144,7 +144,8 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     permissions: { filesystem: ["write:config", "write:project"] },
   },
   typst: {
-    description: "Typst compiler: incremental compile, SVG page render and PDF export",
+    description:
+      "Typst compiler: incremental compile, SVG page render, PDF export and source/preview jumps",
     permissions: { filesystem: ["read:project"] },
   },
   writing: {

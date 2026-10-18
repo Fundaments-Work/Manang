@@ -8,11 +8,13 @@
 
 import { build } from "$lib/state/build.svelte";
 import { convertToTypst } from "$lib/state/convert";
+import { copyIncludeLine, diagramIsActive, newDiagram } from "$lib/state/diagramFiles";
 import { documents } from "$lib/state/documents.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
 import { settings } from "$lib/state/settings.svelte";
 import { settingsPage } from "$lib/state/settingsPage.svelte";
+import { showInPreview } from "$lib/state/sourceJump";
 import { tabs } from "$lib/state/tabs.svelte";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
@@ -52,6 +54,8 @@ const WHEN: Readonly<Record<string, string>> = {
   "doc.compile": "project",
   "file.new": "project",
   "file.new-figure": "project",
+  "file.new-diagram": "project",
+  "doc.copy-include": "workbench && document",
   "view.preview-split": "workbench && document",
   "view.preview-editor": "workbench && document",
   "view.preview-preview": "workbench && document",
@@ -65,6 +69,7 @@ const WHEN: Readonly<Record<string, string>> = {
   "file.save-all": "project",
   "doc.export-pdf": "workbench && document",
   "doc.format": "workbench && document",
+  "doc.show-in-preview": "workbench && document",
   "doc.slides": "workbench && typst",
   "doc.convert-typst": "workbench && markdown",
   "project.close": "project",
@@ -86,6 +91,7 @@ const BRINGS_WORKBENCH: ReadonlySet<string> = new Set([
   "view.output",
   "file.new",
   "file.new-figure",
+  "file.new-diagram",
 ]);
 
 function toWorkbench(): void {
@@ -283,9 +289,25 @@ export function workbenchCommands(
       id: "file.new-figure",
       title: "New figure",
       group: "Workbench",
-      keywords: "draw diagram",
+      keywords: "draw diagram sketch figure.create",
       enabled: hasProject,
       run: () => void actions.newFigure(),
+    },
+    {
+      id: "file.new-diagram",
+      title: "New diagram",
+      group: "Workbench",
+      keywords: "mermaid pikchr ascii svgbob flowchart sequence",
+      enabled: hasProject,
+      run: () => void newDiagram(),
+    },
+    {
+      id: "doc.copy-include",
+      title: "Copy include line",
+      group: "Workbench",
+      keywords: "diagram image includegraphics insert",
+      enabled: diagramIsActive(),
+      run: () => void copyIncludeLine(),
     },
     {
       id: "file.save",
@@ -346,6 +368,15 @@ export function workbenchCommands(
       shortcuts: [{ key: "f", shift: true, alt: true }],
       enabled: isDocument && active.view === "text",
       run: () => actions.formatDocument(),
+    },
+    {
+      id: "doc.show-in-preview",
+      title: "Show in preview",
+      group: "Workbench",
+      keywords: "jump sync synctex forward search locate caret cursor",
+      shortcuts: [mod("j", { alt: true })],
+      enabled: isPaged && active?.kind === "document" && active.view === "text",
+      run: () => void showInPreview(),
     },
     {
       id: "doc.slides",

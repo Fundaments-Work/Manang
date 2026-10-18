@@ -25,6 +25,10 @@ pub enum FigureError {
     #[error("node with id `{0}` already exists")]
     DuplicateNode(String),
 
+    /// A figure already exists at the given path.
+    #[error("a figure already exists at `{0}`")]
+    AlreadyExists(String),
+
     /// An I/O error occurred while reading or writing a figure file.
     #[error("I/O error at `{path}`: {source}")]
     Io {

@@ -5,6 +5,7 @@
   import { pushDiagnostics } from "$lib/editor/gutter";
   import { createEditorView } from "$lib/editor/view";
   import { build } from "$lib/state/build.svelte";
+  import { diagram } from "$lib/state/diagram.svelte";
   import { documents } from "$lib/state/documents.svelte";
   import { problemsIn, toGutter } from "$lib/workbench/problems";
 
@@ -51,7 +52,7 @@
   });
 
   $effect(() => {
-    const problems = build.problems;
+    const problems = [...build.problems, ...diagram.problems];
     void documents.version;
     if (view === undefined) return;
     const session = documents.get(path);
