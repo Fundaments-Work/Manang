@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
 
   import Icon from "$lib/components/ui/Icon.svelte";
-  import { kernel, type KernelCommand } from "$lib/kernel";
+  import { kernel, reportError, type KernelCommand } from "$lib/kernel";
   import {
     keybindingsApi,
     type KeybindingConflict,
@@ -112,7 +112,8 @@
       const res = await keys.list();
       bindings = res.bindings;
       conflicts = res.conflicts;
-    } catch {
+    } catch (error) {
+      reportError("keyboard shortcuts could not be listed", error);
       bindings = [];
     }
   }
@@ -125,7 +126,7 @@
         info = list;
         commands = all;
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => reportError("plugins could not be listed", error));
     let unlisten: (() => void) | undefined;
     void kernel
       .onEvent((event) => {
@@ -165,16 +166,27 @@
     if (target !== null) scroller.scrollTop = target.offsetTop - 8;
   }
 
-  /** Keep the section list in step with what is on screen. */
+  /**
+   * Keep the section list in step with what is on screen. Scroll events come
+   * faster than frames, and measuring every section forces a layout, so this
+   * measures at most once per frame (WebKitGTK stutters otherwise).
+   */
+  let spyFrame = 0;
   function onscroll(): void {
-    if (scroller === undefined) return;
-    const top = scroller.getBoundingClientRect().top + 32;
-    let current = "";
-    for (const el of scroller.querySelectorAll<HTMLElement>("[data-group]")) {
-      if (el.getBoundingClientRect().top <= top) current = el.dataset["group"] ?? "";
-    }
-    if (current !== "") active = current;
+    if (spyFrame !== 0) return;
+    spyFrame = requestAnimationFrame(() => {
+      spyFrame = 0;
+      if (scroller === undefined) return;
+      const top = scroller.getBoundingClientRect().top + 32;
+      let current = "";
+      for (const el of scroller.querySelectorAll<HTMLElement>("[data-group]")) {
+        if (el.getBoundingClientRect().top > top) break;
+        current = el.dataset["group"] ?? "";
+      }
+      if (current !== "" && current !== active) active = current;
+    });
   }
+  onDestroy(() => cancelAnimationFrame(spyFrame));
 
   function disabledReason(def: SettingDef): string | undefined {
     if (scope === "project" && def.scope !== "project")

@@ -6,6 +6,8 @@
 //! `crates/`.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use manang_editor::{Editor, EditorPlugin};
 use manang_kernel::{BufferService, CommandInfo, EventBus, Kernel, KernelError, Payload};
@@ -321,8 +323,10 @@ async fn dispatch(
     let kernel = Arc::clone(&shell.kernel);
     let input = args.map_or(Payload::Empty, Payload::Json);
     let opening = matches!(command.as_str(), "project.open" | "project.create");
-    let output = tauri::async_runtime::spawn_blocking(move || {
-        let output = kernel.invoke(&command, input)?;
+    let started = Instant::now();
+    let name = command.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let output = kernel.invoke(&name, input)?;
         if opening {
             point_plugins_at_project(&kernel, &output);
         }
@@ -331,8 +335,10 @@ async fn dispatch(
     .await
     .map_err(|e| IpcError {
         message: format!("command task failed: {e}"),
-    })?
-    .map_err(IpcError::from)?;
+    })
+    .and_then(|r| r.map_err(IpcError::from));
+    log_dispatch(&command, started.elapsed(), result.as_ref().err());
+    let output = result?;
     // WASM plugins granted `fs` may only touch the open project's directory.
     if opening
         && let Payload::Json(value) = &output
@@ -341,6 +347,31 @@ async fn dispatch(
         shell.project_root.set(Some(root.into()));
     }
     Ok(output)
+}
+
+/// A command slower than this is logged even when it succeeds.
+const SLOW_COMMAND: Duration = Duration::from_millis(200);
+
+/// Failures and slow commands always, so the terminal running `pnpm app:dev`
+/// shows what went wrong and what was slow; every command only at trace level
+/// (one per keystroke would drown the rest).
+fn log_dispatch(command: &str, took: Duration, error: Option<&IpcError>) {
+    let ms = took.as_secs_f64() * 1000.0;
+    match error {
+        Some(e) => log::warn!("{command} failed after {ms:.1} ms: {}", e.message),
+        None if took >= SLOW_COMMAND => log::info!("{command} slow: {ms:.1} ms"),
+        None => log::trace!("{command} {ms:.1} ms"),
+    }
+}
+
+/// Open the web inspector (F12 / Ctrl+Shift+I). Debug builds only; a release
+/// build has no inspector and ignores the call.
+#[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) {
+    #[cfg(debug_assertions)]
+    window.open_devtools();
+    #[cfg(not(debug_assertions))]
+    let _ = window;
 }
 
 /// Run a command whose result is structured data.
@@ -449,8 +480,55 @@ fn forward_events(app: tauri::AppHandle, events: &EventBus) -> std::io::Result<(
         .map(|_| ())
 }
 
+/// WebKitGTK's DMABUF renderer misdraws under Wayland with NVIDIA's driver:
+/// parts of the page do not paint, scrolling stutters, clicks miss. Returns the
+/// variable and value that turn it off when that is the situation and the user
+/// has not chosen either way (`WEBKIT_DISABLE_DMABUF_RENDERER=0` keeps it).
+pub fn webkit_renderer_override(
+    wayland: bool,
+    nvidia: bool,
+    already_set: bool,
+) -> Option<(&'static str, &'static str)> {
+    (cfg!(target_os = "linux") && wayland && nvidia && !already_set)
+        .then_some(("WEBKIT_DISABLE_DMABUF_RENDERER", "1"))
+}
+
+static RENDERER_OVERRIDDEN: AtomicBool = AtomicBool::new(false);
+
+/// `main` applied [`webkit_renderer_override`]; the log says so at startup.
+pub fn note_renderer_override() {
+    RENDERER_OVERRIDDEN.store(true, Ordering::Relaxed);
+}
+
+/// The inputs of [`webkit_renderer_override`] for this machine.
+pub fn webkit_renderer_situation() -> (bool, bool, bool) {
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
+        || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland");
+    let nvidia = std::path::Path::new("/proc/driver/nvidia/version").exists();
+    let already_set = std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some();
+    (wayland, nvidia, already_set)
+}
+
+/// How much the shell itself logs: everything while developing.
+const OWN_LEVEL: log::LevelFilter = if cfg!(debug_assertions) {
+    log::LevelFilter::Debug
+} else {
+    log::LevelFilter::Info
+};
+
+/// Panics are bugs: put them in the log (with where they happened) before the
+/// default hook prints them, so they land in the log file too.
+fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::error!("panic: {info}");
+        default(info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), tauri::Error> {
+    log_panics();
     let builder = tauri::Builder::default();
     // First, so a second launch hands over to the running window and exits
     // before it builds a second kernel.
@@ -464,11 +542,13 @@ pub fn run() -> Result<(), tauri::Error> {
         }
     }));
     builder
-        // Logs go to the platform log folder (and the terminal in debug builds);
-        // the web view forwards its uncaught errors here too.
+        // Logs go to the terminal and the platform log folder. The web view
+        // forwards its errors and warnings here too (src/lib/kernel/log.ts).
+        // Debug builds log the shell's own debug messages too.
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
+                .level_for("manang_lib", OWN_LEVEL)
                 .max_file_size(2_000_000)
                 .build(),
         )
@@ -480,6 +560,12 @@ pub fn run() -> Result<(), tauri::Error> {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             use tauri::Manager;
+            if RENDERER_OVERRIDDEN.load(Ordering::Relaxed) {
+                log::info!(
+                    "WebKit DMABUF renderer off (Wayland with NVIDIA); \
+                     set WEBKIT_DISABLE_DMABUF_RENDERER=0 to keep it"
+                );
+            }
             let config_dir = app.path().app_config_dir()?;
             let cache_dir = app.path().app_cache_dir()?;
             let dirs = Dirs {
@@ -509,7 +595,8 @@ pub fn run() -> Result<(), tauri::Error> {
             kernel_plugins,
             kernel_invoke,
             kernel_invoke_binary,
-            save_binary_artifact
+            save_binary_artifact,
+            open_devtools
         ])
         .run(tauri::generate_context!())
 }
@@ -527,6 +614,17 @@ mod tests {
         assert!(check_destination(std::path::Path::new("out.pdf")).is_err());
         assert!(check_destination(dir.path()).is_err());
         assert!(check_destination(&dir.path().join("nope/out.pdf")).is_err());
+    }
+
+    #[test]
+    fn dmabuf_renderer_is_turned_off_only_for_wayland_on_nvidia_when_unset() {
+        use super::webkit_renderer_override as decide;
+        let off = Some(("WEBKIT_DISABLE_DMABUF_RENDERER", "1"));
+        let expected = if cfg!(target_os = "linux") { off } else { None };
+        assert_eq!(decide(true, true, false), expected);
+        assert_eq!(decide(false, true, false), None, "X11 is fine");
+        assert_eq!(decide(true, false, false), None, "AMD and Intel are fine");
+        assert_eq!(decide(true, true, true), None, "the user's choice wins");
     }
 
     #[test]

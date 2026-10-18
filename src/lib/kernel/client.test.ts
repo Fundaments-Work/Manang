@@ -7,7 +7,11 @@ vi.mock("@tauri-apps/api/event", () => ({ listen }));
 import { isKernelError, kernel } from "./client";
 
 describe("kernel client", () => {
-  beforeEach(() => invoke.mockReset());
+  // A block body: a function returned from beforeEach is run as a teardown,
+  // and `mockReset()` returns the mock, which would call `invoke` again.
+  beforeEach(() => {
+    invoke.mockReset();
+  });
 
   it("lists commands through kernel_commands", async () => {
     invoke.mockResolvedValue([{ id: "editor.new", title: "New", plugin: "editor" }]);
@@ -58,10 +62,25 @@ describe("kernel client", () => {
     expect(unlisten).toHaveBeenCalled();
   });
 
-  it("is a quiet no-op when there is no event channel (a plain browser)", async () => {
+  it("carries on without an event channel, and logs why", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     listen.mockRejectedValue(new Error("no tauri"));
     const stop = await kernel.onEvent(() => undefined);
     expect(() => stop()).not.toThrow();
+    expect(logged).toHaveBeenCalledWith(
+      "[manang] kernel events are unavailable:",
+      expect.any(Error),
+    );
+    logged.mockRestore();
+  });
+
+  it("logs a failed command with its id and still rejects for the caller", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const failure = { message: "[not_found] no such file" };
+    invoke.mockRejectedValue(failure);
+
+    await expect(kernel.run("project.read", { path: "x" })).rejects.toBe(failure);
+    logged.mockRestore();
   });
 
   it("recognises structured kernel errors", () => {
