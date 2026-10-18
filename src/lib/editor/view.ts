@@ -76,6 +76,12 @@ export const prefsCompartment = new Compartment();
  */
 export const liveCompartment = new Compartment();
 
+/**
+ * Holds the Visual editor of a document (`editor/visual`): empty in Source
+ * mode, which is the default. The extension is loaded on demand.
+ */
+export const visualCompartment = new Compartment();
+
 export interface EditorLayoutPrefs {
   readonly tabSize: number;
   readonly wordWrap: boolean;
@@ -165,6 +171,7 @@ export function createEditorState(text: string, extra: Extension): EditorState {
       ]),
       languageCompartment.of([]),
       liveCompartment.of([]),
+      visualCompartment.of([]),
       manangTheme,
       problemMarkers(),
       writing(),

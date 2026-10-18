@@ -37,6 +37,7 @@ export const DEFAULT_BINDINGS: readonly DefaultBinding[] = [
   { command: "view.toggle-panel", key: "Mod+J" },
   { command: "view.problems", key: "Mod+Shift+M" },
   { command: "view.cycle-preview", key: "Mod+Shift+V" },
+  { command: "view.visual", key: "Mod+Alt+V" },
   { command: "view.zen", key: "Mod+\\" },
   { command: "tab.next", key: "Mod+PageDown" },
   { command: "tab.next", key: "Mod+Tab" },

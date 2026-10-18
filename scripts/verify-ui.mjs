@@ -1425,6 +1425,512 @@ async function healSection(browser) {
   mp.close();
 }
 
+/**
+ * The Visual editor (ADR 0015): Markdown and Typst shown as formatted text over
+ * the real source. Against the in-memory kernel, which answers the `visual.*`
+ * commands with the same shapes as the Rust plugin (`mockVisual.ts`).
+ *
+ * Self-contained, so `MANANG_ONLY=visual node scripts/verify-ui.mjs` runs only it.
+ */
+async function visualSection(browser) {
+  section("Visual editor");
+  const page = await newPage(browser);
+  current = page;
+  await clickText(page, "[data-project] button", "Entropy paper");
+  await waitFor(
+    page,
+    `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+    { label: "editor shows main.typ" },
+  );
+  // A dialog left by an earlier section would swallow the keys.
+  await press(page, "Escape", { wait: 150 });
+  await click(page, ".cm-content");
+
+  const imp = (module) => `import("/src/lib/${module}")`;
+  /** Run `body` with the editor `view` and its `documents` store in scope. */
+  const inPage = (body) =>
+    page.evaluate(
+      `(async () => { const { documents } = await ${imp("state/documents.svelte.ts")}; for (let i = 0; i < 50 && documents.view === undefined; i += 1) await new Promise((r) => setTimeout(r, 100)); const view = documents.view; ${body} })()`,
+    );
+  const docText = () => inPage(`return view.state.doc.toString();`);
+  const run = (command, args = {}) =>
+    page.evaluate(
+      `${imp("kernel/index.ts")}.then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
+    );
+  const select = (anchor, head = anchor) =>
+    inPage(
+      `view.dispatch({ selection: { anchor: ${anchor}, head: ${head} } }); view.focus();`,
+    );
+  /** Offsets of `needle` in the document. */
+  const at = (needle) =>
+    inPage(
+      `const i = view.state.doc.toString().indexOf(${JSON.stringify(needle)}); return i;`,
+    );
+  const lineText = (selector) =>
+    page.evaluate(
+      `document.querySelector(${JSON.stringify(selector)})?.closest(".cm-line")?.innerText ?? null`,
+    );
+  const settled = () =>
+    inPage(
+      `const { visualHandle } = await ${imp("editor/visual/extension.ts")}; const h = visualHandle(view); return h !== null && (await h.settle());`,
+    );
+  const openFileTab = (path) =>
+    page.evaluate(
+      `${imp("state/actions.ts")}.then((m) => m.openFile(${JSON.stringify(path)}))`,
+    );
+
+  const TEXT =
+    "# Heading one\n\nSome **bold** and *italic* and `code` and [a link](https://example.org).\n\n" +
+    "- item one\n- item two\n\n> quote text\n\n---\n\nplain tail words\n\n" +
+    "$x^2$ then more\n\n![state](figures/state_lattice.svg)\n";
+
+  // -- The toggle: only for files that have an adapter, Source by default. ----
+  await openFileTab("references.bib");
+  await sleep(300);
+  check(
+    "a .bib file has no Source/Visual toggle",
+    !(await exists(page, '[data-testid="mode-toggle"]')),
+  );
+  await openFileTab("notes.md");
+  await waitFor(
+    page,
+    `document.querySelector(".cm-content")?.textContent.includes("dissipation")`,
+    {
+      label: "notes.md is shown",
+    },
+  );
+  await press(page, "Escape", { wait: 100 });
+  check(
+    "a Markdown file has the toggle",
+    await exists(page, '[data-testid="mode-toggle"]'),
+  );
+  check(
+    "Source is the default",
+    await page.evaluate(
+      `document.querySelector('[data-testid="mode-source"]').getAttribute("aria-checked") === "true"`,
+    ),
+  );
+  check(
+    "no toolbar in Source mode",
+    !(await exists(page, '[data-testid="visual-toolbar"]')),
+  );
+  check(
+    "the tooltips carry the shortcut (Ctrl+Alt+V, as Ctrl+Shift+V cycles the preview)",
+    await page.evaluate(
+      `/Ctrl\\+Alt\\+V/.test(document.querySelector('[data-testid="mode-visual"]').title)`,
+    ),
+  );
+
+  const original = await docText();
+  await inPage(
+    `view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: ${JSON.stringify(TEXT)} }, selection: { anchor: ${TEXT.length} } });`,
+  );
+  const typed = await docText();
+  check("the test text is in the document", typed === TEXT);
+
+  // -- Switch to Visual. ---------------------------------------------------
+  await click(page, '[data-testid="mode-visual"]');
+  await expectEventually(
+    page,
+    "Visual shows the formatting toolbar",
+    `!!document.querySelector('[data-testid="visual-toolbar"]')`,
+  );
+  await expectEventually(
+    page,
+    "headings render once the span table arrives",
+    `document.querySelector(".cm-vis-h1") !== null`,
+    { show: `document.querySelector(".cm-content")?.innerText.slice(0, 200)` },
+  );
+  await settled();
+  await shoot(page, "visual-1-markdown");
+  check(
+    "the heading shows without its marker",
+    (await lineText(".cm-vis-h1")) === "Heading one",
+    String(await lineText(".cm-vis-h1")),
+  );
+  check(
+    "the heading is larger than body text",
+    await page.evaluate(
+      `parseFloat(getComputedStyle(document.querySelector(".cm-vis-h1")).fontSize) > parseFloat(getComputedStyle(document.querySelector(".cm-line:not(.cm-vis-h)")).fontSize) * 1.5`,
+    ),
+  );
+  const prose = "Some bold and italic and code and a link.";
+  check(
+    "bold, italic, code and the link lose their markers",
+    (await lineText(".cm-vis-strong")) === prose,
+    String(await lineText(".cm-vis-strong")),
+  );
+  check(
+    "bold is weight 400 against prose at 300; italic and code are styled",
+    await page.evaluate(
+      `(() => { const w = (s) => getComputedStyle(document.querySelector(s)); return w(".cm-vis-strong").fontWeight === "400" && w(".cm-vis-emph").fontStyle === "italic" && w(".cm-vis-code").fontFamily.startsWith('"DM Mono"') && w(".cm-vis-link").textDecorationLine.includes("underline") && getComputedStyle(document.querySelector(".cm-vis-strong").closest(".cm-line")).fontWeight === "300"; })()`,
+    ),
+  );
+  check(
+    "list markers become bullets",
+    (await page.evaluate(`document.querySelectorAll(".cm-vis-bullet").length`)) === 2,
+  );
+  check(
+    "the quote shows a bar and no marker",
+    (await lineText(".cm-vis-quote")) === "quote text" &&
+      (await page.evaluate(
+        `getComputedStyle(document.querySelector(".cm-vis-quote")).borderLeftWidth === "1px"`,
+      )),
+  );
+  check(
+    "the rule is drawn",
+    (await page.evaluate(`document.querySelectorAll(".cm-vis-rule").length`)) === 1,
+  );
+  await expectEventually(
+    page,
+    "the formula is drawn as a vector image",
+    `document.querySelector(".cm-vis-math img.cm-vis-math-img") !== null`,
+    { show: `document.querySelector(".cm-vis-math")?.outerHTML.slice(0, 200)` },
+  );
+  await expectEventually(
+    page,
+    "the image widget loads the project's SVG",
+    `document.querySelector(".cm-vis-image img.cm-vis-image-img") !== null`,
+    { show: `document.querySelector(".cm-vis-image")?.outerHTML.slice(0, 200)` },
+  );
+  check(
+    "code blocks and chips use the recessed tone, square, no shadow",
+    await page.evaluate(
+      `(() => { const s = getComputedStyle(document.querySelector(".cm-vis-code")); return s.boxShadow === "none" && s.borderRadius === "0px" && s.backgroundColor !== "rgba(0, 0, 0, 0)"; })()`,
+    ),
+  );
+  check("the document text is untouched by Visual", (await docText()) === TEXT);
+
+  // -- Cursor reveal. ---------------------------------------------------------
+  await select(3);
+  await expectEventually(
+    page,
+    "a caret on the heading reveals its marker",
+    `document.querySelector(".cm-vis-h1")?.innerText.startsWith("# Heading one")`,
+    { show: `document.querySelector(".cm-vis-h1")?.innerText` },
+  );
+  await select(TEXT.length);
+  await expectEventually(
+    page,
+    "moving away hides it again",
+    `document.querySelector(".cm-vis-h1")?.innerText === "Heading one"`,
+  );
+  const boldAt = await at("bold");
+  await select(boldAt + 2);
+  await expectEventually(
+    page,
+    "a caret inside bold reveals its two markers and nothing else",
+    `(() => { const l = document.querySelector(".cm-vis-strong")?.closest(".cm-line"); return l?.innerText.includes("**bold**") && !l.innerText.includes("*italic*") && !l.innerText.includes("[a link]"); })()`,
+    {
+      show: `document.querySelector(".cm-vis-strong")?.closest(".cm-line")?.innerText`,
+    },
+  );
+  check(
+    "the toolbar shows Bold as active inside bold text",
+    await (async () => {
+      for (let i = 0; i < 30; i += 1) {
+        if (
+          await page.evaluate(
+            `document.querySelector('[data-visual="bold"]').getAttribute("aria-pressed") === "true"`,
+          )
+        )
+          return true;
+        await sleep(100);
+      }
+      return false;
+    })(),
+  );
+  // A click on the image widget does not drop the caret into its source;
+  // clicking the heading with the real pointer does reveal it.
+  await select(TEXT.length);
+  await sleep(200);
+  await click(page, ".cm-vis-h1");
+  await expectEventually(
+    page,
+    "clicking a heading with the pointer reveals its marker",
+    `document.querySelector(".cm-vis-h1")?.innerText.startsWith("# ")`,
+  );
+  await select(TEXT.length);
+
+  // The toolbar is one Tab stop; the arrow keys move along it.
+  await page.evaluate(`document.querySelector('[data-visual="bold"]').focus()`);
+  await press(page, "ArrowRight", { wait: 150 });
+  check(
+    "arrow keys move along the toolbar",
+    await page.evaluate(
+      `document.activeElement?.getAttribute("data-visual") === "italic" && document.querySelectorAll('[data-testid="visual-toolbar"] button[tabindex="0"]').length === 1`,
+    ),
+  );
+  await select(TEXT.length);
+
+  // -- Toolbar and keyboard: only the intended text changes. ---------------------
+  const before = await docText();
+  const plainAt = await at("plain");
+  await select(plainAt, plainAt + 5);
+  await click(page, '[data-visual="bold"]');
+  await sleep(300);
+  const bolded = await docText();
+  check(
+    "the toolbar changed only the selected word",
+    bolded === before.replace("plain", "**plain**"),
+    bolded.slice(plainAt - 2, plainAt + 20),
+  );
+  await press(page, "z", { ctrl: true, wait: 300 });
+  check("one Ctrl+Z restores the text in one step", (await docText()) === before);
+
+  const wordsAt = await at("words");
+  await select(wordsAt, wordsAt + 5);
+  await press(page, "b", { ctrl: true, wait: 400 });
+  check(
+    "Ctrl+B bolds the selection",
+    (await docText()) === before.replace("words", "**words**"),
+  );
+  await press(page, "z", { ctrl: true, wait: 300 });
+  await select(wordsAt, wordsAt + 5);
+  await press(page, "i", { ctrl: true, wait: 400 });
+  check(
+    "Ctrl+I italicises it",
+    (await docText()) === before.replace("words", "*words*"),
+  );
+  await press(page, "z", { ctrl: true, wait: 300 });
+  check("and undo restores it", (await docText()) === before);
+
+  await select(plainAt + 2);
+  await click(page, '[data-visual="heading"]');
+  await clickText(page, '[role="menuitem"], [role="menuitemradio"]', "Heading 2");
+  await sleep(300);
+  check(
+    "the heading menu sets the level of the caret's line",
+    (await docText()) === before.replace("plain tail words", "## plain tail words"),
+  );
+  await press(page, "z", { ctrl: true, wait: 300 });
+  check("and one undo restores it", (await docText()) === before);
+
+  await select(plainAt, plainAt + 5);
+  await click(page, '[data-visual="bullets"]');
+  await sleep(300);
+  check(
+    "the list button prefixes the line",
+    (await docText()) === before.replace("plain tail words", "- plain tail words"),
+  );
+  await press(page, "z", { ctrl: true, wait: 300 });
+
+  // -- Selection, copy, drag. ---------------------------------------------------
+  await select(0, TEXT.length);
+  await sleep(150);
+  const copied = await inPage(
+    `const dt = new DataTransfer(); const event = new ClipboardEvent("copy", { clipboardData: dt, bubbles: true, cancelable: true }); view.contentDOM.dispatchEvent(event); return dt.getData("text/plain");`,
+  );
+  check(
+    "copy gives the plain source text",
+    copied === TEXT,
+    JSON.stringify(copied).slice(0, 80),
+  );
+  await select(TEXT.length);
+  // A drag across several lines selects source ranges, not widgets.
+  const box = await rect(page, ".cm-vis-h1");
+  await mouse(page, "mouseMoved", box.left + 4, box.y);
+  await mouse(page, "mousePressed", box.left + 4, box.y);
+  await mouse(page, "mouseMoved", box.left + 60, box.y + 120);
+  await mouse(page, "mouseReleased", box.left + 60, box.y + 120);
+  await sleep(200);
+  check(
+    "dragging across formatted lines selects a source range",
+    (await inPage(`const s = view.state.selection.main; return s.to > s.from;`)) ===
+      true,
+  );
+  await select(TEXT.length);
+
+  // -- Keystroke latency: the dispatch itself, with decorations mapped. -----------
+  const latency = await inPage(
+    `const times = []; const end = view.state.doc.length; for (let i = 0; i < 200; i += 1) { const t = performance.now(); view.dispatch({ changes: { from: end + i, insert: "x" }, selection: { anchor: end + i + 1 }, userEvent: "input.type" }); times.push(performance.now() - t); await new Promise((r) => setTimeout(r, 4)); } times.sort((a, b) => a - b); view.dispatch({ changes: { from: end, to: end + 200, insert: "" } }); return { p50: times[100], p99: times[197] };`,
+  );
+  check(
+    "typing in Visual: p99 of the keystroke dispatch is under 8 ms",
+    latency.p99 < 8,
+    `p50 ${latency.p50.toFixed(2)} ms, p99 ${latency.p99.toFixed(2)} ms`,
+  );
+  await settled();
+  check("typing left the text as it was", (await docText()) === TEXT);
+
+  // -- A session that drifts or is lost is rebuilt, never surfaced. ---------------
+  const sessionId = () =>
+    inPage(
+      `const { visualHandle } = await ${imp("editor/visual/extension.ts")}; return visualHandle(view)?.session ?? null;`,
+    );
+  const first = await sessionId();
+  // The host's copy drifts (as after a restart): the next edit is a desync.
+  await run("visual.reset", { session: first, text: "zzz" });
+  await inPage(
+    `view.dispatch({ changes: { from: view.state.doc.length, insert: " tail" } });`,
+  );
+  await sleep(300);
+  await settled();
+  await expectEventually(
+    page,
+    "a desynchronised session is reset and the formatting returns",
+    `document.querySelector(".cm-vis-h1")?.innerText === "Heading one" || document.querySelector(".cm-vis-h1")?.innerText.startsWith("# ")`,
+    { show: `document.querySelector(".cm-content")?.innerText.slice(0, 80)` },
+  );
+  check("it kept its session", (await sessionId()) === first);
+  await run("visual.close", { session: first });
+  await inPage(
+    `view.dispatch({ changes: { from: view.state.doc.length, insert: "!" } });`,
+  );
+  await sleep(300);
+  await settled();
+  const second = await sessionId();
+  check("a lost session is opened again", second !== null && second !== first);
+  await expectEventually(
+    page,
+    "and the formatting is back",
+    `document.querySelector(".cm-vis-strong") !== null`,
+  );
+  await inPage(
+    `view.dispatch({ changes: { from: view.state.doc.length - 6, to: view.state.doc.length, insert: "" } });`,
+  );
+  await settled();
+  check("the text is as it was", (await docText()) === TEXT);
+
+  // -- The mode is remembered per file type. --------------------------------------
+  check(
+    "switching on Visual wrote the per-type default",
+    await page.evaluate(
+      `${imp("state/settings.svelte.ts")}.then((m) => JSON.stringify(m.settings.value("editor.visual-default")) === '["markdown"]')`,
+    ),
+  );
+  await click(page, '[data-testid="mode-source"]');
+  await sleep(300);
+  check(
+    "Source removes the Visual decorations",
+    !(await exists(page, ".cm-vis-h1")) &&
+      !(await exists(page, '[data-testid="visual-toolbar"]')),
+  );
+  check("and shows the exact original text", (await docText()) === TEXT);
+  check(
+    "and clears the default again",
+    await page.evaluate(
+      `${imp("state/settings.svelte.ts")}.then((m) => JSON.stringify(m.settings.value("editor.visual-default")) === "[]")`,
+    ),
+  );
+
+  // -- Ctrl+Alt+V toggles from the keyboard and the View menu lists it. ----------
+  await focusEditor(page);
+  await press(page, "v", { ctrl: true, alt: true, wait: 500 });
+  check(
+    "Ctrl+Alt+V switches to Visual",
+    await page.evaluate(
+      `document.querySelector('[data-testid="mode-visual"]').getAttribute("aria-checked") === "true"`,
+    ),
+  );
+  await press(page, "v", { ctrl: true, alt: true, wait: 500 });
+  check(
+    "and back to Source",
+    await page.evaluate(
+      `document.querySelector('[data-testid="mode-source"]').getAttribute("aria-checked") === "true"`,
+    ),
+  );
+
+  // -- Typst: directives stay visible as styled source. ---------------------------
+  await openFileTab("main.typ");
+  await waitFor(
+    page,
+    `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+  );
+  await press(page, "Escape", { wait: 100 });
+  const mainText = await docText();
+  await click(page, '[data-testid="mode-visual"]');
+  await expectEventually(
+    page,
+    "Typst headings render without their marker",
+    `document.querySelector(".cm-vis-h1") !== null`,
+    { show: `document.querySelector(".cm-content")?.innerText.slice(0, 150)` },
+  );
+  await settled();
+  await shoot(page, "visual-2-typst");
+  check(
+    "the Typst heading shows without `= `",
+    (await lineText(".cm-vis-h1")) === "Quantum thermodynamic bounds",
+    String(await lineText(".cm-vis-h1")),
+  );
+  check(
+    "#set stays visible as styled source",
+    await page.evaluate(
+      `(() => { const el = document.querySelector(".cm-vis-opaque"); return !!el && el.innerText.startsWith("#set document") && getComputedStyle(el).fontFamily.startsWith('"DM Mono"'); })()`,
+    ),
+  );
+  check("the Typst text is untouched", (await docText()) === mainText);
+
+  // -- Live co-editing: remote edits reach the session like local ones. -----------
+  await run("settings.set", { id: "live.relay-url", value: "wss://relay.example.org" });
+  await click(page, '[data-testid="share-button"]');
+  await expectEventually(
+    page,
+    "the Share popover offers to start",
+    `!!document.querySelector('[data-testid="share-popover"] [data-testid="share-start"]:not(:disabled)')`,
+  );
+  await click(page, '[data-testid="share-start"]');
+  await expectEventually(
+    page,
+    "the session bar appears",
+    `document.querySelector('[data-testid="live-bar"]') !== null`,
+  );
+  await run("dev.live-peer-join", { name: "Ada Lovelace", slot: 3 });
+  const headings = () =>
+    page.evaluate(`document.querySelectorAll(".cm-vis-h1").length`);
+  const h1 = await headings();
+  await select(mainText.length);
+  await run("dev.live-peer-type", { at: 0, text: "= Remote heading\n\n" });
+  await expectEventually(
+    page,
+    "a collaborator's heading renders in Visual like a local one",
+    `document.querySelectorAll(".cm-vis-h1").length === ${h1 + 1}`,
+    { show: `document.querySelector(".cm-content")?.innerText.slice(0, 120)` },
+  );
+  check(
+    "the document equals the shared text",
+    (await docText()) === (await run("dev.live-text")),
+  );
+  check("the session stayed in step", await settled());
+  // A local edit after a remote one: toolbar plan lands on the right text.
+  const base = await docText();
+  const thermAt = await at("Under unitary");
+  await select(thermAt, thermAt + 5);
+  await click(page, '[data-visual="bold"]');
+  await sleep(400);
+  check(
+    "a toolbar edit after a remote edit changes only the selection",
+    (await docText()) === base.replace("Under", "*Under*"),
+    (await docText()).slice(thermAt - 4, thermAt + 14),
+  );
+  await run("dev.live-peer-type", { at: 0, text: "REMOTE-TOP " });
+  await sleep(400);
+  await press(page, "z", { ctrl: true, wait: 400 });
+  check(
+    "undo takes back only the local bold and keeps the collaborator's text",
+    (await docText()).includes("REMOTE-TOP") && !(await docText()).includes("*Under*"),
+  );
+  await click(page, '[data-testid="live-leave"]').catch(() => undefined);
+  await sleep(300);
+  await click(page, '[data-testid="mode-source"]');
+  await sleep(300);
+  // Put the documents back as they were.
+  await inPage(
+    `const text = ${JSON.stringify(mainText)}; view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });`,
+  );
+  await openFileTab("notes.md");
+  await sleep(300);
+  await inPage(
+    `view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: ${JSON.stringify(original)} } });`,
+  );
+  check(
+    "no page errors from the visual editor",
+    page.errors.length === 0,
+    page.errors.slice(0, 2).join(" | "),
+  );
+  page.close();
+}
+
 async function main() {
   const browserBin = findBrowser();
   if (browserBin === null) {
@@ -1476,9 +1982,11 @@ async function main() {
     if (
       process.env.MANANG_ONLY === "live" ||
       process.env.MANANG_ONLY === "autosave" ||
+      process.env.MANANG_ONLY === "visual" ||
       process.env.MANANG_ONLY === "feedback"
     ) {
       if (process.env.MANANG_ONLY === "feedback") await feedbackSection(browser);
+      else if (process.env.MANANG_ONLY === "visual") await visualSection(browser);
       else if (process.env.MANANG_ONLY === "autosave") await autosaveSection(browser);
       else await liveSection(browser);
       browser.close();
@@ -8387,6 +8895,7 @@ async function main() {
     await feedbackSection(browser);
     await autosaveSection(browser);
     await liveSection(browser);
+    await visualSection(browser);
 
     /* ------------------------------------------------------------------ */
     section("Brand invariants");

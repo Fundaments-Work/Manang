@@ -16,6 +16,9 @@ Manang is a fast, local-first scientific authoring and illustration desktop appl
 - **[Writing](writing.md)**  
   Write in Typst, LaTeX, or Markdown, convert Markdown to Typst, format source files, check spelling, manage your personal dictionary, insert symbols and snippets, and view document word counts.
 
+- **[The Visual editor](visual-editor.md)**
+  See Markdown and Typst formatted as you write (headings, bold, lists, formulas, images), switch between Source and Visual with `Ctrl+Alt+V`, and use the formatting toolbar. The file stays plain text.
+
 - **[Preview and PDF](preview-and-pdf.md)**  
   Control preview layouts, compile documents automatically, use the built-in PDF viewer, jump between source text and the preview with SyncTeX, export PDFs, and configure TeX Live for LaTeX.
 
