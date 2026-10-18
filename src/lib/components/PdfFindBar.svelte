@@ -52,7 +52,7 @@
     bind:this={input}
     bind:value={view.findQuery}
     class="h-6 w-36 min-w-0 bg-transparent font-mono text-[11px] text-text outline-none placeholder:text-text-60"
-    type="search"
+    type="text"
     placeholder="Find in PDF"
     aria-label="Find in PDF"
     aria-describedby="mng-pdf-find-count"
