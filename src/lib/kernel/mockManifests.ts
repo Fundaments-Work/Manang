@@ -241,6 +241,32 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
       },
     ],
   },
+  live: {
+    description:
+      "Edit one file together in real time. End-to-end encrypted through a relay you choose; the file on disk stays plain text.",
+    permissions: {},
+    settings: [
+      {
+        id: "live.relay-url",
+        type: "string",
+        default: "",
+        title: "Relay address",
+        description:
+          "Where live sessions meet, for example wss://relay.example.org. The relay forwards encrypted data and cannot read your text. Empty turns sharing off; joining uses the address in the invite.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "live.display-name",
+        type: "string",
+        default: "",
+        title: "Name shown to collaborators",
+        description: "Shown next to your caret. Empty uses your system user name.",
+        scope: "user",
+        "requires-restart": false,
+      },
+    ],
+  },
   markdown: {
     description:
       "Markdown rendering, outline extraction, XSS sanitization, and Typst conversion",

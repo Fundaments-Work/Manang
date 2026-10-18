@@ -1,0 +1,28 @@
+[package]
+name = "manang-live-plugin"
+description = "Manang live co-editing plugin: runs a manang-live session on an open document through the kernel and a relay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+manang-editor = { path = "../manang-editor" }
+manang-live = { path = "../manang-live" }
+manang-relay = { path = "../manang-relay", features = ["tls"] }
+parking_lot = "0.12"
+ropey = "1.6"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# Tokio only moves frames over the socket; every CRDT step runs on the
+# session's own thread (AGENTS.md section 2.3).
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "time", "sync"] }
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "time", "sync", "macros"] }

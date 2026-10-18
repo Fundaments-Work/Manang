@@ -470,6 +470,373 @@ async function caretToEnd(cdp) {
 
 /* -------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------- */
+/* Live co-editing                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The live session flow against the in-memory kernel: sharing (with and without
+ * a relay), a scripted collaborator typing and moving a caret, a local edit
+ * racing a delayed remote one, a dropped link, an error, joining with a
+ * different copy, leaving, and closing the tab mid-session. The mock follows
+ * the Rust plugin's contract (see `mockLive.ts`); the real session is covered
+ * by `crates/manang-live-plugin/tests`.
+ *
+ * Self-contained, so `MANANG_ONLY=live node scripts/verify-ui.mjs` runs only it.
+ */
+async function liveSection(browser) {
+  section("Live editing");
+  const page = await newPage(browser);
+  current = page;
+  await clickText(page, "[data-project] button", "Entropy paper");
+  await waitFor(
+    page,
+    `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+    { label: "editor shows main.typ" },
+  );
+  const run = (command, args = {}) =>
+    page.evaluate(
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
+    );
+  const docText = () =>
+    page.evaluate(
+      `import("/src/lib/state/documents.svelte.ts").then((m) => m.documents.get("main.typ")?.text() ?? null)`,
+    );
+  const kernelText = async () =>
+    run("editor.text", { id: (await run("live.status")).doc });
+  const bar = `document.querySelector('[data-testid="live-bar"]')`;
+  const palette = async (query) => {
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, query);
+    await press(page, "Enter", { wait: 400 });
+  };
+  /** The session and the shared copy both have `needle`. */
+  const reached = async (needle) => {
+    for (let i = 0; i < 40; i += 1) {
+      const [a, k] = [await run("dev.live-text"), await kernelText()];
+      if (a.includes(needle) && k.includes(needle)) return true;
+      await sleep(100);
+    }
+    return false;
+  };
+  const original = await docText();
+
+  // -- No relay: sharing explains itself and points at Settings. ----------
+  await palette("Share this file live");
+  await expectEventually(
+    page,
+    "sharing without a relay says so and offers the Settings",
+    `(() => { const el = document.querySelector('[data-testid="live-setup"]'); return !!el && el.innerText.includes("Set a relay in Settings") && !!el.querySelector('[data-testid="live-open-settings"]'); })()`,
+    { show: `document.querySelector('[data-testid="live-setup"]')?.innerText` },
+  );
+  check("no session was started", (await run("live.status")).active === false);
+  await shoot(page, "live-1-no-relay");
+  await click(page, '[data-testid="live-open-settings"]');
+  await expectEventually(
+    page,
+    "Open settings shows the relay address field",
+    `document.querySelector('section[aria-label="Settings"]')?.innerText.includes("Relay address") === true`,
+    {
+      show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 200)`,
+    },
+  );
+  await press(page, "Escape");
+  await press(page, "Escape");
+  await run("settings.set", { id: "live.relay-url", value: "wss://relay.example.org" });
+
+  // -- Share. ----------------------------------------------------------------
+  await palette("Share this file live");
+  await expectEventually(page, "the session bar appears", `${bar} !== null`, {
+    show: `document.querySelector("footer")?.innerText`,
+  });
+  await expectEventually(
+    page,
+    "the bar goes from connecting to live",
+    `${bar}?.dataset.state === "connected" && ${bar}.innerText.includes("Live")`,
+    { show: `${bar}?.innerText` },
+  );
+  check(
+    "the bar is a labelled region with Copy invite and Leave",
+    await page.evaluate(
+      `(() => { const b = ${bar}; return b.getAttribute("role") === "region" && b.getAttribute("aria-label") === "Live session" && !!b.querySelector('[data-testid="live-copy"]') && !!b.querySelector('[data-testid="live-leave"]'); })()`,
+    ),
+  );
+  check(
+    "alone in the room it says so",
+    await page.evaluate(`${bar}.innerText.includes("Only you so far")`),
+  );
+  const invite = (await run("live.invite")).invite;
+  check(
+    "the invite carries the relay and the key in its fragment",
+    /^manang-live:\/\/join\?relay=wss%3A%2F%2Frelay\.example\.org&file=main\.typ#.{8,}/.test(
+      invite,
+    ),
+    invite,
+  );
+  check(
+    "sharing leaves the text and the file alone",
+    (await docText()) === original && (await dirtyTabs(page)).length === 0,
+  );
+  check(
+    "no lime action is added to the view (the bar has no primary button)",
+    await page.evaluate(
+      `[...${bar}.querySelectorAll("button")].every((b) => getComputedStyle(b).backgroundColor !== "rgb(198, 241, 53)")`,
+    ),
+  );
+  await shoot(page, "live-2-bar");
+
+  // -- A collaborator arrives, types and moves a caret. -------------------
+  const ada = await run("dev.live-peer-join", { name: "Ada Lovelace", slot: 3 });
+  await expectEventually(
+    page,
+    "the bar lists Ada with her caret's stroke",
+    `(() => { const li = ${bar}?.querySelector('li[data-peer]'); return !!li && li.innerText.includes("Ada Lovelace") && li.querySelector("span")?.style.borderLeftStyle === "dashed"; })()`,
+    { show: `${bar}?.innerText` },
+  );
+  await run("dev.live-peer-type", { at: 0, text: "// Ada was here\n" });
+  await expectEventually(
+    page,
+    "a remote edit appears in the editor",
+    `document.querySelector(".cm-content")?.textContent.includes("Ada was here")`,
+  );
+  await focusEditor(page);
+  await press(page, "z", { ctrl: true, wait: 300 });
+  check(
+    "undo does not take back someone else's edit",
+    await page.evaluate(
+      `document.querySelector(".cm-content")?.textContent.includes("Ada was here")`,
+    ),
+  );
+  await run("dev.live-peer-caret", { peer: ada.peer, anchor: 3, head: 9 });
+  await expectEventually(
+    page,
+    "Ada's caret carries her name and her selection is tinted",
+    `(() => { const c = document.querySelector(".cm-remote-caret .cm-remote-flag"); return c?.textContent === "Ada Lovelace" && !!document.querySelector(".cm-remote-selection"); })()`,
+    { show: `document.querySelector(".cm-content")?.innerHTML.slice(0, 300)` },
+  );
+  check(
+    "collaborator colours are mixes of existing tokens",
+    await page.evaluate(
+      `(() => { const v = document.querySelector(".cm-remote-caret").style.getPropertyValue("--cm-remote"); return /^(var\\(--mng-[a-z-]+\\)|color-mix\\(in srgb, .*var\\(--mng-.*\\))$/.test(v) || v; })()`,
+    ),
+  );
+  await shoot(page, "live-3-remote-caret");
+
+  // -- This person types: it reaches the session and the kernel copy. ------
+  await focusEditor(page);
+  await caretToEnd(page);
+  await insertText(page, "LOCAL-EDIT");
+  check(
+    "a local edit reaches the session and the shared copy",
+    await reached("LOCAL-EDIT"),
+  );
+  check(
+    "the editor, the session and the kernel copy agree",
+    (await docText()) === (await run("dev.live-text")) &&
+      (await run("dev.live-text")) === (await kernelText()),
+  );
+
+  // -- A remote edit and a local one cross in flight. ---------------------
+  await run("dev.live-lag", { ms: 500 });
+  await run("dev.live-peer-type", { at: 0, text: "[R]" });
+  await focusEditor(page);
+  await caretToEnd(page);
+  await insertText(page, "[L]");
+  await sleep(1400);
+  await run("dev.live-lag", { ms: 0 });
+  await sleep(300);
+  const crossed = await docText();
+  check(
+    "both edits survive a crossing: the remote one first, the local one last",
+    crossed.startsWith("[R]") && crossed.trimEnd().endsWith("[L]"),
+    JSON.stringify(crossed.slice(0, 30)),
+  );
+  check(
+    "after the crossing the editor, the session and the kernel copy agree",
+    crossed === (await run("dev.live-text")) && crossed === (await kernelText()),
+  );
+  check(
+    "no resync was needed (nothing told the person the document was re-read)",
+    !(await statusText(page)).includes("re-read"),
+  );
+
+  // -- Saving writes plain text. ------------------------------------------
+  await press(page, "s", { ctrl: true, wait: 500 });
+  const saved = await run("project.read-file", { path: "main.typ" });
+  check(
+    "Save writes the merged text as a plain file",
+    saved.includes("Ada was here") &&
+      saved.includes("LOCAL-EDIT") &&
+      !/manang-live|loro/i.test(saved),
+  );
+
+  // -- The link drops: editing continues and says what happens. -----------
+  await run("dev.live-link", { state: "down" });
+  await expectEventually(
+    page,
+    "a dropped link shows reconnecting and promises the edits are kept",
+    `${bar}?.dataset.state === "reconnecting" && ${bar}.innerText.includes("Your edits are kept")`,
+    { show: `${bar}?.innerText` },
+  );
+  await shoot(page, "live-4-reconnecting");
+  await focusEditor(page);
+  await caretToEnd(page);
+  await insertText(page, "WHILE-DOWN");
+  check("typing still works while reconnecting", await reached("WHILE-DOWN"));
+  await run("dev.live-link", { state: "up" });
+  await expectEventually(
+    page,
+    "the bar is live again",
+    `${bar}?.dataset.state === "connected"`,
+  );
+
+  // -- The session fails. -------------------------------------------------
+  await run("dev.live-fail", { message: "The copies of this file no longer match." });
+  await expectEventually(
+    page,
+    "an error is stated in words, as an alert, and Leave is still there",
+    `${bar}?.dataset.state === "error" && document.querySelector('[data-testid="live-detail"]')?.getAttribute("role") === "alert" && ${bar}.innerText.includes("no longer match") && !!${bar}.querySelector('[data-testid="live-leave"]')`,
+    { show: `${bar}?.innerText` },
+  );
+  await shoot(page, "live-5-error");
+
+  // -- Leave. -----------------------------------------------------------------
+  await click(page, '[data-testid="live-leave"]');
+  await expectEventually(page, "Leave removes the bar", `${bar} === null`);
+  check("the session ended", (await run("live.status")).active === false);
+  check(
+    "the remote carets are gone with it",
+    !(await exists(page, ".cm-remote-caret")),
+  );
+  const afterLeave = await docText();
+  const editorId = await page.evaluate(
+    `import("/src/lib/state/documents.svelte.ts").then((m) => m.documents.get("main.typ").sync.docId)`,
+  );
+  check(
+    "the kernel copy matches what the editor shows after leaving",
+    (await run("editor.text", { id: editorId })) === afterLeave,
+  );
+  await focusEditor(page);
+  await caretToEnd(page);
+  await insertText(page, "AFTER-LEAVE");
+  await expectEventually(
+    page,
+    "ordinary editing reaches the kernel again after leaving",
+    `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("editor.text", { id: ${editorId} })).then((t) => t.includes("AFTER-LEAVE"))`,
+  );
+
+  // -- Join a session whose file differs from this copy. ------------------
+  const beforeJoin = await docText();
+  const hostText = `${afterLeave}\nHOST LINE\n`;
+  const made = await run("dev.live-make-invite", { text: hostText, file: "main.typ" });
+  await palette("Join a live session");
+  await expectEventually(
+    page,
+    "Join asks for the invite in a dialog",
+    `document.querySelector('[role="alertdialog"] input') !== null`,
+  );
+  await insertText(page, "this is not an invite");
+  await press(page, "Enter", { wait: 400 });
+  await expectEventually(
+    page,
+    "a bad invite is refused in words and nothing starts",
+    `document.querySelector('footer[aria-label="Status"]')?.innerText.includes("not valid") === true`,
+    { show: `document.querySelector('footer[aria-label="Status"]')?.innerText` },
+  );
+  check("still no session", (await run("live.status")).active === false);
+  await palette("Join a live session");
+  await waitFor(page, `document.querySelector('[role="alertdialog"] input') !== null`);
+  await page.evaluate(
+    `(() => { const i = document.querySelector('[role="alertdialog"] input'); i.value = ${JSON.stringify(made.invite)}; i.dispatchEvent(new Event("input", { bubbles: true })); })()`,
+  );
+  await press(page, "Enter", { wait: 500 });
+  await expectEventually(
+    page,
+    "a different copy is not replaced silently: the person is asked first",
+    `(() => { const d = document.querySelector('[role="alertdialog"]'); return !!d && d.innerText.includes("Replace your copy") && d.innerText.includes("saved first"); })()`,
+    { show: `document.querySelector('[role="alertdialog"]')?.innerText` },
+  );
+  check(
+    "meanwhile the copy is untouched",
+    (await docText()) === beforeJoin && (await run("live.status")).active === false,
+  );
+  await shoot(page, "live-6-join-differs");
+  await clickText(page, '[role="alertdialog"] button', "Use the host's version");
+  await expectEventually(
+    page,
+    "after confirming, the host's text arrives and the bar shows a guest session",
+    `${bar}?.dataset.role === "guest" && document.querySelector(".cm-content")?.textContent.includes("HOST LINE")`,
+    { show: `${bar}?.innerText` },
+  );
+  check(
+    "the guest sees the host's collaborator",
+    await page.evaluate(`${bar}.innerText.includes("Ada Lovelace")`),
+  );
+  await run("dev.live-peer-type", { at: 0, text: "% from the host\n" });
+  await expectEventually(
+    page,
+    "the host's later edits keep arriving",
+    `document.querySelector(".cm-content")?.textContent.includes("from the host")`,
+  );
+
+  // -- Closing the tab ends the session. ----------------------------------
+  await press(page, "w", { ctrl: true, synthetic: true, wait: 400 });
+  if (await exists(page, '[role="alertdialog"]')) {
+    // Unsaved edits: discard them for this check.
+    const buttons = await page.evaluate(
+      `[...document.querySelectorAll('[role="alertdialog"] button')].map((b) => b.textContent.trim())`,
+    );
+    const discard = buttons.find((b) => /discard|don't save|close without/i.test(b));
+    if (discard !== undefined)
+      await clickText(page, '[role="alertdialog"] button', discard);
+  }
+  await expectEventually(
+    page,
+    "closing the tab leaves the session",
+    `document.querySelector('[data-testid="live-bar"]') === null`,
+  );
+  await expectEventually(
+    page,
+    "and the plugin has no session left",
+    `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("live.status")).then((s) => s.active === false)`,
+  );
+
+  // -- Narrow window, brand rules. -----------------------------------------
+  await press(page, "p", { ctrl: true, wait: 300 });
+  await insertText(page, "main");
+  await press(page, "Enter", { wait: 600 });
+  await waitFor(page, `document.querySelector(".cm-content") !== null`, {
+    label: "main.typ is open again",
+  });
+  await palette("Share this file live");
+  await waitFor(page, `${bar} !== null`);
+  await run("dev.live-peer-join", { name: "Grace Brewster Murray Hopper", slot: 6 });
+  await run("dev.live-peer-join", { name: "Katherine Johnson", slot: 1 });
+  await resize(page, 420, 800);
+  check(
+    "at 420 px the bar wraps and the page does not scroll sideways",
+    await page.evaluate(
+      `document.documentElement.scrollWidth <= window.innerWidth && ${bar}.getBoundingClientRect().right <= window.innerWidth`,
+    ),
+  );
+  await shoot(page, "live-7-narrow");
+  await resize(page, 1280, 820);
+  check(
+    "the bar uses square corners, no shadows and only weights 300 and 400",
+    await page.evaluate(
+      `(() => { for (const el of [${bar}, ...${bar}.querySelectorAll("*")]) { const s = getComputedStyle(el); if (s.borderTopLeftRadius !== "0px" || s.boxShadow !== "none" || !["300", "400"].includes(s.fontWeight)) return el.outerHTML.slice(0, 80); } return true; })()`,
+    ),
+  );
+  await click(page, '[data-testid="live-leave"]');
+  await expectEventually(page, "the last session ends cleanly", `${bar} === null`);
+  check(
+    "no page errors were thrown during live editing",
+    page.errors.length === 0,
+    page.errors.slice(0, 2).join(" | "),
+  );
+  page.close();
+}
+
 async function main() {
   const browserBin = findBrowser();
   if (browserBin === null) {
@@ -504,6 +871,19 @@ async function main() {
       r.json(),
     );
     const browser = await Cdp.open(version.webSocketDebuggerUrl);
+
+    if (process.env.MANANG_ONLY === "live") {
+      await liveSection(browser);
+      browser.close();
+      child.kill("SIGTERM");
+      const bad = results.filter((entry) => !entry.passed);
+      process.stdout.write(
+        `\n${results.length - bad.length}/${results.length} checks passed` +
+          (bad.length > 0 ? `, ${bad.length} FAILED` : "") +
+          `\n`,
+      );
+      process.exit(bad.length === 0 ? 0 : 1);
+    }
 
     /* ------------------------------------------------------------------ */
     section("Home");
@@ -6656,6 +7036,8 @@ async function main() {
     );
     ext.close();
     current = page;
+
+    await liveSection(browser);
 
     /* ------------------------------------------------------------------ */
     section("Brand invariants");

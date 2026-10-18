@@ -6,9 +6,10 @@
 //! through a queue the caller drains with `poll`. Only I/O happens on the
 //! runtime: the CRDT work stays on the caller's thread.
 //!
-//! `wss://` needs a TLS connector, which the desktop app supplies (rustls with
-//! the ring provider, as its other network code does); this crate builds with
-//! no TLS and no C dependencies so it stays easy to audit.
+//! `wss://` needs TLS, behind the `tls` cargo feature: rustls with the ring
+//! provider (never aws-lc) and the bundled Mozilla roots, built once. Without
+//! the feature this crate has no TLS and no C dependencies, and a `wss://`
+//! address simply fails to connect.
 
 use std::sync::mpsc as std_mpsc;
 
@@ -45,12 +46,52 @@ impl RelayClient {
     }
 }
 
+/// The TLS client configuration, built on first use.
+#[cfg(feature = "tls")]
+fn tls_connector() -> Option<tokio_tungstenite::Connector> {
+    use std::sync::{Arc, OnceLock};
+
+    static CONFIG: OnceLock<Option<Arc<rustls::ClientConfig>>> = OnceLock::new();
+    CONFIG
+        .get_or_init(|| {
+            let roots = rustls::RootCertStore {
+                roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+            };
+            let provider = Arc::new(rustls::crypto::ring::default_provider());
+            let config = rustls::ClientConfig::builder_with_provider(provider)
+                .with_safe_default_protocol_versions()
+                .ok()?
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            Some(Arc::new(config))
+        })
+        .clone()
+        .map(tokio_tungstenite::Connector::Rustls)
+}
+
+async fn open(
+    url: String,
+) -> Result<
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    tokio_tungstenite::tungstenite::Error,
+> {
+    #[cfg(feature = "tls")]
+    if url.starts_with("wss://") {
+        return tokio_tungstenite::connect_async_tls_with_config(url, None, false, tls_connector())
+            .await
+            .map(|(ws, _)| ws);
+    }
+    tokio_tungstenite::connect_async(url)
+        .await
+        .map(|(ws, _)| ws)
+}
+
 async fn run(
     url: String,
     events: std_mpsc::Sender<TransportEvent>,
     mut outbound: tokio_mpsc::UnboundedReceiver<Vec<u8>>,
 ) {
-    let Ok((ws, _)) = tokio_tungstenite::connect_async(url).await else {
+    let Ok(ws) = open(url).await else {
         let _ = events.send(TransportEvent::Down);
         return;
     };

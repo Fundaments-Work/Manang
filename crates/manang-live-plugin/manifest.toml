@@ -1,0 +1,64 @@
+[plugin]
+name = "live"
+version = "0.1.0"
+description = "Edit one file together in real time. End-to-end encrypted through a relay you choose; the file on disk stays plain text."
+tier = "native"
+
+[contributes]
+[[contributes.commands]]
+id = "live.start"
+title = "Share this file live"
+
+[[contributes.commands]]
+id = "live.join"
+title = "Join a live session"
+
+[[contributes.commands]]
+id = "live.leave"
+title = "Leave the live session"
+
+[[contributes.commands]]
+id = "live.invite"
+title = "Copy the live invite"
+
+[[contributes.commands]]
+id = "live.status"
+title = "Live session status"
+
+[[contributes.commands]]
+id = "live.inspect"
+title = "Read what a live invite points at"
+
+[[contributes.commands]]
+id = "live.push"
+title = "Send local edits to the live session"
+
+[[contributes.commands]]
+id = "live.selection"
+title = "Share the caret with the live session"
+
+[[contributes.commands]]
+id = "live.snapshot"
+title = "Re-read the live document"
+
+[[contributes.commands]]
+id = "live.contributors"
+title = "List who edited in the live session"
+
+[[contributes.commands]]
+id = "live.configure"
+title = "Apply live editing settings"
+
+[[contributes.settings]]
+id = "live.relay-url"
+type = "string"
+default = ""
+title = "Relay address"
+description = "Where live sessions meet, for example wss://relay.example.org. The relay forwards encrypted data and cannot read your text. Empty turns sharing off; joining uses the address in the invite."
+
+[[contributes.settings]]
+id = "live.display-name"
+type = "string"
+default = ""
+title = "Name shown to collaborators"
+description = "Shown next to your caret. Empty uses your system user name."

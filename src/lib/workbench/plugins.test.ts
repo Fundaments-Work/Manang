@@ -16,6 +16,7 @@ describe("plugins panel model", () => {
       "figure",
       "git",
       "latex",
+      "live",
       "markdown",
       "plugins",
       "project",
@@ -56,10 +57,11 @@ describe("plugins panel model", () => {
       "typst.render",
       "typst.svg-to-pdf",
     ]);
-    // agent 21, citations 7, diagram 5, editor 8, figure 21, git 27, latex 4, markdown 4,
-    // plugins 10, project 30, recovery 4, search 6, settings 14, typst 7, writing 14.
+    // agent 21, citations 7, diagram 5, editor 8, figure 21, git 27, latex 4, live 11,
+    // markdown 4, plugins 10, project 30, recovery 4, search 6, settings 14, typst 7,
+    // writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      21 + 7 + 5 + 8 + 21 + 27 + 4 + 4 + 10 + 30 + 4 + 6 + 14 + 7 + 14,
+      21 + 7 + 5 + 8 + 21 + 27 + 4 + 11 + 4 + 10 + 30 + 4 + 6 + 14 + 7 + 14,
     );
   });
 
