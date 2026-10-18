@@ -605,3 +605,55 @@ fn insta_snapshots_formatted_and_parse_errors() {
         manang_citations::parse_csl_json(malformed_csl, Some("malformed.json")).unwrap_err();
     insta::assert_debug_snapshot!("citation_csl_json_parse_error", csl_err);
 }
+
+#[test]
+fn the_agent_tool_verifies_a_reference_in_words_and_never_adds_an_entry() {
+    let mock = Arc::new(MockHttpClient::new());
+    mock.set_json(
+        "https://api.crossref.org/works/10.1002/andp.19053221004",
+        200,
+        &json!({"status": "ok", "message": {
+            "title": ["On the Electrodynamics of Moving Bodies"],
+            "author": [{"family": "Einstein", "given": "Albert"}],
+            "issued": {"date-parts": [[1905]]},
+            "DOI": "10.1002/andp.19053221004"
+        }}),
+    );
+    let k = test_kernel(mock);
+
+    // The tool is declared with a name the model sees, bound to the plugin's own command.
+    let list = k.agent_tools();
+    let tool = list
+        .tools
+        .iter()
+        .find(|t| t.tool.name == "verify_citation")
+        .expect("verify_citation is registered");
+    assert_eq!(tool.tool.command, "citations.verify-reference");
+
+    let said = |args: serde_json::Value| match k.call_agent_tool("verify_citation", args) {
+        Ok(Payload::Json(serde_json::Value::String(text))) => text,
+        other => panic!("expected text, got {other:?}"),
+    };
+    let verified = said(json!({"doi": "10.1002/andp.19053221004"}));
+    assert!(verified.starts_with("Verified:"), "{verified}");
+    assert!(verified.contains("Einstein"), "{verified}");
+    assert!(
+        verified.contains("No bibliography entry was created"),
+        "{verified}"
+    );
+    let missing = said(json!({"doi": "10.9999/nope", "title": "Nonexistent"}));
+    assert!(missing.starts_with("Not found"), "{missing}");
+
+    // Nothing was added to the index, and an empty call is a steering error.
+    let Ok(Payload::Json(found)) = k.invoke(
+        "citations.search",
+        Payload::Json(json!({"query": "Einstein"})),
+    ) else {
+        panic!("search");
+    };
+    assert!(found["results"].as_array().expect("results").is_empty());
+    let err = k
+        .call_agent_tool("verify_citation", json!({}))
+        .expect_err("needs something to check");
+    assert!(err.to_string().contains("Give a doi"), "{err}");
+}

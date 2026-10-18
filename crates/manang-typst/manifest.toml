@@ -16,6 +16,10 @@ id = "typst.compile"
 title = "Compile Typst document"
 
 [[contributes.commands]]
+id = "typst.check"
+title = "Check Typst sources for problems without changing the preview"
+
+[[contributes.commands]]
 id = "typst.render"
 title = "Render page as SVG"
 

@@ -10,6 +10,8 @@ network = ["api.crossref.org", "api.openalex.org", "export.arxiv.org"]
 filesystem = ["read:project"]
 
 [contributes]
+hooks = ["register_agent_tool"]
+
 [[contributes.commands]]
 id = "citations.load"
 title = "Load bibliography files into index"
@@ -33,6 +35,10 @@ title = "Extract citation keys from source text"
 [[contributes.commands]]
 id = "citations.verify"
 title = "Verify citation against authoritative registries"
+
+[[contributes.commands]]
+id = "citations.verify-reference"
+title = "Verify one reference (DOI, or title and first author) and answer in words"
 
 [[contributes.commands]]
 id = "citations.configure"
