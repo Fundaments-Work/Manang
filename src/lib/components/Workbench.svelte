@@ -13,6 +13,7 @@
   import Home from "./Home.svelte";
   import ProjectSwitcher from "./ProjectSwitcher.svelte";
   import ConfirmDialog from "./ui/ConfirmDialog.svelte";
+  import RecoveryReview from "./RecoveryReview.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import ShortcutOverlay from "./ShortcutOverlay.svelte";
   import SettingsPage from "./settings/SettingsPage.svelte";
@@ -28,6 +29,7 @@
   import { notice } from "$lib/state/notice.svelte";
   import { context } from "$lib/state/context.svelte";
   import { palette } from "$lib/state/palette.svelte";
+  import { recovery } from "$lib/state/recovery.svelte";
   import { settings } from "$lib/state/settings.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { slides } from "$lib/state/slides.svelte";
@@ -107,6 +109,7 @@
     if (
       event.defaultPrevented ||
       dialog.request !== null ||
+      recovery.review !== null ||
       palette.open ||
       switcher.open ||
       slides.presenting
@@ -229,6 +232,7 @@
   <CommandPalette />
   <ProjectSwitcher />
   <ConfirmDialog />
+  <RecoveryReview />
   <ShortcutOverlay />
   {#if slides.presenting}
     <Presentation />

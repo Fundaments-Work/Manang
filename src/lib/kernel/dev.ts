@@ -7,7 +7,13 @@
 
 import type { Kernel } from "./client";
 import { createMockKernel } from "./mock";
-import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject";
+import {
+  MockProjectHost,
+  devHooksPlugin,
+  projectPlugin,
+  type SeedProject,
+} from "./mockProject";
+import { recoveryPlugin } from "./mockRecovery";
 import { citationsPlugin } from "./mockCitations";
 import { diagramPlugin } from "./mockDiagram";
 import { figurePlugin } from "./mockFigure";
@@ -449,6 +455,8 @@ export function createDevKernel(
   const kernel = createMockKernel({
     plugins: [
       projectPlugin(host),
+      devHooksPlugin(host),
+      recoveryPlugin(host),
       typstPlugin(host),
       latexPlugin(host),
       markdownPlugin(),

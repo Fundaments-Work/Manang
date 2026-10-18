@@ -2,6 +2,7 @@
   import { untrack, type Component } from "svelte";
 
   import EditorPane from "./EditorPane.svelte";
+  import ExternalChangeBar from "./ExternalChangeBar.svelte";
   import FileViewer from "./FileViewer.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
@@ -131,7 +132,10 @@
     </div>
   {:else if tab.kind === "figure"}
     {#if figure !== undefined && Figure !== undefined}
-      <Figure {figure} />
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ExternalChangeBar path={tab.path} kind="figure" />
+        <Figure {figure} />
+      </div>
     {:else if loadError !== ""}
       <div class="m-auto flex flex-col items-center gap-3 text-xs" role="alert">
         <p class="m-0 text-text-60">{loadError}</p>
@@ -151,10 +155,13 @@
   {:else}
     {#if mode !== "preview"}
       <div
-        class="min-h-0 min-w-0"
+        class="flex min-h-0 min-w-0 flex-col"
         style="flex: {mode === 'split' ? layout.splitRatio : 1} 1 0"
       >
-        <EditorPane path={tab.path} zen={layout.zen} />
+        <ExternalChangeBar path={tab.path} kind="document" />
+        <div class="min-h-0 flex-1">
+          <EditorPane path={tab.path} zen={layout.zen} />
+        </div>
       </div>
     {/if}
     {#if mode === "split"}

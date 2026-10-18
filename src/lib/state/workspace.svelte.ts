@@ -11,6 +11,7 @@ import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
 import { kernel, errorMessage } from "$lib/kernel";
 import { projectApi } from "$lib/kernel/api";
+import type { TextRead, WriteResult } from "$lib/kernel/api";
 import type {
   Engine,
   GitStatus,
@@ -266,8 +267,14 @@ export class WorkspaceState {
     return api.readFile(path);
   }
 
-  async writeFile(path: string, content: string): Promise<void> {
-    await api.writeFile(path, content);
+  /** A text file with its fingerprint, for the save-time conflict check. */
+  readText(path: string): Promise<TextRead> {
+    return api.readText(path);
+  }
+
+  /** Write a file; `expected` is the fingerprint it must still have on disk. */
+  writeFile(path: string, content: string, expected?: string): Promise<WriteResult> {
+    return api.writeFile(path, content, expected);
   }
 
   /** Create a file with starting content. Throws a kernel error on failure. */
