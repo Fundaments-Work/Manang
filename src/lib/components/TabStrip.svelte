@@ -5,7 +5,10 @@
   import { formatShortcut } from "$lib/commands/shortcut";
   import SharePopover from "$lib/components/SharePopover.svelte";
   import ContextMenu, { type MenuItem } from "$lib/components/ui/ContextMenu.svelte";
+  import { SLOT_COLOURS, SLOT_COUNT, SLOT_STROKES } from "$lib/editor/live/remote";
+  import { live } from "$lib/state/live.svelte";
   import { sharePopover } from "$lib/state/sharePopover.svelte";
+  import { initials } from "$lib/workbench/live";
   import { detectPlatform } from "$lib/util/keyboard";
   import Icon from "$lib/components/ui/Icon.svelte";
   import {
@@ -39,6 +42,12 @@
     const first = keymap.shortcuts("share.open")[0];
     return first === undefined ? "" : formatShortcut(first, platform);
   });
+
+  // Presence: at most four marks, the rest folded into "+N" (names in its tooltip).
+  const MAX_MARKS = 4;
+  const shownPeers = $derived(live.peers.slice(0, MAX_MARKS));
+  const hiddenPeers = $derived(live.peers.slice(MAX_MARKS));
+  const slotOf = (n: number): number => ((n % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
 
   const labels = $derived(tabLabels(tabs.tabs));
   const activeTypst = $derived(
@@ -286,6 +295,41 @@
       </div>
     {/each}
   </div>
+
+  {#if live.active}
+    <ul
+      class="m-0 flex shrink-0 list-none items-center gap-1 border-l border-line px-2"
+      aria-label="People in this session"
+      data-testid="presence"
+    >
+      {#each shownPeers as peer (peer.peer)}
+        {@const n = slotOf(peer.slot)}
+        <li
+          class="inline-flex h-5 min-w-5 items-center justify-center border border-line px-0.5 text-[10px] text-text"
+          style="border-bottom: 3px {SLOT_STROKES[n]} {SLOT_COLOURS[n]}"
+          title={peer.name}
+          aria-label={peer.name}
+          data-peer={peer.peer}
+        >
+          {initials(peer.name)}
+        </li>
+      {/each}
+      {#if hiddenPeers.length > 0}
+        <li
+          class="inline-flex h-5 min-w-5 items-center justify-center border border-line px-0.5 text-[10px] text-text-60"
+          title={hiddenPeers.map((p) => p.name).join(", ")}
+          aria-label="{hiddenPeers.length} more: {hiddenPeers
+            .map((p) => p.name)
+            .join(', ')}"
+        >
+          +{hiddenPeers.length}
+        </li>
+      {/if}
+      {#if live.peers.length === 0}
+        <li class="px-1 text-[11px] text-text-muted">Only you</li>
+      {/if}
+    </ul>
+  {/if}
 
   {#if activeTypst && tabs.active !== undefined}
     {@const slidesOn = tabs.active.view === "slides"}

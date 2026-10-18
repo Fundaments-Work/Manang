@@ -662,6 +662,12 @@ async function liveSection(browser) {
     `(() => { const li = ${bar}?.querySelector('li[data-peer]'); return !!li && li.innerText.includes("Ada Lovelace") && li.querySelector("span")?.style.borderLeftStyle === "dashed"; })()`,
     { show: `${bar}?.innerText` },
   );
+  await expectEventually(
+    page,
+    "the tab strip shows Ada as initials with her name in the tooltip, and the chip counts two people",
+    `(() => { const li = document.querySelector('[data-testid="presence"] li[data-peer]'); return !!li && li.innerText.trim() === "AL" && li.title === "Ada Lovelace" && li.getAttribute("aria-label") === "Ada Lovelace" && document.querySelector('[data-testid="live-chip"]')?.innerText.trim() === "Live: 2 people"; })()`,
+    { show: `document.querySelector('[data-testid="presence"]')?.outerHTML` },
+  );
   await run("dev.live-peer-type", { at: 0, text: "// Ada was here\n" });
   await expectEventually(
     page,
