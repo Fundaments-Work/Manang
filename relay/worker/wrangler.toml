@@ -1,0 +1,39 @@
+# Manang hosted relay. Placeholder name; no account id, no secrets.
+# `wrangler deploy` uses the account you are logged in to.
+name = "manang-relay"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# The relay only ever handles ciphertext and must not record who connected to
+# what: no request logs, no invocation logs, no traces.
+[observability]
+enabled = false
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+# SQLite-backed classes (the only kind on the Workers Free plan). Neither class
+# writes any document or user data to storage.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room", "Limiter"]
+
+# Limits. All optional; the values below are the defaults compiled into the
+# Worker. The wire-level ones match crates/manang-relay's RelayConfig.
+[vars]
+MAX_FRAME_BYTES = "16777216"
+MAX_PEERS_PER_ROOM = "16"
+RATE_MSGS_PER_SEC = "200"
+RATE_BYTES_PER_SEC = "4194304"
+RATE_PRESENCE_PER_SEC = "20"
+# A room with no frame for this long is closed (clients reconnect and resync).
+IDLE_TIMEOUT_SECS = "900"
+# Per client address (hashed, in memory only): upgrades per minute and
+# distinct rooms per ten minutes. 0 turns a check off.
+RATE_CONNECTS_PER_MIN = "60"
+RATE_ROOMS_PER_10MIN = "32"
