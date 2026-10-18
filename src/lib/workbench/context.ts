@@ -11,7 +11,7 @@
 import type { Engine } from "./paths";
 
 /** The full-window surface on screen. */
-export type Surface = "home" | "settings" | "workbench";
+export type Surface = "home" | "settings" | "workbench" | "help";
 
 /** What the editor area shows, when the workbench is on screen. */
 export type EditorKind = "document" | "figure" | "slides";

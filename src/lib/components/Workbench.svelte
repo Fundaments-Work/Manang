@@ -16,6 +16,7 @@
   import RecoveryReview from "./RecoveryReview.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import ShortcutOverlay from "./ShortcutOverlay.svelte";
+  import HelpPage from "./help/HelpPage.svelte";
   import SettingsPage from "./settings/SettingsPage.svelte";
   import { installShellSurfaces } from "./menu/surfaces";
   import { resolveKey, typesText } from "$lib/commands/keymap";
@@ -24,6 +25,7 @@
   import { workbenchCommands } from "$lib/commands/workbench";
   import { build } from "$lib/state/build.svelte";
   import { dialog } from "$lib/state/dialog.svelte";
+  import { helpPage } from "$lib/state/helpPage.svelte";
   import { home } from "$lib/state/home.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { notice } from "$lib/state/notice.svelte";
@@ -120,6 +122,9 @@
       if (layout.zen) {
         event.preventDefault();
         layout.toggleZen();
+      } else if (helpPage.open) {
+        event.preventDefault();
+        helpPage.hide();
       } else if (settingsPage.open) {
         event.preventDefault();
         settingsPage.hide();
@@ -183,7 +188,7 @@
         <!-- Stays mounted under Home so the editor keeps its caret and scroll. -->
         <div
           class="flex min-h-0 flex-1 flex-col"
-          inert={home.visible || settingsPage.open}
+          inert={home.visible || settingsPage.open || helpPage.open}
         >
           {#if !layout.zen}
             <TabStrip />
@@ -205,13 +210,18 @@
         </div>
       {/if}
       {#if home.showing}
-        <div class="absolute inset-0 z-10 bg-bg" inert={settingsPage.open}>
+        <div class="absolute inset-0 z-10 bg-bg" inert={settingsPage.open || helpPage.open}>
           <Home />
         </div>
       {/if}
       {#if settingsPage.open && !layout.zen}
-        <div class="absolute inset-0 z-20 bg-bg">
+        <div class="absolute inset-0 z-20 bg-bg" inert={helpPage.open}>
           <SettingsPage />
+        </div>
+      {/if}
+      {#if helpPage.open && !layout.zen}
+        <div class="absolute inset-0 z-30 bg-bg">
+          <HelpPage />
         </div>
       {/if}
     </main>

@@ -27,6 +27,9 @@ describe("ui context", () => {
         ...contextKeys({ ...base, surface: "settings", editor: null, engine: null }),
       ].sort(),
     ).toEqual(["project", "settings"].sort());
+    expect([...contextKeys({ ...base, surface: "help", editor: null, engine: null })].sort()).toEqual(
+      ["help", "project"].sort(),
+    );
   });
 
   it("evaluates when clauses", () => {

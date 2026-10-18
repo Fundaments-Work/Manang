@@ -1,8 +1,8 @@
 import { basename } from "./paths";
 
 export interface TitleContext {
-  /** Where the person is: Home, Settings, or the workbench. */
-  readonly surface: "home" | "settings" | "workbench";
+  /** Where the person is: Home, Settings, Help, or the workbench. */
+  readonly surface: "home" | "settings" | "workbench" | "help";
   /** The open project's name, if any. */
   readonly project: string | null;
   /** The active tab's project-relative path, if any. */
@@ -11,11 +11,13 @@ export interface TitleContext {
 
 /**
  * The window title, which the desktop shows in the taskbar and alt-tab list:
- * "main.typ — Entropy paper" in a project, "Settings" or "Home" on those
+ * "main.typ — Entropy paper" in a project, "Settings", "User guide" or "Home" on those
  * pages, and just "Manang" when nothing is open. It replaces the breadcrumb
  * the top bar used to carry, which could not be clicked.
  */
 export function windowTitle({ surface, project, file }: TitleContext): string {
+  if (surface === "help")
+    return project === null ? "User guide" : `User guide — ${project}`;
   if (surface === "settings")
     return project === null ? "Settings" : `Settings — ${project}`;
   if (surface === "home" || project === null)
