@@ -244,11 +244,8 @@ fn braces(env: &Env<'_>, index: usize) -> Vec<Draft> {
         match bytes[i] {
             b'\\' => i += 1,
             b'{' => open.push(i),
-            b'}' => {
-                if open.pop().is_none() {
-                    extra.push(i);
-                }
-            }
+            // A `}` that pops nothing is extra; one that pops matches.
+            b'}' if open.pop().is_none() => extra.push(i),
             _ => {}
         }
         i += 1;

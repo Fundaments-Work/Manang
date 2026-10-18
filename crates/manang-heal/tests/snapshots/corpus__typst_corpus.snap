@@ -1,0 +1,42 @@
+---
+source: crates/manang-heal/tests/corpus.rs
+expression: report
+---
+{
+  "misspelled_function.typ": {
+    "steps": [
+      "typst.rename:gret->greet:49 [Likely]"
+    ],
+    "result": "#let greet(name) = [Hello, #name!]\n\n#greet(\"a\")\n#greet(\"b\")\n"
+  },
+  "misspelled_set.typ": {
+    "steps": [
+      "typst.rename:sett->set:1 [Likely]"
+    ],
+    "result": "#set text(size: 11pt)\n= Title\n#lorem(10)\n"
+  },
+  "needs_cetz.typ": {
+    "steps": [
+      "typst.import:cetz@0.5.2:cetz [Certain]"
+    ],
+    "result": "= Plot\n#cetz.canvas({\n  import cetz.draw: *\n  line((0, 0), (1, 1))\n})\n"
+  },
+  "unclosed_content.typ": {
+    "steps": [
+      "typst.close:]:20 [Likely]"
+    ],
+    "result": "#let note = [careful]\n\n= Heading\n#note\n"
+  },
+  "unclosed_figure.typ": {
+    "steps": [
+      "typst.close:):71 [Likely]"
+    ],
+    "result": "= Report\n\n#figure(\n  rect(width: 3em, height: 2em),\n  caption: [A box],)\n\nText after the figure.\n"
+  },
+  "unclosed_math.typ": {
+    "steps": [
+      "typst.close:$:28 [Likely]"
+    ],
+    "result": "= Math\n\nThe identity $ x + y $\n\nfollows.\n"
+  }
+}

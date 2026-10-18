@@ -211,6 +211,27 @@ fn overlaps(chosen: &[&Draft], draft: &Draft) -> bool {
     })
 }
 
+/// Apply `edits` (UTF-16 offsets of `text`, sorted or not) and return the
+/// new text. Edits that fall outside the text or overlap are skipped, so a
+/// stale fix can never panic. Insertions at one offset keep their order.
+pub fn apply_edits(text: &str, edits: &[Edit]) -> String {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let mut sorted: Vec<&Edit> = edits.iter().collect();
+    sorted.sort_by_key(|e| (e.from, e.to));
+    let mut out: Vec<u16> = Vec::with_capacity(units.len());
+    let mut cursor = 0;
+    for edit in sorted {
+        if edit.from < cursor || edit.to < edit.from || edit.to > units.len() {
+            continue;
+        }
+        out.extend_from_slice(&units[cursor..edit.from]);
+        out.extend(edit.insert.encode_utf16());
+        cursor = edit.to;
+    }
+    out.extend_from_slice(&units[cursor..]);
+    String::from_utf16_lossy(&out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,25 +276,4 @@ mod tests {
         b.edits = vec![ByteEdit::replace(2, 5, "y")];
         assert!(fix_all(&[a, b], "abcdef").is_none());
     }
-}
-
-/// Apply `edits` (UTF-16 offsets of `text`, sorted or not) and return the
-/// new text. Edits that fall outside the text or overlap are skipped, so a
-/// stale fix can never panic. Insertions at one offset keep their order.
-pub fn apply_edits(text: &str, edits: &[Edit]) -> String {
-    let units: Vec<u16> = text.encode_utf16().collect();
-    let mut sorted: Vec<&Edit> = edits.iter().collect();
-    sorted.sort_by_key(|e| (e.from, e.to));
-    let mut out: Vec<u16> = Vec::with_capacity(units.len());
-    let mut cursor = 0;
-    for edit in sorted {
-        if edit.from < cursor || edit.to < edit.from || edit.to > units.len() {
-            continue;
-        }
-        out.extend_from_slice(&units[cursor..edit.from]);
-        out.extend(edit.insert.encode_utf16());
-        cursor = edit.to;
-    }
-    out.extend_from_slice(&units[cursor..]);
-    String::from_utf16_lossy(&out)
 }
