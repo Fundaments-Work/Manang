@@ -100,7 +100,6 @@ export async function ensureIdentity(root: string): Promise<boolean> {
         fail("saving the author identity", error);
         return false;
       }
-      reportError("the author identity was refused", error);
       problem = parsed.message;
       current = { ...current, name: answer.value, email: answer.extra ?? "" };
     }

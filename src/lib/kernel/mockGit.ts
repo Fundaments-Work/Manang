@@ -247,7 +247,7 @@ export function gitPlugin(host: MockProjectHost): MockPluginFactory {
 
   function recordCommit(fs: MockProjectFs, subject: string, label: boolean): GitCommitInfo {
     const id = requireIdentity();
-    const hash = Math.random().toString(16).slice(2).padStart(40, "0");
+    const hash = (Math.random().toString(16).slice(2) + "0".repeat(40)).slice(0, 40);
     const commit: GitCommitInfo = {
       hash,
       short: hash.slice(0, 7),
@@ -423,10 +423,13 @@ export function gitPlugin(host: MockProjectHost): MockPluginFactory {
     handlers: {
       "git.open": (args) => {
         const root = str(args, "root");
-        try {
-          host.open(root);
-        } catch {
-          // ignore
+        // Opening a project again must not reset its files to the seed.
+        if (host.current?.root !== root) {
+          try {
+            host.open(root);
+          } catch {
+            // ignore
+          }
         }
         return { root, is_repo: isRepo };
       },
