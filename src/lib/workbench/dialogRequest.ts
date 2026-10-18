@@ -6,6 +6,8 @@
 export interface DialogAction {
   readonly id: string;
   readonly label: string;
+  /** The view's one action: drawn in the signal colour. At most one per dialog. */
+  readonly primary?: boolean;
 }
 
 export interface DialogInput {
@@ -28,6 +30,8 @@ export interface DialogRequest {
   readonly actions: readonly DialogAction[];
   /** A one-line text field shown above the actions. */
   readonly input?: DialogInput;
+  /** A second one-line field under the first (an email beside a name). */
+  readonly extraInput?: DialogInput;
   readonly choice?: DialogChoice;
 }
 
@@ -36,6 +40,8 @@ export interface DialogAnswer {
   readonly value: string;
   /** The selected choice's id, or "" when the request had no choice. */
   readonly choice: string;
+  /** The second field's text, or "" when the request had none. */
+  readonly extra?: string;
 }
 
 /**

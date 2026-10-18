@@ -68,7 +68,12 @@ export function formatRelativeTime(epochSecs: number, nowSecs = Math.floor(Date.
 /**
  * Parse structured JSON GitError messages from kernel invocation failures.
  */
-export function parseGitError(error: unknown): { code: string; message: string } {
+export function parseGitError(error: unknown): {
+  code: string;
+  message: string;
+  /** Files named by the error (a refused restore lists the ones it would overwrite). */
+  paths: readonly string[];
+} {
   const raw = errorMessage(error);
   try {
     const parsed = JSON.parse(raw);
@@ -78,12 +83,19 @@ export function parseGitError(error: unknown): { code: string; message: string }
       typeof parsed.code === "string" &&
       typeof parsed.message === "string"
     ) {
-      return { code: parsed.code, message: parsed.message };
+      const paths: unknown = parsed.paths;
+      return {
+        code: parsed.code,
+        message: parsed.message,
+        paths: Array.isArray(paths)
+          ? paths.filter((p): p is string => typeof p === "string")
+          : [],
+      };
     }
   } catch {
     // raw string
   }
-  return { code: "unknown", message: raw };
+  return { code: "unknown", message: raw, paths: [] };
 }
 
 /**
@@ -93,6 +105,8 @@ export function gitActionableError(code: string, message: string): string {
   switch (code) {
     case "missing-identity":
       return "Git author identity is missing. Run `git config --global user.name \"Your Name\"` and `git config --global user.email you@example.com` in your terminal, then try again.";
+    case "nothing-to-save":
+      return "Nothing has changed since the last version.";
     case "nothing-to-commit":
       return "Nothing staged to commit. Stage your changes with `+` before committing.";
     case "empty-message":
