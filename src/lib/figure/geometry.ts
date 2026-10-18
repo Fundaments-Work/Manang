@@ -5,7 +5,7 @@
 
 import { getStroke } from "perfect-freehand";
 
-import { measure } from "./text";
+import { mathBox } from "./mathRender";
 import {
   isShape,
   type FigureNode,
@@ -147,13 +147,10 @@ export function nodeRect(node: FigureNode): Rect {
       return pointsBounds(node.points);
     case "freedraw":
       return freedrawBounds(node);
-    case "math":
-      return {
-        x: node.x,
-        y: node.y - node.size,
-        width: measure(node.tex, node.size, "mono"),
-        height: node.size * 1.4,
-      };
+    case "math": {
+      const box = mathBox(node);
+      return { x: node.x, y: node.y, width: box.width, height: box.height };
+    }
     default:
       return normalizeRect(node.x, node.y, node.width, node.height);
   }
@@ -307,10 +304,10 @@ export function frameChildren(scene: FigureScene, frameId: string): string[] {
 
 /** Where the ray from the shape's centre toward `toward` leaves its outline. */
 export function outlinePoint(node: FigureNode, toward: Vec): Vec {
-  if (!isShape(node)) return rectCenter(nodeRect(node));
-  const r = normalizeRect(node.x, node.y, node.width, node.height);
+  if (!isShape(node) && node.kind !== "math") return rectCenter(nodeRect(node));
+  const r = nodeRect(node);
   const c = rectCenter(r);
-  const angle = node.angle ?? 0;
+  const angle = nodeAngle(node);
   const local = rotatePoint(toward, c, -angle);
   const dx = local.x - c.x;
   const dy = local.y - c.y;

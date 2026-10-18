@@ -8,10 +8,10 @@
     "paper": { "dark": "#141416", "light": "#faf9f7", "print": "#ffffff" },
     "accent": { "dark": "#c6f135", "light": "#4f5f20", "print": "#4f5f20" },
     "sage": { "dark": "#b3d17a", "light": "#5c7330", "print": "#5c7330" },
-    "orange": { "dark": "#e69f00", "light": "#b27a00", "print": "#e69f00" },
-    "sky": { "dark": "#56b4e9", "light": "#2f86b8", "print": "#56b4e9" },
+    "orange": { "dark": "#e69f00", "light": "#b27a00", "print": "#b27a00" },
+    "sky": { "dark": "#56b4e9", "light": "#2f86b8", "print": "#2f86b8" },
     "green": { "dark": "#009e73", "light": "#007a59", "print": "#009e73" },
-    "yellow": { "dark": "#f0e442", "light": "#9a8f00", "print": "#c9bc00" },
+    "yellow": { "dark": "#f0e442", "light": "#9a8f00", "print": "#9a8f00" },
     "blue": { "dark": "#3d9ad9", "light": "#0072b2", "print": "#0072b2" },
     "vermillion": { "dark": "#ef7a3a", "light": "#d55e00", "print": "#d55e00" },
     "purple": { "dark": "#d99bc0", "light": "#a8578a", "print": "#cc79a7" }

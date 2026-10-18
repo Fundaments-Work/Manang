@@ -4,7 +4,6 @@
 use perfect_freehand::{InputPoint, StrokeOptions, get_stroke};
 
 use crate::scene::{FigureNode, FigureScene, FreedrawNode, Rect, ShapeNode, Vec2};
-use crate::text;
 
 /// Hit tolerance for thin things (lines, outlines of frames), in scene units.
 pub const HIT_TOLERANCE: f64 = 6.0;
@@ -92,8 +91,8 @@ pub fn node_rect(node: &FigureNode) -> Rect {
         FigureNode::Arrow(c) | FigureNode::Line(c) => points_bounds(c.points.iter().copied()),
         FigureNode::Freedraw(f) => freedraw_bounds(f),
         FigureNode::Math(m) => {
-            let width = text::measure(&m.tex, m.size, crate::scene::FontFamily::Mono);
-            Rect::new(m.x, m.y - m.size, width, m.size * 1.4)
+            let (width, height) = m.box_size();
+            Rect::new(m.x, m.y, width, height)
         }
         other => match other.shape() {
             Some(s) => normalize_rect(s.x, s.y, s.width, s.height),
@@ -273,12 +272,13 @@ pub fn frame_children(scene: &FigureScene, frame_id: &str) -> Vec<String> {
 /// Where the ray from the shape's centre toward `toward` leaves its
 /// outline. Rotation is honoured. For a degenerate direction, the centre.
 pub fn outline_point(node: &FigureNode, toward: Vec2) -> Vec2 {
-    let Some(s) = node.shape() else {
-        return node_rect(node).center();
+    let (r, angle) = match node.shape() {
+        Some(s) => (normalize_rect(s.x, s.y, s.width, s.height), s.angle),
+        None if matches!(node, FigureNode::Math(_)) => (node_rect(node), 0.0),
+        None => return node_rect(node).center(),
     };
-    let r = normalize_rect(s.x, s.y, s.width, s.height);
     let c = r.center();
-    let local = rotate_point(toward, c, -s.angle);
+    let local = rotate_point(toward, c, -angle);
     let (dx, dy) = (local.x - c.x, local.y - c.y);
     let (hw, hh) = (r.width / 2.0, r.height / 2.0);
     if (dx == 0.0 && dy == 0.0) || hw <= 0.0 || hh <= 0.0 {
@@ -302,7 +302,7 @@ pub fn outline_point(node: &FigureNode, toward: Vec2) -> Vec2 {
             tx.min(ty)
         }
     };
-    rotate_point(Vec2::new(c.x + dx * t, c.y + dy * t), c, s.angle)
+    rotate_point(Vec2::new(c.x + dx * t, c.y + dy * t), c, angle)
 }
 
 /// The point a fixed anchor (fractions of the box) names, projected onto

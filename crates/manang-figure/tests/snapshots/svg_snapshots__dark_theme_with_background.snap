@@ -1,5 +1,6 @@
 ---
 source: crates/manang-figure/tests/svg_snapshots.rs
+assertion_line: 162
 expression: "render_svg(&every_kind(0), &options)"
 ---
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400">
@@ -30,7 +31,7 @@ expression: "render_svg(&every_kind(0), &options)"
     <path d="M450.9 219.1L470.3 238.9L520 239L520.3 239.1L520.6 239.2L520.8 239.5L520.9 239.7L521 240.1L520.9 240.4L520.7 240.6L520.5 240.8L520.2 240.9L519.9 240.9L519.6 240.9L519.3 240.7L519.2 240.4L519.1 240.2L519.1 239.8L519.2 239.6L519.3 239.3L519.6 239.1L519.9 239.1L520.2 239.1L520.5 239.2L520.7 239.4L520.9 239.7L521 240L520.9 240.3L520.8 240.5L520.6 240.8L520.3 240.9L520 241L469.3 240.7L449.1 220.9L448.9 220.7L448.8 220.4L448.7 220.1L448.8 219.8L448.8 219.5L449 219.2L449.2 219L449.5 218.8L449.8 218.8L450.1 218.7L450.4 218.8L450.7 218.9L450.9 219.1Z" fill="#e8e6e1"/>
   </g>
   <g id="x">
-    <text x="620" y="240" fill="#b3d17a" font-family="DM Mono, monospace" font-size="20">E = mc^2</text>
+    <rect x="620" y="220" width="108" height="28" fill="none" stroke="#9a9a9a" stroke-width="1" stroke-dasharray="4 4"/>
   </g>
   <g id="a1">
     <path d="M164 55L216 55" fill="none" stroke="#e8e6e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>

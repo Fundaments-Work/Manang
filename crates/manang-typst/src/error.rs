@@ -22,6 +22,9 @@ pub enum TypstError {
     Pdf(String),
     #[error("[invalid_svg] the SVG could not be placed: {0}")]
     Svg(String),
+    /// Carries `[math_error] {json}`: the formula's problem, positioned.
+    #[error("{0}")]
+    Math(String),
     #[error("compile worker panicked")]
     WorkerPanicked,
 }

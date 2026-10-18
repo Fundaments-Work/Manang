@@ -1,8 +1,11 @@
 <script lang="ts">
+  import type { MathRender } from "$lib/figure/mathRender";
   import { nodeVisual } from "$lib/figure/render";
   import { createScene, type FigureNode } from "$lib/figure/scene";
   import type { FigureTheme } from "$lib/figure/palette";
+  import type { FormulaShown } from "$lib/state/figure.svelte";
   import { mermaidRenders } from "$lib/state/figures.svelte";
+  import { mathRenders } from "$lib/state/mathRenders.svelte";
 
   /**
    * One scene node on the canvas, drawn from the same primitives the export
@@ -20,6 +23,8 @@
     dim?: boolean;
     /** Hide the label while the inline editor covers it. */
     hideText?: boolean;
+    /** The formula as typed into the editor (debounced), for the node it edits. */
+    formula?: FormulaShown | null;
   }
 
   const {
@@ -29,6 +34,7 @@
     theme,
     dim = false,
     hideText = false,
+    formula = null,
   }: Props = $props();
 
   const visual = $derived(
@@ -41,6 +47,26 @@
       theme,
     ),
   );
+
+  const mathItem = $derived(visual?.items.find((i) => i.type === "math"));
+  /** What a formula draws: the editor's draft while it is open, else the node. */
+  const render = $derived.by(() => {
+    if (mathItem?.type !== "math") return undefined;
+    const draft = formula?.id === node.id ? formula : null;
+    return mathRenders.get(
+      draft?.language ?? mathItem.language,
+      draft?.source ?? mathItem.source,
+      mathItem.size,
+      mathItem.colour,
+    );
+  });
+  /** The last rendering that worked: kept on screen, dimmed, while the source is broken. */
+  let kept = $state.raw<MathRender | undefined>(undefined);
+  $effect(() => {
+    if (render?.url !== undefined) kept = render;
+  });
+  const shownMath = $derived(render?.url !== undefined ? render : kept);
+  const mathBroken = $derived(render?.error !== undefined);
 
   const mermaid = $derived(
     node.kind === "mermaid" && node.source !== undefined
@@ -94,6 +120,40 @@
           height={item.height}
           preserveAspectRatio="xMidYMid meet"
         />
+      {:else if item.type === "math"}
+        {#if shownMath?.url !== undefined}
+          <image
+            data-math-image
+            data-math-language={item.language}
+            href={shownMath.url}
+            x={item.x}
+            y={item.y}
+            width={shownMath.width ?? item.width}
+            height={shownMath.height ?? item.height}
+            opacity={mathBroken ? 0.35 : 1}
+            preserveAspectRatio="xMinYMin meet"
+          />
+        {:else}
+          <rect
+            data-math-placeholder
+            x={item.x}
+            y={item.y}
+            width={item.width}
+            height={item.height}
+            fill="none"
+            stroke="var(--mng-line)"
+            stroke-width="1"
+            vector-effect="non-scaling-stroke"
+            stroke-dasharray="4 4"
+          />
+          <text
+            x={item.x + 6}
+            y={item.y + item.height / 2 + 4}
+            fill="var(--mng-text-60)"
+            font-family="var(--font-mono)"
+            font-size="12">{mathBroken ? "formula error" : "Rendering formula…"}</text
+          >
+        {/if}
       {:else if item.type === "embed"}
         {#if mermaid?.url !== undefined}
           <image
