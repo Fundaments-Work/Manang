@@ -162,6 +162,7 @@ export function normalizeNode(node: FigureNode): FigureNode {
         if (Array.isArray(value) && value.length === 0) continue;
         break;
       case "locked":
+      case "hidden":
         if (value === false) continue;
         break;
       case "language":
@@ -236,6 +237,7 @@ const SHAPE_KEYS = new Set([
   "style",
   "groups",
   "locked",
+  "hidden",
 ]);
 const CONNECTOR_KEYS = new Set([
   "kind",
@@ -249,6 +251,7 @@ const CONNECTOR_KEYS = new Set([
   "style",
   "groups",
   "locked",
+  "hidden",
 ]);
 const FREEDRAW_KEYS = new Set([
   "kind",
@@ -258,6 +261,7 @@ const FREEDRAW_KEYS = new Set([
   "style",
   "groups",
   "locked",
+  "hidden",
 ]);
 const MATH_KEYS = new Set([
   "kind",
@@ -272,6 +276,7 @@ const MATH_KEYS = new Set([
   "style",
   "groups",
   "locked",
+  "hidden",
 ]);
 const SHAPE_KINDS = new Set([
   "rect",
@@ -370,6 +375,9 @@ function checkCommon(n: Json): void {
   }
   if (n["locked"] !== undefined && typeof n["locked"] !== "boolean") {
     throw new Error("`locked` must be true or false");
+  }
+  if (n["hidden"] !== undefined && typeof n["hidden"] !== "boolean") {
+    throw new Error("`hidden` must be true or false");
   }
 }
 
