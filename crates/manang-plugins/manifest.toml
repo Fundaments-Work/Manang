@@ -44,3 +44,7 @@ title = "Show what a plugin may access"
 [[contributes.commands]]
 id = "plugins.use-project"
 title = "Apply the open project's plugin overrides"
+
+[[contributes.commands]]
+id = "plugins.contributions"
+title = "List the format adapters, editors and toolbars plugins contribute"
