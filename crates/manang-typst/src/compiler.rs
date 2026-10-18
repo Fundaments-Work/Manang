@@ -361,6 +361,19 @@ impl Compiler {
         *artifact.pdf.lock() = Some(Arc::clone(&bytes));
         Ok(bytes)
     }
+
+    /// A one-page PDF of `svg`, the page sized to the picture. Independent of
+    /// the project session: it neither reads files nor replaces the cached
+    /// document. Deterministic: the same SVG gives the same bytes.
+    pub fn svg_to_pdf(&self, svg: &[u8]) -> Result<Arc<[u8]>, TypstError> {
+        let converted = self.pool.install(|| {
+            catch_unwind(AssertUnwindSafe(|| {
+                crate::svgpdf::convert(&self.library, &self.fonts, svg)
+            }))
+        });
+        let bytes = converted.map_err(|_| TypstError::WorkerPanicked)??;
+        Ok(Arc::from(bytes))
+    }
 }
 
 /// The Typst sources a compile read, kept with its document. Cheap: a

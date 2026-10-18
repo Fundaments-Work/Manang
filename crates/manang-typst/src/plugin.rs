@@ -97,6 +97,18 @@ impl Plugin for TypstPlugin {
         command: &str,
         input: Payload,
     ) -> Result<Payload, PluginError> {
+        // Binary in, binary out: the SVG is never wrapped in JSON on the way.
+        if command == "typst.svg-to-pdf" {
+            let pdf = match &input {
+                Payload::Binary(svg) => self.compiler.svg_to_pdf(svg),
+                Payload::Json(Value::Object(map)) => match map.get("svg") {
+                    Some(Value::String(svg)) => self.compiler.svg_to_pdf(svg.as_bytes()),
+                    _ => return Err(failed("`svg` must be a string")),
+                },
+                _ => return Err(failed("expected the SVG as binary or as `{ svg }`")),
+            };
+            return pdf.map(Payload::Binary).map_err(failed);
+        }
         let args = json_args(input)?;
         match command {
             "typst.compile" => {
