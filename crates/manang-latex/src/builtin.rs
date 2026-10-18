@@ -722,13 +722,26 @@ impl EngineStore {
 /// computer lacks fails here, with the loader's message, instead of at the
 /// user's first compile.
 fn smoke_test(worker: &Path) -> Result<(), EngineError> {
-    let mut child = std::process::Command::new(worker)
-        .arg("--version")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| EngineError::WontRun(e.to_string()))?;
+    // A file that was just written can briefly be "busy" (ETXTBSY, errno 26)
+    // when another thread forks while its write handle is open: the child
+    // holds a copy until it execs. It clears in microseconds; retry.
+    let mut attempts = 0;
+    let mut child = loop {
+        let spawned = std::process::Command::new(worker)
+            .arg("--version")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn();
+        match spawned {
+            Ok(child) => break child,
+            Err(e) if e.raw_os_error() == Some(26) && attempts < 50 => {
+                attempts += 1;
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Err(e) => return Err(EngineError::WontRun(e.to_string())),
+        }
+    };
     let status = wait_timeout::ChildExt::wait_timeout(&mut child, Duration::from_secs(15))
         .map_err(|e| EngineError::WontRun(e.to_string()))?;
     let Some(status) = status else {
