@@ -142,6 +142,13 @@ fn test_messy_bib_file_partial_results_and_warnings() {
     );
 
     // Assert insta snapshot of diagnostics
+    // The path differs per checkout, so it stays out of the snapshot.
+    let mut errors = errors.clone();
+    for error in &mut errors {
+        if let Some(file) = error.get_mut("file") {
+            *file = serde_json::Value::String("[path]/messy.bib".into());
+        }
+    }
     insta::assert_json_snapshot!("robustness_messy_bib_errors", errors);
 }
 
