@@ -14,7 +14,7 @@ export type SideView =
   | "figures"
   | "references"
   | "plugins";
-export type PanelTab = "problems" | "output";
+export type PanelTab = "problems" | "output" | "agent";
 export type PreviewMode = "split" | "editor" | "preview";
 export type Theme = "dark" | "light";
 
@@ -177,7 +177,7 @@ export function sanitizeLayout(raw: unknown): LayoutModel {
     panelHeight: finite(r["panelHeight"])
       ? clampPanel(r["panelHeight"])
       : d.panelHeight,
-    panelTab: isOneOf(r["panelTab"], ["problems", "output"] as const)
+    panelTab: isOneOf(r["panelTab"], ["problems", "output", "agent"] as const)
       ? r["panelTab"]
       : d.panelTab,
     preview: isOneOf(r["preview"], PREVIEW_CYCLE) ? r["preview"] : d.preview,

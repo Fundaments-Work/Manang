@@ -69,9 +69,14 @@ export const manangTheme = EditorView.theme({
   },
 
   "&.cm-focused": { outline: "none" },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-    backgroundColor: "color-mix(in srgb, var(--mng-accent) 32%, transparent)",
-  },
+  // CodeMirror's own selection colours (a lavender `#d7d4f0` when focused, since
+  // this theme does not declare itself dark) are scoped through the scroller
+  // and selection layer; match that depth so the accent tint always wins, in
+  // both themes, focused or not.
+  "&.cm-editor > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, &.cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground":
+    {
+      backgroundColor: "color-mix(in srgb, var(--mng-accent) 32%, transparent)",
+    },
   "&.cm-focused .cm-matchingBracket": {
     backgroundColor: "color-mix(in srgb, var(--mng-accent) 20%, transparent)",
     color: "inherit",

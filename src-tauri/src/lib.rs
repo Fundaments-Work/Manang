@@ -66,6 +66,8 @@ enum BootError {
     Plugins(#[from] manang_plugins::ManagerError),
     #[error(transparent)]
     Settings(#[from] manang_settings::SyncError),
+    #[error(transparent)]
+    Agent(#[from] manang_agent::AgentError),
 }
 
 /// Directories the shell hands to plugins.
@@ -96,14 +98,25 @@ fn sibling_worker(exe: &std::path::Path) -> Option<std::path::PathBuf> {
     candidate.is_file().then_some(candidate)
 }
 
-/// Build the kernel with every first-party plugin registered.
+/// Build the kernel with every first-party plugin registered (tests that need no agent handle).
 ///
 /// Everything in Manang is a plugin; the shell only dispatches commands.
+#[cfg(test)]
 fn build_kernel(
     dirs: &Dirs<'_>,
     events: &EventBus,
     editor: &Arc<Editor>,
 ) -> Result<Kernel, BootError> {
+    build_kernel_parts(dirs, events, editor).map(|(kernel, _)| kernel)
+}
+
+/// [`build_kernel`] plus the agent plugin, which must be attached to the kernel once that is in
+/// an `Arc` (its tool calls run through the kernel from background tasks).
+fn build_kernel_parts(
+    dirs: &Dirs<'_>,
+    events: &EventBus,
+    editor: &Arc<Editor>,
+) -> Result<(Kernel, Arc<manang_agent::AgentPlugin>), BootError> {
     let kernel = Kernel::new();
     kernel.register(
         manang_editor::manifest()?,
@@ -158,6 +171,14 @@ fn build_kernel(
         manang_diagram::manifest()?,
         Arc::new(manang_diagram::plugin()),
     )?;
+    let agent = Arc::new(manang_agent::plugin(
+        dirs.config.to_path_buf(),
+        events.clone(),
+    )?);
+    kernel.register(
+        manang_agent::manifest()?,
+        Arc::clone(&agent) as Arc<dyn manang_kernel::Plugin>,
+    )?;
     // One settings implementation serves three command namespaces.
     let settings = Arc::new(manang_settings::plugin(
         dirs.config.to_path_buf(),
@@ -169,7 +190,7 @@ fn build_kernel(
             Arc::clone(&settings) as Arc<dyn manang_kernel::Plugin>,
         )?;
     }
-    Ok(kernel)
+    Ok((kernel, agent))
 }
 
 /// Shell state: the kernel plus the WASM plugin host that keeps it extended.
@@ -635,7 +656,8 @@ pub fn run() -> Result<(), tauri::Error> {
             };
             let events = EventBus::new();
             let editor = Arc::new(Editor::new());
-            let kernel = Arc::new(build_kernel(&dirs, &events, &editor)?);
+            let (kernel, agent) = build_kernel_parts(&dirs, &events, &editor)?;
+            let kernel = Arc::new(kernel);
             // Crash-recovery snapshots live in the app data dir, not the config dir.
             kernel.register(
                 manang_recovery::manifest().map_err(BootError::from)?,
@@ -643,6 +665,7 @@ pub fn run() -> Result<(), tauri::Error> {
                     app.path().app_data_dir()?.join("recovery"),
                 )),
             )?;
+            agent.attach(&kernel);
             let project_root = Arc::new(ProjectRoot::new(None));
             let settings = start_settings_sync(&kernel, &events)?;
             let (plugins, watch) =
@@ -786,6 +809,9 @@ mod tests {
             "typst.compile",
             "latex.compile",
             "project.open",
+            "agent.start",
+            "agent.key.set",
+            "agent.apply-proposal",
         ] {
             assert!(ids.iter().any(|id| id == expected), "missing {expected}");
         }

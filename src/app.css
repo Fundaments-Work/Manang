@@ -461,3 +461,45 @@
 .mng-lime-hover:hover:not(:disabled) {
   color: var(--mng-accent);
 }
+
+/*
+ * The inline diff of an AI proposal (src/lib/editor/aiDiff.ts): removed text dim and struck
+ * through, inserted text in the Sage token, square hairline buttons. No shadows, no new colours.
+ */
+.mng-ai-removed {
+  color: var(--mng-text-60);
+  text-decoration: line-through;
+  text-decoration-color: var(--mng-text-60);
+}
+.mng-ai-inline {
+  display: inline;
+}
+.mng-ai-inserted {
+  color: var(--mng-math);
+  text-decoration: underline;
+  text-decoration-color: var(--mng-math);
+  text-underline-offset: 3px;
+}
+.mng-ai-bar {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: baseline;
+  font-family: var(--font-sans);
+}
+.mng-ai-btn {
+  height: 20px;
+  padding: 0 8px;
+  border: var(--hairline) solid var(--mng-line);
+  background: var(--mng-surface);
+  color: var(--mng-text);
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.mng-ai-btn:hover,
+.mng-ai-btn:focus-visible {
+  color: var(--mng-accent);
+  outline: none;
+  border-color: var(--mng-accent);
+}

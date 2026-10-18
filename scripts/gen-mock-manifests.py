@@ -24,6 +24,7 @@ if not paths:
     sys.exit(f"no crates/manang-*/manifest.toml under {ROOT}; nothing written")
 
 entries = []
+seen = set()
 for path in paths:
     with open(path, "rb") as f:
         m = tomllib.load(f)
@@ -40,6 +41,10 @@ for path in paths:
         s.setdefault("requires-restart", False)
     if settings:
         entry["settings"] = settings
+    # A plugin may be split over crates (agent: orchestrator + keystore): the first wins.
+    if m["plugin"]["name"] in seen:
+        continue
+    seen.add(m["plugin"]["name"])
     entries.append((m["plugin"]["name"], entry))
 
 body = ",\n".join(
