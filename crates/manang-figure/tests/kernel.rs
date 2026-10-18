@@ -199,3 +199,58 @@ fn invalid_arguments_are_errors_not_panics() {
             .is_err()
     );
 }
+
+/// New figures are `<name>.figure`; a path the owner already has as
+/// `<name>.figure.json` keeps its name (no second file appears); a bare name or
+/// an `.svg` path gives `.figure`.
+#[test]
+fn figures_are_saved_as_dot_figure_and_legacy_names_are_kept() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let k = kernel();
+    let names = |d: &std::path::Path| {
+        let mut v: Vec<String> = fs::read_dir(d)
+            .expect("read dir")
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .collect();
+        v.sort();
+        v
+    };
+
+    // A new figure at a `.figure` path.
+    run(
+        &k,
+        "figure.create",
+        json!({ "path": dir.path().join("a.figure") }),
+    );
+    // A bare name, and an `.svg` path, both become `.figure`.
+    run(&k, "figure.create", json!({ "path": dir.path().join("b") }));
+    run(
+        &k,
+        "figure.create",
+        json!({ "path": dir.path().join("c.svg") }),
+    );
+    // A legacy figure keeps its own name.
+    run(
+        &k,
+        "figure.create",
+        json!({ "path": dir.path().join("old.figure.json") }),
+    );
+    assert_eq!(
+        names(dir.path()),
+        [
+            "a.figure",
+            "a.svg",
+            "b.figure",
+            "b.svg",
+            "c.figure",
+            "c.svg",
+            "old.figure.json",
+            "old.svg"
+        ]
+    );
+    // The content is the same JSON scene whichever name it has.
+    let new: Value =
+        serde_json::from_str(&fs::read_to_string(dir.path().join("a.figure")).expect("read"))
+            .expect("json");
+    assert_eq!(new["version"], 2);
+}

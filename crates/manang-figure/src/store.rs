@@ -56,10 +56,15 @@ pub struct FigureInfo {
     pub dirty: bool,
 }
 
+/// The extension of a figure scene file (JSON content).
+pub const FIGURE_SUFFIX: &str = ".figure";
+/// The name scenes had before 2026-10-18; still read and saved in place.
+pub const LEGACY_FIGURE_SUFFIX: &str = ".figure.json";
+
 /// Where a save wrote the scene and its SVG.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SavedPaths {
-    /// `<name>.figure.json`.
+    /// The scene file (`<name>.figure`, or a legacy `<name>.figure.json`).
     pub json: String,
     /// `<name>.svg`.
     pub svg: String,
@@ -67,15 +72,20 @@ pub struct SavedPaths {
     pub revision: u64,
 }
 
-/// Canonical `<stem>.figure.json` and `<stem>.svg` for any of `x.figure.json`,
-/// `x.svg`, `x.json` or `x`.
+/// The scene file and the SVG for a figure path. New figures are
+/// `<stem>.figure`; a path that already ends in `.figure.json` (the name used
+/// before 2026-10-18) keeps that name, so saving never creates a second file.
+/// `x.svg`, `x.json` and `x` give `x.figure`.
 pub fn resolve_figure_paths(path: &Path) -> (PathBuf, PathBuf) {
     let parent = path.parent().unwrap_or_else(|| Path::new(""));
     let file_name = path
         .file_name()
         .and_then(|f| f.to_str())
         .unwrap_or("figure");
-    let stem = if let Some(s) = file_name.strip_suffix(".figure.json") {
+    if let Some(stem) = file_name.strip_suffix(LEGACY_FIGURE_SUFFIX) {
+        return (path.to_path_buf(), parent.join(format!("{stem}.svg")));
+    }
+    let stem = if let Some(s) = file_name.strip_suffix(FIGURE_SUFFIX) {
         s
     } else if let Some(s) = file_name
         .strip_suffix(".svg")
@@ -86,7 +96,7 @@ pub fn resolve_figure_paths(path: &Path) -> (PathBuf, PathBuf) {
         file_name
     };
     (
-        parent.join(format!("{stem}.figure.json")),
+        parent.join(format!("{stem}{FIGURE_SUFFIX}")),
         parent.join(format!("{stem}.svg")),
     )
 }

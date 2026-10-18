@@ -1,7 +1,7 @@
 //! The figure scene graph, format version 2 (ADR 0012).
 //!
 //! A scene is plain data: a page size and an ordered list of nodes, painted
-//! first to last. It serialises to the `.figure.json` files people commit,
+//! first to last. It serialises to the `.figure` files people commit,
 //! so every optional field is omitted at its default and numbers are written
 //! with at most two decimals ([`FigureScene::to_file_json`]).
 

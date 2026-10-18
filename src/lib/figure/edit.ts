@@ -67,9 +67,9 @@ export function translatedScene(
   return translatedNodes(scene, [id], delta);
 }
 
-/** Where the rendered SVG of a figure lives: next to its `.figure.json`. */
+/** Where the rendered SVG of a figure lives: next to its `.figure` (or legacy `.figure.json`). */
 export function svgPathFor(figurePath: string): string {
-  return figurePath.replace(/\.figure\.json$/, ".svg");
+  return figurePath.replace(/\.figure(\.json)?$/i, ".svg");
 }
 
 /** The PDF Manang writes next to a figure's SVG in LaTeX projects. */
