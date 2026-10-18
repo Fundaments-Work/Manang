@@ -3,10 +3,11 @@
 
 use ::svgbob::Settings;
 
+use crate::color::Invert;
 use crate::diagnostics::Diagnostic;
 use crate::engine::{DiagramEngine, LanguageInfo};
 use crate::error::DiagramError;
-use crate::svgxml;
+use crate::svgxml::{self, Rewrite};
 use crate::theme::{FONT_MONO, Theme};
 
 static INFO: LanguageInfo = LanguageInfo {
@@ -51,6 +52,12 @@ impl DiagramEngine for SvgbobEngine {
             ..Settings::default()
         };
         let svg = ::svgbob::to_svg_with_settings(source, &settings);
-        svgxml::apply_design(&svg, None).map_err(DiagramError::Render)
+        let plan = Rewrite {
+            background: None,
+            square: true,
+            palette: Some((p, Invert::All)),
+            text_font: None,
+        };
+        svgxml::rewrite(&svg, &plan).map_err(DiagramError::Render)
     }
 }

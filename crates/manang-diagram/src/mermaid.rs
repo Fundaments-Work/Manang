@@ -18,10 +18,11 @@ use merman::{
 };
 use serde_json::{Value, json};
 
+use crate::color::Invert;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::engine::{DiagramEngine, LanguageInfo};
 use crate::error::DiagramError;
-use crate::svgxml;
+use crate::svgxml::{self, Rewrite};
 use crate::theme::{FONT_SANS, Palette, Theme};
 
 /// The `merman` version this crate is pinned to (`=0.9.0` in Cargo.toml).
@@ -154,7 +155,7 @@ fn svg_request(theme: Theme, id: &str) -> SvgRequest {
     request.options.diagram_id = Some(id.to_owned());
     request.pipeline = Some(merman::svg::SvgPipeline::resvg_safe().with_postprocessor(
         DesignPostprocessor {
-            background: theme.palette().background,
+            palette: theme.palette(),
         },
     ));
     request
@@ -448,10 +449,10 @@ impl MathRenderer for LocalMath {
     }
 }
 
-/// Square corners, no shadows, and the print background, applied to the
-/// SVG tree before merman's resvg-safe finalisation.
+/// Square corners, no shadows, palette-only colours and the print
+/// background, applied to the SVG tree before merman's resvg-safe finalisation.
 struct DesignPostprocessor {
-    background: Option<&'static str>,
+    palette: &'static Palette,
 }
 
 impl SvgPostprocessor for DesignPostprocessor {
@@ -464,7 +465,13 @@ impl SvgPostprocessor for DesignPostprocessor {
         svg: Cow<'a, str>,
         _ctx: &SvgPostprocessContext<'_>,
     ) -> RenderResult<Cow<'a, str>> {
-        svgxml::apply_design(&svg, self.background)
+        let plan = Rewrite {
+            background: self.palette.background,
+            square: true,
+            palette: Some((self.palette, Invert::Literals)),
+            text_font: None,
+        };
+        svgxml::rewrite(&svg, &plan)
             .map(Cow::Owned)
             .map_err(|message| BackendError::SvgPostprocess {
                 pass: "manang-design".to_owned(),
