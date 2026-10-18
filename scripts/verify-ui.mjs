@@ -554,11 +554,12 @@ async function main() {
       (await cards(page)).join() === "conference-poster",
     );
     await clickText(page, 'nav[aria-label="Home sections"] button', "Templates");
+    await sleep(150);
     check(
-      "Templates lists a starter per engine",
-      await page.evaluate(
-        `[...document.querySelectorAll("main button, section[aria-label='Home'] button")].filter((b) => /(Typst|LaTeX) article|Markdown notes/.test(b.textContent)).length === 3`,
-      ),
+      "Templates section renders starter templates",
+      (await page.evaluate(
+        `document.querySelectorAll('[data-template-card]').length`,
+      )) >= 11,
     );
     await shoot(page, "02-templates");
     await clickText(page, 'nav[aria-label="Home sections"] button', "Projects");
@@ -650,6 +651,80 @@ async function main() {
       "Esc closes the new project dialog",
       !(await exists(page, '[role="dialog"]')),
     );
+
+    /* ------------------------------------------------------------------ */
+    section("Templates");
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Templates");
+    await sleep(200);
+
+    const templateCards = await page.evaluate(
+      `document.querySelectorAll('[data-template-card]').length`,
+    );
+    check(
+      "templates section renders all starter templates",
+      templateCards >= 11,
+      `count: ${templateCards}`,
+    );
+
+    // Filter by LaTeX
+    await clickText(page, 'section[aria-label="Home"] button', "LaTeX");
+    await sleep(150);
+    const latexCount = await page.evaluate(
+      `document.querySelectorAll('[data-template-card]').length`,
+    );
+    const onlyLatex = await page.evaluate(
+      `[...document.querySelectorAll('[data-template-card]')].every((c) => c.innerText.includes("LaTeX"))`,
+    );
+    check(
+      "filtering by LaTeX shows only LaTeX templates",
+      onlyLatex && latexCount === 3,
+      `count: ${latexCount}`,
+    );
+
+    // Filter by All
+    await clickText(page, 'section[aria-label="Home"] button', "All");
+    await sleep(150);
+    const allCount = await page.evaluate(
+      `document.querySelectorAll('[data-template-card]').length`,
+    );
+    check("resetting filter shows all templates", allCount >= 11, `count: ${allCount}`);
+
+    // Click "Use template" on Academic Article
+    const articleCardExists = await page.evaluate(
+      `!!document.querySelector('[data-template-card="article-typst"]')`,
+    );
+    check("article-typst card is present", articleCardExists);
+
+    await click(page, '[data-template-card="article-typst"] button');
+    await sleep(250);
+
+    check(
+      "clicking Use template opens New project dialog with template preselected",
+      await page.evaluate(`(() => {
+        const dialog = document.querySelector('[role="dialog"]');
+        if (!dialog) return false;
+        const select = dialog.querySelector('select[aria-label="Template"]');
+        return select && select.value === "article-typst";
+      })()`),
+    );
+
+    // Create a new project from this template
+    await click(page, 'input[placeholder="entropy-paper"]');
+    await insertText(page, "verify-template-paper");
+    await sleep(150);
+    await clickText(page, 'button[type="submit"]', "Create project");
+    await sleep(500);
+
+    await waitFor(
+      page,
+      `document.querySelector(".cm-content")?.textContent.includes("Introduction")`,
+      { label: "editor shows template content" },
+    );
+    check(
+      "new project from template opened in workbench with main.typ",
+      (await activeTab(page)) === "main.typ",
+    );
+    await shoot(page, "02b-template-created");
 
     /* ------------------------------------------------------------------ */
     section("Workbench");
