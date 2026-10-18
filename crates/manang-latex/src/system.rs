@@ -354,7 +354,11 @@ const ENV_ALLOWLIST: &[&str] = &[
 
 struct TexEnv {
     vars: Vec<(OsString, OsString)>,
+    out_dir: PathBuf,
 }
+
+/// File in the build directory holding what the TeX tools printed.
+pub const TOOL_OUTPUT: &str = "tool-output.txt";
 
 impl TexEnv {
     fn new(root: &Path, out_dir: &Path, build_epoch: u64) -> Self {
@@ -383,7 +387,10 @@ impl TexEnv {
                 out_dir.as_os_str().to_owned(),
             ),
         ]);
-        Self { vars }
+        Self {
+            vars,
+            out_dir: out_dir.to_path_buf(),
+        }
     }
 
     fn command(&self, program: &Path, cwd: &Path) -> Command {
@@ -392,9 +399,23 @@ impl TexEnv {
             .current_dir(cwd)
             .env_clear()
             .envs(self.vars.iter().map(|(k, v)| (k, v)))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stdin(Stdio::null());
+        // What TeX or latexmk printed goes to a file next to the build, so a
+        // failure with nothing in the .log (a crash, a killed process, a
+        // missing tool) can still say why. Nothing is printed to our own output.
+        match fs::File::create(self.out_dir.join(TOOL_OUTPUT)) {
+            Ok(file) => {
+                let again = file.try_clone();
+                command.stdout(file);
+                match again {
+                    Ok(second) => command.stderr(second),
+                    Err(_) => command.stderr(Stdio::null()),
+                };
+            }
+            Err(_) => {
+                command.stdout(Stdio::null()).stderr(Stdio::null());
+            }
+        }
         command
     }
 }

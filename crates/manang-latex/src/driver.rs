@@ -319,6 +319,29 @@ struct RunOutcome {
     failed: Option<String>,
 }
 
+/// The last lines the TeX tools printed, for a failure with nothing in the log.
+fn tool_output_tail(out_dir: &Path) -> String {
+    let text = read_optional(&out_dir.join(system::TOOL_OUTPUT))
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        .unwrap_or_default();
+    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    // latexmk ends with generic advice; start at the first line that says what
+    // went wrong when there is one, else take the last few lines.
+    let start = lines
+        .iter()
+        .position(|l| {
+            let lower = l.to_ascii_lowercase();
+            lower.contains("error") || lower.contains("fatal") || lower.starts_with('!')
+        })
+        .unwrap_or_else(|| lines.len().saturating_sub(6));
+    let tail = &lines[start..lines.len().min(start + 6)];
+    if tail.is_empty() {
+        String::new()
+    } else {
+        format!(": {}", tail.join(" | "))
+    }
+}
+
 /// Compile in a private directory. Blocks until TeX exits or the timeout
 /// kills it; call from a CPU-bound thread (Rayon), never from Tokio.
 pub fn compile_with(
@@ -358,9 +381,13 @@ pub fn compile_with(
                     build_epoch: spec.build_epoch,
                 },
             )?;
-            let failed = run
-                .failure
-                .map(|status| format!("{} stopped ({status}); see the log", engine.program()));
+            let failed = run.failure.map(|status| {
+                let detail = tool_output_tail(&out_dir);
+                format!(
+                    "{} stopped ({status}); see the log{detail}",
+                    engine.program()
+                )
+            });
             let outcome = RunOutcome {
                 stem: run.stem,
                 failed,
@@ -519,6 +546,20 @@ fn run_tectonic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_failure_without_log_errors_shows_what_the_tools_printed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert_eq!(tool_output_tail(dir.path()), "");
+        fs::write(
+            dir.path().join(system::TOOL_OUTPUT),
+            "Running 'pdflatex -halt-on-error main.tex'\n\nThis is pdfTeX\n! Emergency stop.\nLatexmk: advice\n",
+        )
+        .expect("write");
+        let tail = tool_output_tail(dir.path());
+        assert!(tail.starts_with(": Running 'pdflatex"), "{tail}");
+        assert!(tail.contains("Emergency stop"), "{tail}");
+    }
+
     use super::*;
 
     #[test]
