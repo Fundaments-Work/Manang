@@ -9,10 +9,13 @@ import { SvelteMap } from "svelte/reactivity";
 import { embedLine, svgPathFor } from "$lib/figure/edit";
 import { errorMessage, kernel, reportError } from "$lib/kernel";
 import { diagramApi, figureApi, projectApi } from "$lib/kernel/api";
+import type { ProjectChange } from "$lib/kernel/types";
+import { decideExternal, isNotFoundError } from "$lib/workbench/external";
 import type { DiagramTheme } from "$lib/kernel/types";
 import { basename, dirname } from "$lib/workbench/paths";
 
 import { FigureState, type FigureBackend, type MermaidResult } from "./figure.svelte";
+import { dialog } from "./dialog.svelte";
 import { notice } from "./notice.svelte";
 import { workspace } from "./workspace.svelte";
 
@@ -45,6 +48,19 @@ export class FiguresStore {
   /** Bumped when a figure is added or removed, so dirty lists refresh. */
   version = $state(0);
 
+  readonly #changeListeners: ((path: string) => void)[] = [];
+  readonly #saveListeners: ((path: string) => void)[] = [];
+
+  /** Called with the path of a figure after its scene reached the disk. */
+  onSave(listener: (path: string) => void): void {
+    this.#saveListeners.push(listener);
+  }
+
+  /** Called with the path of a figure each time its scene changes. */
+  onChange(listener: (path: string) => void): void {
+    this.#changeListeners.push(listener);
+  }
+
   get(path: string): FigureState | undefined {
     return this.#open.get(path);
   }
@@ -56,10 +72,22 @@ export class FiguresStore {
 
   async #adopt(path: string, id: number): Promise<FigureState> {
     const figure = new FigureState(path, await api.get(id), backendFor(id), id);
+    this.#hook(figure);
+    void this.#noteDisk(figure);
     this.#open.set(path, figure);
     this.version += 1;
     this.#listen();
     return figure;
+  }
+
+  #hook(figure: FigureState): void {
+    figure.onEdit = () => {
+      for (const listener of this.#changeListeners) listener(figure.path);
+    };
+    figure.onSaved = () => {
+      void this.#noteDisk(figure);
+      for (const listener of this.#saveListeners) listener(figure.path);
+    };
   }
 
   #unlisten: Promise<() => void> | null = null;
@@ -93,6 +121,104 @@ export class FiguresStore {
     pending
       .then((stop) => stop())
       .catch((e: unknown) => reportError("figure.changed", e));
+  }
+
+  /** Remember the fingerprint of the scene file as it is now. */
+  async #noteDisk(figure: FigureState): Promise<void> {
+    try {
+      figure.diskHash = (await project.readText(figure.path)).hash;
+    } catch {
+      figure.diskHash = null;
+    }
+  }
+
+  /**
+   * The watcher reported changes: an open figure whose file changed outside
+   * reloads when it has no unsaved edits, and is marked (never overwritten)
+   * when it has. A figure whose file went away keeps its tab.
+   */
+  async externalChanges(changes: readonly ProjectChange[]): Promise<void> {
+    for (const change of changes) {
+      const gone = change.kind === "removed" ? change.path : change.from;
+      if (gone !== undefined) {
+        const figure = this.#open.get(gone);
+        if (figure !== undefined && figure.external !== "deleted") {
+          figure.external = "deleted";
+          notice.error(`${basename(gone)} was deleted or moved on disk.`);
+        }
+      }
+      if (change.kind === "removed") continue;
+      const figure = this.#open.get(change.path);
+      if (figure === undefined) continue;
+      // Our own save comes back through the watcher a moment later.
+      if (Date.now() - figure.savedAt < 2500) continue;
+      let disk: { content: string; hash: string } | null;
+      try {
+        disk = await project.readText(change.path);
+      } catch (error) {
+        if (!isNotFoundError(error)) {
+          reportError("figures.externalChange", error);
+          continue;
+        }
+        disk = null;
+      }
+      if (this.#open.get(change.path) !== figure) continue;
+      const action = decideExternal(
+        { dirty: figure.dirty, diskHash: figure.diskHash, savedText: "\0", text: "\0" },
+        disk,
+      );
+      if (disk === null) continue;
+      if (action.kind === "reload") await this.reload(change.path);
+      else if (action.kind === "ignore") figure.diskHash = disk.hash;
+      else if (action.kind === "conflict") {
+        const first = figure.external === null;
+        figure.external = "changed";
+        if (first) {
+          notice.error(
+            `${basename(change.path)} changed on disk. Your unsaved drawing is kept: choose how to continue in the bar above the editor.`,
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Replace an open figure with what is on disk, keeping its tab, tool and
+   * view. The old scene's unsaved edits are dropped; the caller asks first.
+   */
+  async reload(path: string): Promise<boolean> {
+    const old = this.#open.get(path);
+    if (old === undefined) return false;
+    try {
+      const { id } = await api.open(absolute(path));
+      const fresh = new FigureState(path, await api.get(id), backendFor(id), id);
+      fresh.view = old.view;
+      fresh.tool = old.tool;
+      fresh.panelOpen = old.panelOpen;
+      this.#hook(fresh);
+      this.#open.set(path, fresh);
+      this.version += 1;
+      await this.#noteDisk(fresh);
+      old.close().catch((e: unknown) => reportError("figures.close", e));
+      return true;
+    } catch (error) {
+      reportError("figures.reload", error);
+      notice.error(`Could not reload ${path}: ${errorMessage(error)}`);
+      return false;
+    }
+  }
+
+  /** "Keep my version": acknowledge the disk file; the next save replaces it. */
+  keepMine(path: string): void {
+    const figure = this.#open.get(path);
+    if (figure === undefined) return;
+    figure.external = null;
+    void this.#noteDisk(figure);
+  }
+
+  /** "Load disk version": drop the unsaved drawing and show the file. */
+  async loadDisk(path: string): Promise<void> {
+    await this.reload(path);
   }
 
   /** Opens in flight, so a tab and a click asking at once share one load. */
@@ -137,6 +263,7 @@ export class FiguresStore {
     const figure = this.#open.get(path);
     if (figure === undefined) return true;
     try {
+      if (!(await this.#confirmOverwrite(figure))) return false;
       await figure.save();
       return true;
     } catch (error) {
@@ -144,6 +271,39 @@ export class FiguresStore {
       notice.error(`Could not save ${path}: ${errorMessage(error)}`);
       return false;
     }
+  }
+
+  /**
+   * Saving replaces the scene file. If another program changed it since this
+   * figure loaded it, ask first (checked against the disk now, not only the
+   * watcher's events).
+   */
+  async #confirmOverwrite(figure: FigureState): Promise<boolean> {
+    const path = figure.path;
+    let changed = figure.external === "changed";
+    if (!changed && figure.diskHash !== null) {
+      try {
+        changed = (await project.readText(path)).hash !== figure.diskHash;
+      } catch {
+        changed = false; // Gone: saving simply writes it again.
+      }
+    }
+    if (!changed) return true;
+    const choice = await dialog.ask({
+      title: `${basename(path)} changed on disk`,
+      message:
+        "Another program changed this figure after Manang loaded it. Saving now would replace its changes with yours.",
+      actions: [
+        { id: "overwrite", label: "Overwrite with my version" },
+        { id: "load", label: "Load disk version" },
+      ],
+    });
+    if (choice === "overwrite") {
+      figure.external = null;
+      return true;
+    }
+    if (choice === "load") await this.reload(path);
+    return false;
   }
 
   /**
