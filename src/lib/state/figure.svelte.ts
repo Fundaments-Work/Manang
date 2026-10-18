@@ -1,83 +1,217 @@
 /**
- * Figure editor state: one `FigureState` per open figure file.
+ * Figure editor state: one `FigureState` per open figure file (ADR 0012).
  *
  * The figure plugin (`figure.*`) owns the scene, its revision and its undo
- * history. This state keeps a mirror of the scene for drawing, the active
- * tool and the gesture in progress.
+ * history. This state keeps a mirror of the scene for drawing, the view
+ * (pan and zoom, never saved), the selection and the gesture in progress.
  *
  * Edits are optimistic: every `figure.apply` operation addresses nodes by id
  * and carries all its data, so the editor applies it to the mirror at once
- * (`applyEdit`, the same rules the plugin uses) and sends it to the plugin
+ * (`applyOp`, the mirror of the plugin's rules) and sends it to the plugin
  * behind, in order. A refused operation, an undo or a redo replaces the mirror
- * with the plugin's scene and replays whatever is still queued on top. A drag
- * moves the node on the mirror only and becomes one `translate` operation on
- * release, so the history gets one step per gesture and the IPC sees one call.
+ * with the plugin's scene and replays whatever is still queued on top.
+ *
+ * Gestures (move, resize, rotate, arrow ends) change a local preview only;
+ * pointer-up sends one operation, so the history gets one step per gesture
+ * and pointer moves never cross the IPC boundary.
  */
 
-import { applyEdit, translatedScene, type FigureEdit } from "$lib/figure/edit";
-import { hits, normalizeRect, outlinePoint } from "$lib/figure/geometry";
+import { normalizeRect } from "$lib/figure/geometry";
+import { applyEdit, type FigureEdit } from "$lib/figure/edit";
+import { route } from "$lib/figure/binding";
+import {
+  MAX_IMAGE_BYTES,
+  PASTE_OFFSET,
+  looksLikeMermaid,
+  parseNodes,
+  reidentify,
+  serializeNodes,
+} from "$lib/figure/clipboard";
+import {
+  handleAt,
+  handleEdges,
+  handlePositions,
+  resizeBox,
+  rotationFor,
+  type Handle,
+  type ResizeHandle,
+} from "$lib/figure/handles";
+import { actionFor, type KeyEventLike, type Tool } from "$lib/figure/keymap";
+import { nextGroupId, type AlignEdge, type Axis, type ZOrder } from "$lib/figure/ops";
+import { naturalSize } from "$lib/figure/text";
 import {
   createScene,
   formatNodeId,
   highestCounter,
   isBindable,
+  isConnector,
+  isShape,
   nodeById,
-  type Binding,
+  type ConnectorNode,
   type FigureNode,
   type FigureScene,
+  type Rect,
+  type ShapeNode,
   type StrokeSample,
+  type Style,
   type Vec,
 } from "$lib/figure/scene";
+import {
+  expandGroups,
+  idSet,
+  marqueeSelect,
+  pickAt,
+  planDrag,
+  previewMove,
+  previewReplace,
+  selectAll,
+  selectionBounds,
+  toggleSelection,
+  type DragPlan,
+} from "$lib/figure/selection";
+import { SNAP_PX, snapMove, snapResize, type Guide } from "$lib/figure/snapping";
+import {
+  cachedBounds,
+  fitRect,
+  pan,
+  stepZoom,
+  toScene,
+  wheelZoomFactor,
+  zoomAt,
+  type Viewport,
+} from "$lib/figure/viewport";
 import { errorMessage, reportError } from "$lib/kernel";
 import type { FigureApplyResult, FigureOp, FigureSaved } from "$lib/kernel/api";
 
 import { notice } from "./notice.svelte";
 
-export type PenTool = "select" | "freehand" | "geometry" | "ellipse" | "arrow" | "math";
+export type { Tool };
 
-export const TOOLS: readonly { tool: PenTool; label: string; key: string }[] = [
-  { tool: "select", label: "Select", key: "P" },
-  { tool: "freehand", label: "Freehand", key: "B" },
-  { tool: "geometry", label: "Rectangle", key: "G" },
-  { tool: "ellipse", label: "Ellipse", key: "E" },
-  { tool: "arrow", label: "Arrow", key: "A" },
-  { tool: "math", label: "Formula", key: "M" },
-];
+/** What `figure.from-mermaid` answers. */
+export interface MermaidResult {
+  readonly ids: readonly string[];
+  readonly mode?: "shapes" | "block";
+  readonly figure?: { readonly revision?: number };
+  readonly fallback?: string | null;
+}
 
 /** The plugin side of one open figure (`figure.*` bound to its id). */
 export interface FigureBackend {
   apply(op: FigureOp): Promise<FigureApplyResult>;
   get(): Promise<FigureScene>;
-  /** The id of the topmost node at `point`, or null. */
-  hitTest(point: Vec): Promise<string | null>;
   /** Write `<name>.figure.json` and `<name>.svg` for the project path `path`. */
   save(path: string): Promise<FigureSaved>;
   close(): Promise<void>;
   /** The scene as SVG markup (`figure.export-svg`). */
   exportSvg(): Promise<string>;
+  /** Mermaid text to native shapes or a block (`figure.from-mermaid`). */
+  fromMermaid(args: {
+    source: string;
+    x: number;
+    y: number;
+    mode: "shapes" | "block";
+  }): Promise<MermaidResult>;
 }
 
 export function serializeScene(scene: FigureScene): string {
   return `${JSON.stringify(scene, null, 2)}\n`;
 }
 
-/** A select-tool press: the hit test is asynchronous, so the drag waits for it. */
-interface Press {
-  readonly start: Vec;
-  current: Vec;
-  released: boolean;
-  /** The node under the press, once the plugin answered. */
-  id: string | null;
-  /** The mirror before the drag started. */
-  base: FigureScene | null;
+/** Pointer details the state reads (the component passes them in). */
+export interface PointerInfo {
+  /** Scene coordinates. */
+  readonly point: Vec;
+  /** Canvas-relative screen coordinates. */
+  readonly screen: Vec;
+  readonly button: number;
+  readonly shift: boolean;
+  readonly alt: boolean;
+  readonly mod: boolean;
+  readonly pressure: number;
+}
+
+type CreateTool = "rect" | "diamond" | "ellipse" | "frame" | "arrow" | "line";
+
+type Gesture =
+  | { readonly kind: "pan"; readonly start: Vec; readonly view: Viewport }
+  | {
+      readonly kind: "create";
+      readonly tool: CreateTool;
+      readonly start: Vec;
+      current: Vec;
+    }
+  | { readonly kind: "draw"; points: StrokeSample[] }
+  | {
+      readonly kind: "move";
+      readonly start: Vec;
+      readonly ids: readonly string[];
+      readonly plan: DragPlan;
+      readonly startBounds: Rect;
+      readonly others: readonly Rect[];
+      delta: Vec;
+    }
+  | {
+      readonly kind: "resize";
+      readonly id: string;
+      readonly handle: ResizeHandle;
+      readonly node: ShapeNode;
+      readonly plan: DragPlan;
+      readonly others: readonly Rect[];
+      box: Rect;
+    }
+  | {
+      readonly kind: "rotate";
+      readonly id: string;
+      readonly node: ShapeNode;
+      readonly plan: DragPlan;
+      angle: number;
+    }
+  | {
+      readonly kind: "marquee";
+      readonly start: Vec;
+      current: Vec;
+      readonly additive: boolean;
+    }
+  | {
+      readonly kind: "endpoint";
+      readonly id: string;
+      readonly end: "start" | "end";
+      readonly node: ConnectorNode;
+      point: Vec;
+      target: string | null;
+    }
+  | { readonly kind: "erase"; readonly ids: ReadonlySet<string> };
+
+/** An inline label editor over a shape, or over the point a text will go. */
+export interface LabelEdit {
+  /** The node edited, or null for a new text node. */
+  readonly id: string | null;
+  readonly kind: string;
+  /** Scene box the editor covers. */
+  readonly box: Rect;
+  readonly angle: number;
+  readonly text: string;
+}
+
+/** Pixels (screen) a press must travel before it counts as a drag. */
+const DRAG_SLOP = 3;
+/** Screen size of a handle's hit area. */
+export const HANDLE_PX = 8;
+
+function shapeOf(node: FigureNode | undefined): ShapeNode | undefined {
+  return node !== undefined && isShape(node) ? node : undefined;
 }
 
 export class FigureState {
   path: string;
+  /** The plugin's id of this figure (for `figure.changed` events). */
+  readonly id: number;
   readonly #backend: FigureBackend;
 
   /** The mirror of the plugin's scene, ahead of it by the queued edits. */
   scene = $state.raw<FigureScene>(createScene(960, 540));
+  /** The scene with the gesture in progress applied, or null. */
+  preview = $state.raw<FigureScene | null>(null);
   /** The plugin's revision and the revision on disk. */
   revision = $state(0);
   savedRevision = $state(0);
@@ -90,54 +224,63 @@ export class FigureState {
     this.pending > 0 || this.revision !== this.savedRevision,
   );
 
-  constructor(path: string, scene: FigureScene, backend: FigureBackend) {
+  tool = $state<Tool>("select");
+  /** Selected node ids, in selection order. */
+  selection = $state.raw<readonly string[]>([]);
+  view = $state.raw<Viewport>({ x: -40, y: -40, zoom: 1 });
+  /** Canvas size in screen pixels. */
+  width = $state(0);
+  height = $state(0);
+  /** Space held: drags pan. */
+  spaceHeld = $state(false);
+
+  gesture = $state.raw<Gesture | null>(null);
+  guides = $state.raw<readonly Guide[]>([]);
+  /** Freehand stroke being drawn. */
+  draft = $state.raw<readonly StrokeSample[]>([]);
+  /** Laser trail (scene points with a timestamp), drawn and faded locally. */
+  laser = $state.raw<readonly { x: number; y: number; t: number }[]>([]);
+  /** The inline label editor, when open. */
+  editing = $state.raw<LabelEdit | null>(null);
+  /** Pasted text that looks like Mermaid, waiting for a choice. */
+  mermaidPrompt = $state<string | null>(null);
+  /** The Insert Mermaid dialog. */
+  mermaidDialog = $state(false);
+
+  #counter = 0;
+  #press: { readonly screen: Vec; readonly point: Vec; moved: boolean } | null = null;
+  #fitted = false;
+
+  constructor(path: string, scene: FigureScene, backend: FigureBackend, id = 0) {
     this.path = path;
+    this.id = id;
     this.scene = scene;
     this.#backend = backend;
     this.#counter = highestCounter(scene);
   }
 
-  tool = $state<PenTool>("freehand");
-
-  #counter = 0;
-
-  /** The stroke being drawn right now; committed on pointer up. */
-  draft = $state<StrokeSample[]>([]);
-
-  /** Endpoints of the arrow or geometry being dragged. */
-  dragStart = $state<Vec | null>(null);
-  dragCurrent = $state<Vec | null>(null);
-
-  /** The shape an arrow end would bind to, and where, while dragging. */
-  activeSnap = $state<{
-    readonly nodeId: string;
-    readonly x: number;
-    readonly y: number;
-  } | null>(null);
-
-  selectedId = $state<string | null>(null);
-
-  #press: Press | null = null;
-  #pressToken = 0;
-
-  /** Plugin calls run one at a time, in the order they were made. */
-  #chain: Promise<unknown> = Promise.resolve();
-  /** Edits applied to the mirror whose plugin call has not finished. */
-  #inflight: FigureEdit[] = [];
-
+  /** What the canvas draws: the preview during a gesture, else the mirror. */
+  readonly display: FigureScene = $derived(this.preview ?? this.scene);
+  readonly nodeCount: number = $derived(this.scene.nodes.length);
+  readonly selectedNodes: readonly FigureNode[] = $derived.by(() => {
+    const set = idSet(this.selection);
+    return this.display.nodes.filter((n) => set.has(n.id));
+  });
+  /** The one selected node, if exactly one is selected. */
   readonly selected: FigureNode | undefined = $derived(
-    this.selectedId === null ? undefined : nodeById(this.scene, this.selectedId),
+    this.selectedNodes.length === 1 ? this.selectedNodes[0] : undefined,
   );
 
-  readonly nodeCount: number = $derived(this.scene.nodes.length);
-
   get isDrawing(): boolean {
-    return this.draft.length > 0 || this.dragStart !== null || this.#press !== null;
+    return this.gesture !== null || this.draft.length > 0;
   }
 
   /* ---------------------------------------------------------------------- */
   /* Plugin round trips                                                      */
   /* ---------------------------------------------------------------------- */
+
+  #chain: Promise<unknown> = Promise.resolve();
+  #inflight: FigureEdit[] = [];
 
   #run<T>(task: () => Promise<T>): Promise<T> {
     const next = this.#chain.then(task);
@@ -167,6 +310,7 @@ export class FigureState {
       }
     }
     this.scene = scene;
+    this.#counter = Math.max(this.#counter, highestCounter(scene));
     this.#dropMissingSelection();
   }
 
@@ -177,8 +321,10 @@ export class FigureState {
       next = applyEdit(this.scene, edit);
     } catch (error) {
       reportError("figure.edit", error);
+      notice.error(`That change is not possible: ${errorMessage(error)}`);
       return false;
     }
+    if (next === this.scene) return true;
     this.scene = next;
     this.canUndo = true;
     this.canRedo = false;
@@ -246,19 +392,20 @@ export class FigureState {
     return this.#run(() => this.#backend.close());
   }
 
-  #dropMissingSelection(): void {
-    if (
-      this.selectedId !== null &&
-      nodeById(this.scene, this.selectedId) === undefined
-    ) {
-      this.selectedId = null;
-    }
+  /** Another plugin or an agent changed this figure: follow when it is newer. */
+  externalChange(revision: number): Promise<void> {
+    return this.#run(async () => {
+      if (revision <= this.revision) return;
+      this.revision = revision;
+      this.canUndo = true;
+      this.canRedo = false;
+      await this.#resync().catch((e: unknown) => reportError("figure.get", e));
+    });
   }
 
-  setTool(tool: PenTool): void {
-    this.tool = tool;
-    this.cancel();
-    if (tool !== "select") this.selectedId = null;
+  #dropMissingSelection(): void {
+    const ids = this.selection.filter((id) => nodeById(this.scene, id) !== undefined);
+    if (ids.length !== this.selection.length) this.selection = ids;
   }
 
   nextId(): string {
@@ -267,253 +414,987 @@ export class FigureState {
   }
 
   /* ---------------------------------------------------------------------- */
+  /* Tools, view and selection                                              */
+  /* ---------------------------------------------------------------------- */
+
+  setTool(tool: Tool): void {
+    this.cancel();
+    this.tool = tool;
+    if (tool !== "select") this.selection = [];
+  }
+
+  select(ids: readonly string[]): void {
+    this.selection = [...ids];
+  }
+
+  setSize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
+    if (!this.#fitted && width > 0 && height > 0) {
+      this.#fitted = true;
+      this.zoomToFit();
+    }
+  }
+
+  get zoomPercent(): number {
+    return Math.round(this.view.zoom * 100);
+  }
+
+  /** The scene point at the centre of the canvas. */
+  get centre(): Vec {
+    return toScene(this.view, { x: this.width / 2, y: this.height / 2 });
+  }
+
+  #contentRect(): Rect {
+    const page = { x: 0, y: 0, width: this.scene.width, height: this.scene.height };
+    const all = selectionBounds(
+      this.scene,
+      this.scene.nodes.map((n) => n.id),
+    );
+    if (all.width === 0 && all.height === 0) return page;
+    const x = Math.min(page.x, all.x);
+    const y = Math.min(page.y, all.y);
+    return {
+      x,
+      y,
+      width: Math.max(page.x + page.width, all.x + all.width) - x,
+      height: Math.max(page.y + page.height, all.y + all.height) - y,
+    };
+  }
+
+  zoomToFit(): void {
+    if (this.width <= 0) return;
+    this.view = fitRect(this.#contentRect(), this.width, this.height, 32, 1);
+  }
+
+  zoomToSelection(): void {
+    if (this.selection.length === 0 || this.width <= 0) return;
+    this.view = fitRect(
+      selectionBounds(this.scene, this.selection),
+      this.width,
+      this.height,
+      64,
+      4,
+    );
+  }
+
+  zoomBy(direction: 1 | -1): void {
+    this.view = zoomAt(this.view, stepZoom(this.view.zoom, direction), {
+      x: this.width / 2,
+      y: this.height / 2,
+    });
+  }
+
+  zoomReset(): void {
+    this.view = zoomAt(this.view, 1, { x: this.width / 2, y: this.height / 2 });
+  }
+
+  /** Wheel: Ctrl/Cmd (and trackpad pinch) zooms around the cursor, else pans. */
+  wheel(screen: Vec, dx: number, dy: number, zoom: boolean): void {
+    if (zoom) {
+      this.view = zoomAt(this.view, this.view.zoom * wheelZoomFactor(dy), screen);
+    } else {
+      this.view = pan(this.view, -dx, -dy);
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Pointer lifecycle                                                       */
   /* ---------------------------------------------------------------------- */
 
-  beginStroke(point: Vec, pressure: number): void {
-    switch (this.tool) {
-      case "freehand":
-        this.draft = [{ x: point.x, y: point.y, pressure }];
-        break;
-      case "geometry":
-      case "ellipse":
-      case "arrow":
-        this.dragStart = point;
-        this.dragCurrent = point;
-        break;
-      case "select":
-        this.#press = {
-          start: point,
-          current: point,
-          released: false,
-          id: null,
-          base: null,
-        };
-        void this.#pick(point, ++this.#pressToken);
-        break;
-      case "math":
-        this.stampMath(point);
-        break;
+  /** The handle of the single selection under `screen`, if any. */
+  handleUnder(point: Vec): Handle | "start" | "end" | undefined {
+    const node = this.selected;
+    if (node === undefined || node.locked === true) return undefined;
+    const tol = HANDLE_PX / this.view.zoom;
+    if (isConnector(node)) {
+      const first = node.points[0];
+      const last = node.points[node.points.length - 1];
+      if (
+        first !== undefined &&
+        Math.hypot(first.x - point.x, first.y - point.y) <= tol
+      )
+        return "start";
+      if (last !== undefined && Math.hypot(last.x - point.x, last.y - point.y) <= tol)
+        return "end";
+      return undefined;
     }
+    if (!isShape(node)) return undefined;
+    const r = normalizeRect(node.x, node.y, node.width, node.height);
+    return handleAt(handlePositions(r, node.angle ?? 0, this.view.zoom), point, tol);
   }
 
-  /** Ask the plugin what is under the press, after every queued edit. */
-  async #pick(point: Vec, token: number): Promise<void> {
-    let id: string | null = null;
-    try {
-      id = await this.#run(() => this.#backend.hitTest(point));
-    } catch (error) {
-      reportError("figure.hit-test", error);
-    }
-    const press = this.#press;
-    if (token !== this.#pressToken || press === null) return;
-    this.selectedId = id;
-    if (id === null) {
-      if (press.released) this.#press = null;
-      return;
-    }
-    press.id = id;
-    press.base = this.scene;
-    if (press.released) {
-      this.#finishMove();
-      return;
-    }
-    this.#dragTo(press);
+  #others(exclude: ReadonlySet<string>): Rect[] {
+    return this.scene.nodes
+      .filter((n) => !exclude.has(n.id) && !isConnector(n))
+      .map((n) => cachedBounds(n));
   }
 
-  #dragTo(press: Press): void {
-    if (press.id === null || press.base === null) return;
-    const delta = {
-      x: press.current.x - press.start.x,
-      y: press.current.y - press.start.y,
-    };
-    // Live movement is drawn on the mirror only; the release sends one step.
-    this.scene = translatedScene(press.base, press.id, delta);
-  }
-
-  #finishMove(): void {
-    const press = this.#press;
-    this.#press = null;
-    if (press === null || press.id === null || press.base === null) return;
-    const dx = press.current.x - press.start.x;
-    const dy = press.current.y - press.start.y;
-    this.scene = press.base;
-    if (dx !== 0 || dy !== 0) this.edit({ op: "translate", id: press.id, dx, dy });
-  }
-
-  /**
-   * Extends an in-progress interaction.
-   *
-   * Sampling is thinned by distance rather than by time so the stroke density
-   * is identical on a 60 Hz and a 120 Hz display, which keeps the exported
-   * outline deterministic across machines.
-   */
-  extend(point: Vec, pressure: number): void {
-    const press = this.#press;
-    if (press !== null) {
-      press.current = point;
-      this.#dragTo(press);
-      return;
-    }
-
-    if (this.tool === "freehand") {
-      const last = this.draft[this.draft.length - 1];
-      if (last !== undefined && Math.hypot(point.x - last.x, point.y - last.y) < 1.5) {
-        return;
-      }
-      this.draft = [...this.draft, { x: point.x, y: point.y, pressure }];
-      return;
-    }
-
-    if (this.dragStart !== null) {
-      this.dragCurrent = point;
-      if (this.tool === "arrow") {
-        const target = this.#bindTarget(point);
-        this.activeSnap =
-          target === undefined
-            ? null
-            : { nodeId: target.id, ...outlinePoint(target, this.dragStart) };
-      } else {
-        this.activeSnap = null;
-      }
-    }
-  }
-
-  /** Commits the in-progress node, if the gesture produced one. */
-  endStroke(): void {
-    const press = this.#press;
-    if (press !== null) {
-      press.released = true;
-      // Still waiting for the hit test: it finishes the move when it lands.
-      if (press.id !== null) this.#finishMove();
-      return;
-    }
-
-    if (this.tool === "freehand" && this.draft.length > 1) {
-      this.add({ kind: "freedraw", id: this.nextId(), points: this.draft, size: 2.5 });
-    }
-
-    if (this.dragStart !== null && this.dragCurrent !== null) {
-      const from = this.dragStart;
-      const to = this.dragCurrent;
-
-      if (this.tool === "arrow" && Math.hypot(to.x - from.x, to.y - from.y) > 8) {
-        // An end dropped on a shape binds to it; the plugin routes it to the outline.
-        const start = this.#bindTarget(from);
-        const end = this.#bindTarget(to);
-        const binding = (n: FigureNode | undefined): { node: string } | undefined =>
-          n === undefined ? undefined : ({ node: n.id } satisfies Binding);
-        const startBinding = binding(start);
-        const endBinding = binding(end);
-        this.add({
-          kind: "arrow",
-          id: this.nextId(),
-          points: [from, to],
-          ...(startBinding === undefined ? {} : { start: startBinding }),
-          ...(endBinding === undefined || end?.id === start?.id
-            ? {}
-            : { end: endBinding }),
-        });
-      }
-
-      if (this.tool === "geometry") {
-        // Dragged up or left gives a negative size, which SVG does not draw.
-        const box = normalizeRect(from.x, from.y, to.x - from.x, to.y - from.y);
-        if (box.width > 8 && box.height > 8) {
-          this.add({
-            kind: "rect",
-            id: this.nextId(),
-            ...box,
-            style: { fill: "surface" },
-          });
-        }
-      }
-
-      if (this.tool === "ellipse") {
-        const box = normalizeRect(from.x, from.y, to.x - from.x, to.y - from.y);
-        if (box.width > 8 && box.height > 8) {
-          this.add({
-            kind: "ellipse",
-            id: this.nextId(),
-            ...box,
-            style: { fill: "surface" },
-          });
-        }
-      }
-    }
-
-    this.cancel();
-  }
-
-  cancel(): void {
-    if (this.#press !== null) {
-      // An abandoned drag snaps back; nothing was sent.
-      if (this.#press.base !== null) this.scene = this.#press.base;
-      this.#press = null;
-      this.#pressToken += 1;
-    }
-    this.draft = [];
-    this.dragStart = null;
-    this.dragCurrent = null;
-    this.activeSnap = null;
-  }
-
-  /** The topmost bindable shape under `point`, for arrow ends. */
-  #bindTarget(point: Vec): FigureNode | undefined {
+  /** The topmost bindable shape under `point`, other than `except`. */
+  bindTarget(point: Vec, except?: string): FigureNode | undefined {
     for (let i = this.scene.nodes.length - 1; i >= 0; i -= 1) {
-      const node = this.scene.nodes[i];
-      if (node !== undefined && isBindable(node) && hits(node, point, 4)) return node;
+      const n = this.scene.nodes[i];
+      if (n === undefined || n.id === except || !isBindable(n)) continue;
+      if (
+        pickAt({ ...this.scene, nodes: [n] }, point, 4 / this.view.zoom) !== undefined
+      )
+        return n;
     }
     return undefined;
+  }
+
+  pointerDown(p: PointerInfo): void {
+    this.mermaidPrompt = null;
+    if (this.editing !== null) this.commitLabel();
+    this.#press = { screen: p.screen, point: p.point, moved: false };
+    if (p.button === 1 || this.tool === "hand" || (this.spaceHeld && p.button === 0)) {
+      this.gesture = { kind: "pan", start: p.screen, view: this.view };
+      return;
+    }
+    if (p.button !== 0) return;
+    switch (this.tool) {
+      case "select":
+        this.#pressSelect(p);
+        return;
+      case "rect":
+      case "diamond":
+      case "ellipse":
+      case "frame":
+      case "arrow":
+      case "line":
+        this.gesture = {
+          kind: "create",
+          tool: this.tool,
+          start: p.point,
+          current: p.point,
+        };
+        return;
+      case "draw":
+        this.draft = [{ x: p.point.x, y: p.point.y, pressure: p.pressure }];
+        this.gesture = { kind: "draw", points: [...this.draft] };
+        return;
+      case "eraser":
+        this.gesture = { kind: "erase", ids: idSet([]) };
+        this.#erase(p.point);
+        return;
+      case "laser":
+        this.laser = [
+          ...this.laser,
+          { x: p.point.x, y: p.point.y, t: performance.now() },
+        ];
+        return;
+      case "text":
+        this.startText(p.point);
+        return;
+      case "math":
+        this.stampMath(p.point);
+        return;
+    }
+  }
+
+  #pressSelect(p: PointerInfo): void {
+    const handle = this.handleUnder(p.point);
+    const single = this.selected;
+    if (handle !== undefined && single !== undefined) {
+      if ((handle === "start" || handle === "end") && isConnector(single)) {
+        this.gesture = {
+          kind: "endpoint",
+          id: single.id,
+          end: handle,
+          node: single,
+          point: p.point,
+          target: null,
+        };
+        return;
+      }
+      const shape = shapeOf(single);
+      if (shape !== undefined) {
+        const plan = planDrag(this.scene, [shape.id]);
+        if (handle === "rotate") {
+          this.gesture = {
+            kind: "rotate",
+            id: shape.id,
+            node: shape,
+            plan,
+            angle: shape.angle ?? 0,
+          };
+        } else if (handle !== "start" && handle !== "end") {
+          this.gesture = {
+            kind: "resize",
+            id: shape.id,
+            handle,
+            node: shape,
+            plan,
+            others: this.#others(idSet([shape.id])),
+            box: normalizeRect(shape.x, shape.y, shape.width, shape.height),
+          };
+        }
+        return;
+      }
+    }
+    const hit = pickAt(this.scene, p.point, 6 / this.view.zoom);
+    if (hit === undefined) {
+      this.gesture = {
+        kind: "marquee",
+        start: p.point,
+        current: p.point,
+        additive: p.shift,
+      };
+      if (!p.shift) this.selection = [];
+      return;
+    }
+    const ids = expandGroups(this.scene, [hit.id]);
+    if (p.shift) {
+      this.selection = toggleSelection(this.selection, ids);
+      return;
+    }
+    if (!ids.every((id) => this.selection.includes(id))) this.selection = ids;
+    const moving = this.selection.filter(
+      (id) => nodeById(this.scene, id)?.locked !== true,
+    );
+    const set = idSet(moving);
+    this.gesture = {
+      kind: "move",
+      start: p.point,
+      ids: moving,
+      plan: planDrag(this.scene, moving),
+      startBounds: selectionBounds(this.scene, moving),
+      others: this.#others(set),
+      delta: { x: 0, y: 0 },
+    };
+  }
+
+  pointerMove(p: PointerInfo): void {
+    const press = this.#press;
+    if (press !== null && !press.moved) {
+      press.moved =
+        Math.hypot(p.screen.x - press.screen.x, p.screen.y - press.screen.y) >
+        DRAG_SLOP;
+    }
+    if (
+      this.tool === "laser" &&
+      (press !== null || this.laser.length > 0) &&
+      this.gesture === null
+    ) {
+      if (press !== null) {
+        const now = performance.now();
+        this.laser = [
+          ...this.laser.filter((q) => now - q.t < 700),
+          { x: p.point.x, y: p.point.y, t: now },
+        ];
+      }
+      return;
+    }
+    const g = this.gesture;
+    if (g === null) return;
+    switch (g.kind) {
+      case "pan":
+        this.view = pan(g.view, p.screen.x - g.start.x, p.screen.y - g.start.y);
+        return;
+      case "create":
+        this.gesture = { ...g, current: p.point };
+        return;
+      case "draw": {
+        const last = g.points[g.points.length - 1];
+        if (
+          last !== undefined &&
+          Math.hypot(p.point.x - last.x, p.point.y - last.y) < 1.5 / this.view.zoom
+        ) {
+          return;
+        }
+        g.points.push({ x: p.point.x, y: p.point.y, pressure: p.pressure });
+        this.draft = [...g.points];
+        return;
+      }
+      case "erase":
+        this.#erase(p.point);
+        return;
+      case "marquee":
+        this.gesture = { ...g, current: p.point };
+        return;
+      case "move": {
+        if (press !== null && !press.moved) return;
+        let delta = { x: p.point.x - g.start.x, y: p.point.y - g.start.y };
+        this.guides = [];
+        if (!p.alt && g.ids.length > 0) {
+          const moved = {
+            ...g.startBounds,
+            x: g.startBounds.x + delta.x,
+            y: g.startBounds.y + delta.y,
+          };
+          const snap = snapMove(moved, g.others, SNAP_PX / this.view.zoom);
+          delta = { x: delta.x + snap.dx, y: delta.y + snap.dy };
+          this.guides = snap.guides;
+        }
+        this.gesture = { ...g, delta };
+        this.preview = previewMove(this.scene, g.plan, delta);
+        return;
+      }
+      case "resize": {
+        let box = resizeBox(
+          normalizeRect(g.node.x, g.node.y, g.node.width, g.node.height),
+          g.node.angle ?? 0,
+          g.handle,
+          p.point,
+          p.shift,
+        );
+        this.guides = [];
+        if (!p.alt && (g.node.angle ?? 0) === 0 && !p.shift) {
+          const snapped = snapResize(
+            box,
+            handleEdges(g.handle),
+            g.others,
+            SNAP_PX / this.view.zoom,
+          );
+          box = snapped.box;
+          this.guides = snapped.guides;
+        }
+        this.gesture = { ...g, box };
+        this.preview = previewReplace(this.scene, g.plan, [{ ...g.node, ...box }]);
+        return;
+      }
+      case "rotate": {
+        const c = { x: g.node.x + g.node.width / 2, y: g.node.y + g.node.height / 2 };
+        const angle = rotationFor(c, p.point, p.shift);
+        this.gesture = { ...g, angle };
+        this.preview = previewReplace(this.scene, g.plan, [{ ...g.node, angle }]);
+        return;
+      }
+      case "endpoint": {
+        const target = this.bindTarget(p.point, g.id) ?? null;
+        this.gesture = { ...g, point: p.point, target: target?.id ?? null };
+        this.preview = this.#endpointPreview(g.node, g.end, p.point, target);
+        return;
+      }
+    }
+  }
+
+  #endpointPreview(
+    c: ConnectorNode,
+    end: "start" | "end",
+    point: Vec,
+    target: FigureNode | null | undefined,
+  ): FigureScene {
+    const points = [...c.points];
+    points[end === "start" ? 0 : points.length - 1] = point;
+    let next: ConnectorNode = { ...c, points };
+    const binding =
+      target === null || target === undefined ? undefined : { node: target.id };
+    if (end === "start") {
+      const { start: _drop, ...rest } = next;
+      next = binding === undefined ? rest : { ...rest, start: binding };
+    } else {
+      const { end: _drop, ...rest } = next;
+      next = binding === undefined ? rest : { ...rest, end: binding };
+    }
+    next = { ...next, points: route(this.scene, next) };
+    return {
+      ...this.scene,
+      nodes: this.scene.nodes.map((n) => (n.id === c.id ? next : n)),
+    };
+  }
+
+  #erase(point: Vec): void {
+    const g = this.gesture;
+    if (g?.kind !== "erase") return;
+    const hit = pickAt(this.scene, point, 6 / this.view.zoom);
+    if (hit !== undefined && !g.ids.has(hit.id)) {
+      this.gesture = { ...g, ids: idSet([...g.ids, hit.id]) };
+    }
+  }
+
+  pointerUp(p: PointerInfo): void {
+    const press = this.#press;
+    this.#press = null;
+    const g = this.gesture;
+    this.gesture = null;
+    this.guides = [];
+    const preview = this.preview;
+    this.preview = null;
+    if (g === null) return;
+    const clicked = press !== null && !press.moved;
+    switch (g.kind) {
+      case "pan":
+        return;
+      case "create":
+        this.#finishCreate(g.tool, g.start, p.point, clicked);
+        return;
+      case "draw":
+        this.draft = [];
+        if (g.points.length > 1) {
+          this.add(
+            [{ kind: "freedraw", id: this.nextId(), points: g.points, size: 2.5 }],
+            false,
+          );
+        }
+        return;
+      case "erase":
+        if (g.ids.size > 0) this.edit({ op: "remove", ids: [...g.ids] });
+        this.selection = this.selection.filter((id) => !g.ids.has(id));
+        return;
+      case "marquee": {
+        const area = normalizeRect(
+          g.start.x,
+          g.start.y,
+          g.current.x - g.start.x,
+          g.current.y - g.start.y,
+        );
+        if (area.width < 1 && area.height < 1) return;
+        const ids = marqueeSelect(this.scene, area);
+        this.selection = g.additive ? toggleSelection(this.selection, ids) : ids;
+        return;
+      }
+      case "move":
+        if (preview !== null && (g.delta.x !== 0 || g.delta.y !== 0)) {
+          this.edit({ op: "move", ids: [...g.ids], dx: g.delta.x, dy: g.delta.y });
+        }
+        return;
+      case "resize": {
+        const b = g.box;
+        const same =
+          b.x === g.node.x &&
+          b.y === g.node.y &&
+          b.width === g.node.width &&
+          b.height === g.node.height;
+        if (!same)
+          this.edit({
+            op: "resize",
+            id: g.id,
+            x: b.x,
+            y: b.y,
+            width: b.width,
+            height: b.height,
+          });
+        return;
+      }
+      case "rotate":
+        if (g.angle !== (g.node.angle ?? 0))
+          this.edit({ op: "rotate", ids: [g.id], angle: g.angle });
+        return;
+      case "endpoint": {
+        if (clicked) return;
+        const points = [...g.node.points];
+        points[g.end === "start" ? 0 : points.length - 1] = g.point;
+        this.edit({
+          op: "batch",
+          ops: [
+            { op: "update", id: g.id, set: { points } },
+            { op: "bind", id: g.id, end: g.end, node: g.target },
+          ],
+        });
+        return;
+      }
+    }
+  }
+
+  #finishCreate(tool: CreateTool, from: Vec, to: Vec, clicked: boolean): void {
+    if (tool === "arrow" || tool === "line") {
+      if (Math.hypot(to.x - from.x, to.y - from.y) * this.view.zoom < 8) return;
+      const start = this.bindTarget(from);
+      const end = this.bindTarget(to);
+      this.add([
+        {
+          kind: tool,
+          id: this.nextId(),
+          points: [from, to],
+          ...(start === undefined ? {} : { start: { node: start.id } }),
+          ...(end === undefined || end.id === start?.id
+            ? {}
+            : { end: { node: end.id } }),
+        },
+      ]);
+      return;
+    }
+    let box = normalizeRect(from.x, from.y, to.x - from.x, to.y - from.y);
+    if (clicked || box.width < 4 || box.height < 4) {
+      // A click places a default-sized shape centred on it.
+      const [w, h] =
+        tool === "frame" ? [320, 200] : tool === "diamond" ? [140, 100] : [140, 70];
+      box = { x: from.x - w / 2, y: from.y - h / 2, width: w, height: h };
+    }
+    if (tool === "frame") {
+      const n = this.scene.nodes.filter((x) => x.kind === "frame").length + 1;
+      this.add([{ kind: "frame", id: this.nextId(), ...box, label: `Frame ${n}` }]);
+      return;
+    }
+    this.add([{ kind: tool, id: this.nextId(), ...box, style: { fill: "surface" } }]);
+  }
+
+  /** The laser trail without points older than `maxAge` ms. */
+  fadeLaser(now: number, maxAge = 700): void {
+    if (this.laser.length === 0) return;
+    const kept = this.laser.filter((q) => now - q.t < maxAge);
+    if (kept.length !== this.laser.length) this.laser = kept;
+  }
+
+  doubleClick(point: Vec): void {
+    const hit = pickAt(this.scene, point, 6 / this.view.zoom);
+    if (hit === undefined) {
+      if (this.tool === "select" || this.tool === "text") this.startText(point);
+      return;
+    }
+    this.selection = [hit.id];
+    this.startLabelEdit(hit.id);
+  }
+
+  /** Cancel the gesture in progress; nothing is sent. */
+  cancel(): void {
+    this.gesture = null;
+    this.preview = null;
+    this.guides = [];
+    this.draft = [];
+    this.#press = null;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Labels and text                                                        */
+  /* ---------------------------------------------------------------------- */
+
+  startLabelEdit(id: string): void {
+    const node = nodeById(this.scene, id);
+    if (node === undefined || node.locked === true) return;
+    if (node.kind === "math") {
+      this.editing = {
+        id,
+        kind: "math",
+        box: {
+          x: node.x,
+          y: node.y - node.size,
+          width: Math.max(node.tex.length * node.size * 0.6, 80),
+          height: node.size * 1.4,
+        },
+        angle: 0,
+        text: node.tex,
+      };
+      return;
+    }
+    if (isConnector(node)) {
+      const mid = node.points[Math.floor(node.points.length / 2)] ?? { x: 0, y: 0 };
+      this.editing = {
+        id,
+        kind: node.kind,
+        box: { x: mid.x - 80, y: mid.y - 14, width: 160, height: 28 },
+        angle: 0,
+        text: node.label ?? "",
+      };
+      return;
+    }
+    if (!isShape(node) || node.kind === "image") return;
+    if (node.kind === "mermaid") return;
+    this.editing = {
+      id,
+      kind: node.kind,
+      box: normalizeRect(node.x, node.y, node.width, node.height),
+      angle: node.angle ?? 0,
+      text: node.label ?? "",
+    };
+  }
+
+  /** Opens the editor for a new text node at `point`. */
+  startText(point: Vec): void {
+    this.editing = {
+      id: null,
+      kind: "text",
+      box: { x: point.x, y: point.y - 10, width: 200, height: 28 },
+      angle: 0,
+      text: "",
+    };
+  }
+
+  setEditingText(text: string): void {
+    if (this.editing !== null) this.editing = { ...this.editing, text };
+  }
+
+  /** Commit the label editor: a label update, a new text node, or nothing. */
+  commitLabel(): void {
+    const e = this.editing;
+    this.editing = null;
+    if (e === null) return;
+    const text = e.text;
+    if (e.id === null) {
+      if (text.trim() === "") return;
+      const size = naturalSize(text, 16, "sans");
+      this.add([
+        {
+          kind: "text",
+          id: this.nextId(),
+          x: e.box.x,
+          y: e.box.y,
+          width: Math.ceil(size.width) + 4,
+          height: Math.ceil(size.height),
+          label: text,
+        },
+      ]);
+      return;
+    }
+    const node = nodeById(this.scene, e.id);
+    if (node === undefined) return;
+    if (node.kind === "math") {
+      if (text.trim() !== "" && text !== node.tex)
+        this.edit({ op: "update", id: e.id, set: { tex: text } });
+      return;
+    }
+    if (node.kind === "text") {
+      if (text.trim() === "") {
+        this.edit({ op: "remove", ids: [e.id] });
+        return;
+      }
+      if (text === node.label) return;
+      const size = naturalSize(
+        text,
+        node.style?.fontSize ?? 16,
+        node.style?.fontFamily ?? "sans",
+      );
+      this.edit({
+        op: "update",
+        id: e.id,
+        set: {
+          label: text,
+          width: Math.max(node.width, Math.ceil(size.width) + 4),
+          height: Math.max(node.height, Math.ceil(size.height)),
+        },
+      });
+      return;
+    }
+    const current = "label" in node ? (node.label ?? "") : "";
+    if (text === current) return;
+    this.edit({ op: "update", id: e.id, set: { label: text === "" ? null : text } });
+  }
+
+  cancelLabel(): void {
+    this.editing = null;
   }
 
   /* ---------------------------------------------------------------------- */
   /* Mutation                                                               */
   /* ---------------------------------------------------------------------- */
 
-  add(node: FigureNode): boolean {
-    return this.edit({ op: "add-node", node });
+  /** Add nodes (one undo step) and select them; back to Select unless `keepTool`. */
+  add(nodes: readonly FigureNode[], selectThem = true): boolean {
+    const ok = this.edit({ op: "add", nodes });
+    if (ok && selectThem) {
+      this.selection = nodes.map((n) => n.id);
+      if (this.tool !== "draw" && this.tool !== "eraser" && this.tool !== "laser")
+        this.tool = "select";
+    }
+    return ok;
   }
 
-  /** Places a formula and selects it so its text can be typed straight away. */
+  /** Places a formula and opens its text for editing. */
   stampMath(point: Vec, tex = "x"): void {
     const id = this.nextId();
-    const added = this.add({
-      kind: "math",
-      id,
-      x: point.x,
-      y: point.y,
-      tex,
-      size: 26,
-      style: { stroke: "sage" },
-    });
-    if (!added) return;
-    this.tool = "select";
-    this.selectedId = id;
+    if (
+      !this.add([
+        {
+          kind: "math",
+          id,
+          x: point.x,
+          y: point.y,
+          tex,
+          size: 26,
+          style: { stroke: "sage" },
+        },
+      ])
+    ) {
+      return;
+    }
+    this.startLabelEdit(id);
   }
 
   /** Change a formula's text. Empty text is refused so a formula cannot vanish invisibly. */
   setMathText(id: string, tex: string): void {
     const node = nodeById(this.scene, id);
     if (node?.kind !== "math" || tex.trim() === "" || node.tex === tex) return;
-    this.edit({ op: "update-node", node: { ...node, tex } });
+    this.edit({ op: "update", id, set: { tex } });
+  }
+
+  setLabel(id: string, label: string): void {
+    const node = nodeById(this.scene, id);
+    if (node === undefined || node.kind === "freedraw" || node.kind === "math") return;
+    if ((node.label ?? "") === label) return;
+    this.edit({ op: "update", id, set: { label: label === "" ? null : label } });
+  }
+
+  /** Update arbitrary fields of one node (properties panel). */
+  update(id: string, set: Record<string, unknown>): void {
+    this.edit({ op: "update", id, set });
+  }
+
+  setStyle(patch: Style): void {
+    if (this.selection.length === 0) return;
+    this.edit({ op: "set-style", ids: [...this.selection], style: patch });
   }
 
   deleteSelected(): void {
-    if (this.selectedId === null) return;
-    this.edit({ op: "remove-node", id: this.selectedId });
-    this.selectedId = null;
+    if (this.selection.length === 0) return;
+    this.edit({ op: "remove", ids: [...this.selection] });
+    this.selection = [];
   }
 
   /** Move the selection by a fixed step (arrow keys); one undo step each. */
   nudge(delta: Vec): void {
-    if (this.selectedId === null) return;
-    this.edit({ op: "translate", id: this.selectedId, dx: delta.x, dy: delta.y });
+    if (this.selection.length === 0) return;
+    this.edit({ op: "move", ids: [...this.selection], dx: delta.x, dy: delta.y });
+  }
+
+  align(edge: AlignEdge): void {
+    if (this.selection.length >= 2)
+      this.edit({ op: "align", ids: [...this.selection], edge });
+  }
+
+  distribute(axis: Axis): void {
+    if (this.selection.length >= 3)
+      this.edit({ op: "distribute", ids: [...this.selection], axis });
+  }
+
+  reorder(to: ZOrder): void {
+    if (this.selection.length > 0)
+      this.edit({ op: "reorder", ids: [...this.selection], to });
+  }
+
+  group(): void {
+    if (this.selection.length >= 2)
+      this.edit({ op: "group", ids: [...this.selection] });
+  }
+
+  ungroup(): void {
+    if (this.selection.length > 0)
+      this.edit({ op: "ungroup", ids: [...this.selection] });
+  }
+
+  /** Lock the selection, or unlock it when everything selected is locked. */
+  toggleLock(): void {
+    const nodes = this.selectedNodes;
+    if (nodes.length === 0) return;
+    const lock = !nodes.every((n) => n.locked === true);
+    this.edit({
+      op: "batch",
+      ops: nodes.map((n) => ({
+        op: "update" as const,
+        id: n.id,
+        set: { locked: lock ? true : null },
+      })),
+    });
   }
 
   clear(): void {
     this.edit({ op: "clear" });
-    this.selectedId = null;
+    this.selection = [];
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Clipboard                                                              */
+  /* ---------------------------------------------------------------------- */
+
+  /** The selection as clipboard text, or null when nothing is selected. */
+  copyText(): string | null {
+    const nodes = this.selectedNodes;
+    return nodes.length === 0 ? null : serializeNodes(nodes);
+  }
+
+  cut(): string | null {
+    const text = this.copyText();
+    if (text !== null) this.deleteSelected();
+    return text;
+  }
+
+  #groupCounter(): () => string {
+    let scene = this.scene;
+    return () => {
+      const g = nextGroupId(scene);
+      // Reserve it so the next call moves on.
+      scene = {
+        ...scene,
+        nodes: [
+          ...scene.nodes,
+          { kind: "rect", id: "", x: 0, y: 0, width: 0, height: 0, groups: [g] },
+        ],
+      };
+      return g;
+    };
+  }
+
+  #insertCopies(nodes: readonly FigureNode[], offset: number): void {
+    if (nodes.length === 0) return;
+    const copies = reidentify(nodes, () => this.nextId(), this.#groupCounter(), offset);
+    this.add(copies);
+  }
+
+  duplicate(): void {
+    this.#insertCopies(this.selectedNodes, PASTE_OFFSET);
+  }
+
+  /**
+   * Paste text: figure nodes go in as copies, Mermaid text asks how to
+   * insert it, anything else becomes a text node at the centre.
+   */
+  pasteText(text: string): void {
+    const nodes = parseNodes(text);
+    if (nodes !== undefined) {
+      this.#insertCopies(nodes, PASTE_OFFSET);
+      return;
+    }
+    if (looksLikeMermaid(text)) {
+      this.mermaidPrompt = text;
+      return;
+    }
+    if (text.trim() === "") return;
+    this.pasteAsText(text);
+  }
+
+  /** `text` as a plain text node at the centre of the view. */
+  pasteAsText(text: string): void {
+    this.mermaidPrompt = null;
+    const size = naturalSize(text, 16, "sans");
+    const c = this.centre;
+    this.add([
+      {
+        kind: "text",
+        id: this.nextId(),
+        x: c.x - size.width / 2,
+        y: c.y - size.height / 2,
+        width: Math.ceil(size.width) + 4,
+        height: Math.ceil(size.height),
+        label: text,
+      },
+    ]);
+  }
+
+  /** An image (a `data:` URI with its natural size) at the centre of the view. */
+  pasteImage(dataUri: string, bytes: number, width: number, height: number): void {
+    if (bytes > MAX_IMAGE_BYTES) {
+      notice.error(
+        `That image is ${Math.round(bytes / 1024)} KB; figures embed images up to ${MAX_IMAGE_BYTES / 1024} KB. Save it into the project and reference it instead.`,
+      );
+      return;
+    }
+    const scale = Math.min(1, 480 / Math.max(width, 1), 360 / Math.max(height, 1));
+    const w = Math.max(width * scale, 8);
+    const h = Math.max(height * scale, 8);
+    const c = this.centre;
+    this.add([
+      {
+        kind: "image",
+        id: this.nextId(),
+        x: c.x - w / 2,
+        y: c.y - h / 2,
+        width: w,
+        height: h,
+        src: dataUri,
+      },
+    ]);
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Mermaid                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  /** Insert Mermaid through the plugin, then follow its scene and select the result. */
+  insertMermaid(source: string, mode: "shapes" | "block"): Promise<boolean> {
+    this.mermaidPrompt = null;
+    const c = this.centre;
+    return this.#run(async () => {
+      try {
+        const result = await this.#backend.fromMermaid({
+          source,
+          x: c.x,
+          y: c.y,
+          mode,
+        });
+        const revision = result.figure?.revision;
+        if (typeof revision === "number")
+          this.revision = Math.max(this.revision, revision);
+        this.canUndo = true;
+        this.canRedo = false;
+        await this.#resync();
+        this.selection = [...result.ids];
+        this.tool = "select";
+        if (result.fallback)
+          notice.show(`Inserted as a Mermaid block: ${result.fallback}`);
+        return true;
+      } catch (error) {
+        reportError("figure.from-mermaid", error);
+        notice.error(`Could not insert the Mermaid diagram: ${errorMessage(error)}`);
+        return false;
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Keyboard                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  /** Handle a key on the canvas; true when the editor used it. */
+  key(e: KeyEventLike): boolean {
+    const action = actionFor(e);
+    if (action === undefined) return false;
+    switch (action.type) {
+      case "tool":
+        this.setTool(action.tool);
+        return true;
+      case "nudge":
+        if (this.selection.length === 0) return false;
+        this.nudge({ x: action.dx, y: action.dy });
+        return true;
+      case "undo":
+        void this.undo();
+        return true;
+      case "redo":
+        void this.redo();
+        return true;
+      case "select-all":
+        this.tool = "select";
+        this.selection = selectAll(this.scene);
+        return true;
+      case "duplicate":
+        this.duplicate();
+        return true;
+      case "group":
+        this.group();
+        return true;
+      case "ungroup":
+        this.ungroup();
+        return true;
+      case "lock":
+        this.toggleLock();
+        return true;
+      case "front":
+      case "back":
+      case "forward":
+      case "backward":
+        this.reorder(action.type);
+        return true;
+      case "zoom-in":
+        this.zoomBy(1);
+        return true;
+      case "zoom-out":
+        this.zoomBy(-1);
+        return true;
+      case "zoom-reset":
+        this.zoomReset();
+        return true;
+      case "zoom-fit":
+        this.zoomToFit();
+        return true;
+      case "zoom-selection":
+        this.zoomToSelection();
+        return true;
+      case "delete":
+        this.deleteSelected();
+        return true;
+      case "escape":
+        if (this.gesture !== null) this.cancel();
+        else if (this.mermaidPrompt !== null) this.mermaidPrompt = null;
+        else if (this.selection.length > 0) this.selection = [];
+        else if (this.tool !== "select") this.tool = "select";
+        return true;
+      case "edit": {
+        const one = this.selected;
+        if (one === undefined) return false;
+        this.startLabelEdit(one.id);
+        return true;
+      }
+    }
   }
 }
 

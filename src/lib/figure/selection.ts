@@ -163,25 +163,46 @@ export function previewMove(
   delta: Vec,
 ): FigureScene {
   if (delta.x === 0 && delta.y === 0) return scene;
+  return previewReplace(
+    scene,
+    plan,
+    plan.moving.map((i) => translated(scene.nodes[i] as FigureNode, delta)),
+  );
+}
+
+/**
+ * The scene with the planned nodes replaced by `next` (same order as
+ * `plan.moving`) and the arrows bound to them re-routed: the preview of a
+ * resize, a rotation or any other change to a few nodes.
+ */
+export function previewReplace(
+  scene: FigureScene,
+  plan: DragPlan,
+  next: readonly FigureNode[],
+): FigureScene {
   const nodes = [...scene.nodes];
-  for (const i of plan.moving) nodes[i] = translated(nodes[i] as FigureNode, delta);
-  if (plan.bound.length > 0) {
-    const byId = new Map<string, FigureNode>();
-    for (const i of plan.moving) {
-      const n = nodes[i] as FigureNode;
-      byId.set(n.id, n);
+  const byId = new Map<string, FigureNode>();
+  plan.moving.forEach((i, k) => {
+    const n = next[k];
+    if (n === undefined) return;
+    nodes[i] = n;
+    byId.set(n.id, n);
+  });
+  for (const i of plan.bound) {
+    const c = nodes[i] as FigureNode;
+    if (!isConnector(c)) continue;
+    const targets: FigureNode[] = [];
+    for (const b of [c.start, c.end]) {
+      if (b === undefined) continue;
+      const t = byId.get(b.node) ?? plan.anchors.get(b.node);
+      if (t !== undefined) targets.push(t);
     }
-    for (const i of plan.bound) {
-      const c = nodes[i] as FigureNode;
-      if (!isConnector(c)) continue;
-      const targets: FigureNode[] = [];
-      for (const b of [c.start, c.end]) {
-        if (b === undefined) continue;
-        const t = byId.get(b.node) ?? plan.anchors.get(b.node);
-        if (t !== undefined) targets.push(t);
-      }
-      nodes[i] = { ...c, points: route({ ...scene, nodes: targets }, c) };
-    }
+    nodes[i] = { ...c, points: route({ ...scene, nodes: targets }, c) };
   }
   return { ...scene, nodes };
+}
+
+/** A plain (non-reactive) id set, for lookups inside a gesture. */
+export function idSet(ids: Iterable<string>): ReadonlySet<string> {
+  return new Set(ids);
 }

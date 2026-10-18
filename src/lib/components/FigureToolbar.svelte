@@ -1,18 +1,15 @@
-<script lang="ts" module>
-  /** The formula text field, focused by a double-click on a formula. */
-  export const FORMULA_FIELD = "figure-formula-text";
-</script>
-
 <script lang="ts">
   import Icon, { type IconName } from "$lib/components/ui/Icon.svelte";
+  import { TOOLS, type Tool } from "$lib/figure/keymap";
   import { figures } from "$lib/state/figures.svelte";
   import { notice } from "$lib/state/notice.svelte";
-  import { TOOLS, type FigureState, type PenTool } from "$lib/state/figure.svelte";
+  import type { FigureState } from "$lib/state/figure.svelte";
 
   /**
-   * Figure tools: a toolbar above the canvas. The active tool is shown by
-   * state (`aria-pressed`, a tonal step and a heavier border), never by colour
-   * alone. Single-letter keys select tools while the canvas has focus.
+   * The figure studio's one toolbar: tools, history, zoom, Insert Mermaid,
+   * then the file actions. The active tool is shown by state (`aria-pressed`,
+   * a tonal step and a heavier border), never by colour alone. Tool keys work
+   * while the canvas has focus and are listed in the shortcut overlay.
    */
   interface Props {
     figure: FigureState;
@@ -21,24 +18,21 @@
 
   const { figure, onsave }: Props = $props();
 
-  const ICONS: Record<PenTool, IconName> = {
+  const ICONS: Record<Tool, IconName> = {
     select: "select",
-    freehand: "freehand",
-    geometry: "rect",
+    hand: "hand",
+    rect: "rect",
+    diamond: "diamond",
     ellipse: "ellipse",
     arrow: "arrow",
+    line: "line",
+    draw: "freehand",
+    text: "text",
+    frame: "frame",
+    eraser: "eraser",
+    laser: "laser",
     math: "formula",
   };
-
-  /** The selected formula, if any: its text is edited in the toolbar. */
-  const formula = $derived(
-    figure.selected?.kind === "math" ? figure.selected : undefined,
-  );
-
-  function commitFormula(event: Event): void {
-    const input = event.currentTarget as HTMLInputElement;
-    if (formula !== undefined) figure.setMathText(formula.id, input.value);
-  }
 
   /** Saves first when needed, so the line always names an SVG that exists. */
   async function copyEmbed(): Promise<void> {
@@ -51,80 +45,113 @@
       notice.error(`Could not reach the clipboard. Type this line instead: ${line}`);
     }
   }
+
+  const BUTTON =
+    "mng-btn h-7 w-7 justify-center border-transparent bg-transparent p-0 text-text-60 hover:text-text aria-pressed:border-text-60 aria-pressed:text-text";
 </script>
 
 <div
-  class="flex h-9 shrink-0 items-center gap-0.5 border-b border-line px-2"
+  class="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-line px-2"
   role="toolbar"
   aria-label="Figure tools"
 >
   {#each TOOLS as { tool, label, key } (tool)}
     <button
       type="button"
-      class="mng-btn h-7 border-transparent bg-transparent px-2 text-text-60 hover:text-text aria-pressed:border-text-60 aria-pressed:text-text"
+      class={BUTTON}
+      aria-label={label}
       aria-pressed={figure.tool === tool}
       aria-keyshortcuts={key}
       title="{label} ({key})"
       onclick={() => figure.setTool(tool)}
     >
       <Icon name={ICONS[tool]} size={14} />
-      {label}
     </button>
   {/each}
 
-  <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
+  <span class="mx-1.5 h-4 w-px shrink-0 bg-line" aria-hidden="true"></span>
 
   <button
     type="button"
-    class="mng-btn h-7 border-transparent bg-transparent px-2 text-text-60 hover:text-text"
+    class={BUTTON}
+    aria-label="Undo"
     disabled={!figure.canUndo}
     title="Undo (Ctrl+Z)"
     aria-keyshortcuts="Control+Z"
     onclick={() => void figure.undo()}
   >
-    <Icon name="undo" size={14} /> Undo
+    <Icon name="undo" size={14} />
   </button>
   <button
     type="button"
-    class="mng-btn h-7 border-transparent bg-transparent px-2 text-text-60 hover:text-text"
+    class={BUTTON}
+    aria-label="Redo"
     disabled={!figure.canRedo}
     title="Redo (Ctrl+Shift+Z)"
     aria-keyshortcuts="Control+Shift+Z"
     onclick={() => void figure.redo()}
   >
-    <Icon name="redo" size={14} /> Redo
+    <Icon name="redo" size={14} />
+  </button>
+
+  <span class="mx-1.5 h-4 w-px shrink-0 bg-line" aria-hidden="true"></span>
+
+  <button
+    type="button"
+    class={BUTTON}
+    aria-label="Zoom out"
+    title="Zoom out (Ctrl+-)"
+    aria-keyshortcuts="Control+-"
+    onclick={() => figure.zoomBy(-1)}
+  >
+    <Icon name="zoom-out" size={14} />
   </button>
   <button
     type="button"
-    class="mng-btn h-7 border-transparent bg-transparent px-2 text-text-60 hover:text-text"
-    disabled={figure.nodeCount === 0}
-    onclick={() => figure.clear()}
+    class="mng-btn h-7 w-12 shrink-0 justify-center border-transparent bg-transparent px-0 font-mono text-[11px] text-text-60 hover:text-text"
+    data-zoom
+    title="Zoom to 100% (Ctrl+0)"
+    aria-label="Zoom {figure.zoomPercent}%, reset to 100%"
+    onclick={() => figure.zoomReset()}>{figure.zoomPercent}%</button
   >
-    <Icon name="trash" size={14} /> Clear
+  <button
+    type="button"
+    class={BUTTON}
+    aria-label="Zoom in"
+    title="Zoom in (Ctrl+=)"
+    aria-keyshortcuts="Control+="
+    onclick={() => figure.zoomBy(1)}
+  >
+    <Icon name="zoom-in" size={14} />
+  </button>
+  <button
+    type="button"
+    class={BUTTON}
+    aria-label="Zoom to fit"
+    title="Zoom to fit (Shift+1)"
+    aria-keyshortcuts="Shift+1"
+    onclick={() => figure.zoomToFit()}
+  >
+    <Icon name="fit" size={14} />
   </button>
 
-  {#if formula !== undefined}
-    <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
-    <label class="flex items-center gap-1.5 text-text-60">
-      Formula
-      <input
-        id={FORMULA_FIELD}
-        class="mng-field selectable h-7 w-48 font-mono text-[12px]"
-        value={formula.tex}
-        aria-label="Formula text"
-        onchange={commitFormula}
-        onkeydown={(event) => {
-          if (event.key === "Enter") (event.currentTarget as HTMLInputElement).blur();
-        }}
-      />
-    </label>
-  {/if}
+  <span class="mx-1.5 h-4 w-px shrink-0 bg-line" aria-hidden="true"></span>
+
+  <button
+    type="button"
+    class="mng-btn h-7 shrink-0 border-transparent bg-transparent px-2 text-text-60 hover:text-text"
+    title="Insert a Mermaid diagram as editable shapes or as a block"
+    aria-haspopup="dialog"
+    onclick={() => (figure.mermaidDialog = true)}
+  >
+    <Icon name="mermaid" size={14} /> Insert Mermaid
+  </button>
 
   <span class="ml-auto"></span>
 
   <button
     type="button"
-    class="mng-btn h-7 px-2"
+    class="mng-btn h-7 shrink-0 px-2"
     onclick={() => void copyEmbed()}
     title="Copy the line that embeds this figure's SVG in a document (saves first if needed)"
   >
@@ -132,7 +159,7 @@
   </button>
   <button
     type="button"
-    class="mng-btn h-7 px-2"
+    class="mng-btn ml-1 h-7 shrink-0 px-2"
     disabled={!figure.dirty}
     onclick={onsave}
   >
