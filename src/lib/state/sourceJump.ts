@@ -50,7 +50,7 @@ async function openAt(path: string, line: number, column: number): Promise<void>
  */
 export async function jumpToSource(page: number, x: number, y: number): Promise<void> {
   try {
-    if (preview.kind === "svg") {
+    if (build.engine === "typst") {
       const jump = await typst.jumpFromClick(page, x, y);
       if (jump === null) {
         notice.show("Nothing in the source maps to that spot. Ctrl+click on text.");
@@ -65,11 +65,11 @@ export async function jumpToSource(page: number, x: number, y: number): Promise<
       } else if (jump.kind === "url") {
         await openExternal(jump.url);
       } else {
-        preview.showMark(typstMarkBox(jump, preview.pageSize?.w ?? null));
+        preview.showMark(typstMarkBox(jump, preview.pageWidth(jump.page)));
       }
       return;
     }
-    if (preview.kind === "pdf") {
+    if (build.engine === "latex") {
       const root = workspace.project?.root ?? "";
       const target = preview.shownTarget || build.target;
       const at = await latex.synctexReverse(join(root, target), page + 1, x, y);
@@ -112,7 +112,7 @@ export async function showInPreview(): Promise<void> {
         notice.show("The text at the caret does not appear on the pages.");
         return;
       }
-      preview.showMark(typstMarkBox(first, preview.pageSize?.w ?? null));
+      preview.showMark(typstMarkBox(first, preview.pageWidth(first.page)));
       return;
     }
     const root = workspace.project?.root ?? "";

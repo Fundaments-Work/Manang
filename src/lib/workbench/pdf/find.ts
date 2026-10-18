@@ -134,6 +134,34 @@ export function runRanges(page: PageText, match: FindMatch): RunRange[] {
   return out;
 }
 
+export interface RunHit {
+  readonly start: number;
+  readonly end: number;
+  readonly current: boolean;
+}
+
+/**
+ * The highlights of one page, per text-layer run: every match on `page`
+ * split over the runs it covers, the one at index `current` marked.
+ */
+export function hitsByRun(
+  page: PageText,
+  matches: readonly FindMatch[],
+  pageIndex: number,
+  current: number,
+): Map<number, RunHit[]> {
+  const hits = new Map<number, RunHit[]>();
+  matches.forEach((match, i) => {
+    if (match.page !== pageIndex) return;
+    for (const range of runRanges(page, match)) {
+      const list = hits.get(range.run) ?? [];
+      list.push({ start: range.start, end: range.end, current: i === current });
+      hits.set(range.run, list);
+    }
+  });
+  return hits;
+}
+
 /** Points from the top of the page to the first run of a match. */
 export function matchTop(page: PageText, match: FindMatch): number {
   const first = runRanges(page, match)[0];

@@ -27,11 +27,11 @@ export interface AnnotationLike {
   readonly dest?: unknown;
 }
 
-/** Only web and mail addresses leave the app; nothing else is opened. */
+/** Only web addresses leave the app (in the system browser); nothing else is opened. */
 export function isSafeExternal(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return ["http:", "https:", "mailto:"].includes(parsed.protocol);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
   } catch {
     return false;
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { latexSourcePath, svgPageSize, synctexFile, typstMarkBox } from "./sourceJump";
+import { latexSourcePath, synctexFile, typstMarkBox } from "./sourceJump";
 
 describe("source and preview helpers", () => {
   it("resolves SyncTeX files against the main file's directory", () => {
@@ -34,13 +34,5 @@ describe("source and preview helpers", () => {
     expect(box.y + box.height).toBeGreaterThan(100);
     expect(box.x + box.width).toBeLessThanOrEqual(595);
     expect(typstMarkBox({ page: 0, x: 0, y: 2 }, null).y).toBe(0);
-  });
-
-  it("reads the page size from an SVG viewBox", () => {
-    const svg = (head: string) => new TextEncoder().encode(`${head}<rect/></svg>`);
-    expect(
-      svgPageSize(svg('<svg class="typst-doc" viewBox="0 0 200 100.5" width="200pt">')),
-    ).toEqual({ w: 200, h: 100.5 });
-    expect(svgPageSize(svg("<svg>"))).toBeNull();
   });
 });

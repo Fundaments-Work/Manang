@@ -2,13 +2,16 @@
   import { untrack } from "svelte";
 
   import DiagramPreview from "$lib/components/DiagramPreview.svelte";
+  import PdfControls from "$lib/components/PdfControls.svelte";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
+  import { reportError } from "$lib/kernel";
   import { exportPdf } from "$lib/state/actions";
   import { build, formatMs } from "$lib/state/build.svelte";
   import { diagram } from "$lib/state/diagram.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { preview } from "$lib/state/preview.svelte";
+  import { settings } from "$lib/state/settings.svelte";
   import { jumpToSource } from "$lib/state/sourceJump";
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
@@ -20,10 +23,10 @@
    * zoom, refresh and export. The page is paper: it keeps the paper tokens in
    * every theme so what is on screen matches what prints.
    *
-   * Typst shows one SVG page at a time, LaTeX a scrollable PDF (pdf.js, loaded on
-   * first use), Markdown the sanitised HTML. States: compiling (the last page
-   * stays visible), ready, failed (last good page plus a way to the errors), and
-   * engine trouble (a message that says how to fix it, never a crash).
+   * Typst and LaTeX show their PDF in one viewer (pdf.js, loaded on first use:
+   * selection, find, links, outline, zoom), Markdown the sanitised HTML.
+   * States: compiling (the last pages stay visible), ready, failed (last good
+   * pages plus a way to the errors), and engine trouble (a message that says how to fix it, never a crash).
    */
 
   const engine = $derived(
@@ -45,7 +48,7 @@
   const kind = $derived(preview.kind);
   /** A diagram file shows its own picture, not the project's pages. */
   const isDiagram = $derived(diagram.active);
-  const paged = $derived(!isDiagram && (kind === "svg" || kind === "pdf"));
+  const paged = $derived(!isDiagram && kind === "pdf");
   const settled = $derived(
     build.status === "ok" || build.status === "failed" || build.status === "compiling",
   );
@@ -54,24 +57,10 @@
       settled &&
       (kind === "html"
         ? build.html !== ""
-        : kind === "pdf"
-          ? preview.pdf !== null && preview.shownTarget === build.target
-          : preview.url !== null && preview.shownTarget === build.target),
+        : kind === "pdf" &&
+          preview.pdf !== null &&
+          preview.shownTarget === build.target),
   );
-
-  const widthStyle = $derived(
-    preview.zoom === null
-      ? "width: 100%; max-width: 920px"
-      : `width: ${Math.round(640 * preview.zoom)}px`,
-  );
-
-  function onkeydown(event: KeyboardEvent): void {
-    if (!paged) return;
-    if (event.key === "PageDown") preview.go(preview.page + 1);
-    else if (event.key === "PageUp") preview.go(preview.page - 1);
-    else return;
-    event.preventDefault();
-  }
 
   const exportable = $derived(
     kind !== "html" && (build.status === "ok" || build.status === "failed"),
@@ -82,41 +71,11 @@
     build.failure !== null ? build.failure.title : countLabel(build.counts),
   );
 
-  /* Source and preview (the rendered page area). */
-
-  let markEl: HTMLDivElement | undefined = $state();
-
-  /** The mark on the shown SVG page, as percentages of the page box. */
-  const pageMark = $derived.by(() => {
-    const mark = preview.mark;
-    const size = preview.pageSize;
-    if (mark === null || size === null || mark.page !== preview.page) return null;
-    return {
-      id: mark.id,
-      left: (mark.x / size.w) * 100,
-      top: (mark.y / size.h) * 100,
-      width: (mark.width / size.w) * 100,
-      height: (mark.height / size.h) * 100,
-    };
-  });
-
-  $effect(() => {
-    const el = markEl;
-    if (el !== undefined && pageMark !== null) el.scrollIntoView({ block: "center" });
-  });
-
-  /** Ctrl+click (Cmd+click) on an SVG page: map the point to page points. */
-  function onPageClick(event: MouseEvent): void {
-    if (!(event.ctrlKey || event.metaKey)) return;
-    const size = preview.pageSize;
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    if (size === null || rect.width === 0 || rect.height === 0) return;
-    event.preventDefault();
-    void jumpToSource(
-      preview.page,
-      ((event.clientX - rect.left) / rect.width) * size.w,
-      ((event.clientY - rect.top) / rect.height) * size.h,
-    );
+  /** The Dark pages toggle writes the setting, so it sticks. */
+  async function setDarkPages(dark: boolean): Promise<void> {
+    preview.view.darkPages = dark;
+    const failed = await settings.set("preview.dark-pages", dark, "user");
+    if (failed !== "") reportError("preview.dark-pages", new Error(failed));
   }
 </script>
 
@@ -144,65 +103,11 @@
         </button>
       {/if}
     {:else if paged}
-      <button
-        type="button"
-        class="mng-icon-btn @max-[240px]:hidden"
-        aria-label="Previous page"
-        disabled={preview.page <= 0 || pages === 0}
-        onclick={() => preview.go(preview.page - 1)}
-      >
-        <Icon name="arrowUp" size={14} />
-      </button>
-      <button
-        type="button"
-        class="mng-icon-btn @max-[240px]:hidden"
-        aria-label="Next page"
-        disabled={preview.page >= pages - 1}
-        onclick={() => preview.go(preview.page + 1)}
-      >
-        <Icon name="arrowDown" size={14} />
-      </button>
-      <span
-        class="px-1.5 font-mono text-[11px] whitespace-nowrap text-text-60 @max-[280px]:hidden"
-        aria-live="polite"
-      >
-        {#if pages > 0}Page {preview.page + 1} of {pages}{:else}No pages{/if}
-      </span>
-
-      <!-- Zoom gives way first in a narrow pane, so the layout buttons at the
-           end always stay on screen; Maximise gives the room back. -->
-      <div class="flex shrink-0 items-center gap-0.5 @max-[400px]:hidden">
-        <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
-
-        <button
-          type="button"
-          class="mng-icon-btn"
-          aria-label="Zoom out"
-          disabled={(preview.zoom ?? 1) <= 0.5}
-          onclick={() => preview.zoomOut()}
-        >
-          <Icon name="clear" size={14} />
-        </button>
-        <button
-          type="button"
-          class="mng-btn h-6 min-w-12 justify-center border-transparent bg-transparent px-1.5 font-mono text-[11px] text-text-60"
-          aria-label={preview.zoom === null
-            ? "Zoom: fit width. Select to reset"
-            : `Zoom ${Math.round(preview.zoom * 100)} percent. Select to fit width`}
-          onclick={() => preview.fit()}
-        >
-          {preview.zoom === null ? "Fit" : `${Math.round(preview.zoom * 100)}%`}
-        </button>
-        <button
-          type="button"
-          class="mng-icon-btn"
-          aria-label="Zoom in"
-          disabled={(preview.zoom ?? 1) >= 2}
-          onclick={() => preview.zoomIn()}
-        >
-          <Icon name="plus" size={14} />
-        </button>
-      </div>
+      <PdfControls
+        view={preview.view}
+        {pages}
+        ondarkpages={(dark: boolean) => void setDarkPages(dark)}
+      />
     {:else if kind === "html"}
       <span
         class="min-w-0 truncate px-1.5 font-mono text-[11px] text-text-60 @max-[240px]:hidden"
@@ -280,29 +185,26 @@
     </button>
   </div>
 
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
     class="relative min-h-0 flex-1 {kind === 'pdf' && shown ? '' : 'overflow-auto'}"
-    tabindex="0"
+    tabindex={kind === "pdf" && shown ? undefined : 0}
     role="region"
     aria-label="Rendered page"
     aria-busy={build.status === "compiling"}
-    {onkeydown}
   >
     {#if shown && kind === "pdf" && preview.pdf !== null}
       {#await import("./PdfViewer.svelte") then viewer}
-        <viewer.default
-          data={preview.pdf}
-          zoom={preview.zoom}
-          jump={preview.jump}
-          page={preview.page}
-          onpage={(page: number) => (preview.page = page)}
-          onpages={(count: number) => (preview.pdfPages = count)}
-          onerror={(message: string) => (preview.error = message)}
-          mark={preview.mark}
-          onsourceclick={(page: number, x: number, y: number) =>
-            void jumpToSource(page, x, y)}
-        />
+        {#key preview.shownTarget}
+          <viewer.default
+            data={preview.pdf}
+            view={preview.view}
+            docKey={preview.shownTarget}
+            onerror={(message: string) => (preview.error = message)}
+            onsourceclick={(page: number, x: number, y: number) =>
+              void jumpToSource(page, x, y)}
+          />
+        {/key}
       {:catch}
         <p class="m-0 px-6 pt-16 text-center text-xs text-text-60" role="alert">
           The PDF viewer could not be loaded. Restart Manang and try again.
@@ -320,34 +222,6 @@
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html build.html}
         </article>
-      </div>
-    {:else if shown}
-      <div class="flex min-h-full justify-center px-6 py-6">
-        <!-- Ctrl+click (Cmd+click) opens the source; plain clicks do nothing. -->
-        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div
-          class="relative self-start"
-          style={widthStyle}
-          title="Ctrl+click to open the source here"
-          onclick={onPageClick}
-        >
-          <img
-            class="block h-auto w-full border border-line bg-paper"
-            src={preview.url}
-            alt="Page {preview.page + 1} of {build.pages}"
-          />
-          {#if pageMark !== null}
-            {#key pageMark.id}
-              <div
-                bind:this={markEl}
-                class="mng-preview-mark pointer-events-none absolute"
-                style="left: {pageMark.left}%; top: {pageMark.top}%; width: {pageMark.width}%; height: {pageMark.height}%"
-                data-preview-mark
-                aria-hidden="true"
-              ></div>
-            {/key}
-          {/if}
-        </div>
       </div>
     {:else if isDiagram}
       <DiagramPreview />
@@ -419,7 +293,7 @@
         onclick={() => layout.showPanel("problems")}
       >
         <Icon name="warning" size={13} />
-        {banner}. Showing the last good page. Show problems
+        {banner}. Showing the last good pages. Show problems
       </button>
     {:else if build.status === "ok"}
       <span class="sr-only" role="status">Compiled in {formatMs(build.durationMs)}</span
