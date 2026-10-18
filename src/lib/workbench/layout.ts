@@ -6,8 +6,6 @@
  * from an older build can be validated before it reaches the UI.
  */
 
-import { engineOf } from "./paths";
-
 export type SideView =
   "files" | "search" | "source-control" | "outline" | "figures" | "references";
 export type PanelTab = "problems" | "output";
@@ -107,11 +105,6 @@ export function togglePanel(model: LayoutModel): LayoutModel {
 
 export function showPanel(model: LayoutModel, tab: PanelTab): LayoutModel {
   return { ...model, panelOpen: true, panelTab: tab };
-}
-
-/** Whether a file has a preview: a Typst, LaTeX or Markdown document. */
-export function hasPreview(path: string): boolean {
-  return engineOf(path) !== null;
 }
 
 /**
