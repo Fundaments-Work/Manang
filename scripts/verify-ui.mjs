@@ -2004,6 +2004,128 @@ async function main() {
     await shoot(page, "18-source-jump");
 
     /* ------------------------------------------------------------------ */
+    section("Diagrams");
+    const diagramImg = `section[aria-label="Preview"] img[data-diagram]`;
+    const runCommand = async (query) => {
+      await press(page, "k", { ctrl: true, wait: 300 });
+      await insertText(page, query);
+      await press(page, "Enter", { wait: 500 });
+    };
+    await press(page, "p", { ctrl: true, wait: 300 });
+    await insertText(page, "flow.mmd");
+    await press(page, "Enter", { wait: 600 });
+    check(
+      "Ctrl+P opens figures/flow.mmd",
+      (await activeTab(page)) === "figures/flow.mmd",
+    );
+    await expectEventually(
+      page,
+      "the diagram is drawn in the preview, with a nonzero size",
+      `(() => { const i = document.querySelector(${JSON.stringify(diagramImg)}); if (!i || !i.complete || i.naturalWidth === 0) return false; const r = i.getBoundingClientRect(); return r.width > 0 && r.height > 0; })()`,
+    );
+    check(
+      "the header names the diagram language and Export PDF is disabled",
+      await page.evaluate(
+        `(() => { const s = document.querySelector('section[aria-label="Preview"]'); const e = s.querySelector('button[aria-label="Export PDF"]'); return s.querySelector('[role="toolbar"]').innerText.includes("Mermaid") && e.disabled && e.title.includes("document that includes"); })()`,
+      ),
+    );
+    check(
+      "the Mermaid source is highlighted",
+      await page.evaluate(`document.querySelectorAll(".cm-content span").length > 3`),
+    );
+    await shoot(page, "diagram-preview");
+    const goodSrc = await page.evaluate(
+      `document.querySelector(${JSON.stringify(diagramImg)}).src`,
+    );
+
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(page, "  D -->>> E");
+    await expectEventually(
+      page,
+      "a diagram error keeps the old picture, dimmed, and names the line",
+      `(() => { const i = document.querySelector(${JSON.stringify(diagramImg)}); const e = document.querySelector("[data-diagram-error]"); return !!i && i.hasAttribute("data-stale") && i.src === ${JSON.stringify(goodSrc)} && Number(getComputedStyle(i).opacity) < 1 && !!e && e.innerText.includes("Line 6"); })()`,
+    );
+    await expectEventually(
+      page,
+      "the gutter marks the broken line",
+      `document.querySelectorAll(".manang-problem-error").length >= 1`,
+    );
+    await press(page, "m", { ctrl: true, shift: true, wait: 300 });
+    await expectEventually(
+      page,
+      "Problems lists the diagram error on its line",
+      `(() => { const t = document.querySelector("#bottom-panel")?.innerText ?? ""; return t.includes("figures/flow.mmd") && t.includes("unexpected token") && /Ln 6, Col 5/.test(t); })()`,
+      { show: `document.querySelector("#bottom-panel")?.innerText` },
+    );
+    await shoot(page, "diagram-error");
+    await focusEditor(page);
+    await press(page, "z", { ctrl: true, wait: 300 });
+    await expectEventually(
+      page,
+      "fixing the source clears the error and redraws",
+      `(() => { const i = document.querySelector(${JSON.stringify(diagramImg)}); return !!i && !i.hasAttribute("data-stale") && document.querySelector("[data-diagram-error]") === null && !(document.querySelector("#bottom-panel")?.innerText ?? "").includes("unexpected token") && document.querySelectorAll(".manang-problem-error").length === 0; })()`,
+    );
+    await press(page, "j", { ctrl: true, wait: 200 });
+
+    const darkSrc = await page.evaluate(
+      `document.querySelector(${JSON.stringify(diagramImg)}).src`,
+    );
+    await runCommand("Switch to light theme");
+    await expectEventually(
+      page,
+      "switching the app theme redraws the diagram in that theme",
+      `(() => { const i = document.querySelector(${JSON.stringify(diagramImg)}); return !!i && i.dataset.theme === "light" && i.src !== ${JSON.stringify(darkSrc)}; })()`,
+    );
+    await shoot(page, "diagram-light");
+    await runCommand("Switch to dark theme");
+    await expectEventually(
+      page,
+      "and back to dark",
+      `document.querySelector(${JSON.stringify(diagramImg)})?.dataset.theme === "dark"`,
+    );
+
+    await runCommand("Copy include line");
+    await expectEventually(
+      page,
+      "Copy include line gives the Typst include for the main document",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes('#image("figures/flow.svg")')`,
+    );
+
+    await runCommand("New diagram");
+    await expectEventually(
+      page,
+      "New diagram asks for a name, with focus in the field",
+      `document.activeElement === document.querySelector('[role="alertdialog"] input')`,
+    );
+    await shoot(page, "diagram-new");
+    await insertText(page, "setup");
+    await clickText(page, '[role="alertdialog"] button', "Pikchr");
+    await expectEventually(
+      page,
+      "it writes figures/setup.pikchr and opens it with a preview",
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "figures/setup.pikchr" && document.querySelector(${JSON.stringify(diagramImg)}) !== null`,
+    );
+    await runCommand("New diagram");
+    await waitFor(
+      page,
+      `document.querySelector('[role="alertdialog"] input') !== null`,
+    );
+    await insertText(page, "setup");
+    await clickText(page, '[role="alertdialog"] button', "Pikchr");
+    await expectEventually(
+      page,
+      "a taken name is never overwritten: Manang asks",
+      `(document.querySelector('[role="alertdialog"]')?.innerText ?? "").includes("already exists")`,
+    );
+    await press(page, "Escape", { wait: 300 });
+    await noStrayEdits(page, "after the diagram checks");
+    for (const name of ["setup.pikchr", "flow.mmd"]) {
+      await clickText(page, '[role="tab"]', name);
+      await press(page, "w", { ctrl: true, synthetic: true, wait: 300 });
+    }
+
+    /* ------------------------------------------------------------------ */
     section("Zen mode");
     await clickText(page, '[role="tab"]', "main.typ");
     await sleep(500);
