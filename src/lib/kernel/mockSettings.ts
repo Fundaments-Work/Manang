@@ -5,6 +5,8 @@
  * over `MockProjectHost` in browser and tests.
  */
 
+import { DEFAULT_BINDINGS } from "$lib/commands/defaults";
+
 import type { MockPlugin, MockPluginFactory } from "./mock";
 import type { MockProjectHost } from "./mockProject";
 import type {
@@ -243,59 +245,14 @@ const CORE_DEFINITIONS: SettingDef[] = CORE_SETTINGS.map((d) => ({
   contexts: CATEGORY_CONTEXTS[d.category] ?? ["app"],
 }));
 
-const DEFAULT_KEYBINDINGS: KeybindingItem[] = [
-  {
-    command: "palette.open",
-    key: "Mod+K",
-    display: "Ctrl+K",
-    when: "",
-    source: "default",
-  },
-  // A second binding for one command, as the real registry has: the table must
-  // not key its rows by command.
-  {
-    command: "palette.open",
-    key: "Mod+Shift+P",
-    display: "Ctrl+Shift+P",
-    when: "",
-    source: "default",
-  },
-  {
-    command: "editor.save",
-    key: "Mod+S",
-    display: "Ctrl+S",
-    when: "editorFocus",
-    source: "default",
-  },
-  {
-    command: "editor.find",
-    key: "Mod+F",
-    display: "Ctrl+F",
-    when: "editorFocus",
-    source: "default",
-  },
-  {
-    command: "workbench.close-tab",
-    key: "Mod+W",
-    display: "Ctrl+W",
-    when: "",
-    source: "default",
-  },
-  {
-    command: "workbench.toggle-panel",
-    key: "Mod+J",
-    display: "Ctrl+J",
-    when: "",
-    source: "default",
-  },
-  {
-    command: "workbench.toggle-zen",
-    key: "Mod+Shift+Z",
-    display: "Ctrl+Shift+Z",
-    when: "",
-    source: "default",
-  },
-];
+/** The shipped defaults, shared with the frontend so the two cannot differ. */
+const DEFAULT_KEYBINDINGS: KeybindingItem[] = DEFAULT_BINDINGS.map((d) => ({
+  command: d.command,
+  key: d.key,
+  display: d.key.replace("Mod+", "Ctrl+"),
+  when: "",
+  source: "default",
+}));
 
 const THEME_DARK: ThemeDetail = {
   id: "dark",
@@ -598,34 +555,38 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
       },
 
       "keybindings.list": () => {
-        const bindings: KeybindingItem[] = DEFAULT_KEYBINDINGS.map((d) => {
-          const user = userKeybindings.get(d.command);
-          if (user) {
-            return {
-              command: d.command,
-              key: user.key,
-              display: user.key.replace("Mod+", "Ctrl+"),
-              when: user.when,
-              source: "user",
-            };
-          }
-          return d;
-        });
+        // As the registry does: a user entry replaces all of its command's
+        // defaults; an entry with no keys unbinds.
+        const bindings: KeybindingItem[] = DEFAULT_KEYBINDINGS.filter(
+          (d) => !userKeybindings.has(d.command),
+        );
+        for (const [command, u] of userKeybindings) {
+          if (u.key === "") continue;
+          bindings.push({
+            command,
+            key: u.key,
+            display: u.key.replace("Mod+", "Ctrl+"),
+            when: u.when,
+            source: "user",
+          });
+        }
 
-        // Add any user-only custom bindings
-        for (const [cmd, u] of userKeybindings) {
-          if (!DEFAULT_KEYBINDINGS.some((d) => d.command === cmd)) {
-            bindings.push({
-              command: cmd,
-              key: u.key,
-              display: u.key.replace("Mod+", "Ctrl+"),
-              when: u.when,
-              source: "user",
+        // Two commands on one key: a tie, or a user binding shadowing a default.
+        const conflicts: KeybindingConflict[] = [];
+        for (let i = 0; i < bindings.length; i++) {
+          for (let j = i + 1; j < bindings.length; j++) {
+            const x = bindings[i];
+            const y = bindings[j];
+            if (x === undefined || y === undefined) continue;
+            if (x.command === y.command) continue;
+            if (x.key.toLowerCase() !== y.key.toLowerCase()) continue;
+            conflicts.push({
+              key: x.display,
+              kind: x.source === y.source ? "conflict" : "shadow",
+              commands: [x.command, y.command].sort(),
             });
           }
         }
-
-        const conflicts: KeybindingConflict[] = [];
         const response: KeybindingsListResponse = {
           platform: "linux",
           bindings,
@@ -651,7 +612,7 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
           typeof args.key === "string"
             ? args.key
             : Array.isArray(args.keys)
-              ? String(args.keys[0])
+              ? String(args.keys[0] ?? "")
               : "";
         const when = typeof args.when === "string" ? args.when : "";
 

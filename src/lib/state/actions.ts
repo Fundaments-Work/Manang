@@ -23,7 +23,9 @@ import {
   pickSavePath,
   revealInFileManager,
   saveBinaryArtifact,
+  windowAction,
 } from "$lib/kernel/native";
+import { focusedSurface, type EditAction } from "$lib/commands/surface";
 import { SESSION_KEY, loadJson, saveJson } from "$lib/workbench/persist";
 import {
   basename,
@@ -59,6 +61,7 @@ import { notice } from "./notice.svelte";
 import { applyPreferences } from "./preferences.svelte";
 import { preview } from "./preview.svelte";
 import { settings } from "./settings.svelte";
+import { settingsPage } from "./settingsPage.svelte";
 import { slides } from "./slides.svelte";
 import { tabs } from "./tabs.svelte";
 import { workspace } from "./workspace.svelte";
@@ -520,6 +523,68 @@ export function toggleSlides(): void {
   if (active === undefined || active.kind !== "document") return;
   tabs.setView(active.id, active.view === "slides" ? "text" : "slides");
   slides.stop();
+}
+
+/** Present the active Typst document as slides (F5). */
+export function presentSlides(): void {
+  const active = tabs.active;
+  if (active === undefined || active.kind !== "document") return;
+  if (active.view !== "slides") toggleSlides();
+  slides.present();
+}
+
+/** Home over the open project, or back to it when Home is already showing. */
+export function toggleHome(): void {
+  if (settingsPage.open) {
+    settingsPage.hide();
+    home.show();
+  } else if (home.visible && workspace.project !== null) home.hide();
+  else home.show();
+}
+
+/**
+ * Show the app's log folder in the file manager, so a problem can be reported
+ * with its log attached. In a browser the log is the devtools console.
+ */
+export async function revealLogs(reporting: boolean): Promise<void> {
+  if (!inTauri()) {
+    notice.show("The log is in the browser's developer console (F12).");
+    return;
+  }
+  try {
+    const { appLogDir } = await import("@tauri-apps/api/path");
+    const dir = await appLogDir();
+    if (!(await revealInFileManager(dir))) return;
+    if (reporting)
+      notice.show("Attach the newest log file from this folder to your report.");
+  } catch (error) {
+    reportError("the log folder could not be shown", error);
+    notice.error(`Could not show the log folder: ${errorMessage(error)}`);
+  }
+}
+
+/** Quit: close the window, which asks about unsaved changes first. */
+export function quitApp(): void {
+  windowAction("close").catch((error: unknown) =>
+    reportError("the window could not close", error),
+  );
+}
+
+/**
+ * Run an Edit command (Undo, Copy, Find, ...) on whatever holds focus: the
+ * editor, the figure canvas, the PDF viewer or a text field.
+ */
+export function editAction(action: EditAction): void {
+  const focused = typeof document === "undefined" ? null : document.activeElement;
+  focusedSurface
+    .dispatch(action, focused)
+    .then((handled) => {
+      if (!handled) notice.show("Nothing here can do that.");
+    })
+    .catch((error: unknown) => {
+      reportError(`edit action ${action} failed`, error);
+      notice.error(`Could not ${action}: ${errorMessage(error)}`);
+    });
 }
 
 export function exportPdf(): void {

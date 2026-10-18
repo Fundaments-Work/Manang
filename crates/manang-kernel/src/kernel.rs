@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::capability::CapabilitySet;
 use crate::error::KernelError;
 use crate::error::PluginError;
-use crate::manifest::{Hook, HookMode, Manifest};
+use crate::manifest::{Hook, HookMode, Manifest, MenuPlacement};
 use crate::payload::Payload;
 use crate::plugin::{Context, Plugin};
 
@@ -34,6 +34,10 @@ pub struct CommandInfo {
     pub id: String,
     pub title: String,
     pub plugin: String,
+    /// Where the plugin's manifest places it in the menus
+    /// (`[[contributes.menus]]`); left out when nowhere.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub menus: Vec<MenuPlacement>,
 }
 
 /// Hosts plugins and routes commands and hooks to them.
@@ -165,6 +169,7 @@ impl Kernel {
                     id: c.id.clone(),
                     title: c.title.clone(),
                     plugin: e.manifest.plugin.name.clone(),
+                    menus: e.manifest.menus_for(&c.id),
                 })
             })
             .collect();

@@ -98,24 +98,20 @@ export function installErrorLog(): void {
 }
 
 /**
- * F12 and Ctrl+Shift+I open the web inspector in a development build of the
- * desktop app (right-click, Inspect Element works too). Release builds have no
- * inspector, so nothing is bound there.
+ * Whether the web inspector exists: a development build of the desktop app.
+ * Release builds have none (right-click, Inspect Element is gone too).
  */
-export function installDevtoolsShortcut(): void {
-  if (!import.meta.env.DEV || !inTauri()) return;
-  window.addEventListener(
-    "keydown",
-    (event) => {
-      const inspect =
-        event.key === "F12" ||
-        (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "i");
-      if (!inspect) return;
-      event.preventDefault();
-      void import("@tauri-apps/api/core")
-        .then(({ invoke }) => invoke("open_devtools"))
-        .catch((error: unknown) => reportError("the inspector could not open", error));
-    },
-    { capture: true },
-  );
+export function canOpenDevtools(): boolean {
+  return import.meta.env.DEV && inTauri();
+}
+
+/**
+ * Open the web inspector. The `dev.inspect` command runs this; its keys (F12,
+ * Ctrl+Shift+I) live in the keybindings registry like every other shortcut.
+ */
+export function openDevtools(): void {
+  if (!canOpenDevtools()) return;
+  void import("@tauri-apps/api/core")
+    .then(({ invoke }) => invoke("open_devtools"))
+    .catch((error: unknown) => reportError("the inspector could not open", error));
 }

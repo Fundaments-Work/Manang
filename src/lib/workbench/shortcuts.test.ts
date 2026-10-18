@@ -15,6 +15,21 @@ describe("workbench shortcuts model", () => {
 
   const mockCommands: readonly Command[] = [
     {
+      id: "help.shortcuts",
+      title: "Keyboard shortcuts",
+      group: "Workbench",
+      shortcuts: [{ key: "/", mod: true }],
+      run: () => {},
+    },
+    {
+      id: "tab.go-1",
+      title: "Go to tab 1",
+      group: "Workbench",
+      shortcuts: [{ key: "1", mod: true }],
+      palette: false,
+      run: () => {},
+    },
+    {
       id: "view.files",
       title: "Show files",
       group: "Workbench",
@@ -55,10 +70,14 @@ describe("workbench shortcuts model", () => {
 
     // Verify formatting
     const general = groups.find((g) => g.name === "General");
-    expect(general?.entries.find((e) => e.id === "workbench.shortcuts")?.formatted).toBe("Ctrl+/");
+    expect(general?.entries.find((e) => e.id === "help.shortcuts")?.formatted).toBe(
+      "Ctrl+/",
+    );
 
     const views = groups.find((g) => g.name === "Views & Panels");
-    expect(views?.entries.find((e) => e.id === "view.files")?.formatted).toBe("Ctrl+Shift+E");
+    expect(views?.entries.find((e) => e.id === "view.files")?.formatted).toBe(
+      "Ctrl+Shift+E",
+    );
 
     const docs = groups.find((g) => g.name === "Document & Files");
     expect(docs?.entries.find((e) => e.id === "file.save")?.formatted).toBe("Ctrl+S");
@@ -67,7 +86,9 @@ describe("workbench shortcuts model", () => {
   it("formats modifier symbols on macOS", () => {
     const groups = extractShortcutGroups(mockCommands, macPlatform);
     const general = groups.find((g) => g.name === "General");
-    expect(general?.entries.find((e) => e.id === "workbench.shortcuts")?.formatted).toBe("⌘/");
+    expect(general?.entries.find((e) => e.id === "help.shortcuts")?.formatted).toBe(
+      "⌘/",
+    );
 
     const views = groups.find((g) => g.name === "Views & Panels");
     expect(views?.entries.find((e) => e.id === "view.files")?.formatted).toBe("⇧⌘E");
@@ -93,6 +114,13 @@ describe("workbench shortcuts model", () => {
     // Non-matching query returns empty
     const nonMatching = filterShortcutGroups(groups, "xyz-unmatched");
     expect(nonMatching).toHaveLength(0);
+  });
+
+  it("summarises keys-only commands instead of listing each", () => {
+    const groups = extractShortcutGroups(mockCommands, linuxPlatform);
+    const ids = groups.flatMap((g) => g.entries.map((e) => e.id));
+    expect(ids).not.toContain("tab.go-1");
+    expect(ids).toContain("workbench.tabs.direct");
   });
 
   it("includes all global shortcuts without duplicates", () => {
