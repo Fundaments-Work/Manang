@@ -15,17 +15,14 @@
  */
 
 import { applyEdit, translatedScene, type FigureEdit } from "$lib/figure/edit";
-import {
-  allAnchors,
-  normalizeRect,
-  snapToAnchors,
-  type SnapResult,
-} from "$lib/figure/geometry";
+import { hits, normalizeRect, outlinePoint } from "$lib/figure/geometry";
 import {
   createScene,
   formatNodeId,
+  highestCounter,
+  isBindable,
   nodeById,
-  type Anchor,
+  type Binding,
   type FigureNode,
   type FigureScene,
   type StrokeSample,
@@ -97,7 +94,7 @@ export class FigureState {
     this.path = path;
     this.scene = scene;
     this.#backend = backend;
-    this.#counter = highestId(scene);
+    this.#counter = highestCounter(scene);
   }
 
   tool = $state<PenTool>("freehand");
@@ -111,8 +108,12 @@ export class FigureState {
   dragStart = $state<Vec | null>(null);
   dragCurrent = $state<Vec | null>(null);
 
-  /** Live snap target while dragging, so the magnet can be drawn. */
-  activeSnap = $state<Anchor | null>(null);
+  /** The shape an arrow end would bind to, and where, while dragging. */
+  activeSnap = $state<{
+    readonly nodeId: string;
+    readonly x: number;
+    readonly y: number;
+  } | null>(null);
 
   selectedId = $state<string | null>(null);
 
@@ -365,11 +366,16 @@ export class FigureState {
     }
 
     if (this.dragStart !== null) {
-      const anchors = allAnchors(this.scene);
-      const snapped: SnapResult =
-        this.tool === "arrow" ? snapToAnchors(point, anchors) : { point };
-      this.dragCurrent = snapped.point;
-      this.activeSnap = snapped.anchor ?? null;
+      this.dragCurrent = point;
+      if (this.tool === "arrow") {
+        const target = this.#bindTarget(point);
+        this.activeSnap =
+          target === undefined
+            ? null
+            : { nodeId: target.id, ...outlinePoint(target, this.dragStart) };
+      } else {
+        this.activeSnap = null;
+      }
     }
   }
 
@@ -384,13 +390,7 @@ export class FigureState {
     }
 
     if (this.tool === "freehand" && this.draft.length > 1) {
-      this.add({
-        kind: "stroke",
-        id: this.nextId(),
-        points: this.draft,
-        size: 2.5,
-        color: "#e8e6e1",
-      });
+      this.add({ kind: "freedraw", id: this.nextId(), points: this.draft, size: 2.5 });
     }
 
     if (this.dragStart !== null && this.dragCurrent !== null) {
@@ -398,7 +398,22 @@ export class FigureState {
       const to = this.dragCurrent;
 
       if (this.tool === "arrow" && Math.hypot(to.x - from.x, to.y - from.y) > 8) {
-        this.add({ kind: "arrow", id: this.nextId(), from, to, color: "#e8e6e1" });
+        // An end dropped on a shape binds to it; the plugin routes it to the outline.
+        const start = this.#bindTarget(from);
+        const end = this.#bindTarget(to);
+        const binding = (n: FigureNode | undefined): { node: string } | undefined =>
+          n === undefined ? undefined : ({ node: n.id } satisfies Binding);
+        const startBinding = binding(start);
+        const endBinding = binding(end);
+        this.add({
+          kind: "arrow",
+          id: this.nextId(),
+          points: [from, to],
+          ...(startBinding === undefined ? {} : { start: startBinding }),
+          ...(endBinding === undefined || end?.id === start?.id
+            ? {}
+            : { end: endBinding }),
+        });
       }
 
       if (this.tool === "geometry") {
@@ -409,25 +424,19 @@ export class FigureState {
             kind: "rect",
             id: this.nextId(),
             ...box,
-            stroke: "#e8e6e1",
-            fill: "#1c1c20",
+            style: { fill: "surface" },
           });
         }
       }
 
       if (this.tool === "ellipse") {
-        const rx = Math.abs(to.x - from.x) / 2;
-        const ry = Math.abs(to.y - from.y) / 2;
-        if (rx > 4 && ry > 4) {
+        const box = normalizeRect(from.x, from.y, to.x - from.x, to.y - from.y);
+        if (box.width > 8 && box.height > 8) {
           this.add({
             kind: "ellipse",
             id: this.nextId(),
-            cx: (from.x + to.x) / 2,
-            cy: (from.y + to.y) / 2,
-            rx,
-            ry,
-            stroke: "#e8e6e1",
-            fill: "#1c1c20",
+            ...box,
+            style: { fill: "surface" },
           });
         }
       }
@@ -449,6 +458,15 @@ export class FigureState {
     this.activeSnap = null;
   }
 
+  /** The topmost bindable shape under `point`, for arrow ends. */
+  #bindTarget(point: Vec): FigureNode | undefined {
+    for (let i = this.scene.nodes.length - 1; i >= 0; i -= 1) {
+      const node = this.scene.nodes[i];
+      if (node !== undefined && isBindable(node) && hits(node, point, 4)) return node;
+    }
+    return undefined;
+  }
+
   /* ---------------------------------------------------------------------- */
   /* Mutation                                                               */
   /* ---------------------------------------------------------------------- */
@@ -467,7 +485,7 @@ export class FigureState {
       y: point.y,
       tex,
       size: 26,
-      color: "#b3d17a",
+      style: { stroke: "sage" },
     });
     if (!added) return;
     this.tool = "select";
@@ -497,16 +515,6 @@ export class FigureState {
     this.edit({ op: "clear" });
     this.selectedId = null;
   }
-}
-
-/** Highest numeric suffix among node ids, so new ids never collide with loaded ones. */
-function highestId(scene: FigureScene): number {
-  let highest = 0;
-  for (const node of scene.nodes) {
-    const parsed = Number.parseInt(node.id.slice(1), 36);
-    if (Number.isFinite(parsed)) highest = Math.max(highest, parsed);
-  }
-  return highest;
 }
 
 /** A blank 960 by 540 figure, the size the starter scenes use. */
