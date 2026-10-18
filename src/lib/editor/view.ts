@@ -69,6 +69,12 @@ export const languageCompartment = new Compartment();
  */
 export const prefsCompartment = new Compartment();
 
+/**
+ * Holds the live-session binding of a document (`editor/live/binding.ts`):
+ * empty until the document joins a session, empty again after it leaves.
+ */
+export const liveCompartment = new Compartment();
+
 export interface EditorLayoutPrefs {
   readonly tabSize: number;
   readonly wordWrap: boolean;
@@ -157,6 +163,7 @@ export function createEditorState(text: string, extra: Extension): EditorState {
         indentWithTab,
       ]),
       languageCompartment.of([]),
+      liveCompartment.of([]),
       manangTheme,
       problemMarkers(),
       writing(),

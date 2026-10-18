@@ -44,8 +44,16 @@ export interface MockPlugin {
   readonly settings?: readonly Omit<SettingDef, "owner" | "category">[];
 }
 
+/**
+ * What a mock plugin may ask of the rest of the kernel: run another command
+ * synchronously (the `live` mock reads and edits the editor's documents).
+ */
+export interface MockHost {
+  call(command: string, args?: Args): unknown;
+}
+
 /** Builds a plugin once the kernel's event bus exists. */
-export type MockPluginFactory = (emit: Emit) => MockPlugin;
+export type MockPluginFactory = (emit: Emit, host: MockHost) => MockPlugin;
 
 export interface MockOptions {
   /** Whole plugins; each contributes its commands like a registered plugin. */
@@ -111,6 +119,14 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
       for (const listener of [...listeners]) listener({ topic, payload });
     }, 0);
   };
+  let lookup: (command: string) => MockHandler | undefined = () => undefined;
+  const host: MockHost = {
+    call(command, args = {}) {
+      const handler = lookup(command);
+      if (handler === undefined) throw fail(`unknown command \`${command}\``);
+      return handler(args);
+    },
+  };
   const pluginCommands: KernelCommand[] = [];
   const pluginInfo: PluginInfo[] = [];
   const agentTools: AgentTool[] = [];
@@ -118,7 +134,7 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
   const pluginHandlers: Record<string, MockHandler> = {};
   const pluginBinary: Record<string, MockBinaryHandler> = {};
   for (const factory of options.plugins ?? []) {
-    const plugin = factory(emit);
+    const plugin = factory(emit, host);
     Object.assign(pluginHandlers, plugin.handlers);
     Object.assign(pluginBinary, plugin.binaryHandlers ?? {});
     for (const tool of plugin.agentTools ?? []) {
@@ -240,6 +256,8 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
     ...pluginHandlers,
     ...options.handlers,
   };
+
+  lookup = (command) => handlers[command];
 
   // Like the shell's settings sync: each plugin's manifest settings are
   // registered with the settings plugin, owned by that plugin.

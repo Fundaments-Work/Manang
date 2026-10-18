@@ -1,9 +1,9 @@
 /**
  * Live co-editing, view side: apply remote edits and draw remote carets.
  *
- * PROTOTYPE (spike, not wired into the app). The Rust core owns the CRDT and
- * the rope. The web view stays thin: it sends rope-level edits (the existing
- * kernel sync does that) and receives two kinds of event from Rust:
+ * The Rust core owns the CRDT and the rope. The web view stays thin: it sends
+ * rope-level edits (`binding.ts` does that, with the version handshake) and
+ * receives two kinds of event from Rust:
  *
  *  - a list of remote changes, already applied to the rope, in UTF-16 units
  *    (`AppliedChange.utf16_start / utf16_delete / insert` in `manang-live`);
