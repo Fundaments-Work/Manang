@@ -2,18 +2,13 @@
  * Pure functions and constants for workspace onboarding coach lines.
  */
 
-export type CoachTarget = "editor" | "preview" | "figures";
+export type CoachTarget = "editor" | "preview";
 
-export const ALL_COACH_TARGETS: readonly CoachTarget[] = [
-  "editor",
-  "preview",
-  "figures",
-] as const;
+export const ALL_COACH_TARGETS: readonly CoachTarget[] = ["editor", "preview"] as const;
 
 export const COACH_MESSAGES: Record<CoachTarget, string> = {
   editor: "Live editor: write Typst, LaTeX, or Markdown with sub-50ms feedback.",
   preview: "Instant preview: double-click any element to jump directly to its source.",
-  figures: "Vector figures: draw illustrations and diagrams with lossless export.",
 };
 
 export const COACH_LINE_STORAGE_KEY = "manang.coach-lines.dismissed.v1";
@@ -22,7 +17,7 @@ export function parseDismissed(raw: unknown): Set<CoachTarget> {
   if (!Array.isArray(raw)) return new Set();
   const set = new Set<CoachTarget>();
   for (const item of raw) {
-    if (item === "editor" || item === "preview" || item === "figures") {
+    if (item === "editor" || item === "preview") {
       set.add(item);
     }
   }
@@ -38,6 +33,8 @@ export function isCoachLineVisible(
   return !dismissed.has(target);
 }
 
-export function areAllCoachLinesDismissed(dismissed: ReadonlySet<CoachTarget>): boolean {
+export function areAllCoachLinesDismissed(
+  dismissed: ReadonlySet<CoachTarget>,
+): boolean {
   return ALL_COACH_TARGETS.every((t) => dismissed.has(t));
 }

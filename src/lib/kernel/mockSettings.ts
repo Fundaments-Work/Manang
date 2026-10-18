@@ -103,7 +103,7 @@ const CORE_SETTINGS: Omit<SettingDef, "contexts">[] = [
     "requires-restart": false,
     owner: "core",
     category: "appearance",
-    description: "Show onboarding coach lines on the editor, preview, and figures.",
+    description: "Show onboarding coach lines on the editor and preview.",
   },
   {
     id: "editor.font-size",
