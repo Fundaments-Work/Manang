@@ -1,6 +1,6 @@
 <script lang="ts">
   import { redactionSegments } from "$lib/agent/redaction";
-  import { tokenLabel } from "$lib/agent/chips";
+  import { tokenLabel } from "$lib/agent/context";
   import { formatCost } from "$lib/agent/reducer";
   import { agent } from "$lib/state/agent.svelte";
 
@@ -30,7 +30,7 @@
 
   const preview = $derived(agent.preview);
   const redacted = $derived(
-    preview?.chips.filter((c) => c.original !== undefined) ?? [],
+    preview?.parts.filter((c) => c.original !== undefined) ?? [],
   );
 </script>
 
@@ -102,11 +102,11 @@
             </dd>
           </dl>
 
-          <h3 class="mt-4 mb-1 text-[13px] font-normal text-text">Context chips</h3>
-          {#if preview.chips.length === 0}
-            <p class="m-0 text-text-60">None. Only your message is sent.</p>
+          <h3 class="mt-4 mb-1 text-[13px] font-normal text-text">What goes with your message</h3>
+          {#if preview.parts.length === 0}
+            <p class="m-0 text-text-60">Only your message, and the project overview in the first message of a chat.</p>
           {/if}
-          {#each preview.chips as chip (chip.id)}
+          {#each preview.parts as chip (chip.id)}
             <p class="m-0 text-text-60">
               {chip.label}, about {tokenLabel(chip.tokens)} tokens{chip.truncated
                 ? ", cut to the size limit"

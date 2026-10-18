@@ -304,6 +304,8 @@ export class DocumentsStore {
   shown: DocSession | undefined;
   cursor = $state({ line: 1, column: 1 });
   words = $state(0);
+  /** Words in the selection of the shown document (0 when nothing is selected). */
+  selectionWords = $state(0);
   lines = $state(1);
   kernelOnline = $state(true);
   /** Bumped to ask the editor pane to take focus. */
@@ -800,6 +802,13 @@ export class DocumentsStore {
     const head = state.selection.main.head;
     const line = state.doc.lineAt(head);
     this.cursor = { line: line.number, column: head - line.from + 1 };
+    const range = state.selection.main;
+    // A huge selection is estimated, not counted, on every selection change.
+    this.selectionWords = range.empty
+      ? 0
+      : range.to - range.from > 50_000
+        ? Math.round((range.to - range.from) / 6)
+        : countWords(state.sliceDoc(range.from, range.to));
   }
 
   /** Word count is O(n); do it once typing settles, not per keystroke. */

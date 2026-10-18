@@ -1,16 +1,15 @@
 /**
  * In-memory `agent` plugin for the browser (`pnpm dev`, verify-ui, vitest).
  *
- * THIS IS A MOCK. No provider is contacted: a deterministic fake provider streams canned
- * text, reasoning, usage and, for the editing features, a `doc_propose_edit` proposal, so the
- * whole Agent UI can be exercised without a key. Every answer says so. The shapes (commands,
- * events, `[code]` errors, redaction, preview) follow `crates/manang-agent`; keep them in step
- * with its `manifest.toml`.
+ * THIS IS A MOCK. No provider is contacted: a deterministic fake provider streams canned text,
+ * tool rows and, for the editing commands, an `edit_text` proposal, so the whole Agent UI can be
+ * exercised without a key. Every answer says so. The shapes (commands, events, `[code]` errors,
+ * redaction, preview) follow `crates/manang-agent`; keep them in step with its `manifest.toml`.
  *
  * Like the real plugin it never stores or returns a key: only whether one was given.
  */
 
-import { estimateTokens } from "$lib/agent/chips";
+import { estimateTokens } from "$lib/agent/context";
 import type { Args, KernelError } from "./client";
 import type { MockPlugin, MockPluginFactory } from "./mock";
 
@@ -21,6 +20,7 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["agent.apply-proposal", "Accept an AI proposal"],
   ["agent.reject-proposal", "Reject an AI proposal"],
   ["agent.preview-request", "Preview exactly what would be sent to the AI provider"],
+  ["agent.commands", "List the slash commands of the AI assistant"],
   ["agent.sessions", "List AI sessions"],
   ["agent.transcript", "Read an AI session transcript"],
   ["agent.models", "List the models of an AI provider"],
@@ -31,12 +31,24 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["agent.key.set", "Save an AI provider API key"],
   ["agent.key.status", "Report whether an AI provider key is stored, and where"],
   ["agent.key.clear", "Remove an AI provider API key"],
-  ["agent.doc-read", "Agent tool: read part of a project file"],
-  ["agent.doc-diagnostics", "Agent tool: list the editor's problems"],
-  ["agent.doc-outline", "Agent tool: outline of a document"],
-  ["agent.doc-propose-edit", "Agent tool: propose a text edit"],
-  ["agent.project-search", "Agent tool: search the project"],
+  ["agent.list-files", "Agent tool: list the project's text sources"],
+  ["agent.read-file", "Agent tool: read a project file"],
+  ["agent.search", "Agent tool: search the project"],
+  ["agent.outline", "Agent tool: outline of a file or the project"],
+  ["agent.diagnostics", "Agent tool: list the problems, optionally with pending edits"],
+  ["agent.bib-search", "Agent tool: search the bibliography"],
+  ["agent.edit-text", "Agent tool: propose a text edit as search and replace pairs"],
+  ["agent.ask-user", "Agent tool: ask the author a question"],
 ];
+
+const SLASH = [
+  { name: "cite", description: "Find citations for the selection", hint: "" },
+  { name: "explain", description: "Explain the selection", hint: "" },
+  { name: "fix", description: "Fix the problem under the cursor", hint: "" },
+  { name: "rewrite", description: "Rewrite the selection for clarity", hint: "" },
+  { name: "shorten", description: "Make the selection shorter", hint: "" },
+  { name: "translate", description: "Translate the selection", hint: "<language>" },
+] as const;
 
 const PRESETS = [
   {
@@ -128,18 +140,27 @@ const PRICES: Readonly<Record<string, readonly [number, number]>> = {
   "claude-sonnet-5-5": [2_000_000, 10_000_000],
 };
 
+/** The constant prefix, shortened: the real text lives in `crates/manang-agent/src/prompt.rs`. */
+const SYSTEM = "You are the writing assistant inside Manang. (mock system prompt)";
+
 function fail(code: string, message: string): KernelError {
   return { message: `[${code}] ${message}` };
 }
 
-interface Chip {
-  id?: string;
-  kind: string;
-  label?: string;
-  path?: string;
-  range?: [number, number];
-  text?: string;
-  diagnostics?: { path: string; line: number; message: string; context?: string }[];
+interface Diag {
+  path: string;
+  line: number;
+  message: string;
+  context?: string;
+}
+
+interface Context {
+  view?: string;
+  active?: { path: string; line?: number };
+  selection?: { path: string; text: string; line_from?: number; line_to?: number };
+  mentions?: { kind: string; path?: string; text?: string; diagnostics?: Diag[] }[];
+  buffers?: Record<string, string>;
+  diagnostics?: Diag[];
 }
 
 const SECRET = /\b(sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{20,})\b/g;
@@ -161,19 +182,24 @@ function redact(text: string): {
   return { text: out, spans };
 }
 
-function chipText(chip: Chip): string {
-  if (chip.text !== undefined) return chip.text;
-  if (chip.kind === "diagnostics") {
-    return (chip.diagnostics ?? [])
-      .map((d) => `error at ${d.path}:${d.line}: ${d.message}\n${d.context ?? ""}`)
-      .join("\n");
+/** The mock's copy of the built-in command templates. */
+function expand(command: string, args: string): string {
+  switch (command) {
+    case "rewrite":
+      return `Rewrite the selected text for clarity and flow. ${args}`.trim();
+    case "shorten":
+      return `Shorten the selected text. ${args}`.trim();
+    case "translate":
+      return `Translate the selected text into ${args || "English"}.`;
+    case "explain":
+      return `Explain the selected text briefly. ${args}`.trim();
+    case "fix":
+      return `Fix the reported problem with the smallest change. ${args}`.trim();
+    case "cite":
+      return `Find support in the bibliography for the selected claim. ${args}`.trim();
+    default:
+      return args;
   }
-  if (chip.kind === "figure")
-    return "Figure: 3 shapes, 2 connections (mock description)";
-  if (chip.kind === "outline") return "Introduction (line 1)\n  Results (line 20)";
-  if (chip.kind === "bibliography-keys")
-    return "landauer1961, berut2012, lloyd2008, nielsen2010";
-  return "";
 }
 
 type Settings = {
@@ -183,7 +209,7 @@ type Settings = {
   baseUrl: string;
   offline: boolean;
   includeThinking: boolean;
-  maxContext: number;
+  contextWindow: number;
 };
 
 interface Proposal {
@@ -200,7 +226,7 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
     baseUrl: "",
     offline: false,
     includeThinking: false,
-    maxContext: 32_000,
+    contextWindow: 100_000,
   };
   const keys = new Set<string>();
   const consent = new Set<string>();
@@ -211,12 +237,12 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
     {
       id: string;
       title: string;
-      feature: string;
       provider: string;
       model: string;
       state: string;
       updated_ms: number;
       turns: number;
+      input: number;
     }
   >();
   let counter = 0;
@@ -264,9 +290,9 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
       },
       consent: consent.has(p.id),
       consent_text: p.local
-        ? `When you press Send, Manang sends the text you attach as context and your message to the server at ${host}, which is on this machine. Nothing is sent in the background. (Browser mock: nothing is sent at all.)`
-        : `When you press Send, Manang sends the text you attach as context (the selection, file, problems or figure you choose in the context tray) and your message to ${p.name} at ${host}. Nothing is sent in the background, and you can preview exactly what will be sent. The provider may bill you; your key stays in your system keychain. You can turn the agent off in Settings. (Browser mock: nothing is sent at all.)`,
-      max_context_tokens: settings.maxContext,
+        ? `When you press Send, Manang sends your message, the text you select and the parts of your project the assistant reads to the server at ${host}, which is on this machine. Nothing is sent in the background. (Browser mock: nothing is sent at all.)`
+        : `When you press Send, Manang sends your message, the text you select and the parts of your project the assistant reads (through its read tools) to ${p.name} at ${host}. Nothing is sent in the background, and you can preview exactly what will be sent. The provider may bill you; your key stays in your system keychain. You can turn the agent off in Settings. (Browser mock: nothing is sent at all.)`,
+      context_window: settings.contextWindow,
       include_thinking: settings.includeThinking,
       presets: PRESETS,
       mock: true,
@@ -300,31 +326,68 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
     }
     const model = modelOf();
     if (model === null) throw fail("invalid_argument", "choose a model in Settings");
-    const chips = ((args["context"] as Chip[] | undefined) ?? []).map((c, i) => {
-      const original = chipText(c);
-      const r = redact(original);
+    const context = (args["context"] as Context | undefined) ?? {};
+    const command = typeof args["command"] === "string" ? args["command"] : "";
+    if (command !== "" && !SLASH.some((c) => c.name === command))
+      throw fail("unknown_command", `there is no command \`/${command}\``);
+    const typed = typeof args["prompt"] === "string" ? args["prompt"].trim() : "";
+    const text = command !== "" ? expand(command, typed) : typed;
+    if (text === "" && args["retry"] !== true)
+      throw fail("invalid_argument", "write a message first");
+    // The parts that travel with the message: the selection and the @-mentions.
+    const raw: { id: string; kind: string; label: string; path?: string; text: string }[] =
+      [];
+    if (context.selection !== undefined) {
+      raw.push({
+        id: "selection",
+        kind: "selection",
+        label: "Selection",
+        path: context.selection.path,
+        text: context.selection.text,
+      });
+    }
+    for (const m of context.mentions ?? []) {
+      if (m.kind === "file" && m.path !== undefined)
+        raw.push({
+          id: `file:${m.path}`,
+          kind: "file",
+          label: m.path,
+          path: m.path,
+          text: m.text ?? `(the host reads ${m.path})`,
+        });
+      if (m.kind === "problems")
+        raw.push({
+          id: "problems",
+          kind: "problems",
+          label: "Problems",
+          text: (m.diagnostics ?? [])
+            .map((d) => `error ${d.path}:${d.line} ${d.message}\n${d.context ?? ""}`)
+            .join("\n"),
+        });
+      if (m.kind === "figure")
+        raw.push({
+          id: "figure",
+          kind: "figure",
+          label: "Figure",
+          text: "Figure: 3 shapes, 2 connections (mock description)",
+        });
+    }
+    const parts = raw.map((c) => {
+      const r = redact(c.text);
       return {
-        id: c.id ?? `${c.kind}-${i}`,
+        id: c.id,
         kind: c.kind,
-        label: c.label ?? c.kind,
+        label: c.label,
         path: c.path,
-        range: c.range,
         tokens: estimateTokens(r.text),
         truncated: false,
         text: r.text,
-        original: r.spans.length > 0 ? original : undefined,
+        original: r.spans.length > 0 ? c.text : undefined,
         redactions: r.spans,
-        source: original,
+        source: c.text,
       };
     });
-    const context = chips.reduce((s, c) => s + c.tokens, 0);
-    if (context > settings.maxContext) {
-      throw fail(
-        "context_too_large",
-        `the attached context is about ${context} tokens; the limit is ${settings.maxContext}.`,
-      );
-    }
-    return { model, chips, context, provider: p };
+    return { model, parts, context, command, text, typed, provider: p };
   }
 
   function later(session: string, ms: number, fn: () => void): void {
@@ -334,83 +397,82 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
     timers.set(session, list);
   }
 
+  /** The edit the mock proposes for a command, or null (the model would only answer). */
   function propose(
-    feature: string,
-    chips: ReturnType<typeof prepare>["chips"],
+    command: string,
+    context: Context,
+    parts: ReturnType<typeof prepare>["parts"],
     target: string,
   ) {
-    const selection = chips.find((c) => c.kind === "selection" && c.path !== undefined);
-    if (feature === "fix-diagnostic") {
-      const d = chips.find((c) => c.kind === "diagnostics");
-      const context = (d?.source ?? "").split("\n").slice(1).join("\n").trim();
-      if (context === "") return null;
-      const file =
-        chips
-          .find((c) => c.kind === "diagnostics")
-          ?.source.match(/ at ([^:]+):/)?.[1] ?? "";
+    if (command === "fix") {
+      const d = context.diagnostics?.[0] ?? context.mentions?.[0]?.diagnostics?.[0];
+      const body = (d?.context ?? "").trim();
+      if (d === undefined || body === "") return null;
       return {
-        path: file,
-        from: 0,
-        to: context.length,
-        before: context,
-        after: `${context.replace(/\s+$/, "")} (mock fix)`,
-        explanation:
-          "Mock fix: appended a marker. A real provider proposes a real change.",
+        kind: "text_edit",
+        path: d.path,
+        note: "Mock fix: appended a marker. A real provider proposes a real change.",
+        edits: [
+          {
+            from: 0,
+            to: body.length,
+            before: body,
+            after: `${body.replace(/\s+$/, "")} (mock fix)`,
+          },
+        ],
       };
     }
-    if (
-      selection === undefined ||
-      selection.path === undefined ||
-      selection.range === undefined
-    )
-      return null;
+    const selection = parts.find((c) => c.kind === "selection" && c.path !== undefined);
+    if (selection?.path === undefined) return null;
     const before = selection.source;
     const words = before.split(/\s+/).filter((w) => w !== "");
     const after =
-      feature === "shorten"
+      command === "shorten"
         ? `${words.slice(0, Math.max(1, Math.ceil(words.length / 2))).join(" ")}.`
-        : feature === "translate"
+        : command === "translate"
           ? `[mock translation to ${target}] ${before}`
           : `${before.replace(/\s+/g, " ").trim()} (mock rewrite)`;
+    const buffer = context.buffers?.[selection.path] ?? "";
+    const from = Math.max(0, buffer.indexOf(before));
     return {
+      kind: "text_edit",
       path: selection.path,
-      from: selection.range[0],
-      to: selection.range[1],
-      before,
-      after,
-      explanation: `Mock ${feature}: a labelled placeholder edit.`,
+      note: `Mock ${command}: a labelled placeholder edit.`,
+      edits: [{ from, to: from + before.length, before, after }],
     };
   }
 
   function start(args: Args) {
-    const { model, chips, context } = prepare(args, true);
-    const feature = String(args["feature"]);
-    const prompt = typeof args["prompt"] === "string" ? args["prompt"] : "";
-    const options = (args["options"] as { target_language?: string } | undefined) ?? {};
+    const { model, parts, context, command, text, typed } = prepare(args, true);
     counter += 1;
     const id =
       typeof args["session_id"] === "string"
         ? args["session_id"]
         : `smock${counter.toString(16)}`;
-    const slow = /\bslow\b/i.test(prompt);
+    const slow = /\bslow\b/i.test(text);
+    const asksFirst = /\bdelete\b/i.test(text);
+    const wantsVerify = /\bverify\b/i.test(text);
     const p = preset();
+    const existing = sessions.get(id);
     sessions.set(id, {
       id,
-      title: (prompt || feature).slice(0, 60),
-      feature,
+      title: existing?.title ?? (text || command).slice(0, 60),
       provider: p.id,
       model,
       state: "running",
       updated_ms: Date.now(),
-      turns: 1,
+      turns: (existing?.turns ?? 0) + 1,
+      input: existing?.input ?? 0,
     });
+    const contextTokens = parts.reduce((s, c) => s + c.tokens, 0);
     emit("agent.started", {
       session_id: id,
       provider: p.id,
       model,
-      feature,
-      context_tokens: context,
-      chips: chips.map((c) => ({
+      effort: command !== "" ? "low" : "high",
+      context_tokens: contextTokens,
+      window: settings.contextWindow,
+      parts: parts.map((c) => ({
         id: c.id,
         kind: c.kind,
         label: c.label,
@@ -418,75 +480,143 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
       })),
     });
     let at = 5;
-    if (settings.includeThinking) {
-      later(id, at, () =>
-        emit("agent.thinking-delta", {
-          session_id: id,
-          text: "Mock reasoning: looking at the attached context. ",
-        }),
-      );
-      at += 10;
-    }
+    // Reasoning is a signal, not text, unless the developer flag is on.
+    later(id, at, () =>
+      emit("agent.text", {
+        session_id: id,
+        thinking: true,
+        text: settings.includeThinking ? "Mock reasoning: looking at the context. " : "",
+      }),
+    );
+    at += 10;
     const proposal =
-      feature === "chat" || feature === "explain"
+      command === "" || command === "explain" || command === "cite"
         ? null
-        : propose(feature, chips, options.target_language ?? "English");
-    const answer =
-      feature === "explain"
+        : propose(command, context, parts, typed || "English");
+    const reads = proposal !== null || /\bread\b/i.test(text);
+    const answer = asksFirst
+      ? ""
+      : command === "explain"
         ? "Mock explanation: this passage states a result and then qualifies it. (No provider was contacted.)"
         : proposal !== null
           ? "Mock answer (no provider was contacted). I propose this change:"
-          : `Mock answer (no provider was contacted). You asked: ${prompt || feature}. Attach a selection or a problem and choose Rewrite or Fix to see a proposal.`;
-    const pieces = answer.match(/.{1,12}/g) ?? [answer];
+          : `Mock answer (no provider was contacted). You asked: ${text || command}. Select some text and type /rewrite or /fix to see a proposal.`;
+    const row = (
+      tid: string,
+      name: string,
+      toolArgs: Record<string, unknown>,
+      result: string,
+      extra: Record<string, unknown> = {},
+    ) => {
+      later(id, (at += 8), () =>
+        emit("agent.tool", {
+          session_id: id,
+          id: tid,
+          name,
+          risk: name === "edit_text" ? "propose" : "read",
+          status: "running",
+          args: toolArgs,
+          summary: "",
+        }),
+      );
+      later(id, (at += 8), () =>
+        emit("agent.tool", {
+          session_id: id,
+          id: tid,
+          name,
+          risk: name === "edit_text" ? "propose" : "read",
+          status: "done",
+          args: toolArgs,
+          summary: result,
+          ...extra,
+        }),
+      );
+    };
+    if (reads) {
+      const path = context.active?.path ?? "main.typ";
+      row("t1", "read_file", { path }, `${path} lines 1-40 of 40`);
+      row("t2", "search", { query: "Landauer" }, "3 matches in 2 files.");
+    }
+    if (asksFirst) {
+      row(
+        "ask1",
+        "ask_user",
+        { question: "Delete that section?" },
+        "Question shown to the author.",
+        { ask: { question: "Delete that section?", choices: ["Yes, delete it", "No"] } },
+      );
+    }
+    if (wantsVerify) {
+      later(id, (at += 8), () =>
+        emit("agent.approval", {
+          session_id: id,
+          call_id: `${id}/v1`,
+          tool_call_id: "v1",
+          tool: "verify_citation",
+          risk: "network",
+          scope: "network:api.crossref.org",
+          host: "api.crossref.org",
+          args: { doi: "10.1000/mock" },
+          after_untrusted_content: false,
+        }),
+      );
+    }
+    const pieces = answer === "" ? [] : (answer.match(/.{1,12}/g) ?? [answer]);
     const gap = slow ? 400 : 12;
     for (const piece of pieces) {
       at += gap;
-      later(id, at, () => emit("agent.text-delta", { session_id: id, text: piece }));
+      later(id, at, () => emit("agent.text", { session_id: id, text: piece }));
     }
     if (proposal !== null) {
       at += 20;
       later(id, at, () =>
-        emit("agent.tool-call", {
+        emit("agent.tool", {
           session_id: id,
-          id: "t1",
-          name: "doc_propose_edit",
+          id: "e1",
+          name: "edit_text",
           risk: "propose",
-          args: proposal,
+          status: "running",
+          args: { path: proposal.path },
+          summary: "",
         }),
       );
       at += 10;
       later(id, at, () => {
         counter += 1;
         const proposalId = `pmock${counter.toString(16)}`;
-        proposals.set(proposalId, {
-          session: id,
-          payload: { kind: "text_edit", ...proposal },
-          state: "pending",
-        });
-        emit("agent.tool-result", {
+        proposals.set(proposalId, { session: id, payload: proposal, state: "pending" });
+        emit("agent.tool", {
           session_id: id,
-          id: "t1",
-          is_error: false,
-          summary: "proposal recorded",
+          id: "e1",
+          name: "edit_text",
+          risk: "propose",
+          status: "done",
+          args: { path: proposal.path },
+          summary: `Proposal ${proposalId} queued`,
+          proposal_id: proposalId,
         });
         emit("agent.proposal", {
           session_id: id,
           proposal_id: proposalId,
           kind: "text_edit",
-          payload: { kind: "text_edit", ...proposal },
+          payload: proposal,
         });
       });
     }
     at += 20;
     later(id, at, () => {
-      const input =
-        chips.reduce((s, c) => s + c.tokens, 0) + estimateTokens(prompt) + 120;
+      const s = sessions.get(id);
+      const input = contextTokens + estimateTokens(text) + 1900 + (s?.input ?? 0);
       const output = estimateTokens(answer) + 20;
       const price = PRICES[model];
       const cost =
         price === undefined
           ? null
           : Math.ceil((input * price[0] + output * price[1]) / 1_000_000);
+      if (s !== undefined) {
+        s.input = input;
+        s.state = "idle";
+      }
       emit("agent.usage", {
         session_id: id,
         model,
@@ -495,6 +625,11 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
         cache_read: 0,
         cache_write: 0,
         est_cost_micro_usd: cost,
+        requests: 1,
+        cache_hit_percent: 0,
+        fill: input,
+        window: settings.contextWindow,
+        compacted: null,
         total: {
           input,
           output,
@@ -503,10 +638,12 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
           est_cost_micro_usd: cost,
         },
       });
-      const s = sessions.get(id);
-      if (s !== undefined) s.state = "idle";
       timers.delete(id);
-      emit("agent.done", { session_id: id, stop_reason: "end_turn" });
+      emit("agent.done", {
+        session_id: id,
+        stop_reason: asksFirst ? "ask_user" : "end_turn",
+        steps: 12,
+      });
     });
     return { session_id: id };
   }
@@ -532,11 +669,14 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
         settings.offline = values["agent.offline"];
       if (typeof values["agent.include-thinking"] === "boolean")
         settings.includeThinking = values["agent.include-thinking"];
-      if (typeof values["agent.max-context-tokens"] === "number")
-        settings.maxContext = values["agent.max-context-tokens"];
+      if (typeof values["agent.context-window"] === "number")
+        settings.contextWindow = values["agent.context-window"];
       return { applied: Object.keys(values).length };
     },
     "agent.status": () => status(),
+    "agent.commands": () => ({
+      commands: SLASH.map((c) => ({ ...c, source: "builtin" })),
+    }),
     "agent.consent": (args) => {
       const provider = String(args["provider"]);
       if (!PRESETS.some((p) => p.id === provider))
@@ -589,17 +729,17 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
       return { ok: true, model: modelOf(), latency_ms: 1, mock: true };
     },
     "agent.preview-request": (args) => {
-      const { model, chips, context, provider } = prepare(args, false);
-      const prompt = typeof args["prompt"] === "string" ? args["prompt"] : "";
-      const system =
-        "You are the writing and figure assistant inside Manang. (mock system prompt)";
-      const user = `<manang_context>\n${chips.map((c) => `<chip kind="${c.kind}">\n${c.text}\n</chip>`).join("\n")}\n</manang_context>\n\n<user_request>\n${prompt || String(args["feature"])}\n</user_request>`;
+      const { model, parts, text, provider } = prepare(args, false);
+      const first =
+        parts.map((c) => `<${c.kind}>\n${c.text}\n</${c.kind}>`).join("\n") +
+        (parts.length > 0 ? "\n\n" : "") +
+        text;
       const body = JSON.stringify(
         {
           model,
           messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
+            { role: "system", content: SYSTEM },
+            { role: "user", content: first },
           ],
           stream: true,
         },
@@ -607,7 +747,7 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
         2,
       );
       const price = PRICES[model];
-      const input = estimateTokens(body);
+      const input = estimateTokens(body) + 1900;
       return {
         provider: provider.id,
         model,
@@ -617,14 +757,14 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
           ["content-type", "application/json"],
         ],
         body,
-        system,
+        system: SYSTEM,
         tools: [
-          { name: "doc_propose_edit", risk: "propose" },
-          { name: "doc_read", risk: "read" },
+          { name: "edit_text", risk: "propose" },
+          { name: "read_file", risk: "read" },
         ],
-        chips: chips.map(({ source: _source, ...c }) => c),
-        redaction_count: chips.reduce((s, c) => s + c.redactions.length, 0),
-        tokens: { context, request: input },
+        parts: parts.map(({ source: _source, ...c }) => c),
+        redaction_count: parts.reduce((s, c) => s + c.redactions.length, 0),
+        tokens: { context: parts.reduce((s, c) => s + c.tokens, 0), request: input },
         cost: {
           est_input_micro_usd:
             price === undefined ? null : Math.ceil((input * price[0]) / 1_000_000),
@@ -644,8 +784,7 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
       timers.delete(id);
       const s = sessions.get(id);
       if (s !== undefined) s.state = "idle";
-      emit("agent.cancelled", { session_id: id });
-      emit("agent.done", { session_id: id, stop_reason: "cancelled" });
+      emit("agent.done", { session_id: id, stop_reason: "cancelled", cancelled: true });
       return { cancelled: true };
     },
     "agent.approve": () => ({ ok: true }),

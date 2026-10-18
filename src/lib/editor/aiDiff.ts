@@ -2,9 +2,11 @@
  * The inline diff of an AI proposal.
  *
  * The removed text is dimmed and struck through, the inserted text follows in the Sage token
- * (`--mng-math`), and a small widget carries Accept and Reject. Nothing in the document changes
- * until Accept: then ONE transaction replaces the range, so one Ctrl+Z undoes the whole edit.
- * Esc rejects. Editing inside the proposed range drops the proposal (it is stale).
+ * (`--mng-math`), and a small widget after the last change carries Accept and Reject. A proposal
+ * can have several hunks (one `edit_text` call): all are shown, one widget decides them together.
+ * Nothing in the document changes until Accept: then ONE transaction applies every hunk, so one
+ * Ctrl+Z undoes the whole edit. Esc rejects. Editing inside a proposed range drops the proposal
+ * (it is stale).
  *
  * The extension holds no logic about the agent: the buttons call the handlers the agent state
  * registered, and `proposeInline` / `clearInline` are the only ways in.
@@ -18,6 +20,7 @@ import {
   StateField,
   Transaction,
   type Extension,
+  type Range,
 } from "@codemirror/state";
 import {
   Decoration,
@@ -27,13 +30,18 @@ import {
   type DecorationSet,
 } from "@codemirror/view";
 
+/** One change of a proposal, in the document's coordinates. */
+export interface InlineHunk {
+  readonly from: number;
+  readonly to: number;
+  /** The text the hunk inserts. */
+  readonly insert: string;
+}
+
 /** What the editor shows for one pending proposal. */
 export interface InlineProposal {
   readonly id: string;
-  readonly from: number;
-  readonly to: number;
-  /** The text the proposal inserts. */
-  readonly insert: string;
+  readonly hunks: readonly InlineHunk[];
   readonly explanation: string;
 }
 
@@ -56,14 +64,20 @@ const hide = StateEffect.define<string | null>();
 export const aiEdit = Annotation.define<boolean>();
 
 class ProposalWidget extends WidgetType {
-  constructor(readonly proposal: InlineProposal) {
+  /** `bar`: this is the last hunk's widget, which carries Accept and Reject. */
+  constructor(
+    readonly proposal: InlineProposal,
+    readonly insert: string,
+    readonly bar: boolean,
+  ) {
     super();
   }
 
   override eq(other: ProposalWidget): boolean {
     return (
       other.proposal.id === this.proposal.id &&
-      other.proposal.insert === this.proposal.insert
+      other.insert === this.insert &&
+      other.bar === this.bar
     );
   }
 
@@ -71,12 +85,13 @@ class ProposalWidget extends WidgetType {
     const root = document.createElement("span");
     root.className = "mng-ai-inline";
     root.setAttribute("data-ai-proposal", this.proposal.id);
-    if (this.proposal.insert !== "") {
+    if (this.insert !== "") {
       const inserted = document.createElement("span");
       inserted.className = "mng-ai-inserted";
-      inserted.textContent = this.proposal.insert;
+      inserted.textContent = this.insert;
       root.append(inserted);
     }
+    if (!this.bar) return root;
     const bar = document.createElement("span");
     bar.className = "mng-ai-bar";
     bar.setAttribute("role", "group");
@@ -113,17 +128,19 @@ interface Field {
 }
 
 function build(proposal: InlineProposal): DecorationSet {
-  const ranges = [];
-  if (proposal.to > proposal.from) {
+  const ranges: Range<Decoration>[] = [];
+  const last = proposal.hunks.length - 1;
+  proposal.hunks.forEach((hunk, i) => {
+    if (hunk.to > hunk.from) {
+      ranges.push(Decoration.mark({ class: "mng-ai-removed" }).range(hunk.from, hunk.to));
+    }
     ranges.push(
-      Decoration.mark({ class: "mng-ai-removed" }).range(proposal.from, proposal.to),
+      Decoration.widget({
+        widget: new ProposalWidget(proposal, hunk.insert, i === last),
+        side: 1,
+      }).range(hunk.to),
     );
-  }
-  ranges.push(
-    Decoration.widget({ widget: new ProposalWidget(proposal), side: 1 }).range(
-      proposal.to,
-    ),
-  );
+  });
   return Decoration.set(ranges, true);
 }
 
@@ -145,14 +162,18 @@ const field = StateField.define<Field>({
     if (tr.docChanged && !tr.effects.some((e) => e.is(show))) {
       // An edit touching the proposed range makes it stale; edits elsewhere just move it.
       let touched = false;
+      const hunks = proposal.hunks;
       tr.changes.iterChangedRanges((fromA, toA) => {
-        if (fromA <= proposal!.to && toA >= proposal!.from) touched = true;
+        if (hunks.some((h) => fromA <= h.to && toA >= h.from)) touched = true;
       });
       if (touched) return { proposal: null, decorations: Decoration.none };
       proposal = {
         ...proposal,
-        from: tr.changes.mapPos(proposal.from, 1),
-        to: tr.changes.mapPos(proposal.to, -1),
+        hunks: hunks.map((h) => ({
+          ...h,
+          from: tr.changes.mapPos(h.from, 1),
+          to: tr.changes.mapPos(h.to, -1),
+        })),
       };
     }
     return { proposal, decorations: build(proposal) };
@@ -196,7 +217,7 @@ export function proposeInline(view: EditorView, proposal: InlineProposal): void 
   view.dispatch({
     effects: [
       show.of(proposal),
-      EditorView.scrollIntoView(proposal.from, { y: "center" }),
+      EditorView.scrollIntoView(proposal.hunks[0]?.from ?? 0, { y: "center" }),
     ],
   });
 }
@@ -213,17 +234,25 @@ export function inlineProposal(state: EditorState): InlineProposal | null {
 }
 
 /**
- * Accepts the shown proposal: ONE transaction replaces the range and clears the diff, so a single
- * undo restores the text. `change` is in the current document's coordinates.
+ * Accepts the shown proposal: ONE transaction applies every hunk and clears the diff, so a
+ * single undo restores the text. `changes` are in the current document's coordinates, in
+ * document order, not overlapping.
  */
 export function applyInline(
   view: EditorView,
-  change: { readonly from: number; readonly to: number; readonly insert: string },
+  changes: readonly InlineHunk[],
   id: string,
 ): void {
+  // The caret lands at the end of the last change, in the new document.
+  let shift = 0;
+  let anchor = 0;
+  for (const c of changes) {
+    anchor = c.from + shift + c.insert.length;
+    shift += c.insert.length - (c.to - c.from);
+  }
   view.dispatch({
-    changes: change,
-    selection: { anchor: change.from + change.insert.length },
+    changes: changes.map((c) => ({ from: c.from, to: c.to, insert: c.insert })),
+    selection: { anchor },
     effects: hide.of(id),
     annotations: [aiEdit.of(true), Transaction.userEvent.of("input.ai")],
     scrollIntoView: true,

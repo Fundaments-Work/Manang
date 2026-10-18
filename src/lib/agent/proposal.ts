@@ -1,16 +1,21 @@
 /**
- * Proposals as diffs. A text edit replaces `before` (at `from`..`to`) with `after`. Nothing is
- * applied here: the editor applies the accepted edit as one transaction, so one Ctrl+Z undoes it.
+ * Proposals as diffs. A proposal is one `edit_text` call: one or more hunks of one file, each
+ * replacing `before` with `after`. Nothing is applied here: the editor applies the accepted edit
+ * as one transaction, so one Ctrl+Z undoes all of it.
+ *
+ * The host located every hunk in the text the model read and sends UTF-16 offsets, but the
+ * editor may have moved on: hunks are found again by their text (the proposed range first, else
+ * the single place the text now occurs), and a hunk that cannot be found makes the proposal stale.
  */
 
-import type { TextEdit } from "./types";
+import type { EditHunk, TextEdit } from "./types";
 
 export type Segment =
   | { readonly kind: "same"; readonly text: string }
   | { readonly kind: "removed"; readonly text: string }
   | { readonly kind: "inserted"; readonly text: string };
 
-/** Splits a code-unit string at the longest common prefix and suffix, never inside a surrogate pair. */
+/** The longest common prefix and suffix, never splitting a surrogate pair. */
 function commonEnds(a: string, b: string): { prefix: number; suffix: number } {
   const max = Math.min(a.length, b.length);
   let prefix = 0;
@@ -35,11 +40,7 @@ function isLowSurrogate(code: number): boolean {
   return code >= 0xdc00 && code <= 0xdfff;
 }
 
-/**
- * The diff of one edit for the card: unchanged lead, removed text, inserted text, unchanged tail.
- * Words that did not change at the ends are shown as plain text, so the card highlights only
- * what the edit touches.
- */
+/** The diff of one hunk: unchanged lead, removed text, inserted text, unchanged tail. */
 export function diffSegments(before: string, after: string): Segment[] {
   const { prefix, suffix } = commonEnds(before, after);
   const out: Segment[] = [];
@@ -54,41 +55,74 @@ export function diffSegments(before: string, after: string): Segment[] {
   return out;
 }
 
-/** The smallest change (editor coordinates) that turns the document into the proposal's result. */
+/** A change in the editor's coordinates. */
+export interface Change {
+  readonly from: number;
+  readonly to: number;
+  readonly insert: string;
+}
+
+/** The smallest change that turns the text at `at` into the hunk's result. */
 export function minimalChange(
-  edit: TextEdit,
+  hunk: Pick<EditHunk, "before" | "after">,
   at: { readonly from: number; readonly to: number },
-): { from: number; to: number; insert: string } {
-  const { prefix, suffix } = commonEnds(edit.before, edit.after);
+): Change {
+  const { prefix, suffix } = commonEnds(hunk.before, hunk.after);
   return {
     from: at.from + prefix,
     to: at.to - suffix,
-    insert: edit.after.slice(prefix, edit.after.length - suffix),
+    insert: hunk.after.slice(prefix, hunk.after.length - suffix),
   };
 }
 
 /**
- * Where the edit applies in `doc`: the proposed range when the text there is still `before`,
- * else the single place `before` now occurs (the text moved), else null (it changed: stale).
+ * Where a hunk applies in `doc`: the proposed range when the text there is still `before`, else
+ * the single place `before` now occurs (the text moved), else null (it changed: stale).
  */
-export function locateEdit(
+export function locateHunk(
   doc: string,
-  edit: TextEdit,
+  hunk: EditHunk,
 ): { readonly from: number; readonly to: number } | null {
-  if (edit.to <= doc.length && doc.slice(edit.from, edit.to) === edit.before) {
-    return { from: edit.from, to: edit.to };
+  if (hunk.to <= doc.length && doc.slice(hunk.from, hunk.to) === hunk.before) {
+    return { from: hunk.from, to: hunk.to };
   }
-  if (edit.before === "") return null;
-  const first = doc.indexOf(edit.before);
-  if (first < 0 || doc.indexOf(edit.before, first + 1) >= 0) return null;
-  return { from: first, to: first + edit.before.length };
+  if (hunk.before === "") return null;
+  const first = doc.indexOf(hunk.before);
+  if (first < 0 || doc.indexOf(hunk.before, first + 1) >= 0) return null;
+  return { from: first, to: first + hunk.before.length };
 }
 
-/** A short plain-language line for the card header. */
+/**
+ * Every hunk's change in `doc`, in document order, or null when any hunk is stale or two hunks
+ * now overlap.
+ */
+export function locateEdit(doc: string, edit: TextEdit): Change[] | null {
+  const found: Change[] = [];
+  let ends = -1;
+  const located = edit.edits
+    .map((hunk) => ({ hunk, at: locateHunk(doc, hunk) }))
+    .sort((a, b) => (a.at?.from ?? 0) - (b.at?.from ?? 0));
+  for (const { hunk, at } of located) {
+    if (at === null || at.from < ends) return null;
+    ends = at.to;
+    found.push(minimalChange(hunk, at));
+  }
+  return found.length === 0 ? null : found;
+}
+
+/** `Edit to main.typ, 2 changes`: the line the chat shows for a proposal. */
 export function describeEdit(edit: TextEdit): string {
-  const removed = edit.before.length;
-  const added = edit.after.length;
-  if (removed === 0) return `Insert ${added} characters in ${edit.path}`;
-  if (added === 0) return `Remove ${removed} characters in ${edit.path}`;
-  return `Replace ${removed} characters with ${added} in ${edit.path}`;
+  const n = edit.edits.length;
+  return `Edit to ${edit.path}, ${n} change${n === 1 ? "" : "s"}`;
+}
+
+/** Characters removed and added by all hunks (for a tooltip). */
+export function sizeOf(edit: TextEdit): { removed: number; added: number } {
+  return edit.edits.reduce(
+    (sum, h) => ({
+      removed: sum.removed + h.before.length,
+      added: sum.added + h.after.length,
+    }),
+    { removed: 0, added: 0 },
+  );
 }

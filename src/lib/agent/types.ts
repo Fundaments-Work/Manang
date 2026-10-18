@@ -3,18 +3,6 @@
  * Argument and field names are the Rust side's, snake_case included.
  */
 
-export type AgentFeature =
-  "chat" | "rewrite" | "shorten" | "translate" | "explain" | "fix-diagnostic";
-
-export type ChipKind =
-  | "selection"
-  | "file"
-  | "diagnostics"
-  | "outline"
-  | "bibliography-keys"
-  | "figure"
-  | "pinned";
-
 export interface WireDiagnostic {
   readonly path: string;
   readonly line: number;
@@ -25,40 +13,55 @@ export interface WireDiagnostic {
   readonly context?: string;
 }
 
-/** A context chip as sent to `agent.start`. */
-export interface ChipInput {
-  readonly id?: string;
-  readonly kind: ChipKind;
-  readonly label?: string;
-  readonly path?: string;
-  /** UTF-16 offsets (what CodeMirror counts). */
-  readonly range?: readonly [number, number];
-  readonly text?: string;
-  readonly diagnostics?: readonly WireDiagnostic[];
-  readonly pinned?: boolean;
-}
+/** Something the author added with `@`. */
+export type Mention =
+  | { readonly kind: "file"; readonly path: string; readonly text?: string }
+  | { readonly kind: "problems"; readonly diagnostics: readonly WireDiagnostic[] }
+  | { readonly kind: "figure"; readonly path?: string };
 
-/** A chip in the tray: what it is, its size, and whether it stays between requests. */
-export interface TrayChip extends ChipInput {
-  readonly id: string;
-  readonly label: string;
-  readonly tokens: number;
+/** What the UI sends with every message; the host adds the session header once. */
+export interface TurnContext {
+  /** Figure tools are offered only in the figure studio. */
+  readonly view?: "document" | "figure";
+  readonly active?: { readonly path: string; readonly line?: number };
+  readonly selection?: {
+    readonly path: string;
+    readonly text: string;
+    readonly line_from?: number;
+    readonly line_to?: number;
+  };
+  readonly mentions?: readonly Mention[];
+  /** Open documents with unsaved changes: path to text. The tools read these, not the disk. */
+  readonly buffers?: Readonly<Record<string, string>>;
+  /** The editor's problems (what the `diagnostics` tool reports). */
+  readonly diagnostics?: readonly WireDiagnostic[];
 }
 
 export interface StartOptions {
   readonly model?: string;
   readonly max_iterations?: number;
   readonly max_tokens?: number;
-  readonly target_language?: string;
 }
 
 export interface StartArgs {
   readonly session_id?: string;
-  readonly feature: AgentFeature;
+  /** What the author typed (after the command name, when there is one). */
   readonly prompt?: string;
-  readonly context: readonly ChipInput[];
+  /** A slash command (`rewrite`): its template becomes the first message. */
+  readonly command?: string;
+  readonly context: TurnContext;
   readonly options?: StartOptions;
   readonly project_root?: string;
+  /** Run the conversation again as it stands (after a connection error). */
+  readonly retry?: boolean;
+}
+
+export interface SlashCommand {
+  readonly name: string;
+  readonly description: string;
+  /** What to type after the name (`<language>`). */
+  readonly hint: string;
+  readonly source: "builtin" | "user" | "project";
 }
 
 export interface KeyStatus {
@@ -94,7 +97,8 @@ export interface AgentStatus {
   readonly key: KeyStatus | null;
   readonly consent: boolean;
   readonly consent_text: string;
-  readonly max_context_tokens: number;
+  /** The working window in tokens; compaction thresholds are shares of it. */
+  readonly context_window: number;
   readonly include_thinking: boolean;
   readonly presets: readonly PresetInfo[];
   /** Present only in the browser build, where the provider is a labelled mock. */
@@ -108,9 +112,10 @@ export interface WireRedaction {
   readonly replacement: string;
 }
 
-export interface PreviewChip {
+/** One part of what is sent: the selection, a mention. */
+export interface PreviewPart {
   readonly id: string;
-  readonly kind: ChipKind;
+  readonly kind: string;
   readonly label: string;
   readonly tokens: number;
   readonly truncated: boolean;
@@ -127,7 +132,7 @@ export interface RequestPreview {
   readonly body: string;
   readonly system: string | null;
   readonly tools: readonly { readonly name: string; readonly risk: string }[];
-  readonly chips: readonly PreviewChip[];
+  readonly parts: readonly PreviewPart[];
   readonly redaction_count: number;
   readonly tokens: { readonly context: number; readonly request: number };
   readonly cost: {
@@ -138,15 +143,20 @@ export interface RequestPreview {
   readonly mock?: boolean;
 }
 
-/** A proposed text edit (offsets are UTF-16). */
-export interface TextEdit {
-  readonly kind?: "text_edit";
-  readonly path: string;
+/** One located change of a proposal (offsets are UTF-16, the host's, in the text it read). */
+export interface EditHunk {
   readonly from: number;
   readonly to: number;
   readonly before: string;
   readonly after: string;
-  readonly explanation: string;
+}
+
+/** A proposed text edit: one `edit_text` call, one or more hunks in one file. */
+export interface TextEdit {
+  readonly kind?: "text_edit";
+  readonly path: string;
+  readonly note: string;
+  readonly edits: readonly EditHunk[];
 }
 
 export interface ConnectionResult {
@@ -161,7 +171,6 @@ export interface ConnectionResult {
 export interface SessionMeta {
   readonly id: string;
   readonly title: string;
-  readonly feature: string;
   readonly provider: string;
   readonly model: string;
   readonly state: string;
