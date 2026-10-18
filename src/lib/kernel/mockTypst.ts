@@ -21,9 +21,21 @@ const MARGIN = 64;
 const LINE_STEP = 17;
 const WRAP = 78;
 
+/** One line of the document after `#include`s are spliced in, with its origin. */
+interface SourceLine {
+  readonly text: string;
+  /** Project-relative path. */
+  readonly file: string;
+  /** 1-based. */
+  readonly line: number;
+}
+
 interface PageLine {
   readonly kind: "heading" | "body" | "math" | "figure" | "rule" | "reference";
   readonly text: string;
+  /** The source line it came from (a paragraph's rows: the paragraph's first line). */
+  readonly file?: string;
+  readonly line?: number;
 }
 
 interface Compiled {
@@ -91,18 +103,26 @@ function plain(text: string): string {
     .replace(/[*_]/g, "");
 }
 
-export function layout(text: string): PageLine[] {
+export function layout(input: string | readonly SourceLine[]): PageLine[] {
+  const source: readonly SourceLine[] =
+    typeof input === "string"
+      ? input.split("\n").map((text, i) => ({ text, file: "", line: i + 1 }))
+      : input;
   const lines: PageLine[] = [];
   let paragraph: string[] = [];
+  let start: SourceLine | null = null;
   const flush = (): void => {
     if (paragraph.length === 0) return;
+    const origin = start === null ? {} : { file: start.file, line: start.line };
     for (const row of wrap(plain(paragraph.join(" "))))
-      lines.push({ kind: "body", text: row });
+      lines.push({ kind: "body", text: row, ...origin });
     lines.push({ kind: "rule", text: "" });
     paragraph = [];
+    start = null;
   };
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
+  for (const from of source) {
+    const line = from.text.trim();
+    const origin = { file: from.file, line: from.line };
     const heading = /^(=+)\s+(.*)$/.exec(line);
     const display = /^\$\s+(.+?)\s+\$$/.exec(line);
     const figure = /image\(\s*"([^"]+)"/.exec(line);
@@ -110,17 +130,18 @@ export function layout(text: string): PageLine[] {
       flush();
     } else if (heading !== null) {
       flush();
-      lines.push({ kind: "heading", text: heading[2] ?? "" });
+      lines.push({ kind: "heading", text: heading[2] ?? "", ...origin });
     } else if (display !== null) {
       flush();
-      lines.push({ kind: "math", text: display[1] ?? "" });
+      lines.push({ kind: "math", text: display[1] ?? "", ...origin });
     } else if (figure !== null) {
       flush();
-      lines.push({ kind: "figure", text: figure[1] ?? "" });
+      lines.push({ kind: "figure", text: figure[1] ?? "", ...origin });
     } else if (line.startsWith("#bibliography")) {
       flush();
-      lines.push({ kind: "reference", text: "References" });
+      lines.push({ kind: "reference", text: "References", ...origin });
     } else {
+      start ??= from;
       paragraph.push(line);
     }
   }
@@ -155,6 +176,19 @@ export function paginate(lines: readonly PageLine[]): PageLine[][] {
 
 function escapeXml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Top and height (points) of each line's band on its page, as `pageSvg` draws it. */
+export function lineBands(
+  page: readonly PageLine[],
+): { top: number; height: number }[] {
+  let y = MARGIN;
+  return page.map((line) => {
+    const height = LINE_STEP * COST[line.kind];
+    const top = y;
+    y += height;
+    return { top, height };
+  });
 }
 
 export function pageSvg(
@@ -227,9 +261,9 @@ function expand(
   diagnostics: WireDiagnostic[],
   bibKeys: ReadonlySet<string>,
   knownFigures: readonly string[],
-): string {
+): SourceLine[] {
   const text = source(fs, sources, path);
-  if (text === undefined) return "";
+  if (text === undefined) return [];
   const file = `/${path}`;
 
   for (const item of analyse(text, { knownFigures })) {
@@ -255,13 +289,18 @@ function expand(
     });
   }
 
-  if (depth > 4) return text;
   const lines = text.split("\n");
-  const out: string[] = [];
+  const own = (raw: string, index: number): SourceLine => ({
+    text: raw,
+    file: path,
+    line: index + 1,
+  });
+  if (depth > 4) return lines.map(own);
+  const out: SourceLine[] = [];
   lines.forEach((raw, index) => {
     const include = /^\s*#include\s+"([^"]+)"/.exec(raw);
     if (include === null || include[1] === undefined) {
-      out.push(raw);
+      out.push(own(raw, index));
       return;
     }
     const target = include[1].replace(/^\//, "");
@@ -280,10 +319,10 @@ function expand(
       return;
     }
     out.push(
-      expand(fs, sources, target, depth + 1, diagnostics, bibKeys, knownFigures),
+      ...expand(fs, sources, target, depth + 1, diagnostics, bibKeys, knownFigures),
     );
   });
-  return out.join("\n");
+  return out;
 }
 
 function hintFor(message: string): string[] {
@@ -298,7 +337,71 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["typst.compile", "Compile Typst document"],
   ["typst.render", "Render page as SVG"],
   ["typst.export-pdf", "Export PDF"],
+  ["typst.jump-from-click", "Jump from preview to source"],
+  ["typst.jump-from-cursor", "Jump from source to preview"],
 ];
+
+function uint(args: Record<string, unknown>, key: string): number {
+  const value = args[key];
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0)
+    throw { message: `\`${key}\` must be an unsigned integer` };
+  return value;
+}
+
+function finite(args: Record<string, unknown>, key: string): number {
+  const value = args[key];
+  if (typeof value !== "number" || !Number.isFinite(value))
+    throw { message: `\`${key}\` must be a finite number` };
+  return value;
+}
+
+/** The source line of the laid-out line nearest `y` on a page. */
+export function lineAt(
+  page: readonly PageLine[],
+  y: number,
+): { file: string; line: number } | null {
+  const bands = lineBands(page);
+  let best: { file: string; line: number } | null = null;
+  let distance = Infinity;
+  page.forEach((entry, i) => {
+    const band = bands[i];
+    if (entry.file === undefined || entry.line === undefined || band === undefined)
+      return;
+    const bottom = band.top + band.height;
+    const d = y < band.top ? band.top - y : y > bottom ? y - bottom : 0;
+    if (d < distance) {
+      distance = d;
+      best = { file: entry.file, line: entry.line };
+    }
+  });
+  return best;
+}
+
+/**
+ * Where a source line landed: the last laid-out line from `file` that starts
+ * at or before `line`, as the baseline start of its text (like Typst).
+ */
+export function pointFor(
+  pages: readonly (readonly PageLine[])[],
+  file: string,
+  line: number,
+): { page: number; x: number; y: number } | null {
+  let found: { page: number; x: number; y: number } | null = null;
+  let foundLine = 0;
+  pages.forEach((lines, page) => {
+    const bands = lineBands(lines);
+    lines.forEach((entry, i) => {
+      const band = bands[i];
+      if (entry.file !== file || entry.line === undefined || band === undefined) return;
+      // The first row of the latest source line wins (a paragraph's first row).
+      if (entry.line <= line && entry.line > foundLine) {
+        found = { page, x: MARGIN, y: band.top + Math.min(band.height, 13) };
+        foundLine = entry.line;
+      }
+    });
+  });
+  return found;
+}
 
 export function typstPlugin(host: MockProjectHost): MockPluginFactory {
   return (): MockPlugin => {
@@ -309,6 +412,37 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
       name: "typst",
       commands: COMMANDS,
       handlers: {
+        "typst.jump-from-click": (args) => {
+          if (latest === null) {
+            throw { message: "no successful compile yet; run `typst.compile` first" };
+          }
+          const page = uint(args, "page");
+          const x = finite(args, "x");
+          const y = finite(args, "y");
+          const lines = latest.pages[page];
+          if (lines === undefined) {
+            throw {
+              message: `page ${page} is out of range; the document has ${latest.pages.length} page(s)`,
+            };
+          }
+          if (x < MARGIN / 2 || x > PAGE_W - MARGIN / 2 || y < 0 || y > PAGE_H)
+            return null;
+          const hit = lineAt(lines, y);
+          return hit === null
+            ? null
+            : { kind: "file", path: hit.file, line: hit.line, column: 1 };
+        },
+        "typst.jump-from-cursor": (args) => {
+          if (latest === null) {
+            throw { message: "no successful compile yet; run `typst.compile` first" };
+          }
+          const path = args["path"];
+          if (typeof path !== "string") throw { message: "`path` must be a string" };
+          const line = uint(args, "line");
+          uint(args, "column");
+          const point = pointFor(latest.pages, path.replace(/^\//, ""), line);
+          return point === null ? [] : [point];
+        },
         "typst.compile": (args): CompileReport => {
           const fs = host.require();
           const main = args["main"];
@@ -331,7 +465,7 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
           }
           const diagnostics: WireDiagnostic[] = [];
           const figures = [...fs.files.keys()].filter((path) => !path.endsWith(".typ"));
-          const text = expand(
+          const expanded = expand(
             fs,
             sources,
             entry,
@@ -340,8 +474,9 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
             bibliographyKeys(fs, sources),
             figures,
           );
+          const text = expanded.map((l) => l.text).join("\n");
           const ok = diagnostics.every((d) => d.severity !== "error");
-          const pages = paginate(layout(text));
+          const pages = paginate(layout(expanded));
           if (ok) {
             generation += 1;
             latest = { pages, generation };
