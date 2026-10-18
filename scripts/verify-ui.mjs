@@ -1177,19 +1177,34 @@ async function main() {
       ),
     );
     await click(page, 'button[aria-label="Refresh preview"]');
-    // Layout switch.
-    await click(page, '[role="radio"][data-mode="editor"]');
-    check(
-      "Editor layout hides the preview",
-      !(await exists(page, 'section[aria-label="Preview"]')),
+    // Layout switch, from the preview's own header.
+    await click(
+      page,
+      'section[aria-label="Preview"] button[aria-label="Close preview"]',
     );
-    await click(page, '[role="radio"][data-mode="preview"]');
     check(
-      "Preview layout hides the editor",
+      "Close preview leaves the editor alone",
+      !(await exists(page, 'section[aria-label="Preview"]')) &&
+        (await exists(page, ".cm-editor")),
+    );
+    await click(page, '[role="tablist"] ~ * button[aria-label="Show preview"]');
+    await waitFor(
+      page,
+      `document.querySelector('section[aria-label="Preview"]') !== null`,
+    );
+    await click(
+      page,
+      'section[aria-label="Preview"] button[aria-label="Maximise preview"]',
+    );
+    check(
+      "Maximise preview hides the editor",
       !(await exists(page, ".cm-editor")) &&
         (await exists(page, 'section[aria-label="Preview"]')),
     );
-    await click(page, '[role="radio"][data-mode="split"]');
+    await click(
+      page,
+      'section[aria-label="Preview"] button[aria-label="Restore split"]',
+    );
     await waitFor(page, `document.querySelector(".cm-editor") !== null`);
 
     // Resize divider by keyboard.
@@ -1258,6 +1273,26 @@ async function main() {
       "export is listed once",
       await page.evaluate(
         `[...document.querySelectorAll('[role="dialog"] [role="option"]')].filter((o) => o.textContent.includes("Export PDF")).length === 1`,
+      ),
+    );
+    await press(page, "Escape");
+
+    // The layout and zen live in the palette now that the top bar has no buttons.
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "preview");
+    check(
+      "the palette offers split, editor only and preview only",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('[role="dialog"]').innerText; return t.includes("editor and preview side by side") && t.includes("Preview: editor only") && t.includes("Preview: preview only"); })()`,
+      ),
+    );
+    await press(page, "Escape");
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "zen");
+    check(
+      "the palette offers zen with its shortcut",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('[role="dialog"]').innerText; return t.includes("Enter zen mode") && /(Ctrl|⌘)\\+?\\\\/.test(t); })()`,
       ),
     );
     await press(page, "Escape");
@@ -1590,6 +1625,164 @@ async function main() {
     );
 
     /* ------------------------------------------------------------------ */
+    section("Editor chrome");
+    // main.typ is active and in split, so the preview header is on screen.
+    // Its last button must stay inside the pane at every width.
+    const headerFits = `(() => { const s = document.querySelector('section[aria-label="Preview"]'); const bar = s?.querySelector('[role="toolbar"]'); const close = bar?.querySelector('button[aria-label="Close preview"]'); if (!close) return false; const r = close.getBoundingClientRect(); return r.width > 0 && r.right <= s.getBoundingClientRect().right && bar.scrollWidth <= bar.clientWidth; })()`;
+    const WINDOW_BUTTONS = '["Minimise", "Maximise", "Restore", "Close window"]';
+    check(
+      "the workbench top bar has no buttons but Home and the window controls",
+      await page.evaluate(
+        `[...document.querySelectorAll("header button")].every((b) => b.getAttribute("aria-label") === "Home" || ${WINDOW_BUTTONS}.includes(b.getAttribute("aria-label")))`,
+      ),
+    );
+    check(
+      "the top bar has no layout, Export PDF or Zen controls",
+      await page.evaluate(
+        `!document.querySelector('header [role="radiogroup"]') && !/Export PDF|Zen|Split/.test(document.querySelector("header").innerText)`,
+      ),
+    );
+    check(
+      "the top bar is still the window's drag region at its height",
+      await page.evaluate(
+        `(() => { const h = document.querySelector("header"); return h.hasAttribute("data-tauri-drag-region") && Math.round(h.getBoundingClientRect().height) === 40; })()`,
+      ),
+    );
+    check(
+      "Export PDF appears once on screen, in the preview header",
+      await page.evaluate(
+        `document.querySelectorAll('button[aria-label="Export PDF"]').length === 1 && !!document.querySelector('section[aria-label="Preview"] [role="toolbar"] button[aria-label="Export PDF"]')`,
+      ),
+    );
+    check(
+      "Show preview is absent while the preview is visible",
+      !(await exists(page, 'button[aria-label="Show preview"]')),
+    );
+    check(
+      "the preview header ends with Maximise and Close",
+      await page.evaluate(
+        `(() => { const b = [...document.querySelectorAll('section[aria-label="Preview"] [role="toolbar"] button')].map((x) => x.getAttribute("aria-label")); return b.slice(-2).join() === "Maximise preview,Close preview"; })()`,
+      ),
+    );
+    check(
+      "at 1280px with the side panel open the header fits and keeps zoom",
+      (await page.evaluate(headerFits)) &&
+        (await page.evaluate(
+          `(() => { const b = document.querySelector('section[aria-label="Preview"] button[aria-label="Zoom in"]'); return !!b && b.getBoundingClientRect().width > 0; })()`,
+        )),
+    );
+    await shoot(page, "18b-preview-header");
+    await click(page, 'button[aria-label="Maximise preview"]');
+    check(
+      "Maximise shows the preview alone and offers Restore split",
+      !(await exists(page, ".cm-editor")) &&
+        (await exists(page, 'button[aria-label="Restore split"]')),
+    );
+    await click(page, 'button[aria-label="Restore split"]');
+    await waitFor(page, `document.querySelector(".cm-editor") !== null`);
+    check(
+      "Restore split brings the editor back beside the preview",
+      await exists(page, 'section[aria-label="Preview"]'),
+    );
+    await click(page, 'button[aria-label="Close preview"]');
+    check(
+      "Close preview shows the editor alone",
+      !(await exists(page, 'section[aria-label="Preview"]')) &&
+        (await exists(page, ".cm-editor")),
+    );
+    check(
+      "Show preview appears at the end of the tab strip once the preview is closed",
+      await page.evaluate(
+        `(() => { const b = document.querySelector('button[aria-label="Show preview"]'); const strip = document.querySelector('[role="tablist"]')?.parentElement; if (!b || !strip) return false; return strip.contains(b) && Math.abs(b.getBoundingClientRect().right - strip.getBoundingClientRect().right) < 12; })()`,
+      ),
+    );
+    await shoot(page, "18c-preview-closed");
+    await click(page, 'button[aria-label="Show preview"]');
+    await waitFor(
+      page,
+      `document.querySelector('section[aria-label="Preview"]') !== null`,
+    );
+    check(
+      "Show preview brings back the split",
+      (await exists(page, ".cm-editor")) &&
+        !(await exists(page, 'button[aria-label="Show preview"]')),
+    );
+    await press(page, "p", { ctrl: true, wait: 300 });
+    await insertText(page, "references.bib");
+    await press(page, "Enter", { wait: 600 });
+    await waitFor(
+      page,
+      `document.querySelector('button[aria-label="Close preview"]') !== null`,
+      {
+        timeout: 8000,
+      },
+    );
+    await click(page, 'button[aria-label="Close preview"]');
+    check(
+      "a file previewed through the main file can show its preview again",
+      await exists(page, 'button[aria-label="Show preview"]'),
+    );
+    await click(page, 'button[aria-label="Show preview"]');
+    await clickText(page, '[role="tab"]', "main.typ");
+    await sleep(300);
+
+    // Narrow: split cannot fit, so Show preview opens the preview alone and
+    // its Close returns to the editor.
+    await resize(page, 640, 600);
+    await sleep(300);
+    // The side panel overlays the editor here; dismiss it first.
+    if (await exists(page, "#side-panel")) await press(page, "Escape", { wait: 300 });
+    check(
+      "at 640px split falls back to the editor and Show preview is offered",
+      !(await exists(page, 'section[aria-label="Preview"]')) &&
+        (await exists(page, 'button[aria-label="Show preview"]')),
+    );
+    await click(page, 'button[aria-label="Show preview"]');
+    await waitFor(
+      page,
+      `document.querySelector('section[aria-label="Preview"]') !== null`,
+    );
+    check(
+      "in a narrow window Show preview shows the preview alone, without Maximise",
+      !(await exists(page, ".cm-editor")) &&
+        !(await exists(page, 'button[aria-label="Maximise preview"]')) &&
+        !(await exists(page, 'button[aria-label="Restore split"]')),
+    );
+    check(
+      "at 640px the preview header and the page fit without overflow",
+      await page.evaluate(
+        `(() => { const bar = document.querySelector('section[aria-label="Preview"] [role="toolbar"]'); const close = bar?.querySelector('button[aria-label="Close preview"]'); if (!close) return false; const r = close.getBoundingClientRect(); return document.documentElement.scrollWidth <= window.innerWidth && bar.scrollWidth <= bar.clientWidth && r.right <= window.innerWidth && r.width > 0; })()`,
+      ),
+    );
+    await shoot(page, "18d-640-preview");
+    await click(page, 'button[aria-label="Close preview"]');
+    check(
+      "Close returns to the editor in a narrow window",
+      (await exists(page, ".cm-editor")) &&
+        !(await exists(page, 'section[aria-label="Preview"]')),
+    );
+    check(
+      "at 640px the tab strip and the top bar fit",
+      await page.evaluate(
+        `(() => { const strip = document.querySelector('[role="tablist"]').parentElement; const bar = document.querySelector("header"); return document.documentElement.scrollWidth <= window.innerWidth && strip.scrollWidth <= strip.clientWidth && bar.scrollWidth <= bar.clientWidth && document.querySelector('button[aria-label="Show preview"]').getBoundingClientRect().right <= window.innerWidth; })()`,
+      ),
+    );
+    await shoot(page, "18e-640-editor");
+    await resize(page, 1280, 820);
+    await sleep(300);
+    // Back to split, with the side panel open, for the sections that follow.
+    if (!(await exists(page, "#side-panel")))
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "side by side");
+    await press(page, "Enter", { wait: 300 });
+    check(
+      "the palette's split command restores the split",
+      (await exists(page, ".cm-editor")) &&
+        (await exists(page, 'section[aria-label="Preview"]')),
+    );
+
+    /* ------------------------------------------------------------------ */
     section("Persistence");
     await press(page, "j", { ctrl: true });
     const tabsBefore = await tabNames(page);
@@ -1620,6 +1813,25 @@ async function main() {
       await page.evaluate(
         `getComputedStyle(document.querySelector("#side-panel")).position !== "absolute" && document.querySelectorAll('section[aria-label="Preview"]').length === 1`,
       ),
+    );
+    check(
+      "at 1024px the preview header keeps Close preview inside the pane",
+      await page.evaluate(headerFits),
+    );
+    // The narrowest preview: 800px wide, side panel inline, divider at its limit.
+    await resize(page, 800, 700);
+    await sleep(300);
+    await page.evaluate(
+      `document.querySelector('[role="separator"][aria-label="Resize editor and preview"]').focus()`,
+    );
+    await press(page, "End", { wait: 300 });
+    check(
+      "with the narrowest split the preview header still fits",
+      await page.evaluate(headerFits),
+    );
+    await shoot(page, "19b-narrowest-preview");
+    await page.evaluate(
+      `document.querySelector('[role="separator"][aria-label="Resize editor and preview"]').dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`,
     );
     await resize(page, 760, 700);
     await sleep(300);
