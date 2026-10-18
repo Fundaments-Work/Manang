@@ -850,3 +850,23 @@ All tasks from Batches 1 and 2 have been completed, verified against the strict 
 - **Batch 2:**
   - **Task F (Outline view - Commit `7df53d9`):** Pure TS outline parsers for Typst (`=` headings and `<labels>`), LaTeX (`\section`..`\subsubsection` and `\label`), and Markdown (via `markdown.outline` kernel call + fallback) with 300 ms debounced live updates and click-to-jump.
   - **Task G (App polish):** Read-only shortcut reference overlay (`Ctrl+/`), About view with app version, git commit, and SCOWL word-list license text.
+
+---
+
+## User Guide Task: Non-Developer Documentation in `docs/user/`
+
+- **Branch:** `antigravity/user-docs`
+- **Scope:** Complete 10-page user guide written in plain English, short sentences, active voice, and numbered step-by-step instructions. Keyboard shortcuts are formatted as `Ctrl+K` (`Cmd+K`).
+- **Files Created:**
+  1. `docs/user/index.md`: Overview of Manang, where to start, and complete site map linking all guide pages.
+  2. `docs/user/getting-started.md`: Running from source (Node 22+, Rust 1.85+, pnpm 10), Home view navigation, project creation, opening folders, and main window layout (Top bar, Activity bar, Sidebar, Editor, Preview, Bottom dock).
+  3. `docs/user/writing.md`: CodeMirror 6 text editor, Typst, LaTeX, and Markdown workflows, spell check with personal dictionaries, document formatting (`Shift+Alt+F`), snippets, math symbol search, and word counts.
+  4. `docs/user/preview-and-pdf.md`: Split/maximize/hide preview layouts (`Ctrl+Shift+V`), live recompile, bidirectional SyncTeX jumps (`Ctrl+Alt+J` forward, click backward), PDF export (`Ctrl+E`), and TeX Live setup on Linux, macOS, and Windows.
+  5. `docs/user/figures-and-diagrams.md`: Built-in vector figure editor, Mermaid, Pikchr, and ASCII (`svgbob`) text diagrams, Markdown diagram code fences, and include lines for Typst, LaTeX, and Markdown.
+  6. `docs/user/references.md`: Automatic indexing of BibTeX and CSL-JSON files, choosing preview and document citation styles (APA, IEEE), bibliography search, one-click citation insertion, and online registry verification against Crossref, OpenAlex, and arXiv.
+  7. `docs/user/projects-and-files.md`: Files tree view, opening code/figures/images/PDFs, "Open with system app", trash deletion behavior, and Source Control panel (staging, diff viewer, commits, branches, sync).
+  8. `docs/user/settings-and-shortcuts.md`: Settings panel, User vs Project scoping, configuration options, shortcut cheat sheet overlay (`Ctrl+/`), and custom keybinding recording.
+  9. `docs/user/plugins.md`: Built-in native vs sandboxed WebAssembly component plugins, manual installation under user config, capability-based permissions, and green/amber/red status indicators.
+  10. `docs/user/troubleshooting.md`: Log file paths on Linux, macOS, and Windows for identifier `work.fundaments.manang`, developer tools via `F12`, fixing "No TeX installation found", resolving Linux Wayland + NVIDIA stuttering (`WEBKIT_DISABLE_DMABUF_RENDERER`), and plugin debugging.
+- **README Update:** Linked `docs/user/index.md` and all 9 topic guides in a dedicated "User guide" section.
+
