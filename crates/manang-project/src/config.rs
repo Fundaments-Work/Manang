@@ -3,6 +3,8 @@
 //! # Schema
 //!
 //! ```toml
+//! version = 1                # format version; absent means 1
+//!
 //! [project]
 //! engine = "typst"            # required: "typst" | "latex" | "markdown"
 //! name   = "My paper"         # optional display name (default: directory name)
@@ -28,6 +30,10 @@ use crate::paths::lexical_relative;
 
 /// File name of the project configuration, at the project root.
 pub const CONFIG_FILE: &str = "manang.toml";
+
+/// The format version this build reads and writes (`docs/formats.md`). A file
+/// from a newer Manang is read as far as it is understood and never rewritten.
+pub const CONFIG_VERSION: u32 = 1;
 
 /// Which compiler a project targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -102,14 +108,21 @@ impl Bibliography {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectConfig {
+    /// Format version; `None` in a file written before the key existed (v1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
     pub project: ProjectSection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<TemplateBinding>,
     #[serde(default, skip_serializing_if = "Bibliography::is_empty")]
     pub bibliography: Bibliography,
+    /// Set when the file was written by a newer Manang: its unknown keys were
+    /// ignored and it must not be written back.
+    #[serde(skip)]
+    pub read_only_newer: Option<u32>,
 }
 
-const TOP_KEYS: &[&str] = &["project", "template", "bibliography"];
+const TOP_KEYS: &[&str] = &["version", "project", "template", "bibliography"];
 const PROJECT_KEYS: &[&str] = &["engine", "name", "main"];
 const TEMPLATE_KEYS: &[&str] = &["id", "version"];
 const BIBLIOGRAPHY_KEYS: &[&str] = &["paths"];
@@ -183,6 +196,20 @@ fn unknown_keys(table: &toml::Table) -> Vec<Issue> {
     issues
 }
 
+/// Drop the keys this build does not know, at every level.
+fn strip_unknown_keys(table: &mut toml::Table) {
+    table.retain(|k, _| TOP_KEYS.contains(&k));
+    for (section, known) in [
+        ("project", PROJECT_KEYS),
+        ("template", TEMPLATE_KEYS),
+        ("bibliography", BIBLIOGRAPHY_KEYS),
+    ] {
+        if let Some(toml::Value::Table(t)) = table.get_mut(section) {
+            t.retain(|k, _| known.contains(&k));
+        }
+    }
+}
+
 fn check_relative(key: &str, value: &str, issues: &mut Vec<Issue>) {
     if value.trim().is_empty() {
         issues.push(Issue::new(key, "must not be empty"));
@@ -203,6 +230,7 @@ impl ProjectConfig {
     /// A minimal valid config for `engine`.
     pub fn new(engine: Engine, name: Option<String>) -> Self {
         Self {
+            version: Some(CONFIG_VERSION),
             project: ProjectSection {
                 engine,
                 name,
@@ -210,19 +238,39 @@ impl ProjectConfig {
             },
             template: None,
             bibliography: Bibliography::default(),
+            read_only_newer: None,
         }
     }
 
     /// Parse and validate `manang.toml` source.
     pub fn parse(source: &str) -> Result<Self, ConfigError> {
-        let table: toml::Table =
+        let mut table: toml::Table =
             toml::from_str(source).map_err(|e| ConfigError::Syntax(e.to_string()))?;
-        let unknown = unknown_keys(&table);
-        if !unknown.is_empty() {
-            return Err(ConfigError::Invalid(unknown));
+        let version = manang_formats::toml_version(&table, "version")
+            .map_err(|e| ConfigError::Schema(e.to_string()))?;
+        let newer = match manang_formats::compat(version, CONFIG_VERSION) {
+            manang_formats::Compat::Newer(found) => Some(found),
+            // No older versions exist yet; a chain of steps goes here.
+            manang_formats::Compat::Current | manang_formats::Compat::Older(_) => None,
+        };
+        if newer.is_some() {
+            // A newer Manang may have added keys: read the ones we know.
+            strip_unknown_keys(&mut table);
+        } else {
+            let unknown = unknown_keys(&table);
+            if !unknown.is_empty() {
+                return Err(ConfigError::Invalid(unknown));
+            }
         }
-        let config: Self =
-            toml::from_str(source).map_err(|e| ConfigError::Schema(e.to_string()))?;
+        let mut config: Self = if newer.is_some() {
+            toml::Value::Table(table)
+                .try_into()
+                .map_err(|e: toml::de::Error| ConfigError::Schema(e.to_string()))?
+        } else {
+            // From the source text, so errors point at the line.
+            toml::from_str(source).map_err(|e| ConfigError::Schema(e.to_string()))?
+        };
+        config.read_only_newer = newer;
         config.validate()?;
         Ok(config)
     }
@@ -338,8 +386,14 @@ impl ProjectConfig {
         }
     }
 
-    /// Serialise to TOML (human-readable, stable key order).
+    /// Serialise to TOML (human-readable, stable key order). Refused for a
+    /// config read from a newer Manang, which would drop what it added.
     pub fn to_toml(&self) -> Result<String, ConfigError> {
+        if let Some(found) = self.read_only_newer {
+            return Err(ConfigError::Schema(
+                manang_formats::refuse_newer(CONFIG_FILE, found, CONFIG_VERSION).to_string(),
+            ));
+        }
         toml::to_string_pretty(self).map_err(|e| ConfigError::Schema(e.to_string()))
     }
 }

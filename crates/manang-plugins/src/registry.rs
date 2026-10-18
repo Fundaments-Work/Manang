@@ -14,6 +14,11 @@ use manang_kernel::manifest::{MAX_MANIFEST_BYTES, Permissions};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// The format version `plugins.toml` is written in (`docs/formats.md`). A
+/// file from a newer Manang is read as far as it is understood and never
+/// written back; a damaged one is set aside as `plugins.toml.corrupt`.
+pub const REGISTRY_VERSION: u32 = 1;
+
 fn yes() -> bool {
     true
 }
@@ -67,8 +72,43 @@ impl Default for PluginRecord {
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RegistryFile {
+    /// Absent in a v1 file written before the key existed.
+    #[serde(default, rename = "version", skip_serializing)]
+    _version: Option<u32>,
     #[serde(default)]
     plugins: BTreeMap<String, PluginRecord>,
+}
+
+/// What is written: the version first, then the decisions.
+#[derive(Serialize)]
+struct RegistryOut<'a> {
+    version: u32,
+    plugins: &'a BTreeMap<String, PluginRecord>,
+}
+
+/// The fields of a [`PluginRecord`], for reading a newer file leniently.
+const RECORD_KEYS: &[&str] = &[
+    "enabled",
+    "granted",
+    "reviewed",
+    "approved_version",
+    "pending_version",
+    "installed_at",
+    "source",
+    "publisher",
+];
+
+/// Keep only the keys this build knows, so a newer file's additions do not
+/// make the whole file unreadable.
+fn strip_unknown(table: &mut toml::Table) {
+    table.retain(|k, _| k == "version" || k == "plugins");
+    if let Some(toml::Value::Table(plugins)) = table.get_mut("plugins") {
+        for (_, record) in plugins.iter_mut() {
+            if let toml::Value::Table(t) = record {
+                t.retain(|k, _| RECORD_KEYS.contains(&k));
+            }
+        }
+    }
 }
 
 /// The registry could not be read or written.
@@ -86,6 +126,9 @@ pub enum RegistryError {
     TooLarge { path: PathBuf, limit: usize },
     #[error("plugin name `{0}` in `{1}` is not lowercase kebab-case")]
     BadName(String, PathBuf),
+    /// The file is from a newer Manang and is kept read-only.
+    #[error(transparent)]
+    Format(#[from] manang_formats::FormatError),
 }
 
 /// Plugin names are lowercase kebab-case starting with a letter.
@@ -145,6 +188,8 @@ fn read_text(path: &Path) -> Result<Option<String>, RegistryError> {
 pub struct Registry {
     path: Option<PathBuf>,
     file: RegistryFile,
+    /// Written by a newer Manang: read-only.
+    newer: Option<u32>,
 }
 
 impl Registry {
@@ -155,14 +200,28 @@ impl Registry {
 
     /// Read `path`; a missing file is an empty registry.
     pub fn load(path: &Path) -> Result<Self, RegistryError> {
+        let parse = |reason: String| RegistryError::Parse {
+            path: path.to_path_buf(),
+            reason,
+        };
+        let mut newer = None;
         let file = match read_text(path)? {
             None => RegistryFile::default(),
             Some(text) => {
-                let file: RegistryFile =
-                    toml::from_str(&text).map_err(|e| RegistryError::Parse {
-                        path: path.to_path_buf(),
-                        reason: e.to_string(),
-                    })?;
+                let version = manang_formats::toml_text_version(&text, "version")
+                    .map_err(|e| parse(e.to_string()))?;
+                let file: RegistryFile = match manang_formats::compat(version, REGISTRY_VERSION) {
+                    manang_formats::Compat::Newer(found) => {
+                        newer = Some(found);
+                        let mut table: toml::Table =
+                            toml::from_str(&text).map_err(|e| parse(e.to_string()))?;
+                        strip_unknown(&mut table);
+                        // Unreadable even leniently: keep what is on disk, start empty.
+                        toml::Value::Table(table).try_into().unwrap_or_default()
+                    }
+                    // No older versions exist yet; migration steps go here.
+                    _ => toml::from_str(&text).map_err(|e| parse(e.to_string()))?,
+                };
                 if let Some(bad) = file.plugins.keys().find(|n| !valid_plugin_name(n)) {
                     return Err(RegistryError::BadName(bad.clone(), path.to_path_buf()));
                 }
@@ -172,6 +231,7 @@ impl Registry {
         Ok(Self {
             path: Some(path.to_path_buf()),
             file,
+            newer,
         })
     }
 
@@ -180,7 +240,14 @@ impl Registry {
         Self {
             path: Some(path.to_path_buf()),
             file: RegistryFile::default(),
+            newer: None,
         }
+    }
+
+    /// The format version of the file, when a newer Manang wrote it: the
+    /// registry is then read-only.
+    pub fn newer_version(&self) -> Option<u32> {
+        self.newer
     }
 
     pub fn get(&self, name: &str) -> Option<&PluginRecord> {
@@ -206,12 +273,21 @@ impl Registry {
         let Some(path) = &self.path else {
             return Ok(());
         };
+        if let Some(found) = self.newer {
+            return Err(
+                manang_formats::refuse_newer("plugins.toml", found, REGISTRY_VERSION).into(),
+            );
+        }
         let mut text = String::from(
             "# Manang plugin registry: your decisions about installed plugins.\n\
              # Edit with care; the Plugins view keeps it up to date.\n\n",
         );
         text.push_str(
-            &toml::to_string_pretty(&self.file).map_err(|e| RegistryError::Parse {
+            &toml::to_string_pretty(&RegistryOut {
+                version: REGISTRY_VERSION,
+                plugins: &self.file.plugins,
+            })
+            .map_err(|e| RegistryError::Parse {
                 path: path.clone(),
                 reason: e.to_string(),
             })?,
@@ -229,6 +305,9 @@ impl Registry {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectOverride {
+    /// Format version; absent in a v1 file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
     #[serde(default)]
     pub disabled: Vec<String>,
 }
@@ -245,10 +324,25 @@ impl ProjectOverride {
         let Some(text) = read_text(&path)? else {
             return Ok(Self::default());
         };
-        let parsed: Self = toml::from_str(&text).map_err(|e| RegistryError::Parse {
+        let parse = |reason: String| RegistryError::Parse {
             path: path.clone(),
-            reason: e.to_string(),
-        })?;
+            reason,
+        };
+        let version = manang_formats::toml_text_version(&text, "version")
+            .map_err(|e| parse(e.to_string()))?;
+        let parsed: Self = if let manang_formats::Compat::Newer(_) =
+            manang_formats::compat(version, REGISTRY_VERSION)
+        {
+            // A newer Manang may add keys; a project override is only ever
+            // read, so read what is understood.
+            let mut table: toml::Table = toml::from_str(&text).map_err(|e| parse(e.to_string()))?;
+            table.retain(|k, _| k == "version" || k == "disabled");
+            toml::Value::Table(table)
+                .try_into()
+                .map_err(|e: toml::de::Error| parse(e.to_string()))?
+        } else {
+            toml::from_str(&text).map_err(|e| parse(e.to_string()))?
+        };
         if let Some(bad) = parsed.disabled.iter().find(|n| !valid_plugin_name(n)) {
             return Err(RegistryError::BadName(bad.clone(), path));
         }

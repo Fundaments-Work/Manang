@@ -126,6 +126,11 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
       "Project config, file tree, confined file operations, watching and git status",
     permissions: { filesystem: ["write:project"] },
   },
+  recovery: {
+    description:
+      "Crash-safe snapshots of unsaved edits, offered back after a crash or force-quit",
+    permissions: {},
+  },
   search: {
     description:
       "Fuzzy file finder, project-wide text search, atomic replace and in-document find",

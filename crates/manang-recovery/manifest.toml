@@ -1,0 +1,22 @@
+[plugin]
+name = "recovery"
+version = "0.1.0"
+description = "Crash-safe snapshots of unsaved edits, offered back after a crash or force-quit"
+tier = "native"
+
+[contributes]
+[[contributes.commands]]
+id = "recovery.write"
+title = "Store a recovery snapshot of an unsaved document"
+
+[[contributes.commands]]
+id = "recovery.list"
+title = "List a project's recovery snapshots"
+
+[[contributes.commands]]
+id = "recovery.read"
+title = "Read one recovery snapshot"
+
+[[contributes.commands]]
+id = "recovery.discard"
+title = "Remove recovery snapshots"

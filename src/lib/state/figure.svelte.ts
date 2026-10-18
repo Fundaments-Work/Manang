@@ -308,6 +308,17 @@ export class FigureState {
   /** The Insert Mermaid dialog. */
   mermaidDialog = $state(false);
 
+  /** Called after every change to the scene (an edit, an undo, a redo). */
+  onEdit: (() => void) | undefined;
+  /** Called after the scene reached the disk. */
+  onSaved: (() => void) | undefined;
+  /** Fingerprint of the scene file as last loaded or saved here (null: unknown). */
+  diskHash: string | null = null;
+  /** When the scene was last written by this editor (ms), to tell our own writes apart. */
+  savedAt = 0;
+  /** The file changed under unsaved edits, or is gone; see `ExternalChangeBar`. */
+  external = $state<"changed" | "deleted" | null>(null);
+
   #counter = 0;
   #formulaTimer: ReturnType<typeof setTimeout> | undefined;
   #press: { readonly screen: Vec; readonly point: Vec; moved: boolean } | null = null;
@@ -392,6 +403,7 @@ export class FigureState {
     this.canRedo = false;
     this.#inflight.push(edit);
     this.pending += 1;
+    this.onEdit?.();
     void this.#run(async () => {
       try {
         this.#ack(await this.#backend.apply(edit));
@@ -418,7 +430,10 @@ export class FigureState {
       try {
         const result = await this.#backend.apply({ op });
         this.#ack(result);
-        if (result.applied) await this.#resync();
+        if (result.applied) {
+          await this.#resync();
+          this.onEdit?.();
+        }
       } catch (error) {
         reportError(`figure.${op}`, error);
         notice.error(`Could not ${op}: ${errorMessage(error)}`);
@@ -440,6 +455,9 @@ export class FigureState {
     return this.#run(async () => {
       const saved = await this.#backend.save(path);
       this.savedRevision = saved.revision;
+      this.savedAt = Date.now();
+      this.external = null;
+      this.onSaved?.();
       return saved;
     });
   }

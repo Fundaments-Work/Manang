@@ -1,0 +1,18 @@
+[package]
+name = "manang-formats"
+description = "Shared helpers for Manang's versioned on-disk formats: read a version, migrate forward, back up once, set a corrupt file aside"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+tempfile = "3"
+thiserror = { workspace = true }
+toml = "1"
+
+[dev-dependencies]
+insta = "1"

@@ -27,9 +27,12 @@ use serde::{Deserialize, Serialize};
 use crate::config::Engine;
 use crate::error::ProjectError;
 use crate::fsops::atomic_write;
+use crate::versioned::load_toml;
 
 /// File name inside the config directory.
 pub const REGISTRY_FILE: &str = "projects.toml";
+/// The format version `projects.toml` is written in (`docs/formats.md`).
+pub const REGISTRY_VERSION: u32 = 1;
 /// Most projects the registry holds.
 pub const MAX_PROJECTS: usize = 2000;
 /// Longest display name, in characters.
@@ -61,6 +64,13 @@ pub struct ProjectEntry {
 pub struct RegistryFile {
     #[serde(default)]
     pub projects: Vec<ProjectEntry>,
+}
+
+/// What is written: the version first, then the list.
+#[derive(Serialize)]
+struct RegistryOut<'a> {
+    version: u32,
+    projects: &'a [ProjectEntry],
 }
 
 /// Fields `project.update` may change; `None` leaves a field alone.
@@ -193,6 +203,15 @@ pub fn select(entries: &[ProjectEntry], q: &ListQuery) -> Vec<ProjectEntry> {
 pub struct Registry {
     file: PathBuf,
     lock: Mutex<()>,
+    state: Mutex<FileState>,
+}
+
+/// What loading the file last found.
+#[derive(Debug, Default)]
+struct FileState {
+    /// Written by a newer Manang: read-only, never written back.
+    newer: Option<u32>,
+    warnings: Vec<String>,
 }
 
 impl Registry {
@@ -200,20 +219,43 @@ impl Registry {
         Self {
             file: config_dir.as_ref().join(REGISTRY_FILE),
             lock: Mutex::new(()),
+            state: Mutex::new(FileState::default()),
         }
     }
 
+    /// Read the list. A damaged file is set aside (never overwritten) and the
+    /// list starts empty; a newer file is read but marked read-only.
     fn read(&self) -> Vec<ProjectEntry> {
-        fs::read_to_string(&self.file)
-            .ok()
-            .and_then(|text| toml::from_str::<RegistryFile>(&text).ok())
-            .map(|f| f.projects)
-            .unwrap_or_default()
+        let loaded = load_toml::<RegistryFile>(&self.file, REGISTRY_FILE, REGISTRY_VERSION, &[]);
+        let mut state = self.state.lock();
+        state.newer = loaded.newer;
+        for warning in loaded.warnings {
+            if !state.warnings.contains(&warning) {
+                state.warnings.push(warning);
+            }
+        }
+        loaded.value.projects
+    }
+
+    /// Problems found while loading (set-aside, newer format), once each.
+    pub fn take_warnings(&self) -> Vec<String> {
+        let _guard = self.lock.lock();
+        // Make sure the file has been looked at.
+        let _ = self.read();
+        std::mem::take(&mut self.state.lock().warnings)
     }
 
     fn write(&self, projects: Vec<ProjectEntry>) -> Result<(), ProjectError> {
-        let text = toml::to_string_pretty(&RegistryFile { projects })
-            .map_err(|e| ProjectError::io("serialising the registry", std::io::Error::other(e)))?;
+        if let Some(found) = self.state.lock().newer {
+            return Err(
+                manang_formats::refuse_newer(REGISTRY_FILE, found, REGISTRY_VERSION).into(),
+            );
+        }
+        let text = toml::to_string_pretty(&RegistryOut {
+            version: REGISTRY_VERSION,
+            projects: &projects,
+        })
+        .map_err(|e| ProjectError::io("serialising the registry", std::io::Error::other(e)))?;
         if let Some(parent) = self.file.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| ProjectError::io("creating the config directory", e))?;

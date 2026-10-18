@@ -5607,6 +5607,467 @@ async function main() {
     current = page;
 
     /* ------------------------------------------------------------------ */
+    section("Crash recovery");
+    const rec = await newPage(browser);
+    current = rec;
+    await clickText(rec, "[data-project] button", "Entropy paper");
+    await waitFor(
+      rec,
+      `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+      { label: "editor shows main.typ" },
+    );
+    const snapshotPaths = () =>
+      rec.evaluate(
+        `(() => { try { return Object.values(JSON.parse(localStorage.getItem("manang.recovery.v1") ?? "{}").snapshots ?? {}).map((s) => s.path); } catch { return []; } })()`,
+      );
+    const diskText = () =>
+      rec.evaluate(
+        `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("project.read-file", { path: "main.typ" }))`,
+      );
+    const recoveryDialog = `document.querySelector('[role="alertdialog"]')?.innerText ?? ""`;
+
+    await focusEditor(rec);
+    await caretToEnd(rec);
+    await insertText(rec, "\nUNSAVED-RECOVERY-LINE\n");
+    check(
+      "typing makes the tab unsaved",
+      (await dirtyTabs(rec)).includes("main.typ"),
+      (await dirtyTabs(rec)).join(),
+    );
+    check(
+      "no snapshot is written on every keystroke",
+      !(await snapshotPaths()).includes("main.typ"),
+    );
+    let waited = 0;
+    while (!(await snapshotPaths()).includes("main.typ") && waited < 8000) {
+      await sleep(250);
+      waited += 250;
+    }
+    check(
+      "a recovery snapshot is written a few seconds after the last edit",
+      (await snapshotPaths()).includes("main.typ") && waited >= 1000,
+      `after ${waited} ms`,
+    );
+    check(
+      "the file on disk is untouched by the snapshot",
+      !(await diskText()).includes("UNSAVED-RECOVERY-LINE"),
+    );
+
+    // The crash: the page goes away with the edit unsaved.
+    await reload(rec);
+    await expectEventually(
+      rec,
+      "after the crash one quiet dialog offers the unsaved text back",
+      `${recoveryDialog}.includes("Recover unsaved changes from")`,
+      { timeout: 10000 },
+    );
+    check(
+      "it names the file and offers Recover all, Review and Discard",
+      await rec.evaluate(
+        `(() => { const d = document.querySelector('[role="alertdialog"]'); const b = [...d.querySelectorAll("button")].map((x) => x.textContent.trim()); return d.innerText.includes("main.typ") && d.innerText.includes("in 1 file") && b.includes("Recover all") && b.includes("Review") && b.includes("Discard"); })()`,
+      ),
+    );
+    check(
+      "recovery has not touched the open document yet",
+      !(await rec.evaluate(
+        `document.querySelector(".cm-content")?.textContent.includes("UNSAVED-RECOVERY-LINE")`,
+      )),
+    );
+    await shoot(rec, "30-recovery-offer");
+
+    await clickText(rec, '[role="alertdialog"] button', "Review");
+    await expectEventually(
+      rec,
+      "Review shows the recovered text against the disk",
+      `(() => { const r = document.querySelector('[data-testid="recovery-review"]'); return !!r && r.innerText.includes("main.typ") && r.innerText.includes("UNSAVED-RECOVERY-LINE") && r.innerText.includes("File 1 of 1"); })()`,
+    );
+    await shoot(rec, "31-recovery-review");
+    await clickText(rec, '[data-testid="recovery-review"] button', "Recover this");
+    await expectEventually(
+      rec,
+      "Recover this opens the text as an unsaved edit",
+      `document.querySelector(".cm-content")?.textContent.includes("UNSAVED-RECOVERY-LINE")`,
+    );
+    check(
+      "the tab is marked unsaved and the review closed",
+      (await dirtyTabs(rec)).includes("main.typ") &&
+        !(await exists(rec, '[data-testid="recovery-review"]')),
+    );
+    check(
+      "the file on disk still does not have the edit",
+      !(await diskText()).includes("UNSAVED-RECOVERY-LINE"),
+    );
+
+    // Crash again; this time Recover all, then save.
+    waited = 0;
+    await focusEditor(rec);
+    await caretToEnd(rec);
+    await insertText(rec, "x");
+    while (!(await snapshotPaths()).includes("main.typ") && waited < 8000) {
+      await sleep(250);
+      waited += 250;
+    }
+    await reload(rec);
+    await expectEventually(
+      rec,
+      "a second crash offers it again",
+      `${recoveryDialog}.includes("Recover unsaved changes from")`,
+      { timeout: 10000 },
+    );
+    await clickText(rec, '[role="alertdialog"] button', "Recover all");
+    await expectEventually(
+      rec,
+      "Recover all brings the text back as an unsaved edit",
+      `document.querySelector(".cm-content")?.textContent.includes("UNSAVED-RECOVERY-LINE")`,
+    );
+    check("and the tab is unsaved", (await dirtyTabs(rec)).includes("main.typ"));
+    await press(rec, "s", { ctrl: true });
+    await expectEventually(
+      rec,
+      "saving writes the recovered text to the file",
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("project.read-file", { path: "main.typ" })).then((t) => t.includes("UNSAVED-RECOVERY-LINE"))`,
+    );
+    waited = 0;
+    while ((await snapshotPaths()).includes("main.typ") && waited < 4000) {
+      await sleep(100);
+      waited += 100;
+    }
+    check("saving removes the snapshot", !(await snapshotPaths()).includes("main.typ"));
+    await reload(rec);
+    await sleep(1200);
+    check(
+      "a clean reload shows no recovery dialog",
+      !(await rec.evaluate(`${recoveryDialog}.includes("Recover")`)),
+    );
+
+    // Discard.
+    await focusEditor(rec);
+    await caretToEnd(rec);
+    await insertText(rec, "\nTO-BE-DISCARDED\n");
+    waited = 0;
+    while (!(await snapshotPaths()).includes("main.typ") && waited < 8000) {
+      await sleep(250);
+      waited += 250;
+    }
+    await reload(rec);
+    await expectEventually(
+      rec,
+      "an unsaved edit is offered once more",
+      `${recoveryDialog}.includes("Recover unsaved changes from")`,
+      { timeout: 10000 },
+    );
+    await clickText(rec, '[role="alertdialog"] button', "Discard");
+    await sleep(400);
+    check(
+      "Discard removes the snapshot and leaves the document alone",
+      !(await snapshotPaths()).includes("main.typ") &&
+        !(await rec.evaluate(
+          `document.querySelector(".cm-content")?.textContent.includes("TO-BE-DISCARDED")`,
+        )) &&
+        (await dirtyTabs(rec)).length === 0,
+    );
+    // Closing a dirty tab with "Don't save" also discards the snapshot.
+    await focusEditor(rec);
+    await caretToEnd(rec);
+    await insertText(rec, "\nGONE-ON-PURPOSE\n");
+    waited = 0;
+    while (!(await snapshotPaths()).includes("main.typ") && waited < 8000) {
+      await sleep(250);
+      waited += 250;
+    }
+    await click(rec, '[role="tab"][data-tab="main.typ"]', "middle");
+    await expectEventually(
+      rec,
+      "closing an unsaved tab still asks",
+      `${recoveryDialog}.includes("Save changes to main.typ")`,
+    );
+    check(
+      "the snapshot is kept while the question is open",
+      (await snapshotPaths()).includes("main.typ"),
+    );
+    await clickText(rec, '[role="alertdialog"] button', "Don't save");
+    await sleep(400);
+    check(
+      "choosing Don't save discards the snapshot too",
+      !(await snapshotPaths()).includes("main.typ"),
+    );
+    check(
+      "no page errors during crash recovery",
+      rec.errors.length === 0,
+      rec.errors.slice(0, 2).join(" | "),
+    );
+    rec.close();
+    current = page;
+
+    /* ------------------------------------------------------------------ */
+    section("Files that change on disk");
+    const ext = await newPage(browser);
+    current = ext;
+    await clickText(ext, "[data-project] button", "Entropy paper");
+    await waitFor(
+      ext,
+      `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+      { label: "editor shows main.typ" },
+    );
+    const outside = (command, args) =>
+      ext.evaluate(
+        `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
+      );
+    const diskOf = (path) =>
+      ext.evaluate(
+        `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("project.read-file", { path: ${JSON.stringify(path)} }))`,
+      );
+    const bar = `document.querySelector('[data-testid="external-change-bar"]')`;
+    const editorHas = (text) =>
+      `document.querySelector(".cm-content")?.textContent.includes(${JSON.stringify(text)})`;
+    const mainText = await diskOf("main.typ");
+
+    // A clean document follows the file silently, caret kept.
+    await focusEditor(ext);
+    await press(ext, "Home", { ctrl: true });
+    await outside("dev.write-outside", {
+      path: "main.typ",
+      content: `${mainText}\nFROM-OUTSIDE-ONE\n`,
+    });
+    await expectEventually(
+      ext,
+      "a clean open document reloads silently when the file changes on disk",
+      editorHas("FROM-OUTSIDE-ONE"),
+    );
+    check(
+      "no bar, no unsaved mark, caret where it was",
+      !(await ext.evaluate(`${bar} !== null`)) &&
+        (await dirtyTabs(ext)).length === 0 &&
+        /Ln 1, Col 1/.test(await statusText(ext)),
+      await statusText(ext),
+    );
+
+    // A dirty document is never overwritten: the bar asks.
+    await focusEditor(ext);
+    await press(ext, "End", { ctrl: true });
+    await insertText(ext, "\nMY-UNSAVED-EDIT\n");
+    check("typing marks it unsaved", (await dirtyTabs(ext)).includes("main.typ"));
+    await outside("dev.write-outside", {
+      path: "main.typ",
+      content: `${mainText}\nFROM-OUTSIDE-TWO\n`,
+    });
+    await expectEventually(
+      ext,
+      "a changed file under unsaved edits shows the bar above the editor",
+      `${bar}?.dataset.status === "changed" && ${bar}.innerText.includes("main.typ changed on disk")`,
+    );
+    check(
+      "the bar offers Keep my version, Load disk version and Compare",
+      await ext.evaluate(
+        `(() => { const b = [...${bar}.querySelectorAll("button")].map((x) => x.textContent.trim()); return b.join() === "Keep my version,Load disk version,Compare"; })()`,
+      ),
+    );
+    check(
+      "neither side was overwritten",
+      (await ext.evaluate(editorHas("MY-UNSAVED-EDIT"))) &&
+        !(await ext.evaluate(editorHas("FROM-OUTSIDE-TWO"))) &&
+        (await diskOf("main.typ")).includes("FROM-OUTSIDE-TWO") &&
+        (await dirtyTabs(ext)).includes("main.typ"),
+    );
+    await shoot(ext, "32-external-change-bar");
+    await clickText(ext, '[data-testid="external-change-bar"] button', "Compare");
+    await expectEventually(
+      ext,
+      "Compare shows the disk version against the unsaved text",
+      `${bar}.innerText.includes("FROM-OUTSIDE-TWO") && ${bar}.innerText.includes("MY-UNSAVED-EDIT")`,
+    );
+    await shoot(ext, "33-external-compare");
+    await clickText(ext, '[data-testid="external-change-bar"] button', "Compare");
+
+    // Saving over a changed file asks first.
+    await focusEditor(ext);
+    await press(ext, "s", { ctrl: true });
+    await expectEventually(
+      ext,
+      "saving a dirty document whose file changed asks before replacing it",
+      `(() => { const d = document.querySelector('[role="alertdialog"]'); return !!d && d.innerText.includes("main.typ changed on disk") && [...d.querySelectorAll("button")].map((x) => x.textContent.trim()).join() === "Cancel,Overwrite with my version,Load disk version,Compare"; })()`,
+    );
+    await shoot(ext, "34-save-conflict");
+    await press(ext, "Escape");
+    await sleep(200);
+    check(
+      "cancelling writes nothing",
+      (await diskOf("main.typ")).includes("FROM-OUTSIDE-TWO") &&
+        !(await diskOf("main.typ")).includes("MY-UNSAVED-EDIT"),
+    );
+    await clickText(
+      ext,
+      '[data-testid="external-change-bar"] button',
+      "Keep my version",
+    );
+    await sleep(200);
+    check(
+      "Keep my version clears the bar and stays unsaved",
+      !(await ext.evaluate(`${bar} !== null`)) &&
+        (await dirtyTabs(ext)).includes("main.typ"),
+    );
+    await focusEditor(ext);
+    await press(ext, "s", { ctrl: true });
+    await expectEventually(
+      ext,
+      "and the next save replaces the file on purpose",
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("project.read-file", { path: "main.typ" })).then((t) => t.includes("MY-UNSAVED-EDIT") && !t.includes("FROM-OUTSIDE-TWO"))`,
+    );
+    check("the tab is clean again", (await dirtyTabs(ext)).length === 0);
+
+    // Load disk version drops the edits, and Ctrl+Z brings them back.
+    await focusEditor(ext);
+    await press(ext, "End", { ctrl: true });
+    await insertText(ext, "\nSECOND-EDIT\n");
+    await sleep(900); // CodeMirror groups edits closer than 500 ms into one undo step.
+    const mineNow = await diskOf("main.typ");
+    await outside("dev.write-outside", {
+      path: "main.typ",
+      content: `${mineNow}\nFROM-OUTSIDE-THREE\n`,
+    });
+    await expectEventually(
+      ext,
+      "a second outside change shows the bar again",
+      `${bar}?.dataset.status === "changed"`,
+    );
+    await clickText(
+      ext,
+      '[data-testid="external-change-bar"] button',
+      "Load disk version",
+    );
+    await expectEventually(
+      ext,
+      "Load disk version shows the file as it is on disk",
+      `${editorHas("FROM-OUTSIDE-THREE")} && !(${editorHas("SECOND-EDIT")})`,
+    );
+    check(
+      "the tab is clean and the bar is gone",
+      (await dirtyTabs(ext)).length === 0 && !(await ext.evaluate(`${bar} !== null`)),
+    );
+    await focusEditor(ext);
+    await press(ext, "z", { ctrl: true });
+    await sleep(200);
+    check(
+      "undo brings the dropped edits back",
+      await ext.evaluate(editorHas("SECOND-EDIT")),
+    );
+    await press(ext, "z", { ctrl: true });
+    await press(ext, "z", { ctrl: true });
+
+    // A file that goes away keeps its tab.
+    await ext.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="notes.md"]').click()`,
+    );
+    await waitFor(
+      ext,
+      `document.querySelector('[role="tab"][data-tab="notes.md"]') !== null`,
+    );
+    await outside("dev.delete-outside", { path: "notes.md" });
+    await expectEventually(
+      ext,
+      "a file deleted on disk keeps its tab and says so",
+      `${bar}?.dataset.status === "deleted" && ${bar}.innerText.includes("notes.md was deleted or moved on disk") && document.querySelector('[role="tab"][data-tab="notes.md"]') !== null`,
+    );
+    check(
+      "the bar offers Save again, Save as and Close",
+      await ext.evaluate(
+        `[...${bar}.querySelectorAll("button")].map((x) => x.textContent.trim()).join() === "Save again,Save as,Close"`,
+      ),
+    );
+    check(
+      "the text is still there",
+      await ext.evaluate(editorHas("Check the dissipation curve")),
+    );
+    await shoot(ext, "35-external-deleted");
+    await clickText(ext, '[data-testid="external-change-bar"] button', "Save again");
+    await expectEventually(
+      ext,
+      "Save again writes the file back",
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("project.read-file", { path: "notes.md" })).then((t) => t.includes("dissipation curve"))`,
+    );
+    check("and the bar goes away", !(await ext.evaluate(`${bar} !== null`)));
+    // Deleted again, then Close.
+    await outside("dev.delete-outside", { path: "notes.md" });
+    await expectEventually(
+      ext,
+      "deleted again",
+      `${bar}?.dataset.status === "deleted"`,
+    );
+    await clickText(ext, '[data-testid="external-change-bar"] button', "Close");
+    await sleep(300);
+    check("Close closes the tab", !(await tabNames(ext)).includes("notes.md"));
+    // A figure follows its scene file when it has no unsaved drawing.
+    await ext.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="figures"]')?.click()`,
+    );
+    await waitFor(
+      ext,
+      `document.querySelector('[role="treeitem"][data-path="figures/dissipation_curve.figure.json"]') !== null`,
+    );
+    await ext.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="figures/dissipation_curve.figure.json"]').click()`,
+    );
+    await waitFor(ext, `document.querySelector("[data-node-id]") !== null`, {
+      label: "figure shown",
+    });
+    const sceneText = await diskOf("figures/dissipation_curve.figure.json");
+    const scene = JSON.parse(sceneText);
+    scene.nodes.push({
+      kind: "rect",
+      id: "n99",
+      x: 300,
+      y: 200,
+      width: 120,
+      height: 60,
+      stroke: "#e8e6e1",
+      fill: "#1c1c20",
+    });
+    await outside("dev.write-outside", {
+      path: "figures/dissipation_curve.figure.json",
+      content: JSON.stringify(scene, null, 2),
+    });
+    await expectEventually(
+      ext,
+      "a clean open figure reloads when its scene file changes on disk",
+      `document.querySelector('[data-node-id="n99"]') !== null`,
+    );
+    check(
+      "and stays clean, with no bar",
+      !(await ext.evaluate(`${bar} !== null`)) &&
+        !(await dirtyTabs(ext)).includes("figures/dissipation_curve.figure.json"),
+    );
+    await ext.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="data"]')?.click()`,
+    );
+    await waitFor(
+      ext,
+      `document.querySelector('[role="treeitem"][data-path="data/measurements.csv"]') !== null`,
+    );
+    await ext.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="data/measurements.csv"]').click()`,
+    );
+    await waitFor(
+      ext,
+      `document.querySelector(".cm-content")?.textContent.includes("cycle")`,
+    );
+    await outside("dev.write-outside", {
+      path: "data/measurements.csv",
+      content: "cycle,duration_ms,heat_kT\n9,90,0.5\n",
+    });
+    await expectEventually(
+      ext,
+      "an open data file follows its file on disk",
+      `document.querySelector(".cm-content")?.textContent.includes("9,90,0.5")`,
+    );
+    check(
+      "no page errors while files changed on disk",
+      ext.errors.length === 0,
+      ext.errors.slice(0, 2).join(" | "),
+    );
+    ext.close();
+    current = page;
+
+    /* ------------------------------------------------------------------ */
     section("Brand invariants");
     check(
       "no rounded corners anywhere",

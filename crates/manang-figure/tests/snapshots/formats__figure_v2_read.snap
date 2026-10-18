@@ -1,0 +1,35 @@
+---
+source: crates/manang-figure/tests/formats.rs
+expression: "store.get(Some(id)).expect(\"scene\")"
+---
+{
+  "version": 2,
+  "width": 960.0,
+  "height": 540.0,
+  "nodes": [
+    {
+      "kind": "rect",
+      "id": "n1",
+      "x": 10.0,
+      "y": 10.0,
+      "width": 50.0,
+      "height": 20.0,
+      "style": {
+        "stroke": "#e8e6e1",
+        "fill": "#1c1c20"
+      }
+    },
+    {
+      "kind": "math",
+      "id": "n2",
+      "x": 10.0,
+      "y": 30.0,
+      "source": "E = mc^2",
+      "language": "latex",
+      "size": 20.0,
+      "style": {
+        "stroke": "#b3d17a"
+      }
+    }
+  ]
+}

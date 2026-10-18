@@ -202,7 +202,7 @@
         replaceMessage = `Replaced in ${apply.applied} files. ${apply.failed} failed: ${failedFiles}`;
         notice.error(replaceMessage);
       } else {
-        replaceMessage = `Replaced ${preview.total_edits} ${preview.total_edits === 1 ? "occurrence" : "occurrences"} across ${apply.applied} ${apply.applied === 1 ? "file" : "files"}.`;
+        replaceMessage = `Replaced ${preview.total_edits} ${preview.total_edits === 1 ? "occurrence" : "occurrences"} across ${apply.applied} ${apply.applied === 1 ? "file" : "files"}.${apply.backup ? ` Originals are kept in ${apply.backup}.` : ""}`;
         notice.show(replaceMessage);
       }
 

@@ -35,6 +35,105 @@ import type {
   TreeQuery,
 } from "./types";
 
+/** `project.read-text`. */
+export interface TextRead {
+  readonly content: string;
+  /** An opaque fingerprint of `content`; pass it back as `expected` on save. */
+  readonly hash: string;
+  readonly size: number;
+  readonly modified: number | null;
+}
+
+/** `project.write-file`. */
+export interface WriteResult {
+  readonly bytes: number;
+  readonly hash: string;
+}
+
+/** `project.diff-text`: the same hunks as `git.diff`. */
+export interface TextDiff {
+  readonly path: string;
+  readonly status: "added" | "modified";
+  readonly binary: boolean;
+  readonly too_large: boolean;
+  readonly additions: number;
+  readonly deletions: number;
+  readonly hunks: readonly GitDiffHunk[];
+}
+
+/** The stable code on a refused save (`project.write-file` with `expected`). */
+export function isConflictError(error: unknown): boolean {
+  const message =
+    typeof error === "object" && error !== null
+      ? (error as { message?: unknown }).message
+      : undefined;
+  return typeof message === "string" && message.startsWith("[conflict]");
+}
+
+export type RecoveryKind = "text" | "figure";
+export type RecoveryDisk = "match" | "changed" | "missing" | "unknown";
+
+/** `recovery.list` entry: a snapshot without its text. */
+export interface RecoveryEntry {
+  readonly kind: RecoveryKind;
+  readonly path: string;
+  /** Milliseconds since the Unix epoch. */
+  readonly saved_at: number;
+  readonly bytes: number;
+  readonly disk: RecoveryDisk;
+}
+
+export interface RecoverySnapshot {
+  readonly version: number;
+  readonly kind: RecoveryKind;
+  readonly project: string;
+  readonly path: string;
+  readonly saved_hash: string | null;
+  readonly saved_at: number;
+  readonly text: string;
+  readonly view?: unknown;
+}
+
+export interface RecoveryWrite {
+  readonly stored: boolean;
+  readonly reason?: "too-large";
+  readonly limit: number;
+}
+
+export function recoveryApi(kernel: Kernel) {
+  return {
+    write: (req: {
+      project: string;
+      path: string;
+      kind: RecoveryKind;
+      content: string;
+      savedHash: string | null;
+      view?: unknown;
+    }) =>
+      kernel.run<RecoveryWrite>("recovery.write", {
+        project: req.project,
+        path: req.path,
+        kind: req.kind,
+        content: req.content,
+        saved_hash: req.savedHash,
+        ...(req.view !== undefined ? { view: req.view } : {}),
+      }),
+    list: (project: string) =>
+      kernel.run<{ entries: readonly RecoveryEntry[]; set_aside: number }>(
+        "recovery.list",
+        { project },
+      ),
+    read: (project: string, path: string) =>
+      kernel.run<RecoverySnapshot | null>("recovery.read", { project, path }),
+    /** One snapshot, or every one of the project when `path` is omitted. */
+    discard: (project: string, path?: string) =>
+      kernel.run<{ removed: number }>("recovery.discard", {
+        project,
+        ...(path !== undefined ? { path } : {}),
+      }),
+  };
+}
+
 export interface CompileRequest {
   /** Entry file, relative to `root`. */
   readonly main: string;
@@ -59,8 +158,28 @@ export function projectApi(kernel: Kernel) {
     readFile: (path: string) => kernel.run<string>("project.read-file", { path }),
     /** Any project file as raw bytes (images, PDFs); never base64. */
     readBytes: (path: string) => kernel.runBinary("project.read-bytes", { path }),
-    writeFile: (path: string, content: string) =>
-      kernel.run<{ bytes: number }>("project.write-file", { path, content }),
+    /** A text file with the fingerprint of exactly the bytes read. */
+    readText: (path: string) => kernel.run<TextRead>("project.read-text", { path }),
+    /**
+     * Write a text file. With `expected` (a fingerprint from `readText` or an
+     * earlier write, or `"absent"`) the write is refused with a `[conflict]`
+     * error when the file on disk is no longer that one.
+     */
+    writeFile: (path: string, content: string, expected?: string) =>
+      kernel.run<WriteResult>("project.write-file", {
+        path,
+        content,
+        ...(expected !== undefined ? { expected } : {}),
+      }),
+    /**
+     * Copy a file into the project trash (`.manang/trash/<id>/`) before it is
+     * changed or replaced. `backup_to` is null when the file does not exist.
+     */
+    backup: (path: string) =>
+      kernel.run<{ backup_to: string | null }>("project.backup", { path }),
+    /** A line diff of the file on disk against `content`. */
+    diffText: (path: string, content: string) =>
+      kernel.run<TextDiff>("project.diff-text", { path, content }),
     rename: (from: string, to: string) =>
       kernel.run<null>("project.rename", { from, to }),
     trash: (path: string) =>
@@ -568,6 +687,8 @@ export interface SearchApplyResponse {
   readonly applied: number;
   readonly failed: number;
   readonly files: readonly SearchApplyFileResult[];
+  /** Project-relative folder holding the originals of the replaced files. */
+  readonly backup?: string | null;
 }
 
 export interface SearchInTextRequest {

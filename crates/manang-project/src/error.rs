@@ -59,6 +59,13 @@ pub enum ProjectError {
     NotUtf8(String),
     #[error("`{path}` is {size} bytes, over the {limit} byte limit")]
     TooLarge { path: String, size: u64, limit: u64 },
+    /// The file on disk is not the one the caller loaded: saving would
+    /// overwrite someone else's change. The `[conflict]` prefix is a stable
+    /// code the shell matches on.
+    #[error("[conflict] `{path}` {what}")]
+    Conflict { path: String, what: &'static str },
+    #[error(transparent)]
+    Format(#[from] manang_formats::FormatError),
     #[error("no project is open")]
     NoProject,
     #[error("`{0}` already exists")]

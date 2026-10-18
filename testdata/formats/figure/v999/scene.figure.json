@@ -1,0 +1,6 @@
+{
+  "version": 999,
+  "width": 960,
+  "height": 540,
+  "nodes": [{ "kind": "hologram", "id": "n1" }]
+}

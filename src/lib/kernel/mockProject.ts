@@ -9,6 +9,7 @@
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
 import { mockKey, mockRender } from "./mockDiagram";
+import { mockDiffText, mockHash } from "./mockDiff";
 import {
   getMockTemplate,
   listMockTemplates,
@@ -472,6 +473,7 @@ function summary(fs: MockProjectFs): ProjectSummary {
     main: fs.main,
     config: configOf(fs),
     warnings: [],
+    format_warnings: [],
     tree: listTree(fs, {}),
   };
 }
@@ -485,6 +487,9 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["project.read-file", "Read text file"],
   ["project.read-bytes", "Read binary file"],
   ["project.write-file", "Write text file"],
+  ["project.read-text", "Read text file with its fingerprint"],
+  ["project.diff-text", "Line diff of a file on disk against given text"],
+  ["project.backup", "Copy a file to the project trash before changing it"],
   ["project.rename", "Rename or move file"],
   ["project.delete", "Move file to trash"],
   ["project.recent", "Recent projects"],
@@ -618,8 +623,55 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           if (typeof content !== "string") {
             throw { message: "bad arguments: `content` must be a string" };
           }
+          const expected = args["expected"];
+          if (typeof expected === "string") {
+            const current = fs.files.get(path);
+            const fail = (what: string): never => {
+              throw { message: `[conflict] \`${path}\` ${what}` };
+            };
+            if (expected === "absent") {
+              if (current !== undefined) fail("already exists on disk");
+            } else if (current === undefined) {
+              fail("was deleted on disk since it was loaded");
+            } else if (typeof current !== "string" || mockHash(current) !== expected) {
+              fail("changed on disk since it was loaded");
+            }
+          }
           write(fs, path, content);
-          return { bytes: new TextEncoder().encode(content).length };
+          return {
+            bytes: new TextEncoder().encode(content).length,
+            hash: mockHash(content),
+          };
+        },
+        "project.read-text": (args) => {
+          const fs = host.require();
+          const path = confine(args["path"]);
+          const content = textOf(fs, path);
+          return {
+            content,
+            hash: mockHash(content),
+            size: new TextEncoder().encode(content).length,
+            modified: modified.get(path) ?? opened,
+          };
+        },
+        "project.backup": (args) => {
+          const fs = host.require();
+          const path = confine(args["path"]);
+          const value = fs.files.get(path);
+          if (value === undefined) return { backup_to: null };
+          const copy = `.manang/trash/${Date.now()}-${modified.size}/${path}`;
+          fs.files.set(copy, value);
+          return { backup_to: copy };
+        },
+        "project.diff-text": (args) => {
+          const fs = host.require();
+          const path = confine(args["path"]);
+          const content = args["content"];
+          if (typeof content !== "string") {
+            throw { message: "bad arguments: `content` must be a string" };
+          }
+          const disk = fs.files.get(path);
+          return mockDiffText(path, typeof disk === "string" ? disk : null, content);
         },
         "project.rename": (args) => {
           const fs = host.require();
@@ -825,6 +877,57 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           if (value === undefined)
             throw { message: `${path}: No such file or directory` };
           return typeof value === "string" ? new TextEncoder().encode(value) : value;
+        },
+      },
+    };
+  };
+}
+
+/**
+ * Test hooks, not part of any real plugin: change the open project's files as
+ * if another program had (git pull, Syncthing, another editor), and publish the
+ * watcher's `project.changed`. Callable (`kernel.run("dev.write-outside", ...)`)
+ * but listed in no command palette.
+ */
+export function devHooksPlugin(host: MockProjectHost): MockPluginFactory {
+  return (emit): MockPlugin => {
+    const changed = (
+      fs: MockProjectFs,
+      changes: readonly { path: string; kind: string; from?: string }[],
+    ): void => emit("project.changed", { root: fs.root, changes });
+    return {
+      name: "dev",
+      commands: [],
+      handlers: {
+        "dev.write-outside": (args) => {
+          const fs = host.require();
+          const path = confine(args["path"]);
+          const content = args["content"];
+          if (typeof content !== "string") {
+            throw { message: "bad arguments: `content` must be a string" };
+          }
+          const existed = fs.files.has(path);
+          fs.files.set(path, content);
+          changed(fs, [{ path, kind: existed ? "modified" : "created" }]);
+          return null;
+        },
+        "dev.delete-outside": (args) => {
+          const fs = host.require();
+          const path = confine(args["path"]);
+          fs.files.delete(path);
+          changed(fs, [{ path, kind: "removed" }]);
+          return null;
+        },
+        "dev.rename-outside": (args) => {
+          const fs = host.require();
+          const from = confine(args["from"], "from");
+          const to = confine(args["to"], "to");
+          const value = fs.files.get(from);
+          if (value === undefined) throw { message: `${from}: No such file` };
+          fs.files.delete(from);
+          fs.files.set(to, value);
+          changed(fs, [{ path: to, kind: "renamed", from }]);
+          return null;
         },
       },
     };

@@ -1,0 +1,9 @@
+---
+source: crates/manang-formats/src/lib.rs
+expression: "notes.warnings(\"settings.toml\")"
+---
+[
+    "settings.toml was updated from format version 1; the old file is kept as /x/a.toml.bak-v1",
+    "settings.toml was written by a newer Manang (format version 9) and is read-only",
+    "settings.toml could not be read and was kept as /x/a.toml.corrupt; defaults are in use",
+]

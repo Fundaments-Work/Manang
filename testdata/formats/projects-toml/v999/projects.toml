@@ -1,0 +1,14 @@
+version = 999
+
+[[projects]]
+path = "/home/ada/papers/thesis"
+name = "Thesis"
+engine = "typst"
+created = 1760000000
+last_opened = 1760600000
+pinned = true
+colour = "lime"
+tags = ["phd"]
+
+[sync]
+device = "laptop"

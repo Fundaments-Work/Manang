@@ -1,0 +1,9 @@
+[[projects]]
+path = "/home/ada/papers/thesis"
+name = "Thesis"
+opened_at = 1760600000
+
+[[projects]]
+path = "/home/ada/talks/qm"
+name = "QM talk"
+opened_at = 1750500000

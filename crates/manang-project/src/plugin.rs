@@ -114,6 +114,11 @@ impl ProjectPlugin {
             }
         };
         let name = display_name(&root, &config);
+        if let Some(found) = config.read_only_newer {
+            warnings.push(format!(
+                "manang.toml was written by a newer Manang (format version {found}); it is read as far as this version understands and never rewritten"
+            ));
+        }
         if let Err(e) = self.recent.touch(root.path(), &name) {
             warnings.push(format!("could not update the recent projects list: {e}"));
         }
@@ -133,7 +138,13 @@ impl ProjectPlugin {
         }
 
         let page = tree::list(&root, &TreeQuery::default())?;
-        let summary = summarize(&root, &config, &name, &warnings, &page)?;
+        let mut summary = summarize(&root, &config, &name, &warnings, &page)?;
+        // Damaged or newer list files, set aside or read-only: say so once.
+        let mut format_warnings = self.recent.take_warnings();
+        format_warnings.extend(self.registry.take_warnings());
+        if let Value::Object(map) = &mut summary {
+            map.insert("format_warnings".to_owned(), json!(format_warnings));
+        }
         // Replacing the state drops the previous watcher.
         *self.state.write() = Some(Arc::new(Open {
             root,
@@ -286,6 +297,16 @@ mod args {
     pub struct Write {
         pub path: String,
         pub content: String,
+        /// The fingerprint the file must still have (`absent`: must not exist).
+        #[serde(default)]
+        pub expected: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct DiffText {
+        pub path: String,
+        pub content: String,
     }
 
     #[derive(Deserialize)]
@@ -417,8 +438,41 @@ impl Plugin for ProjectPlugin {
             "project.write-file" => {
                 let a: args::Write = parse(input)?;
                 let open = self.current().map_err(failed)?;
-                let bytes = fsops::write_text(&open.root, &a.path, &a.content).map_err(failed)?;
-                Ok(Payload::Json(json!({ "bytes": bytes })))
+                let written = fsops::write_text_checked(
+                    &open.root,
+                    &a.path,
+                    &a.content,
+                    a.expected.as_deref(),
+                )
+                .map_err(failed)?;
+                Ok(Payload::Json(
+                    json!({ "bytes": written.bytes, "hash": written.hash }),
+                ))
+            }
+            "project.read-text" => {
+                let a: args::File = parse(input)?;
+                let open = self.current().map_err(failed)?;
+                json_payload(&fsops::read_text_hashed(&open.root, &a.path).map_err(failed)?)
+            }
+            "project.diff-text" => {
+                let a: args::DiffText = parse(input)?;
+                let open = self.current().map_err(failed)?;
+                let disk = match fsops::read_text(&open.root, &a.path) {
+                    Ok(text) => Some(text),
+                    Err(ProjectError::NotFound(_)) => None,
+                    Err(e) => return Err(failed(e)),
+                };
+                json_payload(&crate::diff::diff_text(
+                    &a.path,
+                    disk.as_deref(),
+                    &a.content,
+                ))
+            }
+            "project.backup" => {
+                let a: args::File = parse(input)?;
+                let open = self.current().map_err(failed)?;
+                let copy = fsops::backup_file(&open.root, &a.path).map_err(failed)?;
+                Ok(Payload::Json(json!({ "backup_to": copy })))
             }
             "project.rename" => {
                 let a: args::Rename = parse(input)?;

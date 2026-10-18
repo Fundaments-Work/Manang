@@ -6170,6 +6170,7 @@ dependencies = [
  "manang-markdown",
  "manang-plugins",
  "manang-project",
+ "manang-recovery",
  "manang-search",
  "manang-settings",
  "manang-typst",
@@ -6317,6 +6318,7 @@ dependencies = [
  "dugong",
  "insta",
  "manang-diagram",
+ "manang-formats",
  "manang-kernel",
  "manang-project",
  "manang-typst",
@@ -6332,6 +6334,17 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "manang-formats"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml 1.1.8+spec-1.1.0",
 ]
 
 [[package]]
@@ -6447,6 +6460,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "insta",
+ "manang-formats",
  "manang-kernel",
  "manang-wasm-host",
  "notify",
@@ -6468,12 +6482,14 @@ dependencies = [
 name = "manang-project"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "chrono",
  "criterion 0.8.2",
  "gix",
  "ignore",
  "insta",
  "manang-diagram",
+ "manang-formats",
  "manang-kernel",
  "manang-typst",
  "notify",
@@ -6482,10 +6498,27 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "similar",
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",
  "trash",
+]
+
+[[package]]
+name = "manang-recovery"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "log",
+ "manang-formats",
+ "manang-kernel",
+ "manang-project",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -6533,6 +6566,7 @@ version = "0.1.0"
 dependencies = [
  "criterion 0.8.2",
  "insta",
+ "manang-formats",
  "manang-kernel",
  "notify",
  "notify-debouncer-full",
