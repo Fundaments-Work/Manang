@@ -1,0 +1,23 @@
+[package]
+name = "manang-recovery"
+description = "Manang's first-party recovery plugin: crash-safe snapshots of unsaved edits (hot exit)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+log = "0.4"
+manang-formats = { path = "../manang-formats" }
+manang-kernel = { path = "../manang-kernel" }
+manang-project = { path = "../manang-project" }
+parking_lot = "0.12"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = "1"
+tempfile = "3"

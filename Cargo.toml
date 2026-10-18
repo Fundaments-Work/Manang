@@ -21,6 +21,8 @@ members = [
     "crates/manang-agent-core",
     "crates/manang-agent-providers",
     "crates/manang-keystore",
+    "crates/manang-formats",
+    "crates/manang-recovery",
     "crates/manang-agent-rig",
 ]
 exclude = [
