@@ -2,12 +2,14 @@
   import { untrack } from "svelte";
 
   import Icon from "$lib/components/ui/Icon.svelte";
+  import { formatShortcut } from "$lib/commands/shortcut";
   import { exportPdf } from "$lib/state/actions";
   import { build, formatMs } from "$lib/state/build.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { preview } from "$lib/state/preview.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
+  import { detectPlatform } from "$lib/util/keyboard";
   import { countLabel } from "$lib/workbench/problems";
 
   /**
@@ -68,6 +70,7 @@
   const exportable = $derived(
     kind !== "html" && (build.status === "ok" || build.status === "failed"),
   );
+  const exportHint = formatShortcut({ key: "e", mod: true }, detectPlatform());
   const pages = $derived(preview.pageCount);
   const banner = $derived(
     build.failure !== null ? build.failure.title : countLabel(build.counts),
@@ -171,11 +174,36 @@
       type="button"
       class="mng-icon-btn"
       aria-label="Export PDF"
-      title="Export PDF"
+      title="Export PDF ({exportHint})"
+      aria-keyshortcuts="Control+E"
       disabled={!exportable || preview.exporting}
       onclick={() => exportPdf()}
     >
       <Icon name="export" size={14} />
+    </button>
+
+    <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
+
+    {#if !layout.narrow}
+      {@const maximised = layout.effectivePreview === "preview"}
+      <button
+        type="button"
+        class="mng-icon-btn"
+        aria-label={maximised ? "Restore split" : "Maximise preview"}
+        title={maximised ? "Restore split" : "Maximise preview"}
+        onclick={() => layout.toggleMaximisedPreview()}
+      >
+        <Icon name={maximised ? "split" : "maximise"} size={14} />
+      </button>
+    {/if}
+    <button
+      type="button"
+      class="mng-icon-btn"
+      aria-label="Close preview"
+      title="Close preview"
+      onclick={() => layout.closePreview()}
+    >
+      <Icon name="close" size={14} />
     </button>
   </div>
 
