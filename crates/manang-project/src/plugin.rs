@@ -525,6 +525,7 @@ impl Plugin for ProjectPlugin {
                 let wanted = a.force || export::wants_pdf(&open.root, open.config.project.engine);
                 json_payload(&export::export_pdf(ctx, &open.root, &a.path, wanted).map_err(failed)?)
             }
+            "project.templates" => json_payload(&crate::template::list_templates()),
             other => Err(PluginError::UnknownCommand(other.to_owned())),
         }
     }

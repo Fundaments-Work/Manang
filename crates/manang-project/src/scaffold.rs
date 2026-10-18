@@ -58,6 +58,16 @@ fn render(engine: Engine, title: &str) -> String {
     }
 }
 
+fn render_template_file(engine: Engine, content: &str, title: &str) -> String {
+    match engine {
+        Engine::Typst => content
+            .replace("{{title_string}}", &escape_typst_string(title))
+            .replace("{{title}}", &escape_typst_markup(title)),
+        Engine::Latex => content.replace("{{title}}", &escape_latex(title)),
+        Engine::Markdown => content.replace("{{title}}", title),
+    }
+}
+
 /// Options for [`create`].
 #[derive(Debug, Clone)]
 pub struct NewProject<'a> {
@@ -70,14 +80,54 @@ pub struct NewProject<'a> {
 /// Returns the config that was written.
 pub fn create(dir: &Path, new: &NewProject<'_>) -> Result<ProjectConfig, ProjectError> {
     let shown = dir.display().to_string();
-    let mut config = ProjectConfig::new(new.engine, Some(new.name.to_owned()));
-    config.bibliography.paths.push("references.bib".to_owned());
-    config.template = new.template.map(|id| TemplateBinding {
-        id: id.to_owned(),
-        version: None,
-    });
-    config.validate()?;
-    let manifest = config.to_toml()?;
+
+    let (config, files_to_write): (ProjectConfig, Vec<(String, String)>) = if let Some(template_id) =
+        new.template
+        && let Some(tmpl) = crate::template::find_template(template_id)
+    {
+        let mut cfg = ProjectConfig::new(tmpl.manifest.engine, Some(new.name.to_owned()));
+        cfg.project.main = Some(tmpl.manifest.main.clone());
+        cfg.template = Some(TemplateBinding {
+            id: tmpl.manifest.id.clone(),
+            version: None,
+        });
+        let has_bib = tmpl.files.iter().any(|(name, _)| *name == "references.bib");
+        if has_bib {
+            cfg.bibliography.paths.push("references.bib".to_owned());
+        }
+        cfg.validate()?;
+        let manifest = cfg.to_toml()?;
+
+        let mut list = vec![
+            (CONFIG_FILE.to_owned(), manifest),
+            (".gitignore".to_owned(), GITIGNORE.to_owned()),
+        ];
+        for (fname, content) in tmpl.files {
+            if *fname == "template.toml" {
+                continue;
+            }
+            let rendered = render_template_file(tmpl.manifest.engine, content, new.name);
+            list.push(((*fname).to_owned(), rendered));
+        }
+        (cfg, list)
+    } else {
+        let mut cfg = ProjectConfig::new(new.engine, Some(new.name.to_owned()));
+        cfg.bibliography.paths.push("references.bib".to_owned());
+        cfg.template = new.template.map(|id| TemplateBinding {
+            id: id.to_owned(),
+            version: None,
+        });
+        cfg.validate()?;
+        let manifest = cfg.to_toml()?;
+        let main = render(new.engine, new.name);
+        let list = vec![
+            (CONFIG_FILE.to_owned(), manifest),
+            (new.engine.default_main().to_owned(), main),
+            ("references.bib".to_owned(), BIB.to_owned()),
+            (".gitignore".to_owned(), GITIGNORE.to_owned()),
+        ];
+        (cfg, list)
+    };
 
     if dir.exists() {
         if !dir.is_dir() {
@@ -96,14 +146,7 @@ pub fn create(dir: &Path, new: &NewProject<'_>) -> Result<ProjectConfig, Project
         fs::create_dir_all(dir).map_err(|e| ProjectError::io(format!("creating {shown}"), e))?;
     }
 
-    let main = render(new.engine, new.name);
-    let files: [(&str, &str); 4] = [
-        (CONFIG_FILE, &manifest),
-        (new.engine.default_main(), &main),
-        ("references.bib", BIB),
-        (".gitignore", GITIGNORE),
-    ];
-    for (name, content) in files {
+    for (name, content) in &files_to_write {
         atomic_write(&dir.join(name), content.as_bytes())?;
     }
     Ok(config)

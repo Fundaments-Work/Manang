@@ -28,7 +28,7 @@
 
   The fundamental bounds governing non-equilibrium processes are given by:
 
-  $ Delta S_irr >= integral_0^t (delta Q)/T $
+  $ Delta S_"irr" >= integral_0^t (delta Q)/T $
 
   #colbreak()
 

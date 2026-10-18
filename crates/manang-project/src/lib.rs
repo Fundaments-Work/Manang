@@ -14,6 +14,7 @@ mod plugin;
 pub mod recent;
 pub mod registry;
 pub mod scaffold;
+pub mod template;
 pub mod tree;
 pub mod watch;
 
@@ -23,3 +24,4 @@ pub use config::{
 pub use error::{ConfigError, Issue, ProjectError};
 pub use paths::{MAX_PATH_BYTES, ProjectRoot, lexical_relative, to_slash};
 pub use plugin::{ProjectPlugin, manifest, plugin};
+pub use template::{TemplateManifest, list_templates};

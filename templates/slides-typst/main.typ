@@ -18,7 +18,7 @@
 
 The entropy production rate satisfies the finite-time bound:
 
-$ Delta S_irr >= integral_0^t (delta Q)/T $
+$ Delta S_"irr" >= integral_0^t (delta Q)/T $
 
 - Quasistatic limits are preserved as drive speed vanishes
 - Non-equilibrium dynamics govern fast protocols
