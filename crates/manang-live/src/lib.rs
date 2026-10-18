@@ -15,6 +15,11 @@ pub mod engine;
 pub mod envelope;
 pub mod error;
 pub mod loro_engine;
+pub mod presence;
+pub mod protocol;
+pub mod session;
+pub mod sim;
+pub mod transport;
 pub mod yrs_engine;
 
 pub use engine::{Applied, IndexUnit, RawChange, SEED_PEER, TextCrdt};

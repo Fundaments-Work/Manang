@@ -177,11 +177,26 @@ impl TextCrdt for YrsEngine {
     }
 
     fn version(&self) -> Vec<u8> {
-        self.doc.transact().state_vector().encode_v1()
+        // A Yjs state vector says which insertions a replica has but not
+        // which deletions, so two replicas with equal state vectors can still
+        // differ (one missed a delete). The version therefore carries a digest
+        // of the delete set too, and equal versions imply equal content.
+        let txn = self.doc.transact();
+        let sv = txn.state_vector().encode_v1();
+        let ds = txn.snapshot().delete_set.encode_v1();
+        let mut out = Vec::with_capacity(8 + sv.len());
+        out.extend_from_slice(&fnv1a(&ds).to_le_bytes());
+        out.extend_from_slice(&sv);
+        out
     }
 
     fn export_since(&self, version: &[u8]) -> Result<Vec<u8>, LiveError> {
-        let sv = StateVector::decode_v1(version).map_err(decode_err)?;
+        let sv_bytes = version
+            .get(8..)
+            .ok_or_else(|| LiveError::Decode("version too short".to_owned()))?;
+        let sv = StateVector::decode_v1(sv_bytes).map_err(decode_err)?;
+        // `encode_diff_v1` always includes the full delete set, so a peer
+        // that only missed deletions is repaired too.
         Ok(self.doc.transact().encode_diff_v1(&sv))
     }
 
@@ -221,4 +236,14 @@ impl TextCrdt for YrsEngine {
         let txn = self.doc.transact();
         sticky.get_offset(&txn).map(|o| o.index as usize)
     }
+}
+
+/// 64-bit FNV-1a, enough to detect a differing delete set.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in bytes {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    h
 }
