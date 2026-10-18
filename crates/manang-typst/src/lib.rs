@@ -14,6 +14,7 @@ mod compiler;
 mod diagnostics;
 mod error;
 mod jump;
+mod math;
 mod plugin;
 mod svgpdf;
 mod world;
@@ -22,6 +23,7 @@ pub use compiler::{CompileReport, CompileRequest, Compiler, CompilerConfig, MAX_
 pub use diagnostics::{CharRange, DiagSeverity, Diagnostic, MAX_DIAGNOSTICS};
 pub use error::TypstError;
 pub use jump::{PagePoint, SourceJump};
+pub use math::{MAX_MATH_SOURCE, MathDiagnostic, MathSvg};
 pub use plugin::{TypstPlugin, manifest, plugin};
 pub use svgpdf::MAX_SVG_BYTES;
 pub use world::Environment;
