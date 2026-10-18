@@ -133,7 +133,9 @@ impl Decision {
 pub enum Gate {
     Auto,
     /// Ask the user. `scope` is remembered on `allow_session`.
-    Ask { scope: String },
+    Ask {
+        scope: String,
+    },
     Deny(String),
 }
 

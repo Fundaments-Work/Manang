@@ -212,7 +212,10 @@ fn record_usage(
     plan: &TurnPlan,
     usage: &Usage,
 ) -> Result<(), AgentError> {
-    let cost = plan.prices.estimate(&plan.model, usage).map(|c| c.micro_usd);
+    let cost = plan
+        .prices
+        .estimate(&plan.model, usage)
+        .map(|c| c.micro_usd);
     let (total, total_cost) = {
         let mut inner = session.inner.lock();
         inner.usage = inner.usage.add(usage);
@@ -296,8 +299,13 @@ async fn stream_turn(
     cancel: &CancellationToken,
 ) -> Result<Turn, End> {
     let sid = session.id.as_str();
-    let payload = serde_json::to_string(request)
-        .map_err(|e| failed("internal", format!("could not encode the request: {e}"), false))?;
+    let payload = serde_json::to_string(request).map_err(|e| {
+        failed(
+            "internal",
+            format!("could not encode the request: {e}"),
+            false,
+        )
+    })?;
     let mut audited = false;
     let mut write_request = |request_id: Option<String>| -> Result<(), AgentError> {
         if audited {
@@ -358,11 +366,7 @@ async fn stream_turn(
             Err(_) => {
                 batch.flush(shared, sid);
                 write_request(None)?;
-                return Err(failed(
-                    "timeout",
-                    "the provider stopped responding",
-                    true,
-                ));
+                return Err(failed("timeout", "the provider stopped responding", true));
             }
             Ok(None) => break,
             Ok(Some(event)) => event,
@@ -382,7 +386,9 @@ async fn stream_turn(
                 }
             }
             ProviderEvent::Block { block } => blocks.push(block),
-            ProviderEvent::ToolUse { id, name, input } => calls.push(ToolUseView { id, name, input }),
+            ProviderEvent::ToolUse { id, name, input } => {
+                calls.push(ToolUseView { id, name, input })
+            }
             ProviderEvent::Usage { usage: u } => usage = Some(u),
             ProviderEvent::Done { stop_reason } => {
                 stop = Some(stop_reason);
@@ -463,8 +469,7 @@ async fn run_tools(
             run_tool(shared, session, plan, call, cancel).await
         };
         cancelled |= outcome.cancelled;
-        if let Ok(block) = ContentBlock::tool_result(&call.id, &outcome.content, outcome.is_error)
-        {
+        if let Ok(block) = ContentBlock::tool_result(&call.id, &outcome.content, outcome.is_error) {
             results.push(block);
         }
     }
@@ -496,7 +501,10 @@ async fn run_tool(
     if !known {
         let out = ToolOutcome::error(
             "unknown_tool",
-            &format!("there is no tool named `{}`; use one of the tools you were given", call.name),
+            &format!(
+                "there is no tool named `{}`; use one of the tools you were given",
+                call.name
+            ),
         );
         shared.emit(
             "agent.tool-result",
