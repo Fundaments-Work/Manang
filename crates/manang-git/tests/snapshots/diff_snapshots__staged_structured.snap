@@ -3,107 +3,107 @@ source: crates/manang-git/tests/diff_snapshots.rs
 expression: v
 ---
 {
+  "staged": true,
   "files": [
     {
-      "additions": 2,
+      "path": "doc.typ",
+      "status": "modified",
       "binary": false,
+      "too_large": false,
+      "additions": 2,
       "deletions": 1,
       "hunks": [
         {
+          "old_start": 1,
+          "old_lines": 7,
+          "new_start": 1,
+          "new_lines": 8,
           "header": "@@ -1,7 +1,8 @@",
           "lines": [
             {
               "kind": "context",
-              "new_line": 1,
-              "new_offset": 0,
-              "no_newline": false,
+              "text": "= Title",
               "old_line": 1,
+              "new_line": 1,
               "old_offset": 0,
-              "text": "= Title"
+              "new_offset": 0,
+              "no_newline": false
             },
             {
               "kind": "context",
-              "new_line": 2,
-              "new_offset": 8,
-              "no_newline": false,
+              "text": "",
               "old_line": 2,
+              "new_line": 2,
               "old_offset": 8,
-              "text": ""
+              "new_offset": 8,
+              "no_newline": false
             },
             {
               "kind": "remove",
-              "new_line": null,
-              "new_offset": null,
-              "no_newline": false,
+              "text": "First paragraph.",
               "old_line": 3,
+              "new_line": null,
               "old_offset": 9,
-              "text": "First paragraph."
+              "new_offset": null,
+              "no_newline": false
             },
             {
               "kind": "add",
+              "text": "First paragraph, edited.",
+              "old_line": null,
               "new_line": 3,
-              "new_offset": 9,
-              "no_newline": false,
-              "old_line": null,
               "old_offset": null,
-              "text": "First paragraph, edited."
+              "new_offset": 9,
+              "no_newline": false
             },
             {
               "kind": "context",
-              "new_line": 4,
-              "new_offset": 34,
-              "no_newline": false,
+              "text": "Second line.",
               "old_line": 4,
+              "new_line": 4,
               "old_offset": 26,
-              "text": "Second line."
+              "new_offset": 34,
+              "no_newline": false
             },
             {
               "kind": "context",
-              "new_line": 5,
-              "new_offset": 47,
-              "no_newline": false,
+              "text": "Third line.",
               "old_line": 5,
+              "new_line": 5,
               "old_offset": 39,
-              "text": "Third line."
+              "new_offset": 47,
+              "no_newline": false
             },
             {
               "kind": "add",
-              "new_line": 6,
-              "new_offset": 59,
-              "no_newline": false,
+              "text": "Inserted ünïcode 😀.",
               "old_line": null,
+              "new_line": 6,
               "old_offset": null,
-              "text": "Inserted ünïcode 😀."
+              "new_offset": 59,
+              "no_newline": false
             },
             {
               "kind": "context",
-              "new_line": 7,
-              "new_offset": 80,
-              "no_newline": false,
+              "text": "",
               "old_line": 6,
+              "new_line": 7,
               "old_offset": 51,
-              "text": ""
+              "new_offset": 80,
+              "no_newline": false
             },
             {
               "kind": "context",
-              "new_line": 8,
-              "new_offset": 81,
-              "no_newline": false,
+              "text": "End.",
               "old_line": 7,
+              "new_line": 8,
               "old_offset": 52,
-              "text": "End."
+              "new_offset": 81,
+              "no_newline": false
             }
-          ],
-          "new_lines": 8,
-          "new_start": 1,
-          "old_lines": 7,
-          "old_start": 1
+          ]
         }
-      ],
-      "path": "doc.typ",
-      "status": "modified",
-      "too_large": false
+      ]
     }
-  ],
-  "staged": true
+  ]
 }

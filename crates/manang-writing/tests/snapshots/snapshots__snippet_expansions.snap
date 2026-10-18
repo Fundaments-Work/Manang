@@ -4,16 +4,18 @@ expression: out
 ---
 [
   {
+    "trigger": "theorem",
+    "syntax": "typst",
     "expansion": {
-      "final_cursor": 109,
+      "text": "#block(width: 100%, inset: (left: 1em), stroke: (left: 0.5pt))[\n  *Theorem (name).* Statement.\n] <thm:label>\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "name",
           "ranges": [
             {
-              "end": 80,
-              "start": 76
+              "start": 76,
+              "end": 80
             }
           ]
         },
@@ -22,8 +24,8 @@ expression: out
           "placeholder": "Statement.",
           "ranges": [
             {
-              "end": 94,
-              "start": 84
+              "start": 84,
+              "end": 94
             }
           ]
         },
@@ -32,28 +34,28 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 107,
-              "start": 102
+              "start": 102,
+              "end": 107
             }
           ]
         }
       ],
-      "text": "#block(width: 100%, inset: (left: 1em), stroke: (left: 0.5pt))[\n  *Theorem (name).* Statement.\n] <thm:label>\n"
-    },
-    "syntax": "typst",
-    "trigger": "theorem"
+      "final_cursor": 109
+    }
   },
   {
+    "trigger": "theorem",
+    "syntax": "latex",
     "expansion": {
-      "final_cursor": 66,
+      "text": "\\begin{theorem}[name]\\label{thm:label}\n  Statement.\n\\end{theorem}\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "name",
           "ranges": [
             {
-              "end": 20,
-              "start": 16
+              "start": 16,
+              "end": 20
             }
           ]
         },
@@ -62,8 +64,8 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 37,
-              "start": 32
+              "start": 32,
+              "end": 37
             }
           ]
         },
@@ -72,28 +74,28 @@ expression: out
           "placeholder": "Statement.",
           "ranges": [
             {
-              "end": 51,
-              "start": 41
+              "start": 41,
+              "end": 51
             }
           ]
         }
       ],
-      "text": "\\begin{theorem}[name]\\label{thm:label}\n  Statement.\n\\end{theorem}\n"
-    },
-    "syntax": "latex",
-    "trigger": "theorem"
+      "final_cursor": 66
+    }
   },
   {
+    "trigger": "theorem",
+    "syntax": "markdown",
     "expansion": {
-      "final_cursor": 34,
+      "text": "> **Theorem (name).** Statement.\n\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "name",
           "ranges": [
             {
-              "end": 17,
-              "start": 13
+              "start": 13,
+              "end": 17
             }
           ]
         },
@@ -102,58 +104,28 @@ expression: out
           "placeholder": "Statement.",
           "ranges": [
             {
-              "end": 32,
-              "start": 22
+              "start": 22,
+              "end": 32
             }
           ]
         }
       ],
-      "text": "> **Theorem (name).** Statement.\n\n"
-    },
-    "syntax": "markdown",
-    "trigger": "theorem"
+      "final_cursor": 34
+    }
   },
   {
-    "expansion": {
-      "final_cursor": 26,
-      "tab_stops": [
-        {
-          "index": 1,
-          "placeholder": "expression",
-          "ranges": [
-            {
-              "end": 12,
-              "start": 2
-            }
-          ]
-        },
-        {
-          "index": 2,
-          "placeholder": "label",
-          "ranges": [
-            {
-              "end": 24,
-              "start": 19
-            }
-          ]
-        }
-      ],
-      "text": "$ expression $ <eq:label>\n"
-    },
+    "trigger": "equation",
     "syntax": "typst",
-    "trigger": "equation"
-  },
-  {
     "expansion": {
-      "final_cursor": 64,
+      "text": "$ expression $ <eq:label>\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "expression",
           "ranges": [
             {
-              "end": 29,
-              "start": 19
+              "start": 2,
+              "end": 12
             }
           ]
         },
@@ -162,48 +134,78 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 47,
-              "start": 42
+              "start": 19,
+              "end": 24
             }
           ]
         }
       ],
-      "text": "\\begin{equation}\n  expression\n  \\label{eq:label}\n\\end{equation}\n"
-    },
-    "syntax": "latex",
-    "trigger": "equation"
+      "final_cursor": 26
+    }
   },
   {
+    "trigger": "equation",
+    "syntax": "latex",
     "expansion": {
-      "final_cursor": 18,
+      "text": "\\begin{equation}\n  expression\n  \\label{eq:label}\n\\end{equation}\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "expression",
           "ranges": [
             {
-              "end": 13,
-              "start": 3
+              "start": 19,
+              "end": 29
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "placeholder": "label",
+          "ranges": [
+            {
+              "start": 42,
+              "end": 47
             }
           ]
         }
       ],
-      "text": "$$\nexpression\n$$\n\n"
-    },
-    "syntax": "markdown",
-    "trigger": "equation"
+      "final_cursor": 64
+    }
   },
   {
+    "trigger": "equation",
+    "syntax": "markdown",
     "expansion": {
-      "final_cursor": 88,
+      "text": "$$\nexpression\n$$\n\n",
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "expression",
+          "ranges": [
+            {
+              "start": 3,
+              "end": 13
+            }
+          ]
+        }
+      ],
+      "final_cursor": 18
+    }
+  },
+  {
+    "trigger": "figure",
+    "syntax": "typst",
+    "expansion": {
+      "text": "#figure(\n  image(\"path/to/image.png\", width: 80%),\n  caption: [Caption.],\n) <fig:label>\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "path/to/image.png",
           "ranges": [
             {
-              "end": 35,
-              "start": 18
+              "start": 18,
+              "end": 35
             }
           ]
         },
@@ -212,8 +214,8 @@ expression: out
           "placeholder": "80%",
           "ranges": [
             {
-              "end": 48,
-              "start": 45
+              "start": 45,
+              "end": 48
             }
           ]
         },
@@ -222,8 +224,8 @@ expression: out
           "placeholder": "Caption.",
           "ranges": [
             {
-              "end": 71,
-              "start": 63
+              "start": 63,
+              "end": 71
             }
           ]
         },
@@ -232,28 +234,28 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 86,
-              "start": 81
+              "start": 81,
+              "end": 86
             }
           ]
         }
       ],
-      "text": "#figure(\n  image(\"path/to/image.png\", width: 80%),\n  caption: [Caption.],\n) <fig:label>\n"
-    },
-    "syntax": "typst",
-    "trigger": "figure"
+      "final_cursor": 88
+    }
   },
   {
+    "trigger": "figure",
+    "syntax": "latex",
     "expansion": {
-      "final_cursor": 143,
+      "text": "\\begin{figure}[htbp]\n  \\centering\n  \\includegraphics[width=0.8\\linewidth]{path/to/image}\n  \\caption{Caption.}\n  \\label{fig:label}\n\\end{figure}\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "htbp",
           "ranges": [
             {
-              "end": 19,
-              "start": 15
+              "start": 15,
+              "end": 19
             }
           ]
         },
@@ -262,8 +264,8 @@ expression: out
           "placeholder": "0.8\\linewidth",
           "ranges": [
             {
-              "end": 72,
-              "start": 59
+              "start": 59,
+              "end": 72
             }
           ]
         },
@@ -272,8 +274,8 @@ expression: out
           "placeholder": "path/to/image",
           "ranges": [
             {
-              "end": 87,
-              "start": 74
+              "start": 74,
+              "end": 87
             }
           ]
         },
@@ -282,8 +284,8 @@ expression: out
           "placeholder": "Caption.",
           "ranges": [
             {
-              "end": 108,
-              "start": 100
+              "start": 100,
+              "end": 108
             }
           ]
         },
@@ -292,28 +294,28 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 128,
-              "start": 123
+              "start": 123,
+              "end": 128
             }
           ]
         }
       ],
-      "text": "\\begin{figure}[htbp]\n  \\centering\n  \\includegraphics[width=0.8\\linewidth]{path/to/image}\n  \\caption{Caption.}\n  \\label{fig:label}\n\\end{figure}\n"
-    },
-    "syntax": "latex",
-    "trigger": "figure"
+      "final_cursor": 143
+    }
   },
   {
+    "trigger": "figure",
+    "syntax": "markdown",
     "expansion": {
-      "final_cursor": 32,
+      "text": "![Caption.](path/to/image.png)\n\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "Caption.",
           "ranges": [
             {
-              "end": 10,
-              "start": 2
+              "start": 2,
+              "end": 10
             }
           ]
         },
@@ -322,28 +324,28 @@ expression: out
           "placeholder": "path/to/image.png",
           "ranges": [
             {
-              "end": 29,
-              "start": 12
+              "start": 12,
+              "end": 29
             }
           ]
         }
       ],
-      "text": "![Caption.](path/to/image.png)\n\n"
-    },
-    "syntax": "markdown",
-    "trigger": "figure"
+      "final_cursor": 32
+    }
   },
   {
+    "trigger": "table",
+    "syntax": "typst",
     "expansion": {
-      "final_cursor": 122,
+      "text": "#figure(\n  table(\n    columns: 3,\n    table.header[A][B][C],\n    [1], [2], [3],\n  ),\n  caption: [Caption.],\n) <tab:label>\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "3",
           "ranges": [
             {
-              "end": 32,
-              "start": 31
+              "start": 31,
+              "end": 32
             }
           ]
         },
@@ -352,8 +354,8 @@ expression: out
           "placeholder": "A",
           "ranges": [
             {
-              "end": 52,
-              "start": 51
+              "start": 51,
+              "end": 52
             }
           ]
         },
@@ -362,8 +364,8 @@ expression: out
           "placeholder": "B",
           "ranges": [
             {
-              "end": 55,
-              "start": 54
+              "start": 54,
+              "end": 55
             }
           ]
         },
@@ -372,8 +374,8 @@ expression: out
           "placeholder": "C",
           "ranges": [
             {
-              "end": 58,
-              "start": 57
+              "start": 57,
+              "end": 58
             }
           ]
         },
@@ -382,8 +384,8 @@ expression: out
           "placeholder": "1",
           "ranges": [
             {
-              "end": 67,
-              "start": 66
+              "start": 66,
+              "end": 67
             }
           ]
         },
@@ -392,8 +394,8 @@ expression: out
           "placeholder": "2",
           "ranges": [
             {
-              "end": 72,
-              "start": 71
+              "start": 71,
+              "end": 72
             }
           ]
         },
@@ -402,8 +404,8 @@ expression: out
           "placeholder": "3",
           "ranges": [
             {
-              "end": 77,
-              "start": 76
+              "start": 76,
+              "end": 77
             }
           ]
         },
@@ -412,8 +414,8 @@ expression: out
           "placeholder": "Caption.",
           "ranges": [
             {
-              "end": 105,
-              "start": 97
+              "start": 97,
+              "end": 105
             }
           ]
         },
@@ -422,28 +424,28 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 120,
-              "start": 115
+              "start": 115,
+              "end": 120
             }
           ]
         }
       ],
-      "text": "#figure(\n  table(\n    columns: 3,\n    table.header[A][B][C],\n    [1], [2], [3],\n  ),\n  caption: [Caption.],\n) <tab:label>\n"
-    },
-    "syntax": "typst",
-    "trigger": "table"
+      "final_cursor": 122
+    }
   },
   {
+    "trigger": "table",
+    "syntax": "latex",
     "expansion": {
-      "final_cursor": 201,
+      "text": "\\begin{table}[htbp]\n  \\centering\n  \\caption{Caption.}\n  \\label{tab:label}\n  \\begin{tabular}{lll}\n    \\toprule\n    A & B & C \\\\\n    \\midrule\n    1 & 2 & 3 \\\\\n    \\bottomrule\n  \\end{tabular}\n\\end{table}\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "htbp",
           "ranges": [
             {
-              "end": 18,
-              "start": 14
+              "start": 14,
+              "end": 18
             }
           ]
         },
@@ -452,8 +454,8 @@ expression: out
           "placeholder": "Caption.",
           "ranges": [
             {
-              "end": 52,
-              "start": 44
+              "start": 44,
+              "end": 52
             }
           ]
         },
@@ -462,8 +464,8 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 72,
-              "start": 67
+              "start": 67,
+              "end": 72
             }
           ]
         },
@@ -472,8 +474,8 @@ expression: out
           "placeholder": "lll",
           "ranges": [
             {
-              "end": 95,
-              "start": 92
+              "start": 92,
+              "end": 95
             }
           ]
         },
@@ -482,8 +484,8 @@ expression: out
           "placeholder": "A",
           "ranges": [
             {
-              "end": 115,
-              "start": 114
+              "start": 114,
+              "end": 115
             }
           ]
         },
@@ -492,8 +494,8 @@ expression: out
           "placeholder": "B",
           "ranges": [
             {
-              "end": 119,
-              "start": 118
+              "start": 118,
+              "end": 119
             }
           ]
         },
@@ -502,8 +504,8 @@ expression: out
           "placeholder": "C",
           "ranges": [
             {
-              "end": 123,
-              "start": 122
+              "start": 122,
+              "end": 123
             }
           ]
         },
@@ -512,8 +514,8 @@ expression: out
           "placeholder": "1",
           "ranges": [
             {
-              "end": 145,
-              "start": 144
+              "start": 144,
+              "end": 145
             }
           ]
         },
@@ -522,8 +524,8 @@ expression: out
           "placeholder": "2",
           "ranges": [
             {
-              "end": 149,
-              "start": 148
+              "start": 148,
+              "end": 149
             }
           ]
         },
@@ -532,28 +534,28 @@ expression: out
           "placeholder": "3",
           "ranges": [
             {
-              "end": 153,
-              "start": 152
+              "start": 152,
+              "end": 153
             }
           ]
         }
       ],
-      "text": "\\begin{table}[htbp]\n  \\centering\n  \\caption{Caption.}\n  \\label{tab:label}\n  \\begin{tabular}{lll}\n    \\toprule\n    A & B & C \\\\\n    \\midrule\n    1 & 2 & 3 \\\\\n    \\bottomrule\n  \\end{tabular}\n\\end{table}\n"
-    },
-    "syntax": "latex",
-    "trigger": "table"
+      "final_cursor": 201
+    }
   },
   {
+    "trigger": "table",
+    "syntax": "markdown",
     "expansion": {
-      "final_cursor": 66,
+      "text": "| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n\nTable: Caption.\n\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "A",
           "ranges": [
             {
-              "end": 3,
-              "start": 2
+              "start": 2,
+              "end": 3
             }
           ]
         },
@@ -562,8 +564,8 @@ expression: out
           "placeholder": "B",
           "ranges": [
             {
-              "end": 7,
-              "start": 6
+              "start": 6,
+              "end": 7
             }
           ]
         },
@@ -572,8 +574,8 @@ expression: out
           "placeholder": "C",
           "ranges": [
             {
-              "end": 11,
-              "start": 10
+              "start": 10,
+              "end": 11
             }
           ]
         },
@@ -582,8 +584,8 @@ expression: out
           "placeholder": "1",
           "ranges": [
             {
-              "end": 37,
-              "start": 36
+              "start": 36,
+              "end": 37
             }
           ]
         },
@@ -592,8 +594,8 @@ expression: out
           "placeholder": "2",
           "ranges": [
             {
-              "end": 41,
-              "start": 40
+              "start": 40,
+              "end": 41
             }
           ]
         },
@@ -602,8 +604,8 @@ expression: out
           "placeholder": "3",
           "ranges": [
             {
-              "end": 45,
-              "start": 44
+              "start": 44,
+              "end": 45
             }
           ]
         },
@@ -612,88 +614,88 @@ expression: out
           "placeholder": "Caption.",
           "ranges": [
             {
-              "end": 64,
-              "start": 56
+              "start": 56,
+              "end": 64
             }
           ]
         }
       ],
-      "text": "| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n\nTable: Caption.\n\n"
-    },
-    "syntax": "markdown",
-    "trigger": "table"
+      "final_cursor": 66
+    }
   },
   {
-    "expansion": {
-      "final_cursor": 4,
-      "tab_stops": [
-        {
-          "index": 1,
-          "placeholder": "key",
-          "ranges": [
-            {
-              "end": 4,
-              "start": 1
-            }
-          ]
-        }
-      ],
-      "text": "@key"
-    },
+    "trigger": "cite",
     "syntax": "typst",
-    "trigger": "cite"
-  },
-  {
     "expansion": {
-      "final_cursor": 10,
+      "text": "@key",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "key",
           "ranges": [
             {
-              "end": 9,
-              "start": 6
+              "start": 1,
+              "end": 4
             }
           ]
         }
       ],
-      "text": "\\cite{key}"
-    },
+      "final_cursor": 4
+    }
+  },
+  {
+    "trigger": "cite",
     "syntax": "latex",
-    "trigger": "cite"
-  },
-  {
     "expansion": {
-      "final_cursor": 6,
+      "text": "\\cite{key}",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "key",
           "ranges": [
             {
-              "end": 5,
-              "start": 2
+              "start": 6,
+              "end": 9
             }
           ]
         }
       ],
-      "text": "[@key]"
-    },
-    "syntax": "markdown",
-    "trigger": "cite"
+      "final_cursor": 10
+    }
   },
   {
+    "trigger": "cite",
+    "syntax": "markdown",
     "expansion": {
-      "final_cursor": 288,
+      "text": "[@key]",
+      "tab_stops": [
+        {
+          "index": 1,
+          "placeholder": "key",
+          "ranges": [
+            {
+              "start": 2,
+              "end": 5
+            }
+          ]
+        }
+      ],
+      "final_cursor": 6
+    }
+  },
+  {
+    "trigger": "algorithm",
+    "syntax": "typst",
+    "expansion": {
+      "text": "#figure(\n  kind: \"algorithm\",\n  supplement: [Algorithm],\n  caption: [Caption.],\n  block(width: 100%, inset: 8pt, stroke: (y: 0.5pt))[\n    *Input:* input \\\n    *Output:* output\n    + Initialise.\n    + *for* each item *do*\n      + Process the item.\n    + *return* result\n  ],\n) <alg:label>\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "Caption.",
           "ranges": [
             {
-              "end": 77,
-              "start": 69
+              "start": 69,
+              "end": 77
             }
           ]
         },
@@ -702,8 +704,8 @@ expression: out
           "placeholder": "input",
           "ranges": [
             {
-              "end": 152,
-              "start": 147
+              "start": 147,
+              "end": 152
             }
           ]
         },
@@ -712,8 +714,8 @@ expression: out
           "placeholder": "output",
           "ranges": [
             {
-              "end": 175,
-              "start": 169
+              "start": 169,
+              "end": 175
             }
           ]
         },
@@ -722,8 +724,8 @@ expression: out
           "placeholder": "Initialise.",
           "ranges": [
             {
-              "end": 193,
-              "start": 182
+              "start": 182,
+              "end": 193
             }
           ]
         },
@@ -732,8 +734,8 @@ expression: out
           "placeholder": "each item",
           "ranges": [
             {
-              "end": 215,
-              "start": 206
+              "start": 206,
+              "end": 215
             }
           ]
         },
@@ -742,8 +744,8 @@ expression: out
           "placeholder": "Process the item.",
           "ranges": [
             {
-              "end": 246,
-              "start": 229
+              "start": 229,
+              "end": 246
             }
           ]
         },
@@ -752,8 +754,8 @@ expression: out
           "placeholder": "result",
           "ranges": [
             {
-              "end": 268,
-              "start": 262
+              "start": 262,
+              "end": 268
             }
           ]
         },
@@ -762,28 +764,28 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 286,
-              "start": 281
+              "start": 281,
+              "end": 286
             }
           ]
         }
       ],
-      "text": "#figure(\n  kind: \"algorithm\",\n  supplement: [Algorithm],\n  caption: [Caption.],\n  block(width: 100%, inset: 8pt, stroke: (y: 0.5pt))[\n    *Input:* input \\\n    *Output:* output\n    + Initialise.\n    + *for* each item *do*\n      + Process the item.\n    + *return* result\n  ],\n) <alg:label>\n"
-    },
-    "syntax": "typst",
-    "trigger": "algorithm"
+      "final_cursor": 288
+    }
   },
   {
+    "trigger": "algorithm",
+    "syntax": "latex",
     "expansion": {
-      "final_cursor": 273,
+      "text": "\\begin{algorithm}[htbp]\n  \\caption{Caption.}\\label{alg:label}\n  \\begin{algorithmic}[1]\n    \\Require input\n    \\Ensure output\n    \\State Initialise.\n    \\For{each item}\n      \\State Process the item.\n    \\EndFor\n    \\State \\Return result\n  \\end{algorithmic}\n\\end{algorithm}\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "htbp",
           "ranges": [
             {
-              "end": 22,
-              "start": 18
+              "start": 18,
+              "end": 22
             }
           ]
         },
@@ -792,8 +794,8 @@ expression: out
           "placeholder": "Caption.",
           "ranges": [
             {
-              "end": 43,
-              "start": 35
+              "start": 35,
+              "end": 43
             }
           ]
         },
@@ -802,8 +804,8 @@ expression: out
           "placeholder": "label",
           "ranges": [
             {
-              "end": 60,
-              "start": 55
+              "start": 55,
+              "end": 60
             }
           ]
         },
@@ -812,8 +814,8 @@ expression: out
           "placeholder": "input",
           "ranges": [
             {
-              "end": 105,
-              "start": 100
+              "start": 100,
+              "end": 105
             }
           ]
         },
@@ -822,8 +824,8 @@ expression: out
           "placeholder": "output",
           "ranges": [
             {
-              "end": 124,
-              "start": 118
+              "start": 118,
+              "end": 124
             }
           ]
         },
@@ -832,8 +834,8 @@ expression: out
           "placeholder": "Initialise.",
           "ranges": [
             {
-              "end": 147,
-              "start": 136
+              "start": 136,
+              "end": 147
             }
           ]
         },
@@ -842,8 +844,8 @@ expression: out
           "placeholder": "each item",
           "ranges": [
             {
-              "end": 166,
-              "start": 157
+              "start": 157,
+              "end": 166
             }
           ]
         },
@@ -852,8 +854,8 @@ expression: out
           "placeholder": "Process the item.",
           "ranges": [
             {
-              "end": 198,
-              "start": 181
+              "start": 181,
+              "end": 198
             }
           ]
         },
@@ -862,28 +864,28 @@ expression: out
           "placeholder": "result",
           "ranges": [
             {
-              "end": 236,
-              "start": 230
+              "start": 230,
+              "end": 236
             }
           ]
         }
       ],
-      "text": "\\begin{algorithm}[htbp]\n  \\caption{Caption.}\\label{alg:label}\n  \\begin{algorithmic}[1]\n    \\Require input\n    \\Ensure output\n    \\State Initialise.\n    \\For{each item}\n      \\State Process the item.\n    \\EndFor\n    \\State \\Return result\n  \\end{algorithmic}\n\\end{algorithm}\n"
-    },
-    "syntax": "latex",
-    "trigger": "algorithm"
+      "final_cursor": 273
+    }
   },
   {
+    "trigger": "algorithm",
+    "syntax": "markdown",
     "expansion": {
-      "final_cursor": 130,
+      "text": "**Algorithm: name**\n\n*Input:* input\n*Output:* output\n\n1. Initialise.\n2. For each item:\n   1. Process the item.\n3. Return result.\n\n",
       "tab_stops": [
         {
           "index": 1,
           "placeholder": "name",
           "ranges": [
             {
-              "end": 17,
-              "start": 13
+              "start": 13,
+              "end": 17
             }
           ]
         },
@@ -892,8 +894,8 @@ expression: out
           "placeholder": "input",
           "ranges": [
             {
-              "end": 35,
-              "start": 30
+              "start": 30,
+              "end": 35
             }
           ]
         },
@@ -902,8 +904,8 @@ expression: out
           "placeholder": "output",
           "ranges": [
             {
-              "end": 52,
-              "start": 46
+              "start": 46,
+              "end": 52
             }
           ]
         },
@@ -912,8 +914,8 @@ expression: out
           "placeholder": "Initialise.",
           "ranges": [
             {
-              "end": 68,
-              "start": 57
+              "start": 57,
+              "end": 68
             }
           ]
         },
@@ -922,8 +924,8 @@ expression: out
           "placeholder": "item",
           "ranges": [
             {
-              "end": 85,
-              "start": 81
+              "start": 81,
+              "end": 85
             }
           ]
         },
@@ -932,8 +934,8 @@ expression: out
           "placeholder": "Process the item.",
           "ranges": [
             {
-              "end": 110,
-              "start": 93
+              "start": 93,
+              "end": 110
             }
           ]
         },
@@ -942,15 +944,13 @@ expression: out
           "placeholder": "result",
           "ranges": [
             {
-              "end": 127,
-              "start": 121
+              "start": 121,
+              "end": 127
             }
           ]
         }
       ],
-      "text": "**Algorithm: name**\n\n*Input:* input\n*Output:* output\n\n1. Initialise.\n2. For each item:\n   1. Process the item.\n3. Return result.\n\n"
-    },
-    "syntax": "markdown",
-    "trigger": "algorithm"
+      "final_cursor": 130
+    }
   }
 ]

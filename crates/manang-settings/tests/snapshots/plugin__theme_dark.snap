@@ -3,12 +3,11 @@ source: crates/manang-settings/tests/plugin.rs
 expression: dark
 ---
 {
-  "base": null,
-  "builtin": true,
   "id": "dark",
   "name": "Dark",
-  "overrides": {},
   "scheme": "dark",
+  "builtin": true,
+  "base": null,
   "tokens": {
     "--mng-accent": "#c6f135",
     "--mng-accent-ink": "#141416",
@@ -23,5 +22,6 @@ expression: dark
     "--mng-text": "#e8e6e1",
     "--mng-text-60": "#9a9a9a",
     "--mng-text-muted": "#7a7a7a"
-  }
+  },
+  "overrides": {}
 }

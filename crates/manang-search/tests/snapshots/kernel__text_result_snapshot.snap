@@ -3,83 +3,83 @@ source: crates/manang-search/tests/kernel.rs
 expression: "serde_json::to_string_pretty(&r).expect(\"json\")"
 ---
 {
-  "cancelled": false,
   "files": [
     {
+      "path": "main.typ",
       "matches": [
         {
-          "after": [],
+          "line": 2,
+          "column": 1,
+          "byte_offset": 8,
+          "text": "hello world",
+          "ranges": [
+            {
+              "start": 0,
+              "end": 5
+            }
+          ],
           "before": [
             {
               "line": 1,
               "text": "= Title"
             }
           ],
-          "byte_offset": 8,
-          "column": 1,
-          "line": 2,
-          "ranges": [
-            {
-              "end": 5,
-              "start": 0
-            }
-          ],
-          "text": "hello world"
+          "after": []
         },
         {
-          "after": [],
-          "before": [],
-          "byte_offset": 20,
-          "column": 1,
           "line": 3,
+          "column": 1,
+          "byte_offset": 20,
+          "text": "Hello again",
           "ranges": [
             {
-              "end": 5,
-              "start": 0
+              "start": 0,
+              "end": 5
             }
           ],
-          "text": "Hello again"
+          "before": [],
+          "after": []
         }
       ],
-      "path": "main.typ",
       "truncated": false
     },
     {
+      "path": "src/lib.rs",
       "matches": [
         {
+          "line": 1,
+          "column": 4,
+          "byte_offset": 0,
+          "text": "fn hello() {}",
+          "ranges": [
+            {
+              "start": 3,
+              "end": 8
+            }
+          ],
+          "before": [],
           "after": [
             {
               "line": 2,
               "text": "// world"
             }
-          ],
-          "before": [],
-          "byte_offset": 0,
-          "column": 4,
-          "line": 1,
-          "ranges": [
-            {
-              "end": 8,
-              "start": 3
-            }
-          ],
-          "text": "fn hello() {}"
+          ]
         }
       ],
-      "path": "src/lib.rs",
       "truncated": false
     }
   ],
+  "total_matches": 3,
+  "total_ranges": 3,
+  "truncated": false,
+  "cancelled": false,
+  "stopped": null,
   "stats": {
-    "bytes_scanned": 67,
     "files_searched": 3,
+    "files_with_matches": 2,
     "files_skipped_binary": 1,
     "files_skipped_large": 0,
     "files_unreadable": 0,
-    "files_with_matches": 2
-  },
-  "stopped": null,
-  "total_matches": 3,
-  "total_ranges": 3,
-  "truncated": false
+    "bytes_scanned": 67
+  }
 }
