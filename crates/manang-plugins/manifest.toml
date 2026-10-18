@@ -1,0 +1,46 @@
+[plugin]
+name = "plugins"
+version = "0.1.0"
+description = "Install, approve, enable, disable and remove plugins"
+tier = "native"
+
+[contributes]
+[[contributes.commands]]
+id = "plugins.list"
+title = "List plugins"
+
+[[contributes.commands]]
+id = "plugins.inspect"
+title = "Inspect a plugin archive or folder without installing it"
+
+[[contributes.commands]]
+id = "plugins.install"
+title = "Install a plugin from a folder or .manangplugin archive"
+
+[[contributes.commands]]
+id = "plugins.approve"
+title = "Approve a plugin's permissions and load it"
+
+[[contributes.commands]]
+id = "plugins.enable"
+title = "Enable a plugin"
+
+[[contributes.commands]]
+id = "plugins.disable"
+title = "Disable a plugin"
+
+[[contributes.commands]]
+id = "plugins.uninstall"
+title = "Uninstall a plugin"
+
+[[contributes.commands]]
+id = "plugins.reload"
+title = "Reload a plugin from disk"
+
+[[contributes.commands]]
+id = "plugins.permissions"
+title = "Show what a plugin may access"
+
+[[contributes.commands]]
+id = "plugins.use-project"
+title = "Apply the open project's plugin overrides"
