@@ -9,6 +9,8 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# dagre port for figure.layout (MIT OR Apache-2.0); already in the tree via merman.
+dugong = "=0.9.0"
 manang-kernel = { path = "../manang-kernel" }
 parking_lot = "0.12"
 perfect_freehand = "0.1.1"
@@ -17,9 +19,16 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+manang-diagram = { path = "../manang-diagram" }
+criterion = { version = "0.8", default-features = false }
+quick-xml = "0.42"
 manang-project = { path = "../manang-project" }
 manang-typst = { path = "../manang-typst" }
 insta = { version = "1", features = ["json"] }
 proptest = "1"
 tempfile = "3"
 
+
+[[bench]]
+name = "figure_ops"
+harness = false

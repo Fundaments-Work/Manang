@@ -8,10 +8,11 @@ import { SvelteMap } from "svelte/reactivity";
 
 import { embedLine, svgPathFor } from "$lib/figure/edit";
 import { errorMessage, kernel, reportError } from "$lib/kernel";
-import { figureApi, projectApi } from "$lib/kernel/api";
+import { diagramApi, figureApi, projectApi } from "$lib/kernel/api";
+import type { DiagramTheme } from "$lib/kernel/types";
 import { basename, dirname } from "$lib/workbench/paths";
 
-import { FigureState, type FigureBackend } from "./figure.svelte";
+import { FigureState, type FigureBackend, type MermaidResult } from "./figure.svelte";
 import { notice } from "./notice.svelte";
 import { workspace } from "./workspace.svelte";
 
@@ -29,12 +30,13 @@ function backendFor(id: number): FigureBackend {
   return {
     apply: (op) => api.apply(id, op),
     get: () => api.get(id),
-    hitTest: async (point) => (await api.hitTest(id, point.x, point.y)).node_id,
     save: (path) => api.save(id, absolute(path)),
     close: async () => {
       await api.close(id);
     },
     exportSvg: async () => new TextDecoder().decode(await api.exportSvg(id)),
+    fromMermaid: (args) =>
+      kernel.run<MermaidResult>("figure.from-mermaid", { figure: id, ...args }),
   };
 }
 
@@ -53,10 +55,44 @@ export class FiguresStore {
   }
 
   async #adopt(path: string, id: number): Promise<FigureState> {
-    const figure = new FigureState(path, await api.get(id), backendFor(id));
+    const figure = new FigureState(path, await api.get(id), backendFor(id), id);
     this.#open.set(path, figure);
     this.version += 1;
+    this.#listen();
     return figure;
+  }
+
+  #unlisten: Promise<() => void> | null = null;
+
+  /**
+   * Follow `figure.changed` (edits by agents and other plugins): the open
+   * figure with that id resyncs when the revision is newer than its own.
+   */
+  #listen(): void {
+    if (this.#unlisten !== null) return;
+    this.#unlisten = kernel.onEvent((event) => {
+      if (event.topic !== "figure.changed") return;
+      const payload = event.payload as { id?: unknown; revision?: unknown } | null;
+      if (typeof payload?.id !== "number" || typeof payload.revision !== "number")
+        return;
+      const revision = payload.revision;
+      for (const figure of this.#open.values()) {
+        if (figure.id === payload.id) {
+          figure
+            .externalChange(revision)
+            .catch((e: unknown) => reportError("figure.changed", e));
+        }
+      }
+    });
+  }
+
+  #stopListening(): void {
+    if (this.#open.size > 0 || this.#unlisten === null) return;
+    const pending = this.#unlisten;
+    this.#unlisten = null;
+    pending
+      .then((stop) => stop())
+      .catch((e: unknown) => reportError("figure.changed", e));
   }
 
   /** Opens in flight, so a tab and a click asking at once share one load. */
@@ -169,6 +205,7 @@ export class FiguresStore {
     this.#open.delete(path);
     this.version += 1;
     figure.close().catch((error: unknown) => reportError("figures.close", error));
+    this.#stopListening();
   }
 
   dropUnder(path: string): void {
@@ -179,3 +216,62 @@ export class FiguresStore {
 }
 
 export const figures = new FiguresStore();
+
+/** One Mermaid block's picture: a blob URL, or why it could not render. */
+export interface MermaidRender {
+  readonly url?: string;
+  readonly error?: string;
+}
+
+const diagrams = diagramApi(kernel);
+
+/**
+ * Rendered Mermaid blocks for the canvas, by theme and source, as blob URLs
+ * drawn with `<image>` (never SVG markup in the DOM). Least recently used
+ * renders beyond the limit are dropped and their URLs revoked.
+ */
+export class MermaidRenders {
+  readonly #renders = new SvelteMap<string, MermaidRender>();
+  readonly #order: string[] = [];
+  readonly #limit: number;
+
+  constructor(limit = 48) {
+    this.#limit = limit;
+  }
+
+  /** The render for `source` in `theme`; starts one when there is none yet. */
+  get(source: string, theme: DiagramTheme): MermaidRender | undefined {
+    const key = `${theme}\n${source}`;
+    const found = this.#renders.get(key);
+    if (found !== undefined || this.#order.includes(key)) return found;
+    this.#order.push(key);
+    void this.#render(key, source, theme);
+    return undefined;
+  }
+
+  async #render(key: string, source: string, theme: DiagramTheme): Promise<void> {
+    let render: MermaidRender;
+    try {
+      const bytes = await diagrams.render("mermaid", source, theme);
+      const blob = new Blob([bytes.slice()], { type: "image/svg+xml" });
+      render = { url: URL.createObjectURL(blob) };
+    } catch (error) {
+      reportError("figure.mermaid-block", error);
+      render = { error: errorMessage(error) };
+    }
+    if (!this.#order.includes(key)) {
+      if (render.url !== undefined) URL.revokeObjectURL(render.url);
+      return;
+    }
+    this.#renders.set(key, render);
+    while (this.#order.length > this.#limit) {
+      const old = this.#order.shift();
+      if (old === undefined) break;
+      const gone = this.#renders.get(old);
+      if (gone?.url !== undefined) URL.revokeObjectURL(gone.url);
+      this.#renders.delete(old);
+    }
+  }
+}
+
+export const mermaidRenders = new MermaidRenders();

@@ -17,6 +17,7 @@ pub mod color;
 pub mod diagnostics;
 pub mod engine;
 pub mod error;
+pub mod layout;
 pub mod mermaid;
 pub mod pikchr;
 pub mod plugin;

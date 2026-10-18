@@ -1,289 +1,158 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  allAnchors,
-  anchorsOf,
-  arrowHead,
+  anchorOf,
+  anchorPoint,
+  formatCoord,
+  frameChildren,
+  freedrawPath,
   hitTest,
+  hits,
   nodeBounds,
+  nodesInRect,
   normalizeRect,
+  outlinePoint,
   polygonToPath,
+  rotatePoint,
   sceneBounds,
-  SNAP_DISTANCE,
-  snapToAnchors,
-  strokeToPath,
   unionRect,
 } from "./geometry";
 import {
-  appendNode,
   createScene,
-  formatNodeId,
-  removeNode,
-  replaceNode,
   type FigureNode,
   type FigureScene,
-  type RectNode,
+  type ShapeNode,
 } from "./scene";
 
-function rectAt(x: number, y: number, width = 100, height = 50): RectNode {
-  return { kind: "rect", id: "r1", x, y, width, height, stroke: "#e8e6e1" };
+function box(
+  kind: ShapeNode["kind"],
+  id: string,
+  x: number,
+  y: number,
+  w = 100,
+  h = 50,
+): ShapeNode {
+  return { kind, id, x, y, width: w, height: h };
 }
 
-describe("nodeBounds", () => {
-  it("measures a rect", () => {
-    expect(nodeBounds(rectAt(10, 20, 30, 40))).toEqual({
-      x: 10,
-      y: 20,
-      width: 30,
-      height: 40,
-    });
+function scene(...nodes: FigureNode[]): FigureScene {
+  return { ...createScene(800, 600), nodes };
+}
+
+describe("coordinates", () => {
+  it("rounds halves up and formats like Rust", () => {
+    expect(formatCoord(10)).toBe("10");
+    expect(formatCoord(10.25)).toBe("10.3");
+    expect(formatCoord(-2.25)).toBe("-2.2");
+    expect(formatCoord(-0.04)).toBe("0");
+    expect(formatCoord(1.95)).toBe("2");
   });
 
-  it("measures an ellipse from its radii", () => {
-    const ellipse: FigureNode = {
-      kind: "ellipse",
-      id: "e1",
-      cx: 50,
-      cy: 50,
-      rx: 20,
-      ry: 10,
-      stroke: "#e8e6e1",
-    };
-    expect(nodeBounds(ellipse)).toEqual({ x: 30, y: 40, width: 40, height: 20 });
-  });
-
-  it("pads a stroke by half its base size", () => {
-    const stroke: FigureNode = {
-      kind: "stroke",
-      id: "s1",
-      points: [
-        { x: 10, y: 10, pressure: 0.5 },
-        { x: 30, y: 10, pressure: 0.5 },
-      ],
-      size: 4,
-      color: "#e8e6e1",
-    };
-    const bounds = nodeBounds(stroke);
-    expect(bounds.x).toBe(8);
-    expect(bounds.width).toBe(24);
-  });
-
-  it("returns an empty rect for an empty stroke", () => {
-    const stroke: FigureNode = {
-      kind: "stroke",
-      id: "s1",
-      points: [],
-      size: 4,
-      color: "#e8e6e1",
-    };
-    expect(nodeBounds(stroke)).toEqual({ x: 0, y: 0, width: 0, height: 0 });
-  });
-});
-
-describe("normalizeRect", () => {
-  it("pulls a negative extent back to its origin", () => {
-    expect(normalizeRect(100, 100, -40, -20)).toEqual({
-      x: 60,
-      y: 80,
-      width: 40,
-      height: 20,
-    });
-  });
-});
-
-describe("unionRect", () => {
-  it("absorbs an empty rect", () => {
-    const rect = { x: 5, y: 5, width: 10, height: 10 };
-    expect(unionRect({ x: 0, y: 0, width: 0, height: 0 }, rect)).toEqual(rect);
-  });
-
-  it("spans both rects", () => {
+  it("normalises inverted rects and unions them", () => {
+    expect(normalizeRect(10, 10, -5, -5)).toEqual({ x: 5, y: 5, width: 5, height: 5 });
     expect(
       unionRect(
-        { x: 0, y: 0, width: 10, height: 10 },
-        { x: 20, y: 5, width: 10, height: 10 },
+        { x: 0, y: 0, width: 0, height: 0 },
+        { x: 1, y: 1, width: 2, height: 2 },
       ),
-    ).toEqual({ x: 0, y: 0, width: 30, height: 15 });
-  });
-});
-
-describe("sceneBounds and hitTest", () => {
-  const scene: FigureScene = {
-    ...createScene(400, 400),
-    nodes: [rectAt(0, 0), { ...rectAt(200, 200), id: "r2" }],
-  };
-
-  it("spans every node", () => {
-    expect(sceneBounds(scene)).toEqual({ x: 0, y: 0, width: 300, height: 250 });
-  });
-
-  it("returns the topmost node under a point", () => {
-    // Overlapping region; the later node paints on top and must win.
-    const stacked: FigureScene = {
-      ...createScene(400, 400),
-      nodes: [rectAt(0, 0, 200, 200), { ...rectAt(50, 50, 200, 200), id: "r2" }],
-    };
-    expect(hitTest(stacked, { x: 100, y: 100 })?.id).toBe("r2");
-  });
-
-  it("returns undefined outside every node", () => {
-    expect(hitTest(scene, { x: 390, y: 390 })).toBeUndefined();
-  });
-});
-
-describe("anchors and snapping", () => {
-  const rect = rectAt(100, 100, 200, 100);
-
-  it("places four anchors on the perimeter", () => {
-    expect(anchorsOf(rect)).toEqual([
-      { nodeId: "r1", side: "top", x: 200, y: 100 },
-      { nodeId: "r1", side: "right", x: 300, y: 150 },
-      { nodeId: "r1", side: "bottom", x: 200, y: 200 },
-      { nodeId: "r1", side: "left", x: 100, y: 150 },
-    ]);
-  });
-
-  it("excludes the node being dragged", () => {
-    const scene: FigureScene = {
-      ...createScene(400, 400),
-      nodes: [rect, { ...rect, id: "r2", x: 300 }],
-    };
-    const anchors = allAnchors(scene, ["r1"]);
-    expect(anchors.every((anchor) => anchor.nodeId === "r2")).toBe(true);
-  });
-
-  it("snaps to the nearest anchor within the threshold", () => {
-    const result = snapToAnchors({ x: 202, y: 104 }, anchorsOf(rect));
-    expect(result.point).toEqual({ x: 200, y: 100 });
-    expect(result.anchor?.side).toBe("top");
-  });
-
-  it("leaves the point alone beyond the threshold", () => {
-    const far = { x: 200 + SNAP_DISTANCE + 1, y: 100 };
-    const result = snapToAnchors(far, anchorsOf(rect));
-    expect(result.point).toEqual(far);
-    expect(result.anchor).toBeUndefined();
-  });
-
-  it("picks the closest anchor when several are in range", () => {
-    // Between the right (300,150) and bottom (200,200) anchors, but nearer right.
-    const result = snapToAnchors({ x: 260, y: 175 }, anchorsOf(rect), 50);
-    expect(result.anchor?.side).toBe("right");
-  });
-
-  it("snaps to an anchor exactly at the threshold", () => {
-    const onThreshold = { x: 200 + SNAP_DISTANCE, y: 100 };
-    expect(snapToAnchors(onThreshold, anchorsOf(rect)).anchor).toBeDefined();
-  });
-});
-
-describe("strokeToPath", () => {
-  it("returns an empty path for an empty stroke", () => {
-    expect(
-      strokeToPath({ kind: "stroke", id: "s", points: [], size: 2, color: "#fff" }),
-    ).toBe("");
-  });
-
-  it("renders a single tap as a closed dot", () => {
-    // A tap with the pen should leave a dot rather than nothing at all.
-    const path = strokeToPath({
-      kind: "stroke",
-      id: "s",
-      points: [{ x: 1, y: 2, pressure: 0.5 }],
-      size: 2,
-      color: "#fff",
+    ).toEqual({
+      x: 1,
+      y: 1,
+      width: 2,
+      height: 2,
     });
-    expect(path.startsWith("M")).toBe(true);
-    expect(path.endsWith("Z")).toBe(true);
+  });
+});
+
+describe("bounds and hits", () => {
+  it("includes rotation in bounds", () => {
+    const n: ShapeNode = { ...box("rect", "r", 0, 0, 100, 20), angle: 90 };
+    const b = nodeBounds(n);
+    expect(b.width).toBeCloseTo(20);
+    expect(b.height).toBeCloseTo(100);
+    expect(hits(n, { x: 50, y: -30 }, 0)).toBe(true);
+    expect(hits(n, { x: 5, y: 10 }, 0)).toBe(false);
   });
 
-  it("produces a closed path for a real stroke", () => {
-    const points = Array.from({ length: 24 }, (_, index) => ({
-      x: index * 4,
-      y: 40 + Math.sin(index / 2) * 12,
-      pressure: 0.5,
-    }));
-    const path = strokeToPath({
-      kind: "stroke",
-      id: "s",
-      points,
-      size: 3,
-      color: "#e8e6e1",
-    });
-
-    expect(path.startsWith("M")).toBe(true);
-    expect(path.endsWith("Z")).toBe(true);
-    expect(path.split("L").length).toBeGreaterThan(10);
-  });
-
-  it("is deterministic for identical input", () => {
-    const node = {
-      kind: "stroke" as const,
-      id: "s",
+  it("hits diamonds and ellipses by their outline, connectors near the line", () => {
+    const d = box("diamond", "d", 0, 0, 100, 100);
+    expect(hits(d, { x: 50, y: 50 }, 0)).toBe(true);
+    expect(hits(d, { x: 5, y: 5 }, 0)).toBe(false);
+    const e = box("ellipse", "e", 0, 0, 100, 100);
+    expect(hits(e, { x: 3, y: 3 }, 0)).toBe(false);
+    const a: FigureNode = {
+      kind: "arrow",
+      id: "a",
       points: [
-        { x: 0, y: 0, pressure: 0.4 },
-        { x: 9, y: 4, pressure: 0.6 },
-        { x: 18, y: 2, pressure: 0.5 },
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+    };
+    expect(hits(a, { x: 50, y: 5 }, 6)).toBe(true);
+    expect(hits(a, { x: 50, y: 20 }, 6)).toBe(false);
+  });
+
+  it("lets frames lose to what they contain", () => {
+    const s = scene(
+      box("rect", "inner", 20, 20, 20, 20),
+      box("frame", "f", 0, 0, 90, 90),
+    );
+    expect(hitTest(s, { x: 30, y: 30 })?.id).toBe("inner");
+    expect(hitTest(s, { x: 1, y: 50 })?.id).toBe("f");
+    expect(hitTest(s, { x: 60, y: 60 })).toBeUndefined();
+    expect(frameChildren(s, "f")).toEqual(["inner"]);
+    expect(
+      nodesInRect(s, { x: 10, y: 10, width: 40, height: 40 }).map((n) => n.id),
+    ).toEqual(["inner"]);
+    expect(sceneBounds(s)).toEqual({ x: 0, y: 0, width: 90, height: 90 });
+  });
+});
+
+describe("outlines and anchors", () => {
+  it("lands on each outline", () => {
+    expect(outlinePoint(box("rect", "r", 0, 0), { x: 500, y: 25 })).toEqual({
+      x: 100,
+      y: 25,
+    });
+    expect(outlinePoint(box("diamond", "d", 0, 0), { x: 50, y: -100 })).toEqual({
+      x: 50,
+      y: 0,
+    });
+    const p = outlinePoint(box("ellipse", "e", 0, 0, 100, 100), { x: 200, y: 200 });
+    expect(Math.hypot(p.x - 50, p.y - 50)).toBeCloseTo(50);
+  });
+
+  it("round-trips anchors", () => {
+    const r = box("rect", "r", 10, 10);
+    const a = anchorOf(r, { x: 110, y: 35 });
+    expect(a).toEqual({ x: 1, y: 0.5 });
+    expect(anchorPoint(r, a)).toEqual({ x: 110, y: 35 });
+  });
+
+  it("rotates clockwise on screen", () => {
+    const p = rotatePoint({ x: 1, y: 0 }, { x: 0, y: 0 }, 90);
+    expect(p.x).toBeCloseTo(0);
+    expect(p.y).toBeCloseTo(1);
+  });
+});
+
+describe("paths", () => {
+  it("draws freehand outlines and polygons", () => {
+    const d = freedrawPath({
+      points: [
+        { x: 0, y: 0, pressure: 0.5 },
+        { x: 20, y: 10, pressure: 0.5 },
       ],
       size: 3,
-      color: "#e8e6e1",
-    };
-    expect(strokeToPath(node)).toBe(strokeToPath(node));
-  });
-});
-
-describe("arrowHead", () => {
-  it("starts at the tip and returns four points", () => {
-    const head = arrowHead({ x: 0, y: 0 }, { x: 100, y: 0 });
-    expect(head).toHaveLength(4);
-    expect(head[0]).toEqual({ x: 100, y: 0 });
-  });
-
-  it("points along the direction of travel", () => {
-    const head = arrowHead({ x: 0, y: 0 }, { x: 0, y: 100 });
-    expect(head[0]).toEqual({ x: 0, y: 100 });
-  });
-});
-
-describe("polygonToPath", () => {
-  it("closes the polygon", () => {
+    });
+    expect(d.startsWith("M")).toBe(true);
+    expect(d.endsWith("Z")).toBe(true);
+    expect(freedrawPath({ points: [], size: 3 })).toBe("");
     expect(
       polygonToPath([
         { x: 0, y: 0 },
-        { x: 10, y: 0 },
-        { x: 10, y: 10 },
+        { x: 1.25, y: 2 },
       ]),
-    ).toBe("M0 0L10 0L10 10Z");
-  });
-
-  it("returns an empty string for no points", () => {
-    expect(polygonToPath([])).toBe("");
-  });
-});
-
-describe("scene mutation", () => {
-  const base = createScene(100, 100);
-
-  it("appends without mutating the original", () => {
-    const next = appendNode(base, rectAt(0, 0));
-    expect(base.nodes).toHaveLength(0);
-    expect(next.nodes).toHaveLength(1);
-  });
-
-  it("replaces by id", () => {
-    const withNode = appendNode(base, rectAt(0, 0));
-    const moved = replaceNode(withNode, { ...rectAt(0, 0), x: 50 });
-    expect(moved.nodes[0]).toMatchObject({ x: 50 });
-  });
-
-  it("removes by id", () => {
-    const withNode = appendNode(base, rectAt(0, 0));
-    expect(removeNode(withNode, "r1").nodes).toHaveLength(0);
-  });
-
-  it("generates stable, sortable ids from a counter", () => {
-    expect(formatNodeId(1)).toBe("n1");
-    expect(formatNodeId(35)).toBe("nz");
-    expect(formatNodeId(36)).toBe("n10");
+    ).toBe("M0 0L1.3 2Z");
   });
 });

@@ -41,4 +41,14 @@ pub trait DiagramEngine: Send + Sync {
 
     /// Renders `source` to a standalone SVG document.
     fn render(&self, source: &str, theme: Theme) -> Result<String, DiagramError>;
+
+    /// The laid-out nodes and edges of `source`, for turning a diagram into
+    /// editable shapes (see [`crate::layout`]). Engines without a graph
+    /// layout refuse.
+    fn layout(&self, _source: &str) -> Result<serde_json::Value, DiagramError> {
+        Err(DiagramError::InvalidArgument(format!(
+            "[unsupported_layout] {} has no shape layout",
+            self.info().name
+        )))
+    }
 }

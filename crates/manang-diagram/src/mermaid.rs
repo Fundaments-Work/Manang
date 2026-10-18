@@ -120,6 +120,10 @@ impl DiagramEngine for MermaidEngine {
         out
     }
 
+    fn layout(&self, source: &str) -> Result<Value, DiagramError> {
+        crate::layout::layout(self.renderer(Theme::Print), source)
+    }
+
     fn render(&self, source: &str, theme: Theme) -> Result<String, DiagramError> {
         let prepared = self.prepared(source, theme);
         let request = svg_request(theme, &svg_id(source, theme));
