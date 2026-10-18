@@ -73,7 +73,7 @@
           {source === "project" ? "Set for this project" : "Changed"}
         </span>
       {/if}
-      {#if def.requires_restart}
+      {#if def["requires-restart"]}
         <span class="text-[11px] text-text-60">Applies after restart</span>
       {/if}
     </div>

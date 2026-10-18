@@ -260,6 +260,118 @@ fn without_tex_the_error_says_how_to_fix_it() {
     );
 }
 
+fn configure(kernel: &Kernel, values: Value) -> Result<Value, String> {
+    kernel
+        .invoke(
+            "latex.configure",
+            Payload::Json(json!({ "values": values })),
+        )
+        .map(json_of)
+        .map_err(|e| e.to_string())
+}
+
+#[test]
+fn configure_updates_the_defaults_reported_by_status() {
+    let cache = tempfile::tempdir().expect("tmp");
+    let config = LatexConfig {
+        cache_dir: Some(cache.path().to_path_buf()),
+        // A worker that cannot exist, so `auto` without TeX resolves to none.
+        worker: Some(cache.path().join("no-worker")),
+        ..LatexConfig::default()
+    };
+    let kernel = Kernel::new();
+    kernel
+        .register(
+            manifest().expect("manifest"),
+            Arc::new(LatexPlugin::with_tools(config, TexTools::default())),
+        )
+        .expect("register");
+
+    // The manifest defaults match the built-in defaults.
+    let declared = manifest().expect("manifest").contributes.settings;
+    let status = json_of(
+        kernel
+            .invoke("latex.status", Payload::Empty)
+            .expect("status"),
+    );
+    for setting in &declared {
+        assert_eq!(
+            Some(&status["settings"][&setting.id]),
+            setting.default.as_ref(),
+            "{}",
+            setting.id
+        );
+    }
+    assert_eq!(status["default"], "none");
+
+    let applied = configure(
+        &kernel,
+        json!({
+            "latex.backend": "system",
+            "latex.engine": "xelatex",
+            "latex.latexmk": false,
+            "latex.timeout-seconds": 30,
+            "latex.from-the-future": 1,
+        }),
+    )
+    .expect("configure");
+    assert_eq!(applied["latex.engine"], "xelatex");
+    let status = json_of(
+        kernel
+            .invoke("latex.status", Payload::Empty)
+            .expect("status"),
+    );
+    assert_eq!(status["default"], "system");
+    assert_eq!(status["default_engine"], "xelatex");
+    assert_eq!(status["settings"]["latex.latexmk"], false);
+    assert_eq!(status["settings"]["latex.timeout-seconds"], 30);
+
+    // Bad values are rejected and change nothing.
+    for bad in [
+        json!({"latex.engine": "tex"}),
+        json!({"latex.backend": "cloud"}),
+        json!({"latex.latexmk": "yes"}),
+        json!({"latex.timeout-seconds": 0}),
+        json!({"latex.timeout-seconds": 99999}),
+        json!({"latex.engine": "lualatex", "latex.timeout-seconds": -1}),
+    ] {
+        let err = configure(&kernel, bad.clone()).expect_err("rejected");
+        assert!(err.contains("[bad_argument]"), "{bad}: {err}");
+    }
+    assert!(configure(&kernel, json!(null)).is_err());
+    let status = json_of(
+        kernel
+            .invoke("latex.status", Payload::Empty)
+            .expect("status"),
+    );
+    assert_eq!(status["default_engine"], "xelatex");
+}
+
+#[test]
+fn configured_engine_and_latexmk_apply_unless_a_request_overrides() {
+    let Some(tools) = system_tex() else { return };
+    if !tools.engines.contains_key(&manang_latex::Engine::Xelatex) {
+        eprintln!("SKIP: no xelatex on PATH");
+        return;
+    }
+    let cache = tempfile::tempdir().expect("tmp");
+    let k = kernel_with(tools, cache.path());
+    configure(
+        &k,
+        json!({"latex.engine": "xelatex", "latex.latexmk": false}),
+    )
+    .expect("configure");
+    let sources = json!({"main.tex": MINIMAL});
+    let report = compile(&k, json!({"main": "main.tex", "sources": sources}));
+    assert_eq!(report["ok"], true, "{report}");
+    assert_eq!(report["engine"], "xelatex");
+    let report = compile(
+        &k,
+        json!({"main": "main.tex", "sources": sources, "engine": "pdflatex"}),
+    );
+    assert_eq!(report["engine"], "pdflatex", "a request still overrides");
+}
+
 fn list(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];

@@ -612,7 +612,7 @@ export interface SettingDef {
   readonly default: unknown;
   readonly description: string;
   readonly scope: SettingScope;
-  readonly requires_restart: boolean;
+  readonly "requires-restart": boolean;
   readonly owner: string;
   readonly category: string;
 }

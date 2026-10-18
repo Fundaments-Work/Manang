@@ -1,7 +1,8 @@
 /**
- * The `[plugin]`, `[permissions]` and `[[contributes.settings]]` tables of
- * the first-party plugins' `manifest.toml`, for the in-memory kernel. Keep in
- * step with `crates/manang-<name>/manifest.toml`.
+ * The `[plugin]`, `[permissions]` and `[[contributes.settings]]` tables of the
+ * first-party plugins' `manifest.toml`, for the in-memory kernel. Generated
+ * by `scripts/gen-mock-manifests.py`; regenerate when a manifest changes
+ * rather than editing by hand.
  */
 
 import type { SettingDef } from "./api";
@@ -21,6 +22,23 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
       network: ["api.crossref.org", "api.openalex.org", "export.arxiv.org"],
       filesystem: ["read:project"],
     },
+    settings: [
+      {
+        id: "citations.style",
+        type: "enum",
+        values: ["apa", "numeric"],
+        default: "apa",
+        scope: "project",
+        title: "Citation style",
+        description:
+          "Style used to format a reference when none is requested: `apa` (author-year) or `numeric` (IEEE-like).",
+        "requires-restart": false,
+      },
+    ],
+  },
+  editor: {
+    description: "Document store, edits and the active-buffer service",
+    permissions: { buffer: ["write:active"] },
   },
   figure: {
     description:
@@ -38,46 +56,47 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     settings: [
       {
         id: "latex.backend",
-        title: "Compiler",
         type: "enum",
         values: ["auto", "system", "tectonic"],
         default: "auto",
-        scope: "user",
-        requires_restart: false,
+        title: "Backend",
         description:
-          "Which TeX compiles LaTeX documents. Auto uses the TeX installed on this computer and falls back to Tectonic.",
+          "What compiles LaTeX. `auto` uses the system TeX installation when one is found, otherwise the optional built-in Tectonic engine.",
+        scope: "user",
+        "requires-restart": false,
       },
       {
         id: "latex.engine",
-        title: "Engine",
         type: "enum",
         values: ["pdflatex", "xelatex", "lualatex"],
         default: "pdflatex",
         scope: "project",
-        requires_restart: false,
+        title: "Engine",
         description:
-          "TeX engine for this project. XeLaTeX and LuaLaTeX can use system fonts.",
+          "TeX engine used to compile LaTeX documents with the system backend, unless a compile request names one.",
+        "requires-restart": false,
       },
       {
         id: "latex.latexmk",
-        title: "Use latexmk",
         type: "bool",
         default: true,
-        scope: "project",
-        requires_restart: false,
+        title: "Use latexmk",
         description:
-          "Let latexmk decide how many passes and bibliography runs a document needs.",
+          "Drive the system backend with latexmk when it is installed, so bibliographies and cross-references settle automatically.",
+        scope: "user",
+        "requires-restart": false,
       },
       {
         id: "latex.timeout-seconds",
-        title: "Time limit",
         type: "int",
         min: 5,
-        max: 600,
-        default: 120,
+        max: 3600,
+        default: 60,
+        title: "Compile timeout (seconds)",
+        description:
+          "Wall-clock limit for one compile; a runaway document is stopped after this many seconds.",
         scope: "user",
-        requires_restart: false,
-        description: "Stop a compile that runs longer than this many seconds.",
+        "requires-restart": false,
       },
     ],
   },
@@ -98,22 +117,24 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     settings: [
       {
         id: "search.exclude",
-        title: "Exclude",
         type: "list",
         item: { type: "string" },
         default: [],
         scope: "project",
-        requires_restart: false,
-        description: "Glob patterns of files that search and replace always skip.",
+        title: "Exclude globs",
+        description:
+          "Glob patterns left out of project text search and replace, in addition to each search's own excludes and .gitignore (for example `build/` or `*.log`).",
+        "requires-restart": false,
       },
       {
         id: "search.include-hidden",
-        title: "Include hidden files",
         type: "bool",
         default: false,
+        title: "Include hidden files",
+        description:
+          "Search dotfiles and dot folders when a search does not say otherwise. `.git` and `.manang` are always skipped.",
         scope: "user",
-        requires_restart: false,
-        description: "Search files and folders whose names start with a dot.",
+        "requires-restart": false,
       },
     ],
   },
@@ -133,22 +154,34 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     settings: [
       {
         id: "writing.spellcheck",
-        title: "Check spelling",
         type: "bool",
         default: true,
+        title: "Spell check",
+        description:
+          "Report misspelled words. When off, spell check and prose lint report no spelling problems.",
         scope: "user",
-        requires_restart: false,
-        description: "Underline misspelled words as you type.",
+        "requires-restart": false,
       },
       {
         id: "writing.spell-language",
-        title: "Spelling language",
         type: "enum",
-        values: ["en-US", "en-GB"],
-        default: "en-US",
+        values: ["en_US", "en_GB"],
+        default: "en_US",
         scope: "project",
-        requires_restart: false,
-        description: "Dictionary used to check spelling in this project.",
+        title: "Spelling language",
+        description: "Dictionary used to check spelling.",
+        "requires-restart": false,
+      },
+      {
+        id: "writing.format-width",
+        type: "int",
+        min: 20,
+        max: 1000,
+        default: 80,
+        scope: "project",
+        title: "Format line width",
+        description: "Line width the Typst formatter aims for.",
+        "requires-restart": false,
       },
     ],
   },

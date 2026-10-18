@@ -25,7 +25,10 @@ pub use capability::{Access, Capability, CapabilitySet};
 pub use error::{CapabilityError, KernelError, ManifestError, PluginError};
 pub use events::{Event, EventBus, Subscription};
 pub use kernel::{CommandInfo, Kernel};
-pub use manifest::{CommandSpec, Contributes, Hook, HookMode, Manifest, PluginMeta, Tier};
+pub use manifest::{
+    CommandSpec, Contributes, Hook, HookMode, Manifest, PluginMeta, SettingKind, SettingScope,
+    SettingSpec, Tier,
+};
 pub use payload::Payload;
 pub use plugin::{Context, Plugin};
 pub use services::BufferService;

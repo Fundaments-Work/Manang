@@ -25,3 +25,41 @@ title = "Export PDF"
 [[contributes.commands]]
 id = "latex.synctex"
 title = "SyncTeX source/PDF lookup"
+
+[[contributes.commands]]
+id = "latex.configure"
+title = "Apply LaTeX settings"
+
+[[contributes.settings]]
+id = "latex.backend"
+type = "enum"
+values = ["auto", "system", "tectonic"]
+default = "auto"
+title = "Backend"
+description = "What compiles LaTeX. `auto` uses the system TeX installation when one is found, otherwise the optional built-in Tectonic engine."
+
+[[contributes.settings]]
+id = "latex.engine"
+type = "enum"
+values = ["pdflatex", "xelatex", "lualatex"]
+default = "pdflatex"
+scope = "project"
+title = "Engine"
+description = "TeX engine used to compile LaTeX documents with the system backend, unless a compile request names one."
+
+[[contributes.settings]]
+id = "latex.latexmk"
+type = "bool"
+default = true
+title = "Use latexmk"
+description = "Drive the system backend with latexmk when it is installed, so bibliographies and cross-references settle automatically."
+
+# Bounds match MIN_TIMEOUT_SECS / MAX_TIMEOUT_SECS in src/plugin.rs.
+[[contributes.settings]]
+id = "latex.timeout-seconds"
+type = "int"
+min = 5
+max = 3600
+default = 60
+title = "Compile timeout (seconds)"
+description = "Wall-clock limit for one compile; a runaway document is stopped after this many seconds."
