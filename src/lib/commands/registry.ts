@@ -6,6 +6,7 @@
  * both the same: a titled, searchable thing with an optional shortcut.
  */
 
+import type { MenuPlacement } from "./menu";
 import type { Shortcut } from "./shortcut";
 
 export type CommandGroup = "Workbench" | "Files" | "Plugin commands";
@@ -28,6 +29,17 @@ export interface Command {
    * left out of the palette and its shortcut does nothing.
    */
   readonly when?: string | undefined;
+  /** Where it sits in the menu bar; a list for a command in two menus. */
+  readonly menu?: MenuPlacement | readonly MenuPlacement[] | undefined;
+  /** A shorter label for the menu, where the menu already gives context. */
+  readonly menuTitle?: string | undefined;
+  /**
+   * `surface`: the focused editor, canvas or field handles the keys itself
+   * (Undo, Copy, Find); the shortcut is shown but the shell never binds it.
+   */
+  readonly keys?: "surface" | undefined;
+  /** False keeps it out of the palette (Go to tab 3 is a key, not a search). */
+  readonly palette?: boolean | undefined;
   readonly run: () => void;
 }
 

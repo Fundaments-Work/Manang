@@ -38,6 +38,8 @@ pub enum ManifestError {
     DuplicateSetting(String),
     #[error("setting `{id}`: {message}")]
     BadSetting { id: String, message: String },
+    #[error("menu item for `{command}`: {message}")]
+    BadMenu { command: String, message: String },
     #[error("plugin `settings_contexts`: {0}")]
     BadSettingsContexts(String),
     #[error(transparent)]

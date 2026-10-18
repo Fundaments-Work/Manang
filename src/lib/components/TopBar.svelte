@@ -2,11 +2,14 @@
   import Icon from "$lib/components/ui/Icon.svelte";
   import Mark from "./Mark.svelte";
   import WindowControls from "./WindowControls.svelte";
+  import MenuBar from "./menu/MenuBar.svelte";
+  import NativeMenu from "./menu/NativeMenu.svelte";
   import { hasCustomTitleBar, osPlatform } from "$lib/kernel/native";
   import { formatShortcut } from "$lib/commands/shortcut";
   import { goHome, openFolder } from "$lib/state/actions";
   import { context } from "$lib/state/context.svelte";
   import { home } from "$lib/state/home.svelte";
+  import { layout } from "$lib/state/layout.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { palette } from "$lib/state/palette.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
@@ -16,6 +19,8 @@
    * Top bar, which is also the window's title bar: the mark (it goes Home), free
    * space that drags the window, a search field where there is something to search, the
    * surface's few actions, and the window controls.
+   *
+   * The menus (File ... Help) sit in the free space after the mark.
    *
    * There is one search and it searches what is on screen: projects on Home,
    * settings and plugins on the Settings page. In the editor the field is
@@ -41,7 +46,17 @@
   // carries the window controls, on the left on macOS as people expect there.
   const ownControls = hasCustomTitleBar();
   let controlsLeft = $state(false);
-  if (ownControls) void osPlatform().then((p) => (controlsLeft = p === "macos"));
+  // The menus: drawn in this bar on Windows, Linux and in a browser; on macOS
+  // they go to the native application menu (NativeMenu) instead. Nothing is
+  // drawn until the platform is known, so macOS never flashes a menu bar.
+  let platformKnown = $state(!ownControls);
+  if (ownControls)
+    void osPlatform()
+      .then((p) => (controlsLeft = p === "macos"))
+      .finally(() => (platformKnown = true));
+  const menusInBar = $derived(platformKnown && !controlsLeft);
+  /** Below 900 px the six menus fold into one Menu button. */
+  const foldMenus = $derived(layout.width < 900);
 
   function inlineQuery(): string {
     return surface === "settings" ? settingsPage.query : home.query;
@@ -105,8 +120,15 @@
     <Mark size={18} />
   </button>
 
-  <!-- Free space: a drag handle for the window, and where the menus sit. -->
-  <div class="min-w-0 flex-1 basis-0 self-stretch" data-tauri-drag-region></div>
+  <!-- Free space: a drag handle for the window, and where the menus sit. Only
+       this element drags; the menu buttons inside it do not. -->
+  <div class="flex min-w-0 flex-1 basis-0 self-stretch" data-tauri-drag-region>
+    {#if menusInBar}
+      <MenuBar folded={foldMenus} />
+    {:else if platformKnown && controlsLeft}
+      <NativeMenu />
+    {/if}
+  </div>
 
   {#if surface !== "workbench"}
     <label

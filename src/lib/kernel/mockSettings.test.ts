@@ -61,18 +61,25 @@ describe("mockSettings plugin", () => {
     expect(initial.bindings.length).toBeGreaterThan(0);
 
     // Override a keybinding
-    await keybindings.set({ command: "editor.save", key: "Mod+Alt+S" });
+    await keybindings.set({ command: "file.save", key: "Mod+Alt+S" });
     const afterSet = await keybindings.list();
-    const saveBinding = afterSet.bindings.find((b) => b.command === "editor.save");
+    const saveBinding = afterSet.bindings.find((b) => b.command === "file.save");
     expect(saveBinding?.key).toBe("Mod+Alt+S");
     expect(saveBinding?.source).toBe("user");
 
     // Reset override
-    await keybindings.reset("editor.save");
+    await keybindings.reset("file.save");
     const afterReset = await keybindings.list();
-    const resetSave = afterReset.bindings.find((b) => b.command === "editor.save");
+    const resetSave = afterReset.bindings.find((b) => b.command === "file.save");
     expect(resetSave?.key).toBe("Mod+S");
     expect(resetSave?.source).toBe("default");
+
+    // A user binding on another command's key is reported.
+    await keybindings.set({ command: "view.files", key: "Mod+S" });
+    const shadowed = await keybindings.list();
+    expect(shadowed.conflicts).toEqual([
+      { key: "Ctrl+S", kind: "shadow", commands: ["file.save", "view.files"] },
+    ]);
   });
 
   it("lists and gets themes", async () => {
