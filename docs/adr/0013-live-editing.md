@@ -65,6 +65,12 @@ rendezvous point, so it forces an exception.
    implements the identical wire contract and remains the answer for
    organisations that forbid third-party cloud services. Nothing is deployed
    by this ADR.
+   **Status (2026-10-18):** the Worker is implemented in `relay/worker`
+   (Worker + `Room` and `Limiter` Durable Objects, unit tests in workerd, and a
+   conformance test that runs the Rust `RelayClient` against `wrangler dev`) but
+   **not deployed**; the lead deploys it with `wrangler deploy`. It has no
+   backlog, like the Rust relay, and drops the global room and connection caps
+   in favour of per-address limits and a 15-minute idle-room timeout.
 
 ## Wire contract (both relays)
 
@@ -87,7 +93,7 @@ What was built, and where it is not what the decisions above describe.
 * **Differing copies (refines decision 2).** `plan_join` runs with no git base. An identical copy seeds locally; an empty copy joins directly; anything else asks and, if confirmed, **replaces the copy with the host's version after saving it to `live-trash` in the app config directory** (not `<git-dir>/manang-trash/`: the plugin has no path or repository for a kernel document). The three-way merge option waits for `manang-merge`.
 * **Transport.** `wss://` is a cargo feature of `manang-relay` (`tls`: rustls on ring, bundled Mozilla roots; no aws-lc), enabled by the plugin; the relay binary stays TLS-free.
 * **Collaborator colours.** Eight slots (the core's `PALETTE_SLOTS`), each a mix of existing tokens plus a stroke style and always a name label; see `docs/design-system-additions.md`.
-* **Not done.** The Cloudflare relay (nothing is deployed); policy keys `collab.live` and `collab.relays`; disabling Get updates for a live file; `Co-authored-by:` trailers on commits (the `live.contributors` command exists, nothing calls it yet); figures; peer-to-peer transport; compaction of long sessions; fuzzing the import path.
+* **Not done.** Deploying the Cloudflare relay (it is built in `relay/worker`, nothing is deployed); policy keys `collab.live` and `collab.relays`; disabling Get updates for a live file; `Co-authored-by:` trailers on commits (the `live.contributors` command exists, nothing calls it yet); figures; peer-to-peer transport; compaction of long sessions; fuzzing the import path.
 
 ## Consequences
 
