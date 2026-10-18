@@ -16,7 +16,7 @@ manang-project = { path = "../manang-project" }
 parking_lot = "0.12"
 serde = { workspace = true }
 serde_json = { workspace = true }
-similar = "2.7"
+similar = "3.2"
 thiserror = { workspace = true }
 wait-timeout = "0.2"
 
