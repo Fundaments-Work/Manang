@@ -7,7 +7,10 @@ use manang_kernel::{Context, Manifest, Payload, Plugin, PluginError};
 use serde_json::{Value, json};
 
 use crate::scene::Vec2;
-use crate::store::{FigureId, FigureOp, FigureStore};
+use std::collections::BTreeMap;
+
+use crate::ops::FigureOp;
+use crate::store::{FigureId, FigureStore};
 
 const MANIFEST: &str = include_str!("../manifest.toml");
 
@@ -150,7 +153,10 @@ impl Plugin for FigurePlugin {
             "figure.save" => {
                 let fig_id = id(&a)?;
                 let path = a.get("path").and_then(Value::as_str).map(Path::new);
-                let saved = self.store.save(fig_id, path).map_err(failed)?;
+                let saved = self
+                    .store
+                    .save(fig_id, path, &BTreeMap::new())
+                    .map_err(failed)?;
                 let pdf = pdf_for(ctx, &saved.svg)?;
                 let mut out = serde_json::to_value(saved).map_err(failed)?;
                 if let Value::Object(map) = &mut out {
@@ -175,9 +181,8 @@ impl Plugin for FigurePlugin {
                 let op_val = a
                     .get("op")
                     .ok_or_else(|| PluginError::Failed("missing `op` field".to_owned()))?;
-                let op: FigureOp = serde_json::from_value(op_val.clone())
-                    .map_err(|e| PluginError::Failed(format!("invalid `op`: {e}")))?;
-                let res = self.store.apply(fig_id, op).map_err(failed)?;
+                let op = FigureOp::from_value(op_val.clone()).map_err(failed)?;
+                let res = self.store.apply(fig_id, &op).map_err(failed)?;
                 serde_json::to_value(res).map(Payload::Json).map_err(failed)
             }
             "figure.get" => {
@@ -193,14 +198,21 @@ impl Plugin for FigurePlugin {
                 let scene_val = a
                     .get("scene")
                     .ok_or_else(|| PluginError::Failed("missing `scene` field".to_owned()))?;
-                let scene: crate::FigureScene = serde_json::from_value(scene_val.clone())
+                let scene = crate::FigureScene::from_value(scene_val.clone())
                     .map_err(|e| PluginError::Failed(format!("invalid `scene`: {e}")))?;
                 let svg = crate::render_svg(&scene, &crate::SvgExportOptions::default());
                 Ok(Payload::Binary(Arc::from(svg.into_bytes())))
             }
             "figure.export-svg" => {
                 let fig_id = id(&a)?;
-                let svg = self.store.export_svg(fig_id, None).map_err(failed)?;
+                let svg = self
+                    .store
+                    .export_svg(
+                        fig_id,
+                        &crate::SvgExportOptions::default(),
+                        &BTreeMap::new(),
+                    )
+                    .map_err(failed)?;
                 Ok(Payload::Binary(Arc::from(svg.into_bytes())))
             }
             "figure.hit-test" => {

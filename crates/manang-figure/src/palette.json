@@ -1,0 +1,21 @@
+{
+  "about": "Figure content colours (ADR 0012). The one place figure colours are declared: read by the Rust renderer and the canvas. Neutrals are the workspace tokens; hues are the Okabe-Ito colour-blind-safe set. Each token has a dark, light and print value.",
+  "tokens": {
+    "ink": { "dark": "#e8e6e1", "light": "#1c1c1c", "print": "#1c1c1c" },
+    "muted": { "dark": "#9a9a9a", "light": "#6b6b6b", "print": "#6b6b6b" },
+    "line": { "dark": "#3d3d42", "light": "#d4d3ce", "print": "#9c9c9c" },
+    "surface": { "dark": "#1c1c20", "light": "#f4f3f0", "print": "#f4f3f0" },
+    "paper": { "dark": "#141416", "light": "#faf9f7", "print": "#ffffff" },
+    "accent": { "dark": "#c6f135", "light": "#4f5f20", "print": "#4f5f20" },
+    "sage": { "dark": "#b3d17a", "light": "#5c7330", "print": "#5c7330" },
+    "orange": { "dark": "#e69f00", "light": "#b27a00", "print": "#e69f00" },
+    "sky": { "dark": "#56b4e9", "light": "#2f86b8", "print": "#56b4e9" },
+    "green": { "dark": "#009e73", "light": "#007a59", "print": "#009e73" },
+    "yellow": { "dark": "#f0e442", "light": "#9a8f00", "print": "#c9bc00" },
+    "blue": { "dark": "#3d9ad9", "light": "#0072b2", "print": "#0072b2" },
+    "vermillion": { "dark": "#ef7a3a", "light": "#d55e00", "print": "#d55e00" },
+    "purple": { "dark": "#d99bc0", "light": "#a8578a", "print": "#cc79a7" }
+  },
+  "neutral": ["ink", "muted", "line", "surface", "paper"],
+  "tint": 0.2
+}
