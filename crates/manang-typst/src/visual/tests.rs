@@ -223,6 +223,34 @@ fn works_through_the_host_with_utf16_offsets() {
     assert_eq!(plan.changes.len(), 2, "unbold removes both stars");
 }
 
+#[test]
+fn the_manifest_declares_exactly_what_the_adapter_implements() {
+    let manifest = crate::manifest().expect("manifest");
+    let spec = manifest
+        .contributes
+        .format_adapters
+        .iter()
+        .find(|a| a.id == "typst")
+        .expect("the manifest contributes the adapter");
+    let adapter = TypstAdapter::new();
+    let info = adapter.info();
+    assert_eq!(spec.id, info.id);
+    assert_eq!(spec.title, info.title);
+    assert_eq!(spec.extensions, info.extensions);
+    assert_eq!(spec.kinds, info.kinds);
+    assert_eq!(spec.commands, info.commands);
+    // Every declared command is implemented, and the session offers them all.
+    let s = adapter.open("x").expect("open");
+    let states: Vec<String> = s
+        .command_state(0..0)
+        .into_iter()
+        .map(|c| c.command)
+        .collect();
+    for c in &spec.commands {
+        assert!(states.contains(c), "`{c}` has no command state");
+    }
+}
+
 // ---------------------------------------------------------------- proptests
 
 fn token() -> impl Strategy<Value = String> {

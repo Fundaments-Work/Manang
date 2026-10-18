@@ -224,16 +224,19 @@ impl AdapterSession for MarkdownSession {
             first -= 1;
         }
         let mut end = (self.block_at(range.end) + 1).min(last);
+        // Whole lines: a block's own start skips its indentation, which
+        // matters (4 spaces make a code block).
         let window_start = if first == 0 {
             0
         } else {
-            self.blocks[first].start
+            text::line_start(&self.text, self.blocks[first].start)
         };
         let (parsed, window_end) = loop {
             let window_end = if end == last {
                 new_len
             } else {
-                (self.blocks[end + 1].start as isize + delta) as usize
+                let next = (self.blocks[end + 1].start as isize + delta) as usize;
+                text::line_start(&self.text, next).max(window_start)
             };
             let parsed = parse_window(&self.text, window_start, window_end);
             // The next line can continue the last block (a list, a fence) or
