@@ -33,8 +33,9 @@ jobs:
             build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev \
             librsvg2-dev libayatana-appindicator3-dev libxdo-dev libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev patchelf
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.96.0" # the version we develop on; bump deliberately
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
@@ -47,8 +48,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.96.0"
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: >
@@ -61,7 +63,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.96.0"
       - name: No bundled C libraries in the app binary (AGENTS.md 7.4)
         run: |
           if cargo tree -p manang --locked | grep -iE "tectonic|harfbuzz|freetype-sys|icu4c|openssl|aws-lc"; then
@@ -71,10 +75,14 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check licenses bans sources
+          # The action defaults to --all-features, which would include the
+          # optional Tectonic sidecar engine; deny.toml checks the app's graph.
+          arguments: ""
       - uses: EmbarkStudios/cargo-deny-action@v2
         continue-on-error: true # advisories are reported, not yet enforced
         with:
           command: check advisories
+          arguments: ""
 
   frontend:
     name: Frontend (typecheck, lint, unit tests)
