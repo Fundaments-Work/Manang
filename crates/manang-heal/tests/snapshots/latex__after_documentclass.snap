@@ -1,0 +1,35 @@
+---
+source: crates/manang-heal/tests/latex.rs
+expression: "show(Engine::Latex, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "latex.package:xcolor",
+        "label": "Add \\usepackage{xcolor}",
+        "why": "`\\textcolor` is defined by the `xcolor` package, which this document does not load.",
+        "edits": [
+          {
+            "from": 36,
+            "to": 36,
+            "insert": "\n\\usepackage{xcolor}"
+          }
+        ],
+        "confidence": "certain",
+        "rule": "latex.missing-package",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "latex.package:xcolor",
+      "after": "\\documentclass[11pt]{article} % base\n\\usepackage{xcolor}\n\\begin{document}\n\\textcolor{red}{x}\n\\end{document}\n"
+    }
+  ],
+  "fix_all": null
+}

@@ -1,0 +1,35 @@
+---
+source: crates/manang-heal/tests/latex.rs
+expression: "show(Engine::Latex, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "latex.package:amsmath",
+        "label": "Add \\usepackage{amsmath}",
+        "why": "The `align` environment is defined by the `amsmath` package, which this document does not load.",
+        "edits": [
+          {
+            "from": 23,
+            "to": 23,
+            "insert": "\n\\usepackage{amsmath}"
+          }
+        ],
+        "confidence": "certain",
+        "rule": "latex.missing-environment-package",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "latex.package:amsmath",
+      "after": "\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n\\begin{align}\na&=b\n\\end{align}\n\\end{document}\n"
+    }
+  ],
+  "fix_all": null
+}

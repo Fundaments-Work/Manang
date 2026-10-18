@@ -1,0 +1,26 @@
+[package]
+name = "manang-heal"
+description = "Manang's first-party self-healing plugin: deterministic one-click fixes for small compile errors"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# Pure Rust, no OS access and no network, so it also builds for
+# `wasm32-unknown-unknown` (the web version): `cargo check -p manang-heal
+# --target wasm32-unknown-unknown`. Only the kernel (also pure) is linked.
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1", features = ["json"] }
+# The system-TeX integration test compiles the fixed documents.
+manang-latex = { path = "../manang-latex" }
+manang-typst = { path = "../manang-typst" }
+tempfile = "3"
+typst = "=0.15.1"
