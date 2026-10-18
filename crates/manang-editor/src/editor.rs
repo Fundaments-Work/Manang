@@ -374,7 +374,8 @@ mod tests {
         let ed = Editor::new();
         ed.create();
         ed.insert(None, 0, "hello world").expect("insert");
-        ed.replace_silent(None, 0, 5, "howdy").expect("silent replace");
+        ed.replace_silent(None, 0, 5, "howdy")
+            .expect("silent replace");
         assert_eq!(ed.text(None).expect("text"), "howdy world");
         assert_eq!(ed.info(None).expect("info").revision, 2);
         // The history was dropped: undo has nothing of the remote edit (or the

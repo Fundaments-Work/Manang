@@ -12,7 +12,7 @@ rust-version.workspace = true
 manang-kernel = { path = "../manang-kernel" }
 manang-editor = { path = "../manang-editor" }
 manang-live = { path = "../manang-live" }
-manang-relay = { path = "../manang-relay" }
+manang-relay = { path = "../manang-relay", features = ["tls"] }
 parking_lot = "0.12"
 ropey = "1.6"
 serde = { workspace = true }

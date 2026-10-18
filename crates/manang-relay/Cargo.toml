@@ -22,5 +22,15 @@ thiserror = { workspace = true }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
 
+# `wss://` for the client. Off by default so the relay binary stays free of TLS
+# and C code; the desktop app turns it on. rustls runs on ring (never aws-lc,
+# AGENTS.md 7.4), with the bundled Mozilla roots.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+webpki-roots = { version = "0.26", optional = true }
+
+[features]
+default = []
+tls = ["tokio-tungstenite/rustls-tls-webpki-roots", "dep:rustls", "dep:webpki-roots"]
+
 [dev-dependencies]
 ropey = "1.6"
