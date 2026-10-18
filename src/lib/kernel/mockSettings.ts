@@ -57,7 +57,8 @@ const CORE_DEFINITIONS: SettingDef[] = [
     "requires-restart": false,
     owner: "core",
     category: "appearance",
-    description: "Id of a user theme from the themes folder to use instead of the built-in one. Empty for none.",
+    description:
+      "Id of a user theme from the themes folder to use instead of the built-in one. Empty for none.",
   },
   {
     id: "appearance.ui-scale",
@@ -80,7 +81,8 @@ const CORE_DEFINITIONS: SettingDef[] = [
     "requires-restart": false,
     owner: "core",
     category: "appearance",
-    description: "Replace transitions with instant changes. `system` follows the operating system.",
+    description:
+      "Replace transitions with instant changes. `system` follows the operating system.",
   },
   {
     id: "editor.font-size",
@@ -171,6 +173,28 @@ const CORE_DEFINITIONS: SettingDef[] = [
     description: "Milliseconds to wait after the last keystroke before recompiling.",
   },
   {
+    id: "preview.double-click-source",
+    type: "bool",
+    default: true,
+    scope: "user",
+    "requires-restart": false,
+    owner: "core",
+    category: "preview",
+    description:
+      "Double-click in the PDF goes to the source. Alt+double-click then selects a word.",
+  },
+  {
+    id: "preview.dark-pages",
+    type: "bool",
+    default: false,
+    scope: "user",
+    "requires-restart": false,
+    owner: "core",
+    category: "preview",
+    description:
+      "Show PDF pages inverted for reading in the dark. Export is unaffected.",
+  },
+  {
     id: "compile.engine",
     type: "enum",
     values: ["typst", "latex", "markdown"],
@@ -200,17 +224,54 @@ const CORE_DEFINITIONS: SettingDef[] = [
     "requires-restart": false,
     owner: "core",
     category: "files",
-    description: "Move deleted files to the trash instead of removing them permanently.",
+    description:
+      "Move deleted files to the trash instead of removing them permanently.",
   },
 ];
 
 const DEFAULT_KEYBINDINGS: KeybindingItem[] = [
-  { command: "palette.open", key: "Mod+K", display: "Ctrl+K", when: "", source: "default" },
-  { command: "editor.save", key: "Mod+S", display: "Ctrl+S", when: "editorFocus", source: "default" },
-  { command: "editor.find", key: "Mod+F", display: "Ctrl+F", when: "editorFocus", source: "default" },
-  { command: "workbench.close-tab", key: "Mod+W", display: "Ctrl+W", when: "", source: "default" },
-  { command: "workbench.toggle-panel", key: "Mod+J", display: "Ctrl+J", when: "", source: "default" },
-  { command: "workbench.toggle-zen", key: "Mod+Shift+Z", display: "Ctrl+Shift+Z", when: "", source: "default" },
+  {
+    command: "palette.open",
+    key: "Mod+K",
+    display: "Ctrl+K",
+    when: "",
+    source: "default",
+  },
+  {
+    command: "editor.save",
+    key: "Mod+S",
+    display: "Ctrl+S",
+    when: "editorFocus",
+    source: "default",
+  },
+  {
+    command: "editor.find",
+    key: "Mod+F",
+    display: "Ctrl+F",
+    when: "editorFocus",
+    source: "default",
+  },
+  {
+    command: "workbench.close-tab",
+    key: "Mod+W",
+    display: "Ctrl+W",
+    when: "",
+    source: "default",
+  },
+  {
+    command: "workbench.toggle-panel",
+    key: "Mod+J",
+    display: "Ctrl+J",
+    when: "",
+    source: "default",
+  },
+  {
+    command: "workbench.toggle-zen",
+    key: "Mod+Shift+Z",
+    display: "Ctrl+Shift+Z",
+    when: "",
+    source: "default",
+  },
 ];
 
 const THEME_DARK: ThemeDetail = {
@@ -273,10 +334,14 @@ function validateValue(def: SettingDef, value: unknown): unknown {
         throw { message: `expected integer for \`${def.id}\`` };
       }
       if (def.min !== undefined && value < def.min) {
-        throw { message: `value ${value} is below minimum ${def.min} for \`${def.id}\`` };
+        throw {
+          message: `value ${value} is below minimum ${def.min} for \`${def.id}\``,
+        };
       }
       if (def.max !== undefined && value > def.max) {
-        throw { message: `value ${value} is above maximum ${def.max} for \`${def.id}\`` };
+        throw {
+          message: `value ${value} is above maximum ${def.max} for \`${def.id}\``,
+        };
       }
       return value;
     }
@@ -285,16 +350,22 @@ function validateValue(def: SettingDef, value: unknown): unknown {
         throw { message: `expected number for \`${def.id}\`` };
       }
       if (def.min !== undefined && value < def.min) {
-        throw { message: `value ${value} is below minimum ${def.min} for \`${def.id}\`` };
+        throw {
+          message: `value ${value} is below minimum ${def.min} for \`${def.id}\``,
+        };
       }
       if (def.max !== undefined && value > def.max) {
-        throw { message: `value ${value} is above maximum ${def.max} for \`${def.id}\`` };
+        throw {
+          message: `value ${value} is above maximum ${def.max} for \`${def.id}\``,
+        };
       }
       return value;
     }
     case "enum": {
       if (typeof value !== "string" || !(def.values ?? []).includes(value)) {
-        throw { message: `value ${JSON.stringify(value)} is not valid for \`${def.id}\` (allowed: ${(def.values ?? []).join(", ")})` };
+        throw {
+          message: `value ${JSON.stringify(value)} is not valid for \`${def.id}\` (allowed: ${(def.values ?? []).join(", ")})`,
+        };
       }
       return value;
     }
@@ -363,7 +434,9 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
     commands: COMMANDS,
     handlers: {
       "settings.schema": () => {
-        const categories = [...new Set([...definitions.values()].map((d) => d.category))];
+        const categories = [
+          ...new Set([...definitions.values()].map((d) => d.category)),
+        ];
         const response: SettingsSchema = {
           version: 1,
           categories,
@@ -382,7 +455,10 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
           return res;
         }
 
-        const values: Record<string, { value: unknown; source: "default" | "user" | "project" }> = {};
+        const values: Record<
+          string,
+          { value: unknown; source: "default" | "user" | "project" }
+        > = {};
         for (const [key] of definitions) {
           const desc = resolveSetting(key);
           if (desc) {
@@ -455,7 +531,9 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
       },
 
       "settings.register": (args) => {
-        const settings = Array.isArray(args.settings) ? (args.settings as SettingDef[]) : [];
+        const settings = Array.isArray(args.settings)
+          ? (args.settings as SettingDef[])
+          : [];
         const owner = typeof args.owner === "string" ? args.owner : "plugin";
         let registered = 0;
         for (const s of settings) {
@@ -545,7 +623,12 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
 
       "keybindings.set": (args) => {
         const command = String(args.command);
-        const key = typeof args.key === "string" ? args.key : (Array.isArray(args.keys) ? String(args.keys[0]) : "");
+        const key =
+          typeof args.key === "string"
+            ? args.key
+            : Array.isArray(args.keys)
+              ? String(args.keys[0])
+              : "";
         const when = typeof args.when === "string" ? args.when : "";
 
         userKeybindings.set(command, { key, when });
@@ -578,8 +661,20 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
       "theme.list": () => {
         const response: ThemeListResponse = {
           themes: [
-            { id: THEME_DARK.id, name: THEME_DARK.name, scheme: THEME_DARK.scheme, builtin: true, base: null },
-            { id: THEME_LIGHT.id, name: THEME_LIGHT.name, scheme: THEME_LIGHT.scheme, builtin: true, base: null },
+            {
+              id: THEME_DARK.id,
+              name: THEME_DARK.name,
+              scheme: THEME_DARK.scheme,
+              builtin: true,
+              base: null,
+            },
+            {
+              id: THEME_LIGHT.id,
+              name: THEME_LIGHT.name,
+              scheme: THEME_LIGHT.scheme,
+              builtin: true,
+              base: null,
+            },
           ],
           warnings: [],
         };

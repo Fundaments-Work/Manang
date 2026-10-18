@@ -25,6 +25,10 @@ export interface PreviewPrefs {
   readonly autoCompile: boolean;
   /** Wait after the last keystroke before recompiling. */
   readonly debounceMs: number;
+  /** Double-click on a PDF page goes to the source (Alt+double-click selects). */
+  readonly doubleClickSource: boolean;
+  /** Show PDF pages inverted, hue preserved. */
+  readonly darkPages: boolean;
 }
 
 export interface Preferences {
@@ -46,7 +50,12 @@ export const DEFAULT_PREFERENCES: Preferences = {
     wordWrap: true,
     lineNumbers: true,
   },
-  preview: { autoCompile: true, debounceMs: 300 },
+  preview: {
+    autoCompile: true,
+    debounceMs: 300,
+    doubleClickSource: true,
+    darkPages: false,
+  },
 };
 
 type Lookup = (id: string) => unknown;
@@ -93,6 +102,11 @@ export function resolvePreferences(get: Lookup): Preferences {
       debounceMs: Math.round(
         num(get("preview.debounce-ms"), d.preview.debounceMs, 0, 5000),
       ),
+      doubleClickSource: bool(
+        get("preview.double-click-source"),
+        d.preview.doubleClickSource,
+      ),
+      darkPages: bool(get("preview.dark-pages"), d.preview.darkPages),
     },
   };
 }
