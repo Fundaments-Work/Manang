@@ -14,16 +14,37 @@ import type { MockProjectFs, MockProjectHost } from "./mockProject";
 import type { LatexDiagnostic, LatexReport } from "./types";
 
 const COMMANDS: readonly (readonly [string, string])[] = [
+  ["latex.status", "LaTeX engines available"],
   ["latex.compile", "Compile LaTeX"],
   ["latex.export-pdf", "Export PDF"],
   ["latex.synctex", "SyncTeX source/PDF lookup"],
 ];
 
 const LINES_PER_PAGE = 42;
+/** Page height and text geometry of `makePdf`, in points. */
+const PDF_PAGE_H = 842;
+const PDF_LEFT = 56;
+const PDF_FIRST_BASELINE = 780;
+const PDF_LEADING = 14;
+const PDF_FONT = 11;
+
+/** A source line, for SyncTeX: `file` is relative to the main file's directory. */
+interface Origin {
+  readonly file: string;
+  readonly line: number;
+}
+
+/** One line of text with where it came from. */
+interface Row {
+  readonly text: string;
+  readonly origin: Origin | null;
+}
 
 interface Built {
   readonly pdf: Uint8Array;
   readonly pages: number;
+  /** Every printed row, in order; row `i` is on page `i / LINES_PER_PAGE`. */
+  readonly rows: readonly Row[];
 }
 
 function text(fs: MockProjectFs, path: string): string | undefined {
@@ -52,7 +73,7 @@ function bibKeys(fs: MockProjectFs): Set<string> {
 }
 
 interface Expansion {
-  readonly lines: string[];
+  readonly lines: Row[];
   readonly diagnostics: LatexDiagnostic[];
 }
 
@@ -108,7 +129,7 @@ function expand(
       if (m[1] === "begin") open.push({ env, line: lineNo });
       else if (open.at(-1)?.env === env) open.pop();
     }
-    out.lines.push(line);
+    out.lines.push({ text: line, origin: { file: shown, line: lineNo } });
   });
   for (const env of open) {
     out.diagnostics.push({
@@ -122,10 +143,11 @@ function expand(
 }
 
 /** The text a reader would see, with commands stripped. */
-function prose(lines: readonly string[]): string[] {
-  const out: string[] = [];
+function prose(lines: readonly Row[]): Row[] {
+  const out: Row[] = [];
+  const blank: Row = { text: "", origin: null };
   let inBody = false;
-  for (const line of lines) {
+  for (const { text: line, origin } of lines) {
     if (/\\begin\{document\}/.test(line)) {
       inBody = true;
       continue;
@@ -134,37 +156,68 @@ function prose(lines: readonly string[]): string[] {
     if (!inBody) continue;
     const heading = /\\(section|chapter|subsection)\*?\{([^}]*)\}/.exec(line);
     if (heading !== null) {
-      out.push("", (heading[2] ?? "").toUpperCase(), "");
+      out.push(blank, { text: (heading[2] ?? "").toUpperCase(), origin }, blank);
       continue;
     }
     const clean = line
       .replace(/\\[a-zA-Z]+\*?(\[[^\]]*\])?/g, "")
       .replace(/[{}$]/g, "")
       .trim();
-    if (clean !== "") out.push(clean);
+    if (clean !== "") out.push({ text: clean, origin });
   }
   return out;
 }
 
-function wrap(lines: readonly string[], width = 74): string[] {
-  const out: string[] = [];
-  for (const paragraph of lines) {
+function wrap(lines: readonly Row[], width = 74): Row[] {
+  const out: Row[] = [];
+  for (const { text: paragraph, origin } of lines) {
     if (paragraph === "") {
-      out.push("");
+      out.push({ text: "", origin: null });
       continue;
     }
     let current = "";
     for (const word of paragraph.split(/\s+/)) {
       if (current !== "" && current.length + word.length + 1 > width) {
-        out.push(current);
+        out.push({ text: current, origin });
         current = word;
       } else {
         current = current === "" ? word : `${current} ${word}`;
       }
     }
-    if (current !== "") out.push(current);
+    if (current !== "") out.push({ text: current, origin });
   }
   return out;
+}
+
+/** The SyncTeX box of row `i`: 1-based page, points from the top-left corner. */
+export function rowBox(i: number, text: string) {
+  const k = i % LINES_PER_PAGE;
+  const baseline = PDF_PAGE_H - (PDF_FIRST_BASELINE - PDF_LEADING * k);
+  return {
+    page: Math.floor(i / LINES_PER_PAGE) + 1,
+    x: PDF_LEFT,
+    y: baseline - PDF_FONT,
+    width: Math.max(PDF_FONT, text.length * PDF_FONT * 0.5),
+    height: PDF_LEADING,
+  };
+}
+
+/** The source line of the row nearest `y` on 1-based `page`. */
+export function rowAt(rows: readonly Row[], page: number, y: number): Origin | null {
+  let best: Origin | null = null;
+  let distance = Infinity;
+  const first = (page - 1) * LINES_PER_PAGE;
+  for (let i = first; i < Math.min(rows.length, first + LINES_PER_PAGE); i += 1) {
+    const row = rows[i];
+    if (row?.origin === null || row === undefined) continue;
+    const box = rowBox(i, row.text);
+    const d = Math.abs(box.y + box.height / 2 - y);
+    if (d < distance) {
+      distance = d;
+      best = row.origin;
+    }
+  }
+  return best;
 }
 
 function pdfString(value: string): string {
@@ -211,7 +264,11 @@ export function makePdf(lines: readonly string[]): {
   return { bytes: new TextEncoder().encode(body), pages: chunks.length };
 }
 
-export function latexPlugin(host: MockProjectHost): MockPluginFactory {
+/** `tex: false` imitates a machine with no TeX installation and no built-in engine. */
+export function latexPlugin(
+  host: MockProjectHost,
+  { tex = true }: { tex?: boolean } = {},
+): MockPluginFactory {
   return (): MockPlugin => {
     const builds = new Map<string, Built>();
     let last: Built | undefined;
@@ -229,6 +286,12 @@ export function latexPlugin(host: MockProjectHost): MockPluginFactory {
                 "[bad_argument] `main` is not a valid argument: must be a string",
             };
           }
+          if (!tex) {
+            throw {
+              message:
+                "[no_backend] no LaTeX backend: no TeX installation was found on PATH and the built-in engine is not installed",
+            };
+          }
           const entry = main.startsWith(`${fs.root}/`)
             ? main.slice(fs.root.length + 1)
             : main;
@@ -241,8 +304,9 @@ export function latexPlugin(host: MockProjectHost): MockPluginFactory {
           const ok = out.diagnostics.every((d) => d.severity !== "error");
           let pages: number | null = null;
           if (ok) {
-            const made = makePdf(wrap(prose(out.lines)));
-            const built = { pdf: made.bytes, pages: made.pages };
+            const rows = wrap(prose(out.lines));
+            const made = makePdf(rows.map((row) => row.text));
+            const built = { pdf: made.bytes, pages: made.pages, rows };
             builds.set(main, built);
             last = built;
             pages = made.pages;
@@ -260,11 +324,83 @@ export function latexPlugin(host: MockProjectHost): MockPluginFactory {
             tex_version: "pdfTeX 3.141592653-2.6-1.40.27 (TeX Live 2025)",
           };
         },
-        "latex.synctex": () => {
-          throw {
-            message:
-              "[synctex_unavailable] SyncTeX data was not produced for this build",
-          };
+        "latex.status": () => ({
+          backends: [
+            {
+              id: "system",
+              available: tex,
+              version: tex ? "pdfTeX 3.141592653-2.6-1.40.27 (TeX Live 2025)" : null,
+              engines: tex ? ["pdflatex"] : [],
+              latexmk: tex,
+              bibtex: tex,
+              biber: false,
+            },
+            {
+              id: "tectonic",
+              available: false,
+              version: null,
+              engines: ["xelatex"],
+              latexmk: false,
+              bibtex: false,
+              biber: false,
+            },
+          ],
+          default: tex ? "system" : "none",
+          default_engine: "pdflatex",
+          settings: {},
+        }),
+        "latex.synctex": (args) => {
+          const main = args["main"];
+          const built = typeof main === "string" ? builds.get(main) : last;
+          if (built === undefined) {
+            throw {
+              message: "[no_build] no build is available; run `latex.compile` first",
+            };
+          }
+          const file = args["file"];
+          if (typeof file === "string") {
+            const line = args["line"];
+            if (typeof line !== "number" || !Number.isInteger(line) || line < 0) {
+              throw {
+                message:
+                  "[bad_argument] `line` is not a valid argument: must be a number",
+              };
+            }
+            const wanted = file.replace(/^\.\//, "");
+            const candidates = built.rows
+              .map((row, i) => ({ row, i }))
+              .filter(({ row }) => row.origin?.file === wanted);
+            if (candidates.length === 0) {
+              throw {
+                message: `[synctex_no_match] no SyncTeX match: \`${file}\` is not part of the build`,
+              };
+            }
+            // The line itself, else the nearest following line that printed.
+            const lines = candidates.map(({ row }) => row.origin?.line ?? 0);
+            const best =
+              lines.filter((l) => l >= line).sort((a, b) => a - b)[0] ??
+              Math.max(...lines);
+            const hit = candidates.find(({ row }) => row.origin?.line === best);
+            return {
+              direction: "forward",
+              positions: hit === undefined ? [] : [rowBox(hit.i, hit.row.text)],
+            };
+          }
+          const page = args["page"];
+          const y = args["y"];
+          if (typeof page !== "number" || typeof y !== "number") {
+            throw {
+              message:
+                "[bad_argument] `file|page` is not a valid argument: give `file` and `line` (forward) or `page`, `x` and `y` (reverse)",
+            };
+          }
+          const at = rowAt(built.rows, page, y);
+          if (at === null) {
+            throw {
+              message: `[synctex_no_match] no SyncTeX match: page ${page} has no mapped content`,
+            };
+          }
+          return { direction: "reverse", file: at.file, line: at.line };
         },
       },
       binaryHandlers: {
