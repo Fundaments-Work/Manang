@@ -1,9 +1,11 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import type { Component, Snippet } from "svelte";
 
   import Icon from "$lib/components/ui/Icon.svelte";
   import type { PluginEntry } from "$lib/workbench/plugins";
   import { formatCategoryLabel } from "$lib/workbench/settings";
+
+  import PersonalDictionary from "./PersonalDictionary.svelte";
 
   /**
    * One plugin on the Settings page: what it is, what it may touch, its
@@ -17,6 +19,12 @@
   }
 
   const { entry, children }: Props = $props();
+
+  /** Settings a plugin keeps outside its manifest, shown after its rows. */
+  const EXTRAS: Readonly<Record<string, Component>> = {
+    writing: PersonalDictionary,
+  };
+  const Extra = $derived(EXTRAS[entry.name]);
 
   let showCommands = $state(false);
 
@@ -90,9 +98,12 @@
     {/if}
   {/if}
 
-  {#if children !== undefined}
+  {#if children !== undefined || Extra !== undefined}
     <div class="mt-2">
-      {@render children()}
+      {@render children?.()}
+      {#if Extra !== undefined}
+        <Extra />
+      {/if}
     </div>
   {/if}
 </section>

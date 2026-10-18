@@ -49,6 +49,30 @@ describe("mock writing plugin", () => {
     expect(await k.run("writing.spell.words")).toEqual({ words: ["teh"] });
   });
 
+  it("lists and removes personal dictionary words; removed words are flagged again", async () => {
+    const api = writingApi(kernel());
+    await api.addWord("wich");
+    await api.addWord("Teh");
+    expect(await api.words()).toEqual({ words: ["teh", "wich"] });
+    expect((await api.spellCheck("teh wich", "typst")).count).toBe(0);
+    expect(await api.removeWord("teh")).toEqual({ removed: true, count: 1 });
+    expect(await api.removeWord("teh")).toEqual({ removed: false, count: 1 });
+    expect(await api.words()).toEqual({ words: ["wich"] });
+    expect((await api.spellCheck("teh wich", "typst")).count).toBe(1);
+  });
+
+  it("lists the bundled languages like the Rust plugin", async () => {
+    const api = writingApi(kernel());
+    expect(await api.languages()).toEqual({
+      default: "en_US",
+      spellcheck: true,
+      languages: [
+        { code: "en_GB", source: "bundled" },
+        { code: "en_US", source: "bundled" },
+      ],
+    });
+  });
+
   it("lint returns the writing envelope with codes and an info severity", async () => {
     const api = writingApi(kernel());
     const out = await api.lint("This is is really good.", "typst");

@@ -832,6 +832,179 @@ async function main() {
     );
 
     /* ------------------------------------------------------------------ */
+    section("Writing and citation settings");
+    // A word for the personal dictionary, added the usual way in notes.md.
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="notes.md"]').click()`,
+    );
+    await waitFor(
+      page,
+      `document.querySelector(".cm-content")?.textContent.includes("Notes")`,
+      {
+        label: "notes.md open",
+      },
+    );
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(page, "\nrecieve");
+    const recieveFlagged = `[...document.querySelectorAll(".cm-spell")].some((e) => e.textContent === "recieve")`;
+    await waitFor(page, recieveFlagged, { label: "recieve flagged", timeout: 8000 });
+    await press(page, ".", { ctrl: true, wait: 400 });
+    await click(page, '.cm-spell-item[data-action="add-word"]');
+    await waitFor(page, `!${recieveFlagged}`, {
+      label: "recieve added",
+      timeout: 8000,
+    });
+
+    // The References output in the default style, before changing it.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="References"]',
+    );
+    const expandReference = () =>
+      page.evaluate(`(() => {
+        const b = document.querySelector('#side-panel ul[aria-label="References"] button[aria-label="Expand details"]');
+        b?.click();
+        return b !== null;
+      })()`);
+    await waitFor(
+      page,
+      `document.querySelectorAll('#side-panel ul[aria-label="References"] li').length >= 1`,
+      { label: "references listed" },
+    );
+    await expandReference();
+    await expectEventually(
+      page,
+      "References formats an entry in the configured style (APA by default)",
+      `(() => { const t = document.querySelector("[data-formatted-citation]")?.textContent ?? ""; return t.includes("(1961)") && !t.includes("[1]"); })()`,
+      { show: `document.querySelector("[data-formatted-citation]")?.textContent` },
+    );
+    check(
+      "the panel names the style instead of offering its own switch",
+      await page.evaluate(
+        `document.querySelector('[data-citation-style]')?.textContent.trim() === "APA" && ![...document.querySelectorAll("#side-panel button")].some((b) => b.textContent.trim() === "IEEE")`,
+      ),
+    );
+
+    // Settings: the dictionary list, with the word in it.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
+    );
+    await expectEventually(
+      page,
+      "the Writing section lists the personal dictionary",
+      `!!document.querySelector('[data-plugin="writing"] [data-dictionary] [data-word="recieve"]')`,
+    );
+    check(
+      "the spelling language offers the dictionaries the plugin reports, by name",
+      await page.evaluate(
+        `(() => { const o = [...document.querySelectorAll('[data-setting="writing.spell-language"] option')].map((x) => x.textContent.trim()); return o.includes("American English") && o.includes("British English"); })()`,
+      ),
+    );
+    await page.evaluate(
+      `document.querySelector('[data-setting="writing.spell-language"]').scrollIntoView({ block: "start" })`,
+    );
+    await shoot(page, "07b-settings-dictionary");
+    await page.evaluate(`(() => {
+      const b = document.querySelector('[data-word="recieve"] button[aria-label^="Remove"]');
+      b.scrollIntoView({ block: "center" });
+      b.click();
+    })()`);
+    await expectEventually(
+      page,
+      "removing a word empties the list and shows the empty state",
+      `!document.querySelector('[data-word="recieve"]') && !!document.querySelector("[data-dictionary-empty]")`,
+    );
+    await clickText(page, '[data-plugin="citations"] [role="radio"]', "Numeric (IEEE)");
+    await expectEventually(
+      page,
+      "choosing a citation style in Settings saves it",
+      `document.querySelector('[data-setting="citations.style"]').innerText.includes("Changed")`,
+    );
+    await press(page, "Escape");
+    if (await exists(page, 'section[aria-label="Settings"]'))
+      await press(page, "Escape");
+    await waitFor(page, `!document.querySelector('section[aria-label="Settings"]')`, {
+      label: "settings closed",
+    });
+
+    await expectEventually(
+      page,
+      "the removed word is flagged again in the editor",
+      recieveFlagged,
+      { timeout: 8000 },
+    );
+    if (!(await exists(page, "[data-formatted-citation]"))) await expandReference();
+    await expectEventually(
+      page,
+      "References re-formats in the new style",
+      `(() => { const t = document.querySelector("[data-formatted-citation]")?.textContent ?? ""; return t.includes("[1]") && document.querySelector("[data-citation-style]")?.dataset.citationStyle === "numeric"; })()`,
+      { show: `document.querySelector("[data-formatted-citation]")?.textContent` },
+    );
+
+    // Convert to Typst from the palette.
+    await click(page, '[role="tab"][data-tab="notes.md"]');
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "convert to typst");
+    check(
+      "the palette offers Convert to Typst for a Markdown tab",
+      await page.evaluate(
+        `document.querySelector('[role="option"][aria-selected="true"]')?.textContent.includes("Convert to Typst")`,
+      ),
+    );
+    await press(page, "Enter", { wait: 400 });
+    await expectEventually(
+      page,
+      "converting writes notes.typ and opens it",
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "notes.typ" && document.querySelector(".cm-content")?.textContent.includes("= Notes")`,
+    );
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    await expectEventually(
+      page,
+      "the Typst file appears in the tree next to the Markdown one",
+      `!!document.querySelector('[role="treeitem"][data-path="notes.typ"]')`,
+    );
+    await click(page, '[role="tab"][data-tab="notes.md"]');
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "convert to typst");
+    await press(page, "Enter", { wait: 400 });
+    await expectEventually(
+      page,
+      "converting again asks before replacing notes.typ",
+      `document.querySelector('[role="alertdialog"]')?.innerText.includes("Replace notes.typ")`,
+    );
+    await clickText(page, '[role="alertdialog"] button', "Replace");
+    await expectEventually(
+      page,
+      "replacing opens the new notes.typ",
+      `!document.querySelector('[role="alertdialog"]') && document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "notes.typ"`,
+    );
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "convert to typst");
+    check(
+      "Convert to Typst is not offered for a Typst tab",
+      !(await page.evaluate(
+        `[...document.querySelectorAll('[role="dialog"] [role="option"]')].some((o) => o.textContent.includes("Convert to Typst"))`,
+      )),
+    );
+    await press(page, "Escape");
+
+    // Leave notes.md as it was, and close what this section opened.
+    await click(page, '[role="tab"][data-tab="notes.md"]');
+    await focusEditor(page);
+    await press(page, "z", { ctrl: true });
+    await click(page, '[role="tab"][data-tab="notes.typ"]', "middle");
+    await click(page, '[role="tab"][data-tab="notes.md"]', "middle");
+    await noStrayEdits(page, "after converting");
+    // The side panel shows References again, as before this section.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="References"]',
+    );
+
+    /* ------------------------------------------------------------------ */
     section("Files tree");
     await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
     check(
