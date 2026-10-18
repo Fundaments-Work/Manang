@@ -1,15 +1,18 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
 
   import Icon from "$lib/components/ui/Icon.svelte";
   import {
     citationsApi,
     type CitationEntry,
+    type CitationStyle,
     type CitationVerificationResult,
   } from "$lib/kernel/api";
-  import { errorMessage, kernel } from "$lib/kernel";
+  import { errorMessage, kernel, reportError } from "$lib/kernel";
   import { insertCitation } from "$lib/state/actions";
   import { notice } from "$lib/state/notice.svelte";
+  import { settings } from "$lib/state/settings.svelte";
+  import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import {
     authorSummary,
@@ -19,6 +22,7 @@
     verificationBadge,
     type BibEntry,
   } from "$lib/workbench/references";
+  import { citationStyleOf, optionLabel } from "$lib/workbench/settingOptions";
 
   const api = citationsApi(kernel);
 
@@ -33,7 +37,17 @@
   let verifyingKeys = $state<Record<string, boolean>>({});
   let verificationResults = $state<Record<string, CitationVerificationResult>>({});
   let formattedCitations = $state<Record<string, string>>({});
-  let formatStyle = $state<"apa" | "numeric">("apa");
+  /**
+   * The bibliography style, chosen in Settings (`citations.style`). Passed
+   * explicitly so a change shows here at once; undefined lets the plugin use
+   * its configured default.
+   */
+  const style: CitationStyle | undefined = $derived(
+    citationStyleOf(settings.value("citations.style")),
+  );
+  const styleLabel = $derived(
+    style === undefined ? "Default style" : optionLabel("citations.style", style),
+  );
   let loadingFormatKeys = $state<Record<string, boolean>>({});
 
   let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -117,13 +131,17 @@
     }
   }
 
-  async function fetchFormatted(key: string, style: "apa" | "numeric"): Promise<void> {
+  async function fetchFormatted(key: string): Promise<void> {
     loadingFormatKeys = { ...loadingFormatKeys, [key]: true };
+    const asked = style;
     try {
-      const res = await api.format(key, style);
+      const res = await api.format(key, asked);
+      // A newer style was chosen meanwhile; its own request fills this in.
+      if (asked !== style) return;
       formattedCitations = { ...formattedCitations, [key]: res.formatted };
-    } catch {
-      // Ignore formatting error
+    } catch (err) {
+      reportError(`could not format the reference ${key}`, err);
+      notice.error(`Could not format ${key}: ${errorMessage(err)}`);
     } finally {
       const updated = { ...loadingFormatKeys };
       delete updated[key];
@@ -135,17 +153,19 @@
     const isExpanded = !expandedKeys[key];
     expandedKeys = { ...expandedKeys, [key]: isExpanded };
     if (isExpanded && !formattedCitations[key]) {
-      await fetchFormatted(key, formatStyle);
+      await fetchFormatted(key);
     }
   }
 
-  async function handleStyleChange(
-    key: string,
-    style: "apa" | "numeric",
-  ): Promise<void> {
-    formatStyle = style;
-    await fetchFormatted(key, style);
-  }
+  // A new style re-formats what is open; the rest formats when opened.
+  $effect(() => {
+    void style;
+    untrack(() => {
+      formattedCitations = {};
+      for (const [key, open] of Object.entries(expandedKeys))
+        if (open) void fetchFormatted(key);
+    });
+  });
 
   async function copyFormattedCitation(key: string): Promise<void> {
     const text = formattedCitations[key];
@@ -442,22 +462,13 @@
                     <div class="flex items-center gap-1">
                       <button
                         type="button"
-                        class="px-1 py-0.5 text-[10px] {formatStyle === 'apa'
-                          ? 'bg-surface-hi text-text'
-                          : 'text-text-muted hover:text-text'}"
-                        onclick={() => void handleStyleChange(entry.key, "apa")}
+                        class="px-1 py-0.5 text-[10px] text-text-muted hover:text-text"
+                        title="Citation style: change it in Settings"
+                        aria-label="Citation style {styleLabel}, change it in Settings"
+                        data-citation-style={style ?? ""}
+                        onclick={() => settingsPage.show("citations")}
                       >
-                        APA
-                      </button>
-                      <span class="text-line">|</span>
-                      <button
-                        type="button"
-                        class="px-1 py-0.5 text-[10px] {formatStyle === 'numeric'
-                          ? 'bg-surface-hi text-text'
-                          : 'text-text-muted hover:text-text'}"
-                        onclick={() => void handleStyleChange(entry.key, "numeric")}
-                      >
-                        IEEE
+                        {styleLabel}
                       </button>
                       {#if formattedCitations[entry.key]}
                         <button
@@ -483,7 +494,7 @@
                     <button
                       type="button"
                       class="text-[10px] text-text-60 underline hover:text-text"
-                      onclick={() => void fetchFormatted(entry.key, formatStyle)}
+                      onclick={() => void fetchFormatted(entry.key)}
                     >
                       Generate formatted citation
                     </button>
