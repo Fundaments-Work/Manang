@@ -40,7 +40,7 @@
     type OutlineNode,
   } from "$lib/workbench/pdf/links";
   import { navigationKey } from "$lib/workbench/pdf/navigation";
-  import { DOCUMENT_OPTIONS, pdfjs } from "$lib/workbench/pdf/runtime";
+  import { documentOptions, pdfjs } from "$lib/workbench/pdf/runtime";
   import {
     registerTextLayer,
     selectedText,
@@ -139,7 +139,7 @@
     try {
       const lib = await pdfjs();
       // pdf.js takes ownership of the buffer it is given, so hand it a copy.
-      const loading = lib.getDocument({ data: bytes.slice(), ...DOCUMENT_OPTIONS });
+      const loading = lib.getDocument({ data: bytes.slice(), ...documentOptions(lib) });
       const next = await loading.promise;
       if (token !== loadToken) {
         void loading.destroy();
@@ -737,13 +737,17 @@
   function onclick(event: MouseEvent): void {
     const link = (event.target as Element | null)?.closest("a[data-pdf-link]");
     if (event.ctrlKey || event.metaKey) {
+      // Ctrl+click on a link too goes to the source, not to the link.
       event.preventDefault();
+      if (link !== null && link !== undefined) event.stopPropagation();
       toSource(event);
       return;
     }
     if (link === null || link === undefined) return;
-    // Never navigate the webview.
+    // Never navigate the webview; the shell's own link router must not open
+    // it a second time.
     event.preventDefault();
+    event.stopPropagation();
     const target = links.get(link);
     if (target !== undefined) void follow(target);
   }
