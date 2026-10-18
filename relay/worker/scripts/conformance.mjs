@@ -50,7 +50,8 @@ async function healthy() {
 
 let code = 1;
 try {
-  if (!(await healthy())) throw new Error("wrangler dev did not become healthy in 60 s");
+  if (!(await healthy()))
+    throw new Error("wrangler dev did not become healthy in 60 s");
   code = await new Promise((done) => {
     const cargo = spawn(
       "cargo",
