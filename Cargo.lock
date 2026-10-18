@@ -6176,6 +6176,8 @@ dependencies = [
  "manang-search",
  "manang-settings",
  "manang-typst",
+ "manang-visual",
+ "manang-visual-plugin",
  "manang-wasm-host",
  "manang-writing",
  "serde",
@@ -6662,6 +6664,21 @@ dependencies = [
  "proptest",
  "ropey",
  "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "manang-visual-plugin"
+version = "0.1.0"
+dependencies = [
+ "manang-editor",
+ "manang-kernel",
+ "manang-markdown",
+ "manang-typst",
+ "manang-visual",
+ "rayon",
+ "serde",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

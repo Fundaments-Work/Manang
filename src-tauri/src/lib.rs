@@ -68,6 +68,8 @@ enum BootError {
     Settings(#[from] manang_settings::SyncError),
     #[error(transparent)]
     Agent(#[from] manang_agent::AgentError),
+    #[error(transparent)]
+    Visual(#[from] manang_visual_plugin::VisualHostError),
 }
 
 /// Directories the shell hands to plugins.
@@ -186,6 +188,16 @@ fn build_kernel_parts(
             events.clone(),
             dirs.config.to_path_buf(),
         )),
+    )?;
+    // The Visual editor: sessions over the format adapters of the text
+    // formats (ADR 0015). Parsing runs on the plugin's own Rayon pool.
+    kernel.register(
+        manang_visual_plugin::manifest()?,
+        Arc::new(
+            manang_visual_plugin::VisualPlugin::new(Arc::clone(editor))?
+                .with_adapter(Arc::new(manang_markdown::visual::MarkdownAdapter::new()))?
+                .with_adapter(Arc::new(manang_typst::visual::TypstAdapter::new()))?,
+        ),
     )?;
     // One settings implementation serves three command namespaces.
     let settings = Arc::new(manang_settings::plugin(
@@ -830,6 +842,11 @@ mod tests {
             "live.join",
             "live.leave",
             "live.push",
+            "visual.open",
+            "visual.edit",
+            "visual.blocks",
+            "visual.run-command",
+            "visual.bold",
         ] {
             assert!(ids.iter().any(|id| id == expected), "missing {expected}");
         }
@@ -837,6 +854,57 @@ mod tests {
             .invoke("editor.new", Payload::Empty)
             .expect("editor.new runs");
         assert_eq!(out, Payload::Json(json!({ "id": 1 })));
+    }
+
+    #[test]
+    fn visual_plugin_serves_markdown_and_typst_through_the_kernel() {
+        let tmp = std::env::temp_dir();
+        let dirs = Dirs {
+            config: &tmp,
+            cache: &tmp,
+        };
+        let kernel = build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
+            .expect("first-party plugins register");
+        let adapters: Vec<String> = kernel
+            .format_adapters()
+            .into_iter()
+            .map(|a| a.adapter.id)
+            .collect();
+        assert_eq!(adapters, ["markdown", "typst"]);
+        assert!(kernel.editors().iter().any(|e| e.editor.id == "visual"));
+        assert!(kernel.editors().iter().any(|e| e.editor.id == "source"));
+        let toolbar_commands: Vec<String> = kernel
+            .toolbars()
+            .into_iter()
+            .flat_map(|t| t.toolbar.items)
+            .map(|i| i.command)
+            .collect();
+        assert!(toolbar_commands.iter().any(|c| c == "visual.bold"));
+        for command in &toolbar_commands {
+            assert!(kernel.has_command(command), "{command} is declared");
+        }
+
+        let opened = kernel
+            .invoke(
+                "visual.open",
+                Payload::Json(json!({ "text": "# Hi\n\nsome *word*\n", "path": "a.typ" })),
+            )
+            .expect("visual.open runs");
+        let Payload::Json(open) = opened else {
+            panic!("visual.open returns JSON");
+        };
+        assert_eq!(open["adapter"], "typst");
+        let session = open["session"].clone();
+        let blocks = kernel
+            .invoke(
+                "visual.blocks",
+                Payload::Json(json!({ "session": session, "from": 0, "to": 100 })),
+            )
+            .expect("visual.blocks runs");
+        let Payload::Binary(bytes) = blocks else {
+            panic!("visual.blocks returns raw bytes");
+        };
+        assert_eq!(&bytes[..4], b"MVS1");
     }
 
     #[test]
