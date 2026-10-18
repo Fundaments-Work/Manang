@@ -3,6 +3,8 @@
  * `/`-separated and relative to the project root, as the kernel reports them.
  */
 
+import { isFigureName } from "$lib/figure/files";
+
 export type FileKind =
   | "typst"
   | "latex"
@@ -65,7 +67,7 @@ const BINARY = new Set([
 
 export function fileKind(path: string): FileKind {
   const name = basename(path).toLowerCase();
-  if (name.endsWith(".figure.json")) return "figure";
+  if (isFigureName(name)) return "figure";
   if (name === "manang.toml") return "config";
   switch (extension(path)) {
     case "typ":

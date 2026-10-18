@@ -170,7 +170,7 @@ export function moveTab(model: TabsModel, id: string, toIndex: number): TabsMode
 
 /**
  * A rename does not change what a file holds: a viewer stays a viewer (a large
- * `.txt`, say), but a file renamed to or from `.figure.json` changes editor.
+ * `.txt`, say), but a file renamed to or from `.figure` changes editor.
  */
 function renamedKind(tab: Tab, path: string): TabKind {
   const named = kindForPath(path, tab.kind);

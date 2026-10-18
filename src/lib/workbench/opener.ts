@@ -10,11 +10,13 @@
  * the files that grow past what an editor tab should load.
  */
 
+import { isFigureName } from "$lib/figure/files";
+
 import { basename, extension } from "./paths";
 
 /** How a file opens. */
 export type OpenAs =
-  /** The figure editor (`*.figure.json`). */
+  /** The figure editor (`*.figure`, and legacy `*.figure.json`). */
   | "figure"
   /** The text editor, highlighted where a language mode exists. */
   | "text"
@@ -166,7 +168,7 @@ const BINARY = new Set([
 /** The decision the name alone gives, or null when the bytes must decide. */
 export function openAsByName(path: string): OpenAs | null {
   const name = basename(path).toLowerCase();
-  if (name.endsWith(".figure.json")) return "figure";
+  if (isFigureName(name)) return "figure";
   const ext = extension(path);
   if (ext === "pdf") return "pdf";
   if (IMAGES.has(ext)) return "image";

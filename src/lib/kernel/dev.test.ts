@@ -57,7 +57,7 @@ describe("dev kernel: project plugin", () => {
       "figures/dissipation_curve.figure.json",
       "figures/flow.mmd",
       "figures/sketch.png",
-      "figures/state_lattice.figure.json",
+      "figures/state_lattice.figure",
       "figures/state_lattice.svg",
     ]);
     const page = await project.tree({ recursive: true, limit: 3 });

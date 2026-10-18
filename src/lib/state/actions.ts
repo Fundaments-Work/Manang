@@ -8,6 +8,7 @@
  */
 
 import { paletteAction } from "$lib/commands/allowlist";
+import { NEW_FIGURE_NAME } from "$lib/figure/files";
 import { recheckWriting, runFormat } from "$lib/editor/writing";
 import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
 import { kernel, errorMessage, inTauri, reportError } from "$lib/kernel";
@@ -410,7 +411,7 @@ export async function newFigure(): Promise<void> {
   await workspace.loadDir("figures");
   const path = join(
     "figures",
-    uniqueName("untitled.figure.json", workspace.namesIn("figures")),
+    uniqueName(NEW_FIGURE_NAME, workspace.namesIn("figures")),
   );
   try {
     // The figure plugin writes the scene and its SVG and keeps it open.
