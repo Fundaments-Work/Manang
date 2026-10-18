@@ -1064,6 +1064,7 @@ mod tests {
         let dirs = Dirs {
             config: config.path(),
             cache: config.path(),
+            data: config.path(),
         };
         let kernel = Arc::new(
             build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
@@ -1113,6 +1114,7 @@ mod tests {
         let dirs = Dirs {
             config: config.path(),
             cache: cache.path(),
+            data: cache.path(),
         };
         let events = EventBus::new();
         let editor = Arc::new(Editor::new());

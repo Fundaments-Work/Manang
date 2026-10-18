@@ -43,7 +43,10 @@ pub struct LatexConfig {
     pub cache_dir: Option<PathBuf>,
     /// Bundle location; `None` selects Tectonic's default bundle.
     pub bundle: Option<String>,
-    /// Allow fetching missing bundle files by default. Off unless asked.
+    /// Let the built-in engine fetch TeX packages it has not cached yet (the
+    /// `latex.fetch-packages` setting). On by default: the engine only exists
+    /// because the user agreed to download it, and the consent text says packages
+    /// are fetched on first use. A request can still override it.
     pub allow_network: bool,
     /// Hard wall-clock limit per compile.
     pub timeout: Duration,
@@ -74,7 +77,7 @@ impl Default for LatexConfig {
             engine_source: None,
             cache_dir: None,
             bundle: None,
-            allow_network: false,
+            allow_network: true,
             timeout: Duration::from_secs(60),
             backend: BackendChoice::Auto,
             engine: Engine::Pdflatex,
