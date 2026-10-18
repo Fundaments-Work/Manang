@@ -34,6 +34,7 @@ function backendFor(id: number): FigureBackend {
     close: async () => {
       await api.close(id);
     },
+    exportSvg: async () => new TextDecoder().decode(await api.exportSvg(id)),
   };
 }
 
@@ -100,8 +101,8 @@ export class FiguresStore {
 
   /**
    * The embed line for a figure, after making sure the SVG it names is on
-   * disk and current: unsaved changes are saved, and a figure whose SVG was
-   * never written (or was deleted) gets it written now.
+   * disk and current: unsaved changes are saved (scene and SVG), and a saved
+   * figure whose SVG was never written (or was deleted) gets just the SVG.
    */
   async embed(path: string): Promise<string | null> {
     const figure = this.#open.get(path);
@@ -109,7 +110,12 @@ export class FiguresStore {
     const svg = svgPathFor(path);
     try {
       await figure.idle();
-      if (figure.dirty || !(await this.#exists(svg))) await figure.save();
+      if (figure.dirty) {
+        await figure.save();
+      } else if (!(await this.#exists(svg))) {
+        // Only the SVG is missing: write it alone, leaving the scene file as it is.
+        await project.writeFile(svg, await figure.exportSvg());
+      }
     } catch (error) {
       reportError("figures.embed", error);
       notice.error(`Could not write ${svg}: ${errorMessage(error)}`);
