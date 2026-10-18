@@ -78,13 +78,15 @@
       ? "No problems. The diagram draws cleanly."
       : build.status === "ok"
         ? "No problems. The document compiled cleanly."
-        : build.status === "unsupported"
-          ? "Problems appear here for Typst, LaTeX and Markdown documents. This file has nothing to compile."
-          : build.status === "unavailable"
-            ? "No compiler is available, so there is nothing to check."
-            : build.status === "compiling"
-              ? "Compiling"
-              : "Nothing has been compiled yet. Open a document and problems appear here.",
+        : build.status === "failed"
+          ? "Build failed. Check the Output tab for compilation messages."
+          : build.status === "unsupported"
+            ? "Problems appear here for Typst, LaTeX and Markdown documents. This file has nothing to compile."
+            : build.status === "unavailable"
+              ? "No compiler is available, so there is nothing to check."
+              : build.status === "compiling"
+                ? "Compiling…"
+                : "Nothing has been compiled yet. Open a document and problems appear here.",
   );
 </script>
 
@@ -161,7 +163,26 @@
   >
     {#if layout.panelTab === "problems"}
       {#if groups.length === 0}
-        <p class="m-0 px-4 py-3 text-xs text-text-60" role="status">{emptyText}</p>
+        {#if build.status === "failed"}
+          <div class="m-3 border border-line bg-surface p-3 text-xs text-text" role="alert">
+            <div class="flex items-center gap-1.5 text-text">
+              <Icon name="error" size={13} />
+              <span>Compilation failed</span>
+            </div>
+            <p class="mt-1 mb-2 leading-relaxed text-text-60">
+              The compiler reported a failure, but no source line diagnostics were generated. Check the Output tab to inspect the raw engine messages.
+            </p>
+            <button
+              type="button"
+              class="mng-btn text-xs"
+              onclick={() => layout.setPanelTab("output")}
+            >
+              View compile output
+            </button>
+          </div>
+        {:else}
+          <p class="m-0 px-4 py-3 text-xs text-text-60" role="status">{emptyText}</p>
+        {/if}
       {:else}
         <p class="sr-only" role="status" aria-live="polite">
           {countLabel(build.counts)}
@@ -236,9 +257,12 @@
         class="selectable px-4 py-2 font-mono text-[11px] leading-relaxed"
       >
         {#if build.log.length === 0}
-          <p class="m-0 font-sans text-xs text-text-60">
-            No output yet. Compile messages appear here.
-          </p>
+          <div class="py-2 font-sans text-xs text-text-60">
+            <p class="m-0">No output yet. Compile messages and build logs appear here when you compile a document.</p>
+            {#if build.status === "unavailable"}
+              <p class="mt-1 mb-0 text-text-muted">The compiler plugin is not available.</p>
+            {/if}
+          </div>
         {/if}
         {#each build.log as line (line.id)}
           <div class={line.level === "error" ? "text-text" : "text-text-60"}>

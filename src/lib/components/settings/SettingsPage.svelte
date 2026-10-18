@@ -481,13 +481,38 @@
       <div class="mx-auto w-full max-w-3xl px-4 pt-2 pb-24 @3xl:px-8 @3xl:pt-4">
         {#if view === "settings"}
           {#if settings.error !== "" && settings.defs.length === 0}
-            <p class="m-0 py-6 text-xs text-text-60">{settings.error}</p>
+            <div class="my-6 border border-line bg-surface p-4 text-xs" role="alert">
+              <div class="flex items-center gap-1.5 text-text">
+                <Icon name="error" size={13} />
+                <span>Could not load settings</span>
+              </div>
+              <p class="mt-1 mb-3 leading-relaxed text-text-60">{settings.error}</p>
+              <button
+                type="button"
+                class="mng-btn text-xs"
+                onclick={() => void settings.load(workspace.project?.root ?? null, true)}
+              >
+                Retry
+              </button>
+            </div>
           {:else if !settings.loaded}
-            <p class="m-0 py-6 text-xs text-text-60" role="status">Loading settings</p>
+            <p class="m-0 py-6 text-xs text-text-muted" role="status">Loading settings…</p>
           {:else if nothing}
-            <p class="m-0 py-6 text-xs text-text-60">
-              No setting or plugin {scoped ? "here " : ""}matches “{query}”.
-            </p>
+            <div class="my-6 border border-line bg-surface p-4 text-xs text-text-60">
+              <p class="m-0 text-text">No settings found</p>
+              <p class="mt-1 mb-3 leading-relaxed text-text-60">
+                No setting or plugin {scoped ? "here " : ""}matches “{query}”. Check your spelling or try another keyword.
+              </p>
+              <button
+                type="button"
+                class="mng-btn text-xs"
+                onclick={() => {
+                  settingsPage.query = "";
+                }}
+              >
+                Clear filter
+              </button>
+            </div>
             {@render more()}
           {:else}
             {#if settings.restartPending}
