@@ -11,6 +11,7 @@ import { setEditorPrefs } from "$lib/editor/view";
 import { build } from "$lib/state/build.svelte";
 import { documents } from "$lib/state/documents.svelte";
 import { layout } from "$lib/state/layout.svelte";
+import { preview } from "$lib/state/preview.svelte";
 import { settings } from "$lib/state/settings.svelte";
 import {
   effectiveTheme,
@@ -72,6 +73,8 @@ export function applyPreferences(): void {
 
     $effect(() => {
       build.setPreviewPrefs(prefs.preview);
+      preview.view.doubleClickSource = prefs.preview.doubleClickSource;
+      preview.view.darkPages = prefs.preview.darkPages;
     });
   });
 }

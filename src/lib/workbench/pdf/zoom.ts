@@ -93,19 +93,22 @@ export function stepZoom(scale: number, direction: 1 | -1): number {
   return next ?? (direction === 1 ? MAX_ZOOM : MIN_ZOOM);
 }
 
-/** Wheel deltas arrive in pixels, lines or pages depending on the device. */
-const DELTA_PX: Readonly<Record<number, number>> = { 0: 1, 1: 16, 2: 400 };
-
 /**
- * Zoom factor after a Ctrl+wheel (or trackpad pinch, which browsers report as
- * a Ctrl+wheel with small deltas): smooth and proportional, so a pinch feels
- * continuous and a notched wheel moves about 20% per notch.
+ * Multiplicative factor for one Ctrl/Cmd+wheel event, proportional to the
+ * delta: a mouse notch (about 100 px) zooms about 10% like Firefox's viewer,
+ * a trackpad pinch (many small deltas) zooms smoothly. From Theorem
+ * (`pdf-zoom-anchor.ts`, `wheelZoomFactor`, MIT, same owner).
  */
+export function wheelFactor(deltaY: number, deltaMode = 0): number {
+  if (!Number.isFinite(deltaY) || deltaY === 0) return 1;
+  // Lines are about 16 px, a page about one screen.
+  const px = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 800 : deltaY;
+  return Math.min(1.25, Math.max(0.8, Math.exp(-px * 0.00095)));
+}
+
+/** Zoom factor after a Ctrl+wheel at `scale`, clamped to the range. */
 export function wheelZoom(scale: number, deltaY: number, deltaMode = 0): number {
-  const px = deltaY * (DELTA_PX[deltaMode] ?? 1);
-  // A notch is about 100 px; clamp so one huge event cannot jump the range.
-  const step = Math.max(-300, Math.min(300, px));
-  return clampZoom(zoomOf(scale) * Math.exp(-step * 0.0018));
+  return clampZoom(zoomOf(scale) * wheelFactor(deltaY, deltaMode));
 }
 
 export type ZoomKey = "in" | "out" | "fit";

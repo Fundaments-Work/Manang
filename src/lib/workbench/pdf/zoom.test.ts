@@ -10,6 +10,7 @@ import {
   isCurrentMode,
   scaleFor,
   stepZoom,
+  wheelFactor,
   wheelZoom,
   zoomKey,
   zoomLabel,
@@ -96,16 +97,19 @@ describe("zoom steps", () => {
     expect(stepZoom(CSS_PER_POINT * 0.25, -1)).toBe(MIN_ZOOM);
   });
 
-  it("a wheel notch zooms about 20%, a pinch a little, and both are clamped", () => {
+  it("a wheel notch zooms about 10%, a pinch a little, and both are clamped", () => {
     const up = wheelZoom(CSS_PER_POINT, -100);
-    expect(up).toBeGreaterThan(1.15);
-    expect(up).toBeLessThan(1.25);
-    expect(wheelZoom(CSS_PER_POINT, 100)).toBeLessThan(0.9);
+    expect(up).toBeGreaterThan(1.08);
+    expect(up).toBeLessThan(1.12);
+    expect(wheelZoom(CSS_PER_POINT, 100)).toBeLessThan(0.92);
     const pinch = wheelZoom(CSS_PER_POINT, -4);
     expect(pinch).toBeGreaterThan(1);
-    expect(pinch).toBeLessThan(1.02);
-    // Line mode counts each line as 16 px.
+    expect(pinch).toBeLessThan(1.01);
+    // Line mode counts each line as 16 px; one event never jumps more than 25%.
     expect(wheelZoom(CSS_PER_POINT, -3, 1)).toBeCloseTo(wheelZoom(CSS_PER_POINT, -48));
+    expect(wheelFactor(-100000)).toBe(1.25);
+    expect(wheelFactor(100000)).toBe(0.8);
+    expect(wheelFactor(Number.NaN)).toBe(1);
     expect(wheelZoom(CSS_PER_POINT * 4, -1000)).toBe(MAX_ZOOM);
     expect(wheelZoom(CSS_PER_POINT * 0.25, 1000)).toBe(MIN_ZOOM);
   });

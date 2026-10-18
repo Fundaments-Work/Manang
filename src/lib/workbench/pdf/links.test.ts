@@ -21,15 +21,16 @@ const lookup: DestLookup = {
 };
 
 describe("link targets", () => {
-  it("external links: http, https and mail only", () => {
+  it("external links: web addresses only", () => {
     expect(linkTarget({ subtype: "Link", url: "https://typst.app/" })).toEqual({
       kind: "external",
       url: "https://typst.app/",
     });
-    expect(linkTarget({ subtype: "Link", unsafeUrl: "mailto:a@b.c" })).toEqual({
+    expect(linkTarget({ subtype: "Link", unsafeUrl: "http://a.b/c" })).toEqual({
       kind: "external",
-      url: "mailto:a@b.c",
+      url: "http://a.b/c",
     });
+    expect(linkTarget({ subtype: "Link", unsafeUrl: "mailto:a@b.c" })).toBeNull();
     expect(
       linkTarget({ subtype: "Link", unsafeUrl: "javascript:alert(1)" }),
     ).toBeNull();
