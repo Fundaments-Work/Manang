@@ -97,9 +97,7 @@
         It runs in a sandbox with only the access below.
       </p>
 
-      <h3 class="mt-4 mb-1 text-xs font-normal text-text">
-        {request.mode === "update" ? "It now asks for" : "It asks to"}
-      </h3>
+      <h3 class="mt-4 mb-1 text-xs font-normal text-text">What it asks for</h3>
       {#if request.lines.length === 0}
         <p class="m-0 text-xs text-text-60" data-consent-none>
           No access to your files, documents or network.
