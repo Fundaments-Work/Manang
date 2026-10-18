@@ -184,6 +184,39 @@ mod tests {
         }
     }
 
+    fn luminance(hex: &str) -> f64 {
+        let v = u32::from_str_radix(&hex[1..], 16).unwrap_or(0);
+        let channel = |shift: u32| {
+            let s = f64::from((v >> shift) & 255) / 255.0;
+            if s <= 0.03928 {
+                s / 12.92
+            } else {
+                ((s + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0)
+    }
+
+    #[test]
+    fn every_colour_token_reads_on_paper_in_every_theme() {
+        for theme in [Theme::Dark, Theme::Light, Theme::Print] {
+            let paper = luminance(&stroke("paper", theme));
+            for name in token_names() {
+                if matches!(name, "line" | "surface" | "paper") {
+                    continue;
+                }
+                let ink = luminance(&stroke(name, theme));
+                let (hi, lo) = if ink > paper {
+                    (ink, paper)
+                } else {
+                    (paper, ink)
+                };
+                let ratio = (hi + 0.05) / (lo + 0.05);
+                assert!(ratio >= 3.0, "{name} in {theme:?}: {ratio:.2}");
+            }
+        }
+    }
+
     #[test]
     fn hex_literals_normalise_to_lowercase_six_digits() {
         assert_eq!(normalize_colour("#ABC"), "#aabbcc");
