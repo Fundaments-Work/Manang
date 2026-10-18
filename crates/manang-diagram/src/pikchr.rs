@@ -1,13 +1,14 @@
 //! Pikchr through `pikru`, a pure-Rust port of the C reference.
 //!
-//! Pikchr has no theming: it draws black on nothing. The palette is applied
-//! by recolouring its default black and white with the XML rewriter, and
-//! text gets the design font. Colours a diagram sets explicitly are kept.
+//! Pikchr has no theming: it draws black on nothing, for a light page. Its
+//! colours are mapped onto the palette's tonal ramp by the XML rewriter
+//! (lightness inverted on the dark theme), and text gets the design font.
 
 use pest::Parser;
 use pest::error::InputLocation;
 use pikru::{PikchrParser, RenderOptions, Rule};
 
+use crate::color::Invert;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::engine::{DiagramEngine, LanguageInfo};
 use crate::error::DiagramError;
@@ -77,18 +78,12 @@ impl DiagramEngine for PikchrEngine {
     fn render(&self, source: &str, theme: Theme) -> Result<String, DiagramError> {
         let svg = render_raw(source).map_err(|d| d.to_error())?;
         let p = theme.palette();
-        let recolor = [
-            ("rgb(0,0,0)", p.ink),
-            ("black", p.ink),
-            ("rgb(255,255,255)", p.base),
-            ("white", p.base),
-        ];
         svgxml::rewrite(
             &svg,
             &Rewrite {
                 background: p.background,
                 square: true,
-                recolor: &recolor,
+                palette: Some((p, Invert::All)),
                 text_font: Some(FONT_SANS),
             },
         )

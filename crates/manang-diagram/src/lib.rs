@@ -13,6 +13,7 @@
 
 #![deny(missing_docs)]
 
+pub mod color;
 pub mod diagnostics;
 pub mod engine;
 pub mod error;
