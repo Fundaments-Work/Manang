@@ -2327,6 +2327,8 @@ async function main() {
       (await tabNames(page)).includes("figures/orbit.figure"),
       JSON.stringify(await tabNames(page)),
     );
+    // Close it again: the demo project does not keep a figure across a reload.
+    await press(page, "w", { ctrl: true, wait: 300, synthetic: true });
 
     await noStrayEdits(page, "after create, rename and delete");
     // Context menu
