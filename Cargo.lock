@@ -5595,6 +5595,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "manang-agent-core"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "futures-core",
+ "insta",
+ "proptest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "manang-buffer"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,10 @@
+---
+source: crates/manang-agent-core/tests/core.rs
+expression: r.text
+---
+key [REDACTED:secret] and [REDACTED:secret].
+AWS [REDACTED:secret], export API_KEY=[REDACTED:secret] ok
+Authorization: Bearer [REDACTED:secret]
+mail [REDACTED:email] from /home/[REDACTED:user]/papers/thesis.tex
+[REDACTED:private_key]
+plain text sk-short
