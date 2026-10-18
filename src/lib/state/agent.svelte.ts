@@ -330,9 +330,7 @@ export class AgentState {
     const diagnostics = this.#problems();
     return {
       view: active?.kind === "figure" ? "figure" : "document",
-      ...(path === undefined
-        ? {}
-        : { active: { path, line: documents.cursor.line } }),
+      ...(path === undefined ? {} : { active: { path, line: documents.cursor.line } }),
       ...(selection === null ? {} : { selection }),
       ...(this.mentions.length === 0 ? {} : { mentions: this.mentions }),
       ...(Object.keys(buffers).length === 0 ? {} : { buffers }),
@@ -347,7 +345,9 @@ export class AgentState {
     const doc = documents.get(path);
     this.mentions = [
       ...this.mentions,
-      doc === undefined ? { kind: "file", path } : { kind: "file", path, text: doc.text() },
+      doc === undefined
+        ? { kind: "file", path }
+        : { kind: "file", path, text: doc.text() },
     ];
   }
 

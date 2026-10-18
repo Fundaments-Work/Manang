@@ -106,7 +106,9 @@
                 data-suggest={c.name}
                 onclick={() => agent.fillCommand(c.name)}
               >
-                <span class="font-mono">/{c.name}{c.hint === "" ? "" : ` ${c.hint}`}</span>
+                <span class="font-mono"
+                  >/{c.name}{c.hint === "" ? "" : ` ${c.hint}`}</span
+                >
                 <span class="text-[11px] text-text-muted">{c.description}</span>
               </button>
             </li>
@@ -188,7 +190,9 @@
                 </div>
               {/if}
             {:else}
-              <p class="m-0 mt-1 text-[11px] text-text-60">You answered: {item.answer}</p>
+              <p class="m-0 mt-1 text-[11px] text-text-60">
+                You answered: {item.answer}
+              </p>
             {/if}
           </div>
         {:else if item.kind === "approval"}
@@ -267,7 +271,9 @@
       {/each}
 
       {#if view.running && view.thinking}
-        <p class="m-0 mt-3 text-[11px] text-text-muted" data-agent-thinking>Thinking…</p>
+        <p class="m-0 mt-3 text-[11px] text-text-muted" data-agent-thinking>
+          Thinking…
+        </p>
       {/if}
 
       {#if pendingCount > 1}

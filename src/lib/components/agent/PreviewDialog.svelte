@@ -102,9 +102,14 @@
             </dd>
           </dl>
 
-          <h3 class="mt-4 mb-1 text-[13px] font-normal text-text">What goes with your message</h3>
+          <h3 class="mt-4 mb-1 text-[13px] font-normal text-text">
+            What goes with your message
+          </h3>
           {#if preview.parts.length === 0}
-            <p class="m-0 text-text-60">Only your message, and the project overview in the first message of a chat.</p>
+            <p class="m-0 text-text-60">
+              Only your message, and the project overview in the first message of a
+              chat.
+            </p>
           {/if}
           {#each preview.parts as chip (chip.id)}
             <p class="m-0 text-text-60">

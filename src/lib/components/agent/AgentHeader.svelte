@@ -133,7 +133,9 @@
           {#if usage.cacheHitPercent > 0}· {usage.cacheHitPercent}% from cache{/if}
         </p>
       {/if}
-      <p class="m-0 border-t border-line px-3 pt-1.5 pb-0.5 text-[11px] text-text-muted">
+      <p
+        class="m-0 border-t border-line px-3 pt-1.5 pb-0.5 text-[11px] text-text-muted"
+      >
         Earlier chats
       </p>
       {#if agent.history.length === 0}

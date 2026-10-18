@@ -35,7 +35,12 @@ import type { SlashCommand, TextEdit } from "./types";
 const COMMANDS: readonly SlashCommand[] = [
   { name: "fix", description: "Fix", hint: "", source: "builtin" },
   { name: "rewrite", description: "Rewrite", hint: "", source: "builtin" },
-  { name: "translate", description: "Translate", hint: "<language>", source: "builtin" },
+  {
+    name: "translate",
+    description: "Translate",
+    hint: "<language>",
+    source: "builtin",
+  },
 ];
 
 describe("context and the composer", () => {
@@ -59,7 +64,10 @@ describe("context and the composer", () => {
       contextLine({
         path: "main.typ",
         selectionWords: 38,
-        mentions: [{ kind: "file", path: "refs.bib" }, { kind: "problems", diagnostics: [] }],
+        mentions: [
+          { kind: "file", path: "refs.bib" },
+          { kind: "problems", diagnostics: [] },
+        ],
       }),
     ).toBe("main.typ, selection (38 words), @refs.bib, @problems");
     expect(contextLine({ path: "a.md", selectionWords: 1, mentions: [] })).toBe(
@@ -82,7 +90,10 @@ describe("context and the composer", () => {
       command: null,
       prompt: "/nonsense go",
     });
-    expect(parseSlash("  hello ", COMMANDS)).toEqual({ command: null, prompt: "hello" });
+    expect(parseSlash("  hello ", COMMANDS)).toEqual({
+      command: null,
+      prompt: "hello",
+    });
   });
 
   it("offers the commands that fit while the name is being typed", () => {
@@ -125,7 +136,9 @@ describe("diff from a proposal", () => {
       insert: "slow",
     });
     expect(describeEdit(edit)).toBe("Edit to a.typ, 1 change");
-    expect(describeEdit({ ...edit, edits: [hunk, hunk] })).toBe("Edit to a.typ, 2 changes");
+    expect(describeEdit({ ...edit, edits: [hunk, hunk] })).toBe(
+      "Edit to a.typ, 2 changes",
+    );
     expect(sizeOf(edit)).toEqual({ removed: 13, added: 12 });
   });
 
@@ -194,9 +207,9 @@ describe("tool rows in words", () => {
     ];
     expect(groupLine(rows)).toBe("Read 3 files, searched for “Fourier”");
     expect(groupLine([row("read_file", { path: "a.typ" })])).toBe("Read a.typ");
-    expect(groupLine([row("bib_search", { query: "x" }), row("diagnostics", {})])).toContain(
-      "checked the problems",
-    );
+    expect(
+      groupLine([row("bib_search", { query: "x" }), row("diagnostics", {})]),
+    ).toContain("checked the problems");
   });
 
   it("shows only the running call, and keeps failures visible", () => {
@@ -206,7 +219,10 @@ describe("tool rows in words", () => {
     ];
     expect(groupLine(rows)).toBe("Searching for “x”…");
     expect(
-      groupLine([row("read_file", { path: "a.typ" }), row("read_file", { path: "z" }, "error")]),
+      groupLine([
+        row("read_file", { path: "a.typ" }),
+        row("read_file", { path: "z" }, "error"),
+      ]),
     ).toBe("Read 2 files, 1 failed");
   });
 });
@@ -263,30 +279,87 @@ describe("transcript reducer", () => {
     const state = run([
       ev("agent.started"),
       ev("agent.text", { text: "Reading." }),
-      ev("agent.tool", { id: "t1", name: "read_file", risk: "read", status: "running", args: { path: "a.typ" }, summary: "" }),
-      ev("agent.tool", { id: "t1", name: "read_file", risk: "read", status: "done", args: { path: "a.typ" }, summary: "a.typ lines 1-3 of 3" }),
-      ev("agent.tool", { id: "t2", name: "search", risk: "read", status: "running", args: { query: "x" }, summary: "" }),
+      ev("agent.tool", {
+        id: "t1",
+        name: "read_file",
+        risk: "read",
+        status: "running",
+        args: { path: "a.typ" },
+        summary: "",
+      }),
+      ev("agent.tool", {
+        id: "t1",
+        name: "read_file",
+        risk: "read",
+        status: "done",
+        args: { path: "a.typ" },
+        summary: "a.typ lines 1-3 of 3",
+      }),
+      ev("agent.tool", {
+        id: "t2",
+        name: "search",
+        risk: "read",
+        status: "running",
+        args: { query: "x" },
+        summary: "",
+      }),
       ev("agent.text", { text: "Done." }),
     ]);
-    expect(state.items.map((i) => i.kind)).toEqual(["user", "assistant", "tools", "assistant"]);
-    const group = state.items[2];
-    expect(group?.kind === "tools" && group.rows.map((r) => `${r.id}:${r.status}`)).toEqual([
-      "t1:done",
-      "t2:running",
+    expect(state.items.map((i) => i.kind)).toEqual([
+      "user",
+      "assistant",
+      "tools",
+      "assistant",
     ]);
+    const group = state.items[2];
+    expect(
+      group?.kind === "tools" && group.rows.map((r) => `${r.id}:${r.status}`),
+    ).toEqual(["t1:done", "t2:running"]);
   });
 
   it("shows a queued edit as a proposal row, not as a tool row, and a refused edit as a failure", () => {
     const state = run([
       ev("agent.started"),
-      ev("agent.tool", { id: "e1", name: "edit_text", risk: "propose", status: "running", args: {}, summary: "" }),
-      ev("agent.tool", { id: "e1", name: "edit_text", risk: "propose", status: "error", args: {}, summary: "old text not found in a.md." }),
-      ev("agent.tool", { id: "e2", name: "edit_text", risk: "propose", status: "running", args: {}, summary: "" }),
-      ev("agent.tool", { id: "e2", name: "edit_text", risk: "propose", status: "done", args: {}, summary: "Proposal p1 queued" }),
+      ev("agent.tool", {
+        id: "e1",
+        name: "edit_text",
+        risk: "propose",
+        status: "running",
+        args: {},
+        summary: "",
+      }),
+      ev("agent.tool", {
+        id: "e1",
+        name: "edit_text",
+        risk: "propose",
+        status: "error",
+        args: {},
+        summary: "old text not found in a.md.",
+      }),
+      ev("agent.tool", {
+        id: "e2",
+        name: "edit_text",
+        risk: "propose",
+        status: "running",
+        args: {},
+        summary: "",
+      }),
+      ev("agent.tool", {
+        id: "e2",
+        name: "edit_text",
+        risk: "propose",
+        status: "done",
+        args: {},
+        summary: "Proposal p1 queued",
+      }),
       ev("agent.proposal", {
         proposal_id: "p1",
         kind: "text_edit",
-        payload: { path: "a.md", note: "x", edits: [{ from: 0, to: 2, before: "ab", after: "c" }] },
+        payload: {
+          path: "a.md",
+          note: "x",
+          edits: [{ from: 0, to: 2, before: "ab", after: "c" }],
+        },
       }),
     ]);
     const kinds = state.items.map((i) => i.kind);
@@ -298,12 +371,31 @@ describe("transcript reducer", () => {
   it("turns ask_user into a question the author can answer", () => {
     let state = run([
       ev("agent.started"),
-      ev("agent.tool", { id: "a1", name: "ask_user", risk: "interaction", status: "running", args: {}, summary: "" }),
-      ev("agent.tool", { id: "a1", name: "ask_user", risk: "interaction", status: "done", args: {}, summary: "", ask: { question: "Delete it?", choices: ["Yes", "No"] } }),
+      ev("agent.tool", {
+        id: "a1",
+        name: "ask_user",
+        risk: "interaction",
+        status: "running",
+        args: {},
+        summary: "",
+      }),
+      ev("agent.tool", {
+        id: "a1",
+        name: "ask_user",
+        risk: "interaction",
+        status: "done",
+        args: {},
+        summary: "",
+        ask: { question: "Delete it?", choices: ["Yes", "No"] },
+      }),
       ev("agent.done", { stop_reason: "ask_user" }),
     ]);
     expect(state.items.map((i) => i.kind)).toEqual(["user", "ask"]);
-    expect(state.items[1]).toMatchObject({ question: "Delete it?", choices: ["Yes", "No"], answer: null });
+    expect(state.items[1]).toMatchObject({
+      question: "Delete it?",
+      choices: ["Yes", "No"],
+      answer: null,
+    });
     state = answerAsk(state, 1, "No");
     expect(state.items[1]).toMatchObject({ answer: "No" });
     expect(state.items.some((i) => i.kind === "notice")).toBe(false);
@@ -322,15 +414,29 @@ describe("transcript reducer", () => {
       ev("agent.proposal", {
         proposal_id: "p1",
         kind: "text_edit",
-        payload: { path: "a.md", note: "x", edits: [{ from: 0, to: 2, before: "ab", after: "c" }] },
+        payload: {
+          path: "a.md",
+          note: "x",
+          edits: [{ from: 0, to: 2, before: "ab", after: "c" }],
+        },
       }),
       ev("agent.usage", {
         fill: 62000,
         window: 100000,
         cache_hit_percent: 80,
-        total: { input: 10, output: 5, cache_read: 0, cache_write: 0, est_cost_micro_usd: 1234 },
+        total: {
+          input: 10,
+          output: 5,
+          cache_read: 0,
+          cache_write: 0,
+          est_cost_micro_usd: 1234,
+        },
       }),
-      ev("agent.error", { code: "authentication_error", message: "Rejected", request_id: "req_1" }),
+      ev("agent.error", {
+        code: "authentication_error",
+        message: "Rejected",
+        request_id: "req_1",
+      }),
     ]);
     expect(pendingProposal(state)?.proposalId).toBe("p1");
     state = decideProposal(state, "p1", "accepted");
@@ -341,7 +447,13 @@ describe("transcript reducer", () => {
       host: "api.crossref.org",
       afterUntrusted: true,
     });
-    expect(state.usage).toMatchObject({ input: 10, output: 5, costMicroUsd: 1234, fill: 62000, cacheHitPercent: 80 });
+    expect(state.usage).toMatchObject({
+      input: 10,
+      output: 5,
+      costMicroUsd: 1234,
+      fill: 62000,
+      cacheHitPercent: 80,
+    });
     expect(fillPercent(state.usage)).toBe(62);
     expect(formatCost(state.usage.costMicroUsd)).toBe("~$0.0012");
     expect(formatCost(null)).toBe("cost unknown");
@@ -351,15 +463,25 @@ describe("transcript reducer", () => {
   it("rejects a proposal payload that is not a list of located hunks", () => {
     const state = run([
       ev("agent.started"),
-      ev("agent.proposal", { proposal_id: "p9", kind: "text_edit", payload: { path: "a", from: 0, to: 1, before: "a", after: "b" } }),
+      ev("agent.proposal", {
+        proposal_id: "p9",
+        kind: "text_edit",
+        payload: { path: "a", from: 0, to: 1, before: "a", after: "b" },
+      }),
     ]);
     expect(state.items.at(-1)).toMatchObject({ kind: "proposal", edit: null });
   });
 
   it("says why a message stopped, in one quiet line", () => {
     const stopped = (reason: string, extra: object = {}) =>
-      run([ev("agent.started"), ev("agent.done", { stop_reason: reason, ...extra })]).items.at(-1);
-    expect(stopped("cancelled", { cancelled: true })).toMatchObject({ kind: "notice", text: "Stopped." });
+      run([
+        ev("agent.started"),
+        ev("agent.done", { stop_reason: reason, ...extra }),
+      ]).items.at(-1);
+    expect(stopped("cancelled", { cancelled: true })).toMatchObject({
+      kind: "notice",
+      text: "Stopped.",
+    });
     expect(stopped("iteration_cap", { steps: 12 })).toMatchObject({
       text: "Stopped after 12 steps. Say continue to go on.",
     });

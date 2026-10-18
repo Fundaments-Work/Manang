@@ -132,7 +132,9 @@ function build(proposal: InlineProposal): DecorationSet {
   const last = proposal.hunks.length - 1;
   proposal.hunks.forEach((hunk, i) => {
     if (hunk.to > hunk.from) {
-      ranges.push(Decoration.mark({ class: "mng-ai-removed" }).range(hunk.from, hunk.to));
+      ranges.push(
+        Decoration.mark({ class: "mng-ai-removed" }).range(hunk.from, hunk.to),
+      );
     }
     ranges.push(
       Decoration.widget({

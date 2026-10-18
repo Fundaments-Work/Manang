@@ -196,7 +196,12 @@ function asEdit(value: unknown): TextEdit | null {
     ) {
       return null;
     }
-    edits.push({ from: e["from"], to: e["to"], before: e["before"], after: e["after"] });
+    edits.push({
+      from: e["from"],
+      to: e["to"],
+      before: e["before"],
+      after: e["after"],
+    });
   }
   if (edits.length === 0) return null;
   return { path: v["path"], note: str(v["note"]), edits };
@@ -217,9 +222,7 @@ function upsertRow(
   if (tail?.kind === "tools") {
     const at = tail.rows.findIndex((r) => r.id === row.id);
     const rows =
-      at >= 0
-        ? tail.rows.map((r, i) => (i === at ? row : r))
-        : [...tail.rows, row];
+      at >= 0 ? tail.rows.map((r, i) => (i === at ? row : r)) : [...tail.rows, row];
     return [...items.slice(0, -1), { kind: "tools", rows }];
   }
   return [...closeAnswer(items), { kind: "tools", rows: [row] }];
@@ -264,7 +267,11 @@ export function reduce(
       };
     case "agent.text":
       if (p["thinking"] === true) return { ...state, thinking: true };
-      return { ...state, thinking: false, items: appendAnswer(state.items, str(p["text"])) };
+      return {
+        ...state,
+        thinking: false,
+        items: appendAnswer(state.items, str(p["text"])),
+      };
     case "agent.tool": {
       const name = str(p["name"]);
       const status = str(p["status"]) as ItemState;
@@ -280,7 +287,9 @@ export function reduce(
               kind: "ask",
               question: str(a["question"]),
               choices: Array.isArray(a["choices"])
-                ? (a["choices"] as unknown[]).filter((c): c is string => typeof c === "string")
+                ? (a["choices"] as unknown[]).filter(
+                    (c): c is string => typeof c === "string",
+                  )
                 : [],
               answer: null,
             },
@@ -369,8 +378,7 @@ export function reduce(
       };
     case "agent.done": {
       const reason = str(p["stop_reason"]);
-      const notice =
-        p["cancelled"] === true ? "Stopped." : stopNotice(reason, p);
+      const notice = p["cancelled"] === true ? "Stopped." : stopNotice(reason, p);
       const items = closeAnswer(state.items);
       return {
         ...state,

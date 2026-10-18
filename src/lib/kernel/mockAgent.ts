@@ -335,8 +335,13 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
     if (text === "" && args["retry"] !== true)
       throw fail("invalid_argument", "write a message first");
     // The parts that travel with the message: the selection and the @-mentions.
-    const raw: { id: string; kind: string; label: string; path?: string; text: string }[] =
-      [];
+    const raw: {
+      id: string;
+      kind: string;
+      label: string;
+      path?: string;
+      text: string;
+    }[] = [];
     if (context.selection !== undefined) {
       raw.push({
         id: "selection",
@@ -485,7 +490,9 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
       emit("agent.text", {
         session_id: id,
         thinking: true,
-        text: settings.includeThinking ? "Mock reasoning: looking at the context. " : "",
+        text: settings.includeThinking
+          ? "Mock reasoning: looking at the context. "
+          : "",
       }),
     );
     at += 10;
@@ -543,7 +550,9 @@ export const agentPlugin: MockPluginFactory = (emit): MockPlugin => {
         "ask_user",
         { question: "Delete that section?" },
         "Question shown to the author.",
-        { ask: { question: "Delete that section?", choices: ["Yes, delete it", "No"] } },
+        {
+          ask: { question: "Delete that section?", choices: ["Yes, delete it", "No"] },
+        },
       );
     }
     if (wantsVerify) {

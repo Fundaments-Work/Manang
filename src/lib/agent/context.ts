@@ -58,7 +58,8 @@ export function parseSlash(
   const m = /^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/.exec(input.trim());
   if (m === null) return { command: null, prompt: input.trim() };
   const name = m[1] ?? "";
-  if (!commands.some((c) => c.name === name)) return { command: null, prompt: input.trim() };
+  if (!commands.some((c) => c.name === name))
+    return { command: null, prompt: input.trim() };
   return { command: name, prompt: (m[2] ?? "").trim() };
 }
 
