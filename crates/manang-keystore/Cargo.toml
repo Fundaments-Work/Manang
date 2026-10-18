@@ -1,0 +1,34 @@
+[package]
+name = "manang-keystore"
+description = "Manang API key storage: OS keychain, kernel keyring or an in-memory session key"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+keyring-core = "1"
+secrecy = "0.10"
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = "0.12"
+
+# One OS store per platform, chosen at compile time. AGENTS.md 7.4: nothing
+# here may bundle a C library, so no `vendored` and no `crypto-openssl`.
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1", features = ["keychain"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Secret Service over D-Bus with the pure-Rust zbus client and RustCrypto.
+zbus-secret-service-keyring-store = { version = "1", default-features = false, features = ["rt-async-io-crypto-rust"] }
+# Headless fallback: the kernel's per-user keyring through syscalls.
+linux-keyutils-keyring-store = "1"
+
+[dev-dependencies]
+proptest = "1"

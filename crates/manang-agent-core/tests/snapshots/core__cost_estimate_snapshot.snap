@@ -1,0 +1,8 @@
+---
+source: crates/manang-agent-core/tests/core.rs
+expression: "out.join(\"\\n\")"
+---
+claude-fable-5-1: ~$0.195000 (195000 micro-USD, estimate=true)
+claude-opus-5-5: ~$0.082000 (82000 micro-USD, estimate=true)
+claude-sonnet-5-5: ~$0.041000 (41000 micro-USD, estimate=true)
+claude-haiku-5-5: ~$0.002250 (2250 micro-USD, estimate=true)
