@@ -42,13 +42,19 @@ pub fn clamp(text: &str, r: Range<usize>) -> Range<usize> {
 /// Start of the line containing `pos`.
 pub fn line_start(text: &str, pos: usize) -> usize {
     let pos = pos.min(text.len());
-    text[..pos].rfind('\n').map_or(0, |i| i + 1)
+    text.as_bytes()[..pos]
+        .iter()
+        .rposition(|b| *b == b'\n')
+        .map_or(0, |i| i + 1)
 }
 
 /// End of the line containing `pos`, before its `\n`.
 pub fn line_end(text: &str, pos: usize) -> usize {
     let pos = pos.min(text.len());
-    text[pos..].find('\n').map_or(text.len(), |i| pos + i)
+    text.as_bytes()[pos..]
+        .iter()
+        .position(|b| *b == b'\n')
+        .map_or(text.len(), |i| pos + i)
 }
 
 /// The lines a selection touches, without their newlines. A selection that

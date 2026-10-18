@@ -6489,6 +6489,7 @@ dependencies = [
  "manang-diagram",
  "manang-kernel",
  "manang-project",
+ "manang-visual",
  "proptest",
  "pulldown-cmark",
  "serde",

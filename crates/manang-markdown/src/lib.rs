@@ -21,6 +21,7 @@ pub mod html;
 pub mod outline;
 pub mod plugin;
 pub mod typst;
+pub mod visual;
 
 pub use diagnostics::Diagnostic;
 pub use diagrams::{DiagramFence, diagram_fences, fence_key, fence_language};
