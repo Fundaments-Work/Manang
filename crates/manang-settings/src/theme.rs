@@ -327,7 +327,7 @@ pub fn parse_user_theme(id: &str, text: &str) -> Result<Theme, SettingsError> {
     }
     if let Some(unknown) = json.as_object().and_then(|o| {
         o.keys()
-            .find(|k| !["name", "base", "tokens"].contains(&k.as_str()))
+            .find(|k| !["version", "name", "base", "tokens"].contains(&k.as_str()))
     }) {
         return Err(bad(id, format!("unknown key `{unknown}`")));
     }

@@ -313,9 +313,14 @@ impl RecoveryStore {
                 let mut removed = 0;
                 for item in read.flatten() {
                     let p = item.path();
-                    if p.extension().and_then(|e| e.to_str()) == Some("json") {
-                        removed += remove_file(&p)?;
+                    if p.extension().and_then(|e| e.to_str()) != Some("json") {
+                        continue;
                     }
+                    // A newer Manang's snapshot is not ours to delete.
+                    if is_newer(&p) {
+                        continue;
+                    }
+                    removed += remove_file(&p)?;
                 }
                 // Leave the folder when set-aside files remain; drop it when empty.
                 let _ = fs::remove_dir(&dir);
@@ -323,6 +328,18 @@ impl RecoveryStore {
             }
         }
     }
+}
+
+/// Whether a snapshot file says it is from a newer format than this build's.
+fn is_newer(file: &Path) -> bool {
+    #[derive(Deserialize)]
+    struct Head {
+        version: u32,
+    }
+    fs::read_to_string(file)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Head>(&t).ok())
+        .is_some_and(|h| h.version > SNAPSHOT_VERSION)
 }
 
 fn remove_file(file: &Path) -> Result<usize, RecoveryError> {

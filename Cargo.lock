@@ -5895,6 +5895,7 @@ dependencies = [
  "dugong",
  "insta",
  "manang-diagram",
+ "manang-formats",
  "manang-kernel",
  "manang-project",
  "manang-typst",
@@ -6015,6 +6016,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "insta",
+ "manang-formats",
  "manang-kernel",
  "manang-wasm-host",
  "notify",
@@ -6105,6 +6107,7 @@ version = "0.1.0"
 dependencies = [
  "criterion 0.8.2",
  "insta",
+ "manang-formats",
  "manang-kernel",
  "notify",
  "notify-debouncer-full",

@@ -1,0 +1,84 @@
+---
+source: crates/manang-figure/tests/formats.rs
+expression: scene
+---
+{
+  "version": 2,
+  "width": 960.0,
+  "height": 540.0,
+  "nodes": [
+    {
+      "kind": "freedraw",
+      "id": "n1",
+      "points": [
+        {
+          "x": 1.0,
+          "y": 2.0,
+          "pressure": 0.5
+        },
+        {
+          "x": 5.0,
+          "y": 6.0,
+          "pressure": 0.6
+        }
+      ],
+      "size": 2.5,
+      "style": {
+        "stroke": "#e8e6e1"
+      }
+    },
+    {
+      "kind": "rect",
+      "id": "n2",
+      "x": 60.0,
+      "y": 100.0,
+      "width": 40.0,
+      "height": 30.0,
+      "style": {
+        "stroke": "#e8e6e1",
+        "fill": "#1c1c20"
+      }
+    },
+    {
+      "kind": "ellipse",
+      "id": "n3",
+      "x": 40.0,
+      "y": 40.0,
+      "width": 20.0,
+      "height": 40.0,
+      "style": {
+        "stroke": "#e8e6e1"
+      }
+    },
+    {
+      "kind": "arrow",
+      "id": "n4",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 10.0,
+          "y": 0.0
+        }
+      ],
+      "label": "H",
+      "style": {
+        "stroke": "#c6f135"
+      }
+    },
+    {
+      "kind": "math",
+      "id": "n5",
+      "x": 3.0,
+      "y": -22.0,
+      "source": "x^2",
+      "language": "latex",
+      "size": 26.0,
+      "style": {
+        "stroke": "#b3d17a"
+      }
+    }
+  ]
+}

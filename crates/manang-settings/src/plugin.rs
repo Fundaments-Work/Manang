@@ -71,10 +71,9 @@ pub const TOPIC_PROJECT: &str = "settings.project-changed";
 /// Default watcher debounce window.
 pub const DEFAULT_DEBOUNCE: Duration = Duration::from_millis(100);
 
-const USER_HEADER: &str = "# Manang user settings. Edit by hand; changes apply immediately.\n# See `settings.schema` (or the Settings screen) for every key.\n";
-const PROJECT_HEADER: &str =
-    "# Manang project settings. These override your user settings for this project only.\n";
-const KEYS_HEADER: &str = "# Manang keybindings. Each [[bindings]] entry replaces that command's default keys.\n#\n# [[bindings]]\n# command = \"editor.save\"\n# keys = [\"Mod+S\"]\n# when = \"editorFocus\"\n";
+const USER_HEADER: &str = "# Manang user settings. Edit by hand; changes apply immediately.\n# See `settings.schema` (or the Settings screen) for every key.\n# Leave `version` alone: it tells later releases which format this file uses.\nversion = 1\n";
+const PROJECT_HEADER: &str = "# Manang project settings. These override your user settings for this project only.\n# Leave `version` alone: it tells later releases which format this file uses.\nversion = 1\n";
+const KEYS_HEADER: &str = "# Manang keybindings. Each [[bindings]] entry replaces that command's default keys.\n#\n# [[bindings]]\n# command = \"editor.save\"\n# keys = [\"Mod+S\"]\n# when = \"editorFocus\"\n#\n# Leave `version` alone: it tells later releases which format this file uses.\nversion = 1\n";
 
 /// The `settings` manifest (`settings.*` commands), parsed and validated.
 pub fn manifest() -> Result<Manifest, ManifestError> {
@@ -140,6 +139,15 @@ impl State {
                     message: message.clone(),
                 });
             }
+            if let Some(found) = file.newer {
+                out.push(Warning {
+                    layer,
+                    id: None,
+                    message: format!(
+                        "this file was written by a newer Manang (format version {found}); it is read as far as this version understands and left unchanged"
+                    ),
+                });
+            }
             out.extend(layers::audit(&self.registry, layer, &file.values));
         }
         out
@@ -194,6 +202,20 @@ impl State {
                 Ok(doc) => {
                     let (entries, warnings) = keybindings::parse_user(&store::doc_to_json(&doc));
                     self.keys_warnings = warnings;
+                    match store::doc_version(&doc) {
+                        Err(message) => self
+                            .keys_warnings
+                            .push(format!("{KEYBINDINGS_FILE}: {message}")),
+                        Ok(version) => {
+                            if let manang_formats::Compat::Newer(found) =
+                                manang_formats::compat(version, store::FORMAT_VERSION)
+                            {
+                                self.keys_warnings.push(format!(
+                                    "{KEYBINDINGS_FILE} was written by a newer Manang (format version {found}); it is read as far as this version understands and left unchanged"
+                                ));
+                            }
+                        }
+                    }
                     if entries != self.keys.user_entries() {
                         self.keys.set_user(entries);
                         events.push((TOPIC_KEYBINDINGS, json!({})));

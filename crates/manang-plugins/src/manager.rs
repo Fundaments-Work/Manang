@@ -330,11 +330,9 @@ impl PluginManager {
             Some(path) => match Registry::load(path) {
                 Ok(r) => r,
                 Err(e @ (RegistryError::Parse { .. } | RegistryError::BadName(..))) => {
-                    let mut aside = path.clone().into_os_string();
-                    aside.push(".corrupt");
-                    let moved = fs::rename(path, PathBuf::from(&aside));
-                    warnings.push(match moved {
-                        Ok(()) => format!("{e}; it was kept as plugins.toml.corrupt and reset"),
+                    // Never overwritten: an earlier .corrupt copy is kept too.
+                    warnings.push(match manang_formats::set_aside_corrupt(path) {
+                        Ok(to) => format!("{e}; it was kept as {} and reset", to.display()),
                         Err(re) => format!("{e}; and it could not be set aside: {re}"),
                     });
                     Registry::empty_at(path)
@@ -342,6 +340,11 @@ impl PluginManager {
                 Err(e) => return Err(e.into()),
             },
         };
+        if let Some(found) = registry.newer_version() {
+            warnings.push(format!(
+                "plugins.toml was written by a newer Manang (format version {found}); your plugin decisions are read as far as understood and not changed until you update"
+            ));
+        }
         let trash = config.trash_dir.unwrap_or_else(|| root.join(".trash"));
         Ok(Self {
             kernel,

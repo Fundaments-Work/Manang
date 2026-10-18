@@ -32,6 +32,9 @@ pub enum FormatError {
         #[source]
         source: io::Error,
     },
+    /// The text is not TOML at all.
+    #[error("not valid TOML: {0}")]
+    Syntax(String),
     /// The version key is present but not a positive integer.
     #[error("`{key}` must be a positive whole number")]
     BadVersion { key: String },
@@ -125,6 +128,14 @@ pub fn toml_version(table: &toml::Table, key: &str) -> Result<Option<u32>, Forma
             key: key.to_owned(),
         }),
     }
+}
+
+/// The top-level integer `key` of TOML `text`, for a crate that parses with a
+/// different `toml` major version than this one.
+pub fn toml_text_version(text: &str, key: &str) -> Result<Option<u32>, FormatError> {
+    let table: toml::Table =
+        toml::from_str(text).map_err(|e| FormatError::Syntax(e.message().to_owned()))?;
+    toml_version(&table, key)
 }
 
 /// One migration step: version `n` to `n + 1`, on the format's parsed value.

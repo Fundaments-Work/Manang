@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "width": 960,
+  "height": 540,
+  "nodes": [
+    { "kind": "stroke", "id": "n1", "points": [{ "x": 1, "y": 2, "pressure": 0.5 }, { "x": 5, "y": 6, "pressure": 0.6 }], "size": 2.5, "color": "#e8e6e1" },
+    { "kind": "rect", "id": "n2", "x": 100, "y": 100, "width": -40, "height": 30, "stroke": "#e8e6e1", "fill": "#1c1c20" },
+    { "kind": "ellipse", "id": "n3", "cx": 50, "cy": 60, "rx": 10, "ry": 20, "stroke": "#e8e6e1" },
+    { "kind": "arrow", "id": "n4", "from": { "x": 0, "y": 0 }, "to": { "x": 10, "y": 0 }, "color": "#c6f135", "label": "H" },
+    { "kind": "math", "id": "n5", "x": 3, "y": 4, "tex": "x^2", "size": 26, "color": "#b3d17a" }
+  ]
+}

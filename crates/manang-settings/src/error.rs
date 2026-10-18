@@ -94,6 +94,8 @@ pub enum SettingsError {
     NoProject,
     #[error("`{path}` is not valid TOML and was left untouched: {message}")]
     FileInvalid { path: String, message: String },
+    #[error(transparent)]
+    Format(#[from] manang_formats::FormatError),
     #[error("`{path}` cannot store this value: {message}")]
     Unstorable { path: String, message: String },
     #[error("no theme `{0}`")]

@@ -1,0 +1,7 @@
+version = 999
+chord-timeout-ms = 900
+
+[[bindings]]
+command = "editor.save"
+keys = ["Mod+Alt+S"]
+repeat = true
