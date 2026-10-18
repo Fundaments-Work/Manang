@@ -46,6 +46,9 @@ throws it away afterwards. Consequences:
 - Start-up cost counts on every call. Keep initialisation trivial. The host's
   overhead for an empty call is about 30 to 45 microseconds; your code is the
   rest.
+- The one exception is a **format adapter session** (see "Format adapters"
+  below): one long-lived instance per open document, with hard memory and
+  per-call time caps, rebuilt from the host's text after any failure.
 
 ## manifest.toml
 
@@ -164,6 +167,84 @@ figure. Edits are announced as `figure.changed { id, revision }` so an open
 editor tab picks them up. A typical session: `figure_add_shapes`, then
 `figure_connect` (by label), `figure_layout`, `figure_describe` to check,
 `figure_export`.
+
+## Format adapters (the Visual editor)
+
+The Visual editor (ADR 0015) shows headings, emphasis, lists, links, math and
+images in place, over the **real source text**. It never converts a document
+to a model and back: every toolbar action is a list of ordinary text edits.
+A format plugin teaches it a new format by contributing a **format adapter**.
+
+```toml
+[[contributes.format-adapters]]
+id = "asciidoc"                 # kebab-case, unique across plugins
+title = "AsciiDoc"
+extensions = ["adoc"]           # lowercase, no dot
+document-type = "asciidoc"      # optional
+kinds = ["heading", "strong", "emph", "link", "code-block", "marker"]
+commands = ["bold", "italic", "heading", "link"]
+```
+
+The adapter is the plugin's own code. Today **first-party native adapters**
+implement the Rust trait `manang_visual::FormatAdapter` (`crates/manang-visual`,
+the reference shape of `wit/format.wit`) and are registered with the `visual`
+plugin in `src-tauri/src/lib.rs`; loading a WASM component that exports
+`manang:format/adapter` is specified (WIT, ADR 0003 addendum) but not wired
+into the Wasmtime host yet.
+
+```rust
+pub trait FormatAdapter: Send + Sync {
+    fn info(&self) -> &AdapterInfo;
+    fn open(&self, text: &str) -> Result<Box<dyn AdapterSession>, AdapterError>;
+}
+pub trait AdapterSession: Send {
+    fn edit(&mut self, range: Range<usize>, text: &str) -> Result<Range<usize>, AdapterError>;
+    fn spans(&self, viewport: Range<usize>, out: &mut Vec<RawSpan>) -> Result<(), AdapterError>;
+    fn outline(&self) -> Vec<OutlineItem>;
+    fn command_state(&self, selection: Range<usize>) -> Vec<CommandState>;
+    fn run_command(&self, command: &str, selection: Range<usize>, args: &str)
+        -> Result<EditPlan, AdapterError>;
+}
+```
+
+* **Sessions are stateful** (the one exception to the stateless-per-call
+  model): the host keeps one session per open document so `edit` can reparse
+  incrementally. The host's rope is the truth; a session that fails is
+  rebuilt from it with `open`.
+* **Offsets are UTF-8 bytes** in the adapter; the host converts to the UTF-16
+  units of the editor. `edit` receives each change of a batch, last change
+  first, in the coordinates of the text before it, and returns the range of
+  the new text whose spans may have changed.
+* **`spans`** reports `RawSpan { range, kind, aux, attr }` for the viewport:
+  `kind` from the fixed vocabulary (`heading`, `strong`, `emph`, `strike`,
+  `code`, `code-block`, `list-item`, `link`, `image`, `quote`, `math`,
+  `frontmatter`, `table`, `rule`, `ref`, `label`, `comment`, `marker`,
+  `opaque`; your own from 1024), `aux` a small number (heading level, list
+  kind), `attr` a string (link target, language). Report syntax characters
+  the renderer may hide (`**`, `# `, `[` and `](url)`) as `marker` spans
+  inside their construct. Report only what the source shows: code you cannot
+  see through is `opaque`, never a guess. Order and nesting do not matter;
+  the host sorts, clamps and nests the spans into the binary table.
+* **`run_command` returns an `EditPlan`, never writes anything.** Edits are
+  sorted, non-overlapping and in the coordinates of the text *before* them;
+  `selection` says where the caret should be *after* them. The web view
+  applies a plan as one CodeMirror transaction, so undo, the CRDT used for
+  live editing, and git see ordinary text. `manang_visual::text` has the
+  helpers (`toggle_wrap`, `lines_of`, `expand_word`, `map_through`).
+* **Test it like the first-party adapters** (`crates/manang-markdown/src/visual/tests.rs`):
+  an `insta` snapshot of the spans of a sample document, assertions on the
+  result of each command, a proptest that an edited session describes exactly
+  what a fresh parse of the same text does, and a proptest that every command
+  returns a well-formed plan that leaves the text outside its edits alone.
+
+The kernel keeps registries of what plugins contribute
+(`Kernel::format_adapters()`, `editors()`, `toolbars()`, and the
+`plugins.contributions` command): ids of adapters and editors are unique
+across plugins, and a plugin whose id is taken fails to load with a message
+that names the owner. `[[contributes.editors]]` (`kind` is `source`, `visual`
+or `custom`; `priority` is `optional` or `default`) and
+`[[contributes.toolbars]]` (items whose `command` your manifest declares) are
+how the Visual editor and its toolbar register.
 
 ## The WIT world
 
