@@ -95,3 +95,7 @@ title = "Render an inline diagram to the project cache"
 [[contributes.commands]]
 id = "project.export-pdf"
 title = "Write a PDF next to an SVG for LaTeX"
+
+[[contributes.commands]]
+id = "project.templates"
+title = "List starter templates"

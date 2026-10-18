@@ -71,13 +71,25 @@ impl Harness {
 fn manifest_matches_the_commands_the_plugin_handles() {
     let h = harness();
     let ids: Vec<String> = h.kernel.commands().into_iter().map(|c| c.id).collect();
-    assert_eq!(ids.len(), 22);
+    assert_eq!(ids.len(), 23);
     // Every declared command is routed (an unknown one would error with UnknownCommand).
     for id in ids {
         if let Err(err) = h.call(&id, json!({ "bogus": 1 })) {
             assert!(!err.contains("does not handle"), "{id} is unrouted: {err}");
         }
     }
+}
+
+#[test]
+fn templates_command_returns_available_templates() {
+    let h = harness();
+    let res = h.ok("project.templates", json!({}));
+    let arr = res.as_array().expect("array of templates");
+    assert_eq!(arr.len(), 11);
+    let ids: Vec<&str> = arr.iter().filter_map(|t| t["id"].as_str()).collect();
+    assert!(ids.contains(&"article-typst"));
+    assert!(ids.contains(&"blank-latex"));
+    assert!(ids.contains(&"notes-markdown"));
 }
 
 #[test]
