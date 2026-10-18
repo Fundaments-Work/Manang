@@ -118,20 +118,42 @@ pub struct H {
 
 impl H {
     pub fn with(provider: Arc<dyn Provider>, limits: Limits) -> Self {
-        let config = tempfile::tempdir().expect("config");
-        let project = tempfile::tempdir().expect("project");
-        let events = EventBus::new();
-        let sub = events.subscribe("agent.*");
         let keys = Arc::new(KeyCommands::new(Arc::new(ChainKeyStore::new(vec![
             Box::new(SessionKeyStore::new()),
         ]))));
         let specs = Arc::new(Mutex::new(Vec::new()));
-        let mut options = AgentOptions::new(config.path().to_path_buf(), events);
-        options.keys = keys;
-        options.factory = Arc::new(Fixed {
+        let factory = Arc::new(Fixed {
             provider,
             specs: Arc::clone(&specs),
         });
+        let h = Self::build(factory, keys, limits, specs);
+        h.call(
+            "agent.configure",
+            json!({"values": {
+            "agent.provider": "deepseek", "agent.model": "deepseek-flash"}}),
+        )
+        .expect("configure");
+        h.call("agent.key.set", json!({"provider": "deepseek", "key": KEY}))
+            .expect("key");
+        h.call("agent.consent", json!({"provider": "deepseek"}))
+            .expect("consent");
+        h
+    }
+
+    /// The kernel with every plugin the agent leans on, a project open, and no provider set up.
+    pub fn build(
+        factory: Arc<dyn ProviderFactory>,
+        keys: Arc<KeyCommands>,
+        limits: Limits,
+        specs: Arc<Mutex<Vec<ProviderSpec>>>,
+    ) -> Self {
+        let config = tempfile::tempdir().expect("config");
+        let project = tempfile::tempdir().expect("project");
+        let events = EventBus::new();
+        let sub = events.subscribe("agent.*");
+        let mut options = AgentOptions::new(config.path().to_path_buf(), events);
+        options.keys = keys;
+        options.factory = factory;
         options.risk = RiskTable::default().with("net_fetch", ToolInfo::network());
         options.limits = limits;
         let kernel = Arc::new(Kernel::new());
@@ -190,16 +212,6 @@ impl H {
         .expect("create the project");
         h.call("project.open", json!({"path": h.root()}))
             .expect("open the project");
-        h.call(
-            "agent.configure",
-            json!({"values": {
-            "agent.provider": "deepseek", "agent.model": "deepseek-flash"}}),
-        )
-        .expect("configure");
-        h.call("agent.key.set", json!({"provider": "deepseek", "key": KEY}))
-            .expect("key");
-        h.call("agent.consent", json!({"provider": "deepseek"}))
-            .expect("consent");
         h
     }
 

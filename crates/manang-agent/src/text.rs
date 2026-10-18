@@ -249,11 +249,10 @@ pub fn introduced_keys(before: &str, after: &str) -> Vec<(String, bool)> {
         .collect()
 }
 
-/// Why `after` may not replace `before`, or `None` when the markup is intact. The edit must keep
-/// every citation, reference and label (unless the author's message names the key, which means
-/// they asked for the change), the parity of `$` signs, the brace balance and the balance of
-/// every `\begin`/`\end` pair.
-pub fn markup_problem_asked(before: &str, after: &str, asked: &str) -> Option<String> {
+/// Why the quoted `before` may not become `after`, or `None`: every citation, reference and label
+/// stays (unless the author's message names the key, which means they asked for the change), and
+/// the `$` signs keep their parity and their presence (a stray `$` may be repaired).
+pub fn pair_problem(before: &str, after: &str, asked: &str) -> Option<String> {
     let b = scan_markup(before);
     let a = scan_markup(after);
     let missing: Vec<&str> = b
@@ -271,10 +270,21 @@ pub fn markup_problem_asked(before: &str, after: &str, asked: &str) -> Option<St
             if plural { "them" } else { "it" },
         ));
     }
-    if b.dollars % 2 != a.dollars % 2 || (b.dollars > 0) != (a.dollars > 0) {
+    let math_ok = (b.dollars % 2 == a.dollars % 2 && (b.dollars > 0) == (a.dollars > 0))
+        || (b.dollars % 2 == 1 && a.dollars.is_multiple_of(2));
+    if !math_ok {
         return Some("the edit changes the math delimiters ($)".to_owned());
     }
-    if b.braces != a.braces {
+    None
+}
+
+/// Why `after` is less balanced than `before` (braces and `\begin`/`\end` pairs), or `None`.
+/// Meant for whole files: a file that was already unbalanced may be repaired, a balanced file
+/// stays balanced.
+pub fn balance_problem(before: &str, after: &str) -> Option<String> {
+    let b = scan_markup(before);
+    let a = scan_markup(after);
+    if b.braces != a.braces && a.braces.abs() >= b.braces.abs() {
         return Some("the edit unbalances { and }".to_owned());
     }
     let open_envs = |m: &Markup| -> BTreeMap<String, i64> {
@@ -285,16 +295,30 @@ pub fn markup_problem_asked(before: &str, after: &str, asked: &str) -> Option<St
             .collect()
     };
     let (be, ae) = (open_envs(&b), open_envs(&a));
-    if be != ae {
-        let mut names: BTreeSet<&String> = be.keys().collect();
-        names.extend(ae.keys());
-        let list: Vec<&str> = names.into_iter().map(String::as_str).collect();
+    let names: BTreeSet<&String> = be.keys().chain(ae.keys()).collect();
+    let worse: Vec<&str> = names
+        .into_iter()
+        .filter(|n| {
+            let (x, y) = (
+                be.get(*n).copied().unwrap_or(0),
+                ae.get(*n).copied().unwrap_or(0),
+            );
+            x != y && y.abs() >= x.abs()
+        })
+        .map(String::as_str)
+        .collect();
+    if !worse.is_empty() {
         return Some(format!(
             "the edit unbalances \\begin and \\end ({})",
-            list.join(", ")
+            worse.join(", ")
         ));
     }
     None
+}
+
+/// [`pair_problem`] then [`balance_problem`] on the same two texts.
+pub fn markup_problem_asked(before: &str, after: &str, asked: &str) -> Option<String> {
+    pair_problem(before, after, asked).or_else(|| balance_problem(before, after))
 }
 
 /// [`markup_problem_asked`] for an author who named nothing.
@@ -307,5 +331,49 @@ pub fn clip_chars(text: &str, max: usize) -> (String, bool) {
     match text.char_indices().nth(max) {
         Some((byte, _)) => (text[..byte].to_owned(), true),
         None => (text.to_owned(), false),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn balanced_text_stays_balanced() {
+        assert!(markup_problem("a {b} c", "a {b} d").is_none());
+        assert!(markup_problem("a {b} c", "a {b c").is_some());
+        assert!(markup_problem("a $x$ c", "a x c").is_some());
+        assert!(markup_problem("a $x$ c", "a $x$ $y$").is_none());
+        assert!(markup_problem("\\begin{a}x\\end{a}", "\\begin{a}y").is_some());
+    }
+
+    #[test]
+    fn unbalanced_text_may_be_repaired_but_not_made_worse() {
+        // A missing closing brace: the fix adds it.
+        assert!(markup_problem("\\textbf{tight bound", "\\textbf{tight} bound").is_none());
+        assert!(markup_problem("\\textbf{tight bound", "\\textbf{{tight bound").is_some());
+        // A missing `$`.
+        assert!(markup_problem("cost $x", "cost $x$").is_none());
+        // A missing \end.
+        assert!(
+            markup_problem(
+                "\\begin{itemize}\n\\item a",
+                "\\begin{itemize}\n\\item a\n\\end{itemize}"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn keys_may_change_when_the_author_names_them() {
+        assert!(markup_problem("see \\cite{a}", "see").is_some());
+        assert!(markup_problem_asked("see \\cite{a}", "see", "remove the citation a").is_none());
+        let new = introduced_keys("see @a", "see @a and @b.");
+        assert_eq!(new, vec![("b".to_owned(), true)]);
+        assert!(
+            introduced_keys("\\label{x}", "\\label{x}\\label{y}")
+                .iter()
+                .all(|(_, cite)| !cite)
+        );
     }
 }

@@ -14,7 +14,7 @@
 
 use crate::context::Diagnostic;
 use crate::edit::{self, Pair};
-use crate::text::{clip_chars, introduced_keys, markup_problem_asked, outline};
+use crate::text::{balance_problem, clip_chars, introduced_keys, outline, pair_problem};
 use manang_kernel::{Context, Payload};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -1005,7 +1005,7 @@ pub fn edit_text(ctx: &Context<'_>, tc: &ToolContext, input: &Value) -> ToolResu
         } else {
             String::new()
         };
-        if let Some(problem) = markup_problem_asked(&e.before, &e.after, &tc.user_text) {
+        if let Some(problem) = pair_problem(&e.before, &e.after, &tc.user_text) {
             return Err(format!("{which}{problem}."));
         }
         for (key, cite) in introduced_keys(&e.before, &e.after) {
@@ -1017,6 +1017,11 @@ pub fn edit_text(ctx: &Context<'_>, tc: &ToolContext, input: &Value) -> ToolResu
                 ));
             }
         }
+    }
+    // Braces and environments are judged on the whole file: a missing brace may be repaired by one
+    // edit and the pairs of one proposal may balance each other.
+    if let Some(problem) = balance_problem(&base, &edit::apply(&base, &located)) {
+        return Err(format!("{problem}."));
     }
     let (removed, added) = edit::char_delta(&located);
     if located

@@ -31,4 +31,7 @@ pub use risk::{Decision, RiskTable, ToolInfo};
 pub use settings::{Effort, Engine, Settings};
 pub use state::Limits;
 pub use storage::{SessionMeta, SessionStore, project_agent_dir};
-pub use text::{estimate_tokens, markup_problem, markup_problem_asked, outline, utf16_len};
+pub use text::{
+    balance_problem, estimate_tokens, markup_problem, markup_problem_asked, outline, pair_problem,
+    utf16_len,
+};

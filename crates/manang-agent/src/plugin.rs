@@ -544,7 +544,11 @@ impl AgentPlugin {
             active: turn.active.as_ref().map(|a| a.path.clone()),
             buffers,
             diagnostics: turn.diagnostics.clone(),
-            user_text: request_text.clone(),
+            // A key the author's message or a problem they pointed at names may be changed.
+            user_text: std::iter::once(request_text.as_str())
+                .chain(turn.diagnostics.iter().map(|d| d.message.as_str()))
+                .collect::<Vec<_>>()
+                .join("\n"),
             pending: Vec::new(),
         };
 
