@@ -310,7 +310,7 @@
   </li>
 {/snippet}
 
-/** Links to the app-level views, for a scoped page; the open view is left out. */
+<!-- Links to the app-level views, for a scoped page; the open view is left out. -->
 {#snippet appLinks(current: View | null)}
   <p class="m-0 flex flex-wrap gap-x-4 pt-6 text-xs" data-settings-app-links>
     {#if current !== "settings"}
