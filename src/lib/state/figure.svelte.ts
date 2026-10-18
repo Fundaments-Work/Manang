@@ -51,6 +51,8 @@ export interface FigureBackend {
   /** Write `<name>.figure.json` and `<name>.svg` for the project path `path`. */
   save(path: string): Promise<FigureSaved>;
   close(): Promise<void>;
+  /** The scene as SVG markup (`figure.export-svg`). */
+  exportSvg(): Promise<string>;
 }
 
 export function serializeScene(scene: FigureScene): string {
@@ -226,6 +228,11 @@ export class FigureState {
       this.savedRevision = saved.revision;
       return saved;
     });
+  }
+
+  /** The current scene as SVG, after every queued edit. */
+  exportSvg(): Promise<string> {
+    return this.#run(() => this.#backend.exportSvg());
   }
 
   /** Release the plugin's copy (the tab closed). */
