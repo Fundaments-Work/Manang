@@ -1,0 +1,9 @@
+﻿[
+  {
+    "id": "csl_unicode",
+    "type": "article-journal",
+    "title": "CSL Unicode: Café & München & Schrödinger",
+    "author": [{ "family": "Müller", "given": "Jörg" }],
+    "issued": { "date-parts": [[2023, 5]] }
+  }
+]

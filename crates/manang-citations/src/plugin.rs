@@ -194,14 +194,9 @@ impl Plugin for CitationsPlugin {
 
                 for p_str in paths {
                     let path = Path::new(&p_str);
-                    match parse_file(path) {
-                        Ok(entries) => {
-                            loaded_count += self.index.insert_batch(entries);
-                        }
-                        Err(diag) => {
-                            diagnostics.push(diag);
-                        }
-                    }
+                    let (entries, diags) = parse_file(path);
+                    loaded_count += self.index.insert_batch(entries);
+                    diagnostics.extend(diags);
                 }
 
                 Ok(Payload::Json(json!({
