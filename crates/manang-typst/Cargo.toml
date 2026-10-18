@@ -17,6 +17,7 @@ typst-ide = "=0.15.1"
 typst-svg = "=0.15.1"
 typst-pdf = "=0.15.1"
 parking_lot = "0.12"
+quick-xml = "0.42"
 rayon = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }

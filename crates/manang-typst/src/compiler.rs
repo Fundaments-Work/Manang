@@ -98,6 +98,8 @@ pub struct Compiler {
     pool: ThreadPool,
     library: LazyHash<Library>,
     fonts: FontStore,
+    /// Embedded fonts only: formulas must not depend on the machine.
+    math_fonts: FontStore,
     session: Mutex<Option<Session>>,
     latest: RwLock<Option<Arc<Artifact>>>,
     diagnostics: RwLock<Vec<Diagnostic>>,
@@ -113,6 +115,7 @@ impl Compiler {
             .map_err(|e| TypstError::Pool(e.to_string()))?;
         Ok(Self {
             fonts: font_store(&config.env),
+            math_fonts: embedded_fonts(),
             library: default_library(),
             pool,
             config,
@@ -362,6 +365,25 @@ impl Compiler {
         Ok(bytes)
     }
 
+    /// One formula (Typst math) as a vector SVG whose page is the formula's
+    /// bounding box, `size` scene units tall per em, painted `color`
+    /// (`currentColor` or `#rrggbb`). Independent of the project session and
+    /// deterministic: embedded fonts only, no clock, no files. A formula that
+    /// does not compile is a `[math_error]` with a line and column inside it.
+    pub fn math_to_svg(
+        &self,
+        source: &str,
+        size: f64,
+        color: &str,
+    ) -> Result<crate::math::MathSvg, TypstError> {
+        let rendered = self.pool.install(|| {
+            catch_unwind(AssertUnwindSafe(|| {
+                crate::math::convert(&self.library, &self.math_fonts, source, size, color)
+            }))
+        });
+        rendered.map_err(|_| TypstError::WorkerPanicked)?
+    }
+
     /// A one-page PDF of `svg`, the page sized to the picture. Independent of
     /// the project session: it neither reads files nor replaces the cached
     /// document. Deterministic: the same SVG gives the same bytes.
@@ -374,6 +396,12 @@ impl Compiler {
         let bytes = converted.map_err(|_| TypstError::WorkerPanicked)??;
         Ok(Arc::from(bytes))
     }
+}
+
+fn embedded_fonts() -> FontStore {
+    let mut store = FontStore::new();
+    store.extend(typst_kit::fonts::embedded());
+    store
 }
 
 /// The Typst sources a compile read, kept with its document. Cheap: a

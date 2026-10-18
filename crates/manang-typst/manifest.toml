@@ -34,3 +34,7 @@ title = "Jump from source to preview"
 [[contributes.commands]]
 id = "typst.svg-to-pdf"
 title = "Convert an SVG to a one-page PDF"
+
+[[contributes.commands]]
+id = "typst.math-to-svg"
+title = "Render a formula to vector SVG"
