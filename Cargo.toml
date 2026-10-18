@@ -28,6 +28,7 @@ members = [
     "crates/manang-live",
     "crates/manang-relay",
     "crates/manang-live-plugin",
+    "crates/manang-heal",
 ]
 exclude = [
     "crates/manang-wasm-host/tests/fixtures/echo-guest",

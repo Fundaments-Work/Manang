@@ -1,0 +1,35 @@
+---
+source: crates/manang-heal/tests/typst.rs
+expression: "show(Engine::Typst, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "typst.import:cetz@0.5.2:canvas, draw",
+        "label": "Import canvas, draw from @preview/cetz:0.5.2",
+        "why": "`canvas`, `draw` come from the `cetz` package, which this document does not import.",
+        "edits": [
+          {
+            "from": 12,
+            "to": 12,
+            "insert": "#import \"@preview/cetz:0.5.2\": canvas, draw\n"
+          }
+        ],
+        "confidence": "certain",
+        "rule": "typst.missing-import",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "typst.import:cetz@0.5.2:canvas, draw",
+      "after": "// A figure\n#import \"@preview/cetz:0.5.2\": canvas, draw\n#canvas({ draw.line((0, 0), (1, 1)) })\n"
+    }
+  ],
+  "fix_all": null
+}

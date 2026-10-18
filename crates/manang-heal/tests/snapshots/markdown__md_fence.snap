@@ -1,0 +1,43 @@
+---
+source: crates/manang-heal/tests/markdown.rs
+expression: "show(Engine::Markdown, text, &[])"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "markdown.close-fence:9",
+        "label": "Close the code fence with ```",
+        "why": "The code fence opened here is never closed, so everything after it is code.",
+        "edits": [
+          {
+            "from": 30,
+            "to": 30,
+            "insert": "```\n"
+          }
+        ],
+        "confidence": "certain",
+        "rule": "markdown.unclosed-fence",
+        "diagnostics": [],
+        "finding": 0
+      }
+    ],
+    "findings": [
+      {
+        "message": "Code fence is never closed",
+        "severity": "warning",
+        "from": 9,
+        "to": 16,
+        "line": 3,
+        "rule": "markdown.unclosed-fence"
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "markdown.close-fence:9",
+      "after": "# Notes\n\n```rust\nfn main() {}\n```\n"
+    }
+  ],
+  "fix_all": null
+}

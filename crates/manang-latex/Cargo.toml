@@ -10,6 +10,7 @@ rust-version.workspace = true
 
 [dependencies]
 flate2 = "1"
+manang-heal = { path = "../manang-heal" }
 manang-kernel = { path = "../manang-kernel" }
 parking_lot = "0.12"
 serde = { workspace = true }

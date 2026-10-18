@@ -44,6 +44,7 @@ manang-git = { path = "../crates/manang-git" }
 manang-settings = { path = "../crates/manang-settings" }
 manang-figure = { path = "../crates/manang-figure" }
 manang-writing = { path = "../crates/manang-writing" }
+manang-heal = { path = "../crates/manang-heal" }
 manang-markdown = { path = "../crates/manang-markdown" }
 manang-diagram = { path = "../crates/manang-diagram" }
 manang-citations = { path = "../crates/manang-citations" }

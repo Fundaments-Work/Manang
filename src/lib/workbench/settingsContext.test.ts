@@ -60,6 +60,7 @@ describe("contextual settings", () => {
       "compile",
       "agent",
       "citations",
+      "heal",
       "writing",
     ]);
     expect(ids(typst)).not.toContain("appearance");
@@ -82,6 +83,7 @@ describe("contextual settings", () => {
       "agent",
       "citations",
       "figure",
+      "heal",
       "latex",
       "live",
       "search",
@@ -121,6 +123,7 @@ describe("contextual settings", () => {
       "compile",
       "agent",
       "citations",
+      "heal",
       "writing",
     ]);
     expect(elsewhere.map((d) => d.category).sort()).toEqual(

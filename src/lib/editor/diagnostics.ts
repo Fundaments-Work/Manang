@@ -19,12 +19,30 @@ export interface QuickFix {
   readonly apply: (text: string) => string;
 }
 
+/**
+ * A deterministic fix offered by the `heal` plugin for a compile diagnostic.
+ * Choosing one applies it through the registered fix runner (`healBridge`).
+ */
+export interface FixChoice {
+  readonly id: string;
+  /** What the button says, e.g. `Add \usepackage{graphicx}`. */
+  readonly label: string;
+  /** One sentence on why. */
+  readonly why: string;
+  /** Only `certain` fixes are applied in bulk. */
+  readonly confidence: "certain" | "likely";
+}
+
 export interface Diagnostic {
   readonly from: number;
   readonly to: number;
   readonly message: string;
   readonly severity: Severity;
   readonly fix?: QuickFix;
+  /** The Problem this diagnostic stands for (compile diagnostics only). */
+  readonly problemId?: string;
+  /** Fixes the `heal` plugin offers for it. */
+  readonly fixes?: readonly FixChoice[];
 }
 
 export interface DiagnosticOptions {

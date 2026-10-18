@@ -6166,6 +6166,7 @@ dependencies = [
  "manang-editor",
  "manang-figure",
  "manang-git",
+ "manang-heal",
  "manang-kernel",
  "manang-latex",
  "manang-live-plugin",
@@ -6394,6 +6395,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "manang-heal"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "manang-kernel",
+ "manang-latex",
+ "manang-typst",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "typst",
+]
+
+[[package]]
 name = "manang-kernel"
 version = "0.1.0"
 dependencies = [
@@ -6430,6 +6446,7 @@ dependencies = [
  "flate2",
  "insta",
  "libc",
+ "manang-heal",
  "manang-kernel",
  "parking_lot",
  "proptest",
