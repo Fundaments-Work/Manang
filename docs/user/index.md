@@ -11,25 +11,28 @@ Manang is a fast, local-first scientific authoring and illustration desktop appl
 ## Guide pages
 
 - **[Getting started](getting-started.md)**  
-  Run Manang from source, use the Home screen, create or open projects, and navigate the main window layout.
+  Run Manang from source, use the Home screen and templates, manage Home trash, create or open projects, and navigate the main window layout.
 
 - **[Writing](writing.md)**  
-  Write in Typst, LaTeX, or Markdown, format source files, check spelling, manage your personal dictionary, insert symbols and snippets, and view document word counts.
+  Write in Typst, LaTeX, or Markdown, convert Markdown to Typst, format source files, check spelling, manage your personal dictionary, insert symbols and snippets, and view document word counts.
 
 - **[Preview and PDF](preview-and-pdf.md)**  
-  Control preview layouts, compile documents automatically, jump between source text and the preview with SyncTeX, export PDFs, and configure TeX Live for LaTeX.
+  Control preview layouts, compile documents automatically, use the built-in PDF viewer, jump between source text and the preview with SyncTeX, export PDFs, and configure TeX Live for LaTeX.
 
 - **[Figures and diagrams](figures-and-diagrams.md)**  
-  Draw vector sketches in the figure editor, render text diagrams in Mermaid, Pikchr, and ASCII format, and include figures in your documents.
+  Draw vector sketches in the figure studio, use bound arrows and frames, render text diagrams in Mermaid, Pikchr, and ASCII format, and include figures in your documents.
 
 - **[References and bibliographies](references.md)**  
   Load bibliography files, choose citation styles, search entries, insert citations into your text, and verify references against online registries.
 
 - **[Projects and files](projects-and-files.md)**  
-  Manage files in the sidebar tree, view images and PDFs, launch external system applications, delete files safely, and commit changes with the source control panel.
+  Manage files in the sidebar tree, view images and PDFs, launch external system applications, delete files safely, use Home trash, and commit changes with the source control panel.
 
 - **[Settings and shortcuts](settings-and-shortcuts.md)**  
-  Adjust user and project settings, switch themes, search keyboard shortcuts, and customize keybindings.
+  Adjust contextual, user, and project settings, switch themes, search keyboard shortcuts, and customize keybindings.
+
+- **[Menus and shortcuts](menus-and-shortcuts.md)**  
+  Complete reference for every menu bar item (File, Edit, View, Go, Build, Help), mnemonics, keyboard navigation, and surface-specific shortcuts.
 
 - **[Plugins](plugins.md)**  
   Learn how built-in and sandboxed WebAssembly plugins work, understand permissions, and interpret plugin status indicators.

@@ -1,0 +1,4 @@
+[project]
+engine = "typst"
+name = "Advanced Mathematical Physics"
+main = "main.typ"

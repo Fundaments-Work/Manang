@@ -978,3 +978,57 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - `pnpm run check && pnpm run lint` passed with 0 errors and 0 warnings.
    - `pnpm test` passed all 64 test suites (488 tests).
 
+---
+
+## Task: User Guide Refresh & Accurate Feature Documentation
+
+- **Branch:** `antigravity/docs-refresh`
+- **Scope:** Brought `docs/user/` up to date with landed features, added `docs/user/menus-and-shortcuts.md`, fixed known errors, and updated links in `README.md`.
+- **Key Changes:**
+  1. **Menu Bar & Navigation:** Documented title bar menus (File, Edit, View, Go, Build, Help) with `Alt+letter` mnemonics, `F10` keyboard focusing, arrow navigation, and narrow window collapse into a single "Menu" button (<900 px width).
+  2. **PDF Preview Viewer:** Replaced "coming soon" with complete step-by-step documentation for text layer selection and copying (`Ctrl+C`), `Ctrl+F` find bar with match counter, links, outline navigation, continuous pointer zoom (`Ctrl+wheel` / pinch) and presets, dark pages night mode, page box navigation, and bidirectional SyncTeX (double-click to jump to source line, `Alt+double-click` to select words).
+  3. **Vector Figure Studio:** Documented the full toolbar and single-key tools (Select `V`/`1`, Hand `H`/`2`, Rect `R`/`3`, Diamond `D`/`4`, Ellipse `O`/`5`, Arrow `A`/`6`, Line `L`/`7`, Draw `P`/`B`/`8`, Text `T`/`9`, Frame `F`, Eraser `E`, Laser `K`, Formula `M`), bound arrows with auto-snapping to shape anchors and head styles, container frames, clipboard copy/paste, undo/redo, deterministic SVG/PDF export, and Mermaid diagram insertion. Noted math formulas and custom color picker as one-line coming soon notes. Removed unplanned PlantUML and Ditaa references.
+  4. **Contextual Settings:** Documented file-scoped settings (`Settings for <file>`), the scope banner with "Show all settings", `File > All settings`, `File > Document settings`, and immediate application of custom keybindings.
+  5. **Home Trash & Templates:** Detailed project trash workflow (Move to trash, Restore, Delete/Purge choices between removing from registry vs system trash, and Empty trash) and template browsing with language filters and "Use template".
+  6. **Convert to Typst:** Documented `Edit > Convert to Typst` (`markdown.to-typst`) with overwrite confirmation and diagnostic reporting.
+  7. **New Page `menus-and-shortcuts.md`:** Exhaustive hierarchy of every menu item, group, command ID, and shortcut derived directly from `src/lib/commands/workbench.ts`, `menu.ts`, and `crates/manang-settings/src/keybindings.rs`.
+  8. **Corrections & Invariants:** Corrected MSRV requirement from Rust 1.85 to Rust 1.95 in `getting-started.md` and `README.md`. Clarified that the title bar carries the logo mark and menus without unclickable breadcrumbs, while document identity appears in the OS window title (`<file> — <project>`). Preserved one-line "coming soon" notes for in-development features (plugin manager, Save a version, AI agent).
+
+---
+
+## Realistic Test Corpus (`antigravity/test-corpus`)
+
+- **Branch:** `antigravity/test-corpus`
+- **Scope:** 12 small but realistic offline projects under `testdata/corpus/` exercising compilation, preview, diagnostics, and export across Typst, LaTeX, and Markdown without external network downloads.
+- **Projects Created:**
+  1. `typst-article`: Academic journal article with title block, abstract, equations, table, embedded SVG figure, BibTeX bibliography (9 entries), and cross-references (3 pages).
+  2. `typst-thesis`: 40-page doctoral dissertation partitioned across five modular chapter includes (`01_introduction.typ` through `05_conclusion.typ`) with table of contents.
+  3. `typst-slides`: 6-slide presentation deck using `presentation-16-9` aspect ratio, large typography, tables, and equations.
+  4. `typst-poster`: Single-page A1 conference poster with multi-column layout, banner header, theoretical blocks, tables, and references.
+  5. `typst-letter`: 1-page formal academic letter of recommendation with sender/recipient blocks and signature.
+  6. `typst-heavy-math`: 3-page mathematical physics document with Christoffel symbols, functional path integrals, Grassmann algebra, and contour integrals.
+  7. `typst-cjk-accented`: 2-page multilingual typography document testing accented Latin European orthographies (French, German, Spanish, Portuguese, Czech, Polish, Nordic) and East Asian CJK ideographs (Chinese, Japanese, Korean) with embedded fonts.
+  8. `typst-broken`: Deliberately malformed document containing missing brace, unknown function call, and missing include to validate compiler error diagnostics without panics.
+  9. `latex-article`: Standard LaTeX article with BibTeX bibliography, math equations, and citations.
+  10. `latex-report`: Multi-file LaTeX technical report using `\input` chapters and report structure.
+  11. `latex-broken`: Deliberately broken LaTeX file with unclosed environments and undefined macros.
+  12. `markdown-notes`: Technical notes file featuring YAML frontmatter, inline and display math, summary tables, and a fenced Mermaid flowchart diagram.
+- **Test Harness (`crates/manang-typst/tests/corpus.rs`):**
+  - Custom zero-dependency line-based TOML parser for `expected.toml` and `manang.toml` to avoid modifying workspace or crate dependencies.
+  - Compiles every Typst project through `manang_typst::Compiler`, asserting compile success/failure, expected page counts, and diagnostic coordinates (line and column) on errors.
+  - Timing report enforcing the < 5.0 s compile SLA in the dev profile.
+  - Validation test confirming that all non-Typst projects (LaTeX and Markdown) exist, have valid `expected.toml` configurations, and that all referenced source files exist on disk.
+- **Measured Compilation Timings (Dev Profile):**
+  - `typst-article`: 3 pages, **104.41 ms**
+  - `typst-thesis`: 40 pages, **55.67 ms**
+  - `typst-slides`: 6 pages, **6.34 ms**
+  - `typst-poster`: 1 page, **11.50 ms**
+  - `typst-letter`: 1 page, **24.63 ms**
+  - `typst-heavy-math`: 3 pages, **10.51 ms**
+  - `typst-cjk-accented`: 2 pages, **8.87 ms**
+  - `typst-broken`: 0 pages (diagnostics verified at line 11), **0.33 ms**
+- **Quality Gates Passed:**
+  - `cargo fmt --all -- --check`: PASS
+  - `cargo clippy -p manang-typst --all-targets --locked -- -D warnings`: PASS (0 warnings)
+  - `cargo test -p manang-typst --locked`: PASS (40/40 tests passing across all test suites)
+

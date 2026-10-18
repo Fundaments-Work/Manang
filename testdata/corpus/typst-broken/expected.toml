@@ -1,0 +1,4 @@
+engine = "typst"
+main = "main.typ"
+compile = false
+diagnostic_lines = [11]

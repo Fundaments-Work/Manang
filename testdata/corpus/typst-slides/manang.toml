@@ -1,0 +1,4 @@
+[project]
+engine = "typst"
+name = "Conference Presentation"
+main = "main.typ"
