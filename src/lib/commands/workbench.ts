@@ -14,6 +14,7 @@ import { context } from "$lib/state/context.svelte";
 import { convertToTypst } from "$lib/state/convert";
 import { copyIncludeLine, diagramIsActive, newDiagram } from "$lib/state/diagramFiles";
 import { documents } from "$lib/state/documents.svelte";
+import { figures } from "$lib/state/figures.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
 import { settings } from "$lib/state/settings.svelte";
@@ -69,6 +70,14 @@ const WHEN: Readonly<Record<string, string>> = {
   "file.new-figure": "project",
   "file.new-diagram": "project",
   "doc.copy-include": "workbench && document",
+  "figure.zoom-fit": "workbench && figure",
+  "figure.zoom-selection": "workbench && figure",
+  "figure.insert-mermaid": "workbench && figure",
+  "figure.group": "workbench && figure",
+  "figure.ungroup": "workbench && figure",
+  "figure.front": "workbench && figure",
+  "figure.back": "workbench && figure",
+  "figure.lock": "workbench && figure",
   "view.preview-split": "workbench && document",
   "view.preview-editor": "workbench && document",
   "view.preview-preview": "workbench && document",
@@ -112,6 +121,83 @@ const BRINGS_WORKBENCH: ReadonlySet<string> = new Set([
   "file.new-figure",
   "file.new-diagram",
 ]);
+
+/**
+ * The figure canvas's actions as commands (palette and View menu), for the
+ * figure in the active tab. Their keys are handled by the canvas itself.
+ */
+function figureCommands(path: string | undefined): Command[] {
+  const figure = path === undefined ? undefined : figures.get(path);
+  const on = figure !== undefined;
+  const selected = (figure?.selection.length ?? 0) > 0;
+  const entry = (
+    id: string,
+    title: string,
+    run: (f: NonNullable<typeof figure>) => void,
+    enabled = on,
+    extra: Partial<Command> = {},
+  ): Command => ({
+    id,
+    title,
+    group: "Workbench",
+    keywords: "figure canvas",
+    enabled,
+    keys: "surface",
+    run: () => {
+      if (figure !== undefined) run(figure);
+    },
+    ...extra,
+  });
+  return [
+    entry("figure.zoom-fit", "Figure: Zoom to fit", (f) => f.zoomToFit(), on, {
+      shortcuts: [{ key: "1", shift: true }],
+      menu: at("view", "7_figure", 0),
+      menuTitle: "Zoom figure to fit",
+    }),
+    entry(
+      "figure.zoom-selection",
+      "Figure: Zoom to selection",
+      (f) => f.zoomToSelection(),
+      selected,
+      {
+        shortcuts: [{ key: "2", shift: true }],
+      },
+    ),
+    entry(
+      "figure.insert-mermaid",
+      "Figure: Insert Mermaid",
+      (f) => {
+        f.mermaidDialog = true;
+      },
+      on,
+      {
+        keywords: "figure mermaid flowchart diagram shapes",
+        menu: at("view", "7_figure", 1),
+      },
+    ),
+    entry("figure.group", "Figure: Group", (f) => f.group(), selected, {
+      shortcuts: [{ key: "g", mod: true }],
+    }),
+    entry("figure.ungroup", "Figure: Ungroup", (f) => f.ungroup(), selected, {
+      shortcuts: [{ key: "g", mod: true, shift: true }],
+    }),
+    entry(
+      "figure.front",
+      "Figure: Bring to front",
+      (f) => f.reorder("front"),
+      selected,
+      {
+        shortcuts: [{ key: "]", mod: true, shift: true }],
+      },
+    ),
+    entry("figure.back", "Figure: Send to back", (f) => f.reorder("back"), selected, {
+      shortcuts: [{ key: "[", mod: true, shift: true }],
+    }),
+    entry("figure.lock", "Figure: Lock or unlock", (f) => f.toggleLock(), selected, {
+      shortcuts: [{ key: "l", mod: true, shift: true }],
+    }),
+  ];
+}
 
 function toWorkbench(): void {
   settingsPage.hide();
@@ -526,6 +612,7 @@ export function workbenchCommands(
       menu: at("edit", "5_document", 1),
       run: () => void copyIncludeLine(),
     },
+    ...figureCommands(active?.path),
     {
       id: "file.save",
       title: "Save",
