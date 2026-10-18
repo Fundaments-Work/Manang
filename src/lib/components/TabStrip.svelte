@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
 
   import { keymap } from "$lib/commands/keymap.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
@@ -7,7 +7,9 @@
   import ContextMenu, { type MenuItem } from "$lib/components/ui/ContextMenu.svelte";
   import { SLOT_COLOURS, SLOT_COUNT, SLOT_STROKES } from "$lib/editor/live/remote";
   import { live } from "$lib/state/live.svelte";
+  import { share } from "$lib/state/share.svelte";
   import { sharePopover } from "$lib/state/sharePopover.svelte";
+  import { workspace } from "$lib/state/workspace.svelte";
   import { initials } from "$lib/workbench/live";
   import { detectPlatform } from "$lib/util/keyboard";
   import Icon from "$lib/components/ui/Icon.svelte";
@@ -38,6 +40,11 @@
   let dropAt = $state<number | null>(null);
   let shareButton: HTMLButtonElement | undefined = $state();
   const platform = detectPlatform();
+  // The one lime action of the view, only while updates are waiting (and not
+  // while the Versions view, which has its own lime Get updates, is showing).
+  const pending = $derived(
+    share.updatesWaiting && layout.sideView !== "source-control",
+  );
   const shareKey = $derived.by(() => {
     const first = keymap.shortcuts("share.open")[0];
     return first === undefined ? "" : formatShortcut(first, platform);
@@ -62,6 +69,13 @@
       layout.effectivePreview === "editor" &&
       build.previewTarget() !== null,
   );
+
+  // Learn whether updates are waiting, so the Share button can say so.
+  $effect(() => {
+    const root = workspace.project?.root ?? "";
+    untrack(() => void share.load(root));
+  });
+  onMount(() => share.listen());
 
   // Keep the active tab visible when it changes, including after a keyboard jump.
   $effect(() => {
@@ -387,7 +401,10 @@
       type="button"
       class="mng-lime-hover inset-focus inline-flex h-7 items-center gap-1.5 px-2 text-xs {sharePopover.open
         ? 'bg-surface-hi text-text'
-        : 'text-text-60'}"
+        : pending
+          ? 'border border-accent bg-accent text-accent-ink'
+          : 'text-text-60'}"
+      data-pending={pending}
       data-testid="share-button"
       aria-haspopup="true"
       aria-expanded={sharePopover.open}

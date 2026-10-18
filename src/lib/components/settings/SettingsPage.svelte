@@ -205,8 +205,7 @@
       if (section === "keyboard" || section === "about") view = section;
       else {
         view = "settings";
-        if (section === "plugins" || section === "collaboration")
-          void reveal(section);
+        if (section === "plugins" || section === "collaboration") void reveal(section);
         else if (section === "live") void reveal("collaboration");
         else if (section !== null)
           void reveal(

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { tick } from "svelte";
 
+  import SharePanel from "$lib/components/SharePanel.svelte";
+  import { layout } from "$lib/state/layout.svelte";
   import { live } from "$lib/state/live.svelte";
   import { settings } from "$lib/state/settings.svelte";
   import { sharePopover } from "$lib/state/sharePopover.svelte";
@@ -220,5 +222,19 @@
         >
       </section>
     {/if}
+
+    <section
+      class="space-y-2 border-t border-line px-3 py-3"
+      aria-labelledby="share-versions-title"
+    >
+      <h2 id="share-versions-title" class="m-0 text-[13px] font-normal text-text">
+        Share versions
+      </h2>
+      <p class="m-0 text-text-60">
+        Send the versions you saved to your co-authors, and get theirs. One turn at a
+        time, not live.
+      </p>
+      <SharePanel embedded quiet={layout.sideView === "source-control"} />
+    </section>
   </div>
 {/if}

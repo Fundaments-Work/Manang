@@ -910,6 +910,33 @@ async function liveSection(browser) {
     ),
   );
   await shoot(page, "live-7-narrow");
+  await openShare();
+  check(
+    "at 420 px the Share button is icon-only with its name kept for screen readers, and the popover fits the window",
+    await page.evaluate(
+      `(() => { const b = document.querySelector('[data-testid="share-button"]'); const label = b.querySelector("span"); const p = document.querySelector('[data-testid="share-popover"]').getBoundingClientRect(); return label.getBoundingClientRect().width <= 1 && p.left >= 0 && p.right <= window.innerWidth && document.documentElement.scrollWidth <= window.innerWidth; })()`,
+    ),
+  );
+  await shoot(page, "live-7b-narrow-popover");
+  await press(page, "Escape");
+  await resize(page, 640, 800);
+  check(
+    "at 640 px the tab strip keeps the Share button and the presence marks inside the window",
+    await page.evaluate(
+      `(() => { const b = document.querySelector('[data-testid="share-button"]').getBoundingClientRect(); const pr = document.querySelector('[data-testid="presence"]').getBoundingClientRect(); return b.right <= window.innerWidth && pr.right <= window.innerWidth && document.documentElement.scrollWidth <= window.innerWidth; })()`,
+    ),
+  );
+  await page.evaluate(`document.documentElement.classList.add("theme-light")`);
+  await openShare();
+  await shoot(page, "live-8-light");
+  check(
+    "in the light theme the popover is on paper tones with a readable hairline",
+    await page.evaluate(
+      `(() => { const p = getComputedStyle(document.querySelector('[data-testid="share-popover"]')); return p.backgroundColor !== "rgb(20, 20, 22)" && p.borderTopWidth === "1px" && p.boxShadow === "none"; })()`,
+    ),
+  );
+  await press(page, "Escape");
+  await page.evaluate(`document.documentElement.classList.remove("theme-light")`);
   await resize(page, 1280, 820);
   check(
     "the bar uses square corners, no shadows and only weights 300 and 400",
@@ -6282,6 +6309,55 @@ async function main() {
     await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
     if (!(await exists(page, 'aside[aria-label="Files panel"]')))
       await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+
+    // The same sharing from the Share popover.
+    const POP = '[data-testid="share-popover"]';
+    const PSHARE = `${POP} section[aria-label="Share versions"]`;
+    await shareFlag("diverged");
+    await click(page, '[data-testid="share-button"]');
+    // Others have shared first: Share is refused, which also teaches the status.
+    await clickText(page, `${PSHARE} button`, "Share");
+    await expectEventually(
+      page,
+      "Share from the popover says to get updates first",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes("get updates first")`,
+    );
+    await expectEventually(
+      page,
+      "the Share popover has a Share versions row with the same status line",
+      `document.querySelector('${PSHARE} [data-testid="share-status"]')?.innerText.includes("Updates available")`,
+      { show: `document.querySelector('${POP}')?.innerText` },
+    );
+    check(
+      "in the popover Get updates is the one lime action",
+      (
+        await page.evaluate(
+          `[...document.querySelectorAll('${POP} button')].filter((b) => b.className.includes("bg-accent")).map((b) => b.textContent.trim())`,
+        )
+      ).join() === "Get updates",
+    );
+    await shoot(page, "share-popover-versions");
+    await press(page, "Escape");
+    check(
+      "with updates waiting the Share button itself becomes the lime action",
+      await page.evaluate(
+        `(() => { const b = document.querySelector('[data-testid="share-button"]'); return b.dataset.pending === "true" && b.className.includes("bg-accent"); })()`,
+      ),
+    );
+    await click(page, '[data-testid="share-button"]');
+    await clickText(page, `${PSHARE} button`, "Get updates");
+    await expectEventually(
+      page,
+      "Get updates from the popover reports what arrived",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes("Got 2 updates")`,
+    );
+    await press(page, "Escape");
+    await expectEventually(
+      page,
+      "afterwards the Share button is an ordinary button again",
+      `document.querySelector('[data-testid="share-button"]')?.dataset.pending === "false"`,
+    );
+    await shareFlag(null);
 
     /* ------------------------------------------------------------------ */
     section("Persistence");
