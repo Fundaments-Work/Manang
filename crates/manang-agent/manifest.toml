@@ -105,7 +105,7 @@ type = "enum"
 values = ["anthropic", "openai", "deepseek", "openrouter", "groq", "ollama", "llama_cpp", "lm_studio", "custom"]
 default = "anthropic"
 title = "Provider"
-description = "Who answers your requests. Set the key under Provider and key."
+description = "Who answers your requests. Set the key under Key."
 
 [[contributes.settings]]
 id = "agent.model"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AgentChip from "$lib/components/agent/AgentChip.svelte";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { inTauri } from "$lib/kernel";
   import { build } from "$lib/state/build.svelte";
@@ -104,6 +105,8 @@
   >
     {notice.text}
   </span>
+
+  <AgentChip />
 
   {#if isDocument}
     <span class="mng-status-text font-mono"

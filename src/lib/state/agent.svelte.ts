@@ -31,6 +31,7 @@ import {
   pendingProposal,
   reduce,
   type AgentViewState,
+  type TranscriptItem,
 } from "$lib/agent/reducer";
 import type {
   AgentFeature,
@@ -38,10 +39,13 @@ import type {
   ChipKind,
   ConnectionResult,
   RequestPreview,
+  SessionMeta,
   StartArgs,
   TextEdit,
   TrayChip,
 } from "$lib/agent/types";
+import { undo } from "@codemirror/commands";
+
 import {
   applyInline,
   clearInline,
@@ -94,6 +98,11 @@ export class AgentState {
   previewOpen = $state(false);
   /** Why the view asks for set-up instead of sending, or null. */
   setup = $state<SetupReason | null>(null);
+
+  /** Earlier chats of this project, newest first (the History menu). */
+  history = $state.raw<readonly SessionMeta[]>([]);
+  /** The message of the last request, so Retry can send it again. */
+  #last: { feature: AgentFeature; prompt: string } | null = null;
 
   #listening = false;
 
@@ -167,9 +176,155 @@ export class AgentState {
     return null;
   }
 
-  /** Opens the provider settings (the one-click "Set up"). */
+  /** Opens the Agent column and focuses its composer (Edit > AI, shortcut, chip). */
+  reveal(): void {
+    this.listen();
+    this.attachSelection();
+    layout.showAgent();
+    void this.refreshStatus();
+  }
+
+  /** Opens the Agent page of Settings (the setup card and the chip link here). */
   openSetup(): void {
-    settingsPage.show();
+    settingsPage.show("agent");
+  }
+
+  /** Chooses a provider (and resets the model to its default). */
+  async chooseProvider(id: string): Promise<void> {
+    await settings.set("agent.provider", id, "user");
+    await settings.set("agent.model", "", "user");
+    await this.refreshStatus();
+  }
+
+  async chooseModel(model: string): Promise<void> {
+    await settings.set("agent.model", model, "user");
+    await this.refreshStatus();
+  }
+
+  /** Turns the agent on again (the "off" state of the view). */
+  async turnOn(): Promise<void> {
+    await settings.set("agent.enabled", true, "user");
+    await this.refreshStatus();
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* History                                                                  */
+  /* ----------------------------------------------------------------------- */
+
+  async loadHistory(): Promise<void> {
+    try {
+      const out = await api.sessions(workspace.project?.root);
+      this.history = [...out.sessions].sort((a, b) => b.updated_ms - a.updated_ms);
+    } catch {
+      this.history = [];
+    }
+  }
+
+  /**
+   * Shows an earlier chat read-only: the first request as its title and the assistant's text.
+   * What was attached to the request is not replayed. Sending starts a new chat.
+   */
+  async openSession(id: string): Promise<void> {
+    const meta = this.history.find((h) => h.id === id);
+    try {
+      const out = await api.transcript(id, workspace.project?.root);
+      const items: TranscriptItem[] = [
+        { kind: "user", text: meta?.title ?? "Earlier chat", chips: [] },
+      ];
+      for (const raw of out.messages) {
+        const m = raw as {
+          role?: string;
+          content?: { type?: string; text?: string }[];
+        };
+        if (m.role !== "assistant") continue;
+        const text = (m.content ?? [])
+          .filter((b) => b.type === "text" && typeof b.text === "string")
+          .map((b) => b.text)
+          .join("\n\n");
+        if (text !== "")
+          items.push({ kind: "assistant", text, thinking: "", open: false });
+      }
+      items.push({
+        kind: "notice",
+        text: "An earlier chat. Send a message to start a new one.",
+      });
+      this.view = { ...initialState(), items };
+      this.tray = clearUnpinned(this.tray);
+      this.setup = null;
+    } catch (error) {
+      reportError("That chat could not be opened", error);
+    }
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* Suggested actions, retry, undo, apply all                                  */
+  /* ----------------------------------------------------------------------- */
+
+  /** Sends `text` as a chat message with the current context. */
+  async sendText(text: string): Promise<void> {
+    this.feature = "chat";
+    this.input = text;
+    await this.send();
+  }
+
+  /** One of the empty-state rows. Context is attached only when it exists; nothing else. */
+  async suggest(kind: "rewrite" | "error" | "summarise" | "caption"): Promise<void> {
+    if (kind === "rewrite") {
+      await this.runSelection("rewrite");
+      return;
+    }
+    if (kind === "error") {
+      await this.addChip("diagnostics");
+      if (!this.tray.some((c) => c.kind === "diagnostics")) return;
+      await this.sendText("Explain this error and how to fix it.");
+      return;
+    }
+    if (kind === "summarise") {
+      await this.addChip(this.selectionChip() === null ? "file" : "selection");
+      if (this.tray.length === 0) return;
+      await this.sendText("Summarise this section in a few sentences.");
+      return;
+    }
+    const figure = tabs.active?.kind === "figure";
+    await this.addChip(
+      figure ? "figure" : this.selectionChip() === null ? "file" : "selection",
+    );
+    if (this.tray.length === 0) return;
+    await this.sendText("Draft a short caption for this figure.");
+  }
+
+  /** Sends the last request again after an error. */
+  async retry(): Promise<void> {
+    const last = this.#last;
+    if (last === null || this.view.running) return;
+    const items = [...this.view.items];
+    while (items.length > 0) {
+      const tail = items.pop();
+      if (tail?.kind === "user") break;
+    }
+    this.view = { ...this.view, items };
+    const continuing = this.view.sessionId !== null && last.feature === "chat";
+    await this.#run(last.feature, last.prompt, continuing ? this.view.sessionId : null);
+  }
+
+  /** Undoes an accepted proposal in the editor (the same as Ctrl+Z) and marks its card. */
+  undoAccepted(id: string): void {
+    const view = documents.view;
+    if (view === undefined) {
+      notice.show("Open the document, then press Ctrl+Z to undo.");
+      return;
+    }
+    undo(view);
+    this.view = decideProposal(this.view, id, "undone");
+    view.focus();
+  }
+
+  /** Accepts every waiting proposal, one editor transaction each (so each undoes alone). */
+  async acceptAll(): Promise<void> {
+    const ids = this.view.items.flatMap((i) =>
+      i.kind === "proposal" && i.state === "pending" ? [i.proposalId] : [],
+    );
+    for (const id of ids) await this.accept(id);
   }
 
   /* ----------------------------------------------------------------------- */
@@ -245,6 +400,16 @@ export class AgentState {
       }
     }
     if (chip !== null) this.tray = mergeTray(this.tray, [chip]);
+  }
+
+  /** Attaches an open document as a file chip (the "@" mention and the + menu). */
+  addFile(path: string): void {
+    const doc = documents.get(path);
+    if (doc === undefined) {
+      notice.show("Open that file first, then attach it.");
+      return;
+    }
+    this.tray = mergeTray(this.tray, [fileChip(path, doc.text())]);
   }
 
   #problemsChip(path: string | undefined): TrayChip | null {
@@ -346,6 +511,7 @@ export class AgentState {
     }
     this.setup = null;
     if (this.status?.consent !== true && !(await this.#consent())) return;
+    this.#last = { feature, prompt };
     const shown = prompt.trim() !== "" ? prompt.trim() : defaultLine(feature);
     const base = sessionId === null ? initialState() : this.view;
     this.view = begin(
@@ -409,7 +575,7 @@ export class AgentState {
       if (answer.id !== "go" || answer.value.trim() === "") return;
       target = answer.value.trim();
     }
-    layout.showPanel("agent");
+    layout.showAgent();
     this.feature = feature;
     this.tray = mergeTray(
       this.tray.filter((c) => c.pinned === true),
@@ -429,7 +595,7 @@ export class AgentState {
     if (documents.get(problem.file) === undefined) {
       if (!(await actions.openFile(problem.file, { focus: false }))) return;
     }
-    layout.showPanel("agent");
+    layout.showAgent();
     this.feature = "fix-diagnostic";
     this.tray = mergeTray(
       this.tray.filter((c) => c.pinned === true),
@@ -595,6 +761,16 @@ export class AgentState {
       return await api.testConnection(workspace.project?.root);
     } catch (error) {
       return { ok: false, message: errorMessage(error) };
+    }
+  }
+
+  /** Records consent to send data to the provider (the last set-up step). */
+  async grantConsent(provider: string): Promise<void> {
+    try {
+      await api.consent(provider, true);
+      await this.refreshStatus();
+    } catch (error) {
+      reportError("Consent could not be recorded", error);
     }
   }
 

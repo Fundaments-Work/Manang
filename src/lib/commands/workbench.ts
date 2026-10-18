@@ -72,6 +72,7 @@ const WHEN: Readonly<Record<string, string>> = {
   "view.problems": "project",
   "view.output": "project",
   "agent.show": "project",
+  "agent.toggle": "project",
   "agent.rewrite": "workbench && document",
   "agent.shorten": "workbench && document",
   "agent.translate": "workbench && document",
@@ -136,6 +137,7 @@ const BRINGS_WORKBENCH: ReadonlySet<string> = new Set([
   "view.problems",
   "view.output",
   "agent.show",
+  "agent.toggle",
   "agent.rewrite",
   "agent.shorten",
   "agent.translate",
@@ -345,12 +347,18 @@ function aiCommands(isDocument: boolean): Command[] {
       menuTitle: "AI agent",
       group: "Workbench",
       keywords: "ai assistant chat model",
-      menu: at("build", "3_panels", 2),
+      run: () => agent.reveal(),
+    },
+    {
+      id: "agent.toggle",
+      title: "Toggle AI agent",
+      menuTitle: "Agent",
+      group: "Workbench",
+      keywords: "ai assistant chat model",
+      menu: at("view", "2_side", 7),
       run: () => {
-        agent.listen();
-        agent.attachSelection();
-        layout.showPanel("agent");
-        void agent.refreshStatus();
+        if (layout.agentOpen) layout.closeAgent();
+        else agent.reveal();
       },
     },
     action(
