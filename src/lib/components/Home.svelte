@@ -4,6 +4,7 @@
   import EditProject from "./home/EditProject.svelte";
   import NewProject from "./home/NewProject.svelte";
   import ProjectCard from "./home/ProjectCard.svelte";
+  import TemplateCard from "./home/TemplateCard.svelte";
   import ContextMenu, { type MenuItem } from "./ui/ContextMenu.svelte";
   import Icon, { type IconName } from "./ui/Icon.svelte";
   import { openFolder, openProject } from "$lib/state/actions";
@@ -12,14 +13,7 @@
   import { notice } from "$lib/state/notice.svelte";
   import type { ProjectEntry } from "$lib/kernel/types";
   import { workspace } from "$lib/state/workspace.svelte";
-  import {
-    ENGINE_LABEL,
-    SECTIONS,
-    SORTS,
-    STARTERS,
-    emptyState,
-    type HomeSection,
-  } from "$lib/workbench/home";
+  import { SECTIONS, SORTS, emptyState, type HomeSection } from "$lib/workbench/home";
 
   /**
    * Home: every project in one place. The surface when no project is open, and
@@ -278,31 +272,61 @@
       </div>
 
       {#if home.section === "templates"}
-        <p class="m-0 mb-4 max-w-[60ch] text-xs leading-relaxed text-text-60">
-          Starters set up a project with a main document and a references file. Pick
-          one, name it, and start writing.
-        </p>
-        <ul
-          class="m-0 grid list-none gap-px p-0"
-          style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))"
-        >
-          {#each STARTERS as starter (starter.engine)}
-            <li class="flex">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p class="m-0 max-w-[60ch] text-xs leading-relaxed text-text-60">
+            Starters configured for offline authoring and deterministic compilation.
+            Pick a template to start writing with publication-grade structure.
+          </p>
+          <div
+            class="flex items-center gap-1"
+            role="group"
+            aria-label="Filter templates by language"
+          >
+            {#each [{ id: "all", label: "All" }, { id: "typst", label: "Typst" }, { id: "latex", label: "LaTeX" }, { id: "markdown", label: "Markdown" }] as filter (filter.id)}
               <button
                 type="button"
-                class="inset-focus flex w-full flex-col gap-2 border border-line bg-surface p-4 text-left hover:bg-surface-hi"
-                onclick={() => home.openNew(starter.engine)}
+                class="mng-btn px-2.5 py-1 text-xs"
+                class:bg-surface-hi={home.templateFilter === filter.id}
+                aria-pressed={home.templateFilter === filter.id}
+                onclick={() =>
+                  (home.templateFilter = filter.id as typeof home.templateFilter)}
               >
-                <span class="font-mono text-[11px] text-text-muted"
-                  >{ENGINE_LABEL[starter.engine]}</span
-                >
-                <span class="text-[13px] text-text">{starter.title}</span>
-                <span class="text-[11px] leading-snug text-text-60">{starter.note}</span
-                >
+                {filter.label}
               </button>
-            </li>
-          {/each}
-        </ul>
+            {/each}
+          </div>
+        </div>
+
+        {#if home.shownTemplates.length === 0}
+          <div class="flex flex-col items-start gap-2 py-6 text-text-60" role="status">
+            <p class="m-0 text-[13px] text-text">No templates match your search</p>
+            <p class="m-0 text-xs">
+              Try a different keyword or reset the language filter.
+            </p>
+            <button
+              type="button"
+              class="mng-btn mt-1 text-xs"
+              onclick={() => {
+                home.query = "";
+                home.templateFilter = "all";
+              }}
+            >
+              Reset filters
+            </button>
+          </div>
+        {:else}
+          <ul
+            class="m-0 grid list-none gap-3 p-0"
+            style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr))"
+            aria-label="Starter templates"
+          >
+            {#each home.shownTemplates as template (template.id)}
+              <li class="flex">
+                <TemplateCard {template} onuse={(t) => home.openNew(t.engine, t.id)} />
+              </li>
+            {/each}
+          </ul>
+        {/if}
       {:else if home.shown.length === 0}
         {#if !home.loaded}
           <p class="m-0 text-xs text-text-60" role="status">Loading projects</p>
@@ -383,6 +407,10 @@
     />
   {/if}
   {#if home.creating !== null}
-    <NewProject engine={home.creating.engine} onclose={() => (home.creating = null)} />
+    <NewProject
+      engine={home.creating.engine}
+      template={home.creating.template}
+      onclose={() => (home.creating = null)}
+    />
   {/if}
 </section>

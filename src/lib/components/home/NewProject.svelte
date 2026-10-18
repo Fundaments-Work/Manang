@@ -14,10 +14,15 @@
    */
   interface Props {
     engine: Engine;
+    template?: string | null | undefined;
     onclose: () => void;
   }
 
-  const { engine: initial, onclose }: Props = $props();
+  const {
+    engine: initial,
+    template: initialTemplate = null,
+    onclose,
+  }: Props = $props();
 
   const engines: readonly { id: Engine; label: string; note: string }[] = [
     { id: "typst", label: "Typst", note: "Fast, modern markup with instant preview." },
@@ -33,6 +38,8 @@
   // The dialog opens on the language that was asked for; it is not meant to follow.
   // svelte-ignore state_referenced_locally
   let engine = $state<Engine>(initial);
+  // svelte-ignore state_referenced_locally
+  let selectedTemplate = $state<string | null>(initialTemplate);
   let location = $state(
     suggestLocation(home.entries) ||
       (workspace.recent.find((r) => r.exists)?.path.replace(/\/[^/]*$/, "") ?? ""),
@@ -41,6 +48,13 @@
   let box: HTMLDivElement | undefined = $state();
   const returnTo =
     document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+  const templatesForEngine = $derived(
+    home.templates.filter((t) => t.engine === engine),
+  );
+  const activeTemplate = $derived(
+    home.templates.find((t) => t.id === selectedTemplate) ?? null,
+  );
 
   const slug = $derived(slugify(name));
   const target = $derived(`${location.replace(/\/+$/, "")}/${slug}`);
@@ -58,6 +72,26 @@
     returnTo?.focus();
   }
 
+  function selectEngine(id: Engine): void {
+    engine = id;
+    if (selectedTemplate !== null) {
+      const tmpl = home.templates.find((t) => t.id === selectedTemplate);
+      if (tmpl && tmpl.engine !== id) {
+        selectedTemplate = null;
+      }
+    }
+  }
+
+  function onTemplateChange(id: string | null): void {
+    selectedTemplate = id;
+    if (id !== null) {
+      const tmpl = home.templates.find((t) => t.id === id);
+      if (tmpl && tmpl.engine !== engine) {
+        engine = tmpl.engine;
+      }
+    }
+  }
+
   async function browse(): Promise<void> {
     try {
       const picked = await pickFolder("Choose where to create the project");
@@ -70,7 +104,8 @@
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!canCreate) return;
-    if (await createProject(target, name.trim(), engine)) onclose();
+    if (await createProject(target, name.trim(), engine, selectedTemplate ?? undefined))
+      onclose();
   }
 
   function onkeydown(event: KeyboardEvent): void {
@@ -146,7 +181,7 @@
               role="radio"
               aria-checked={engine === option.id}
               class="mng-btn h-auto flex-col items-start gap-1 px-3 py-2.5 text-left whitespace-normal"
-              onclick={() => (engine = option.id)}
+              onclick={() => selectEngine(option.id)}
             >
               <span class="text-[13px]">{option.label}</span>
               <span class="text-[11px] leading-snug text-text-60">{option.note}</span>
@@ -154,6 +189,36 @@
           {/each}
         </div>
       </fieldset>
+      <div class="flex flex-col gap-1.5 text-xs text-text-60">
+        <div class="flex items-center justify-between">
+          <label for="new-project-template">Template</label>
+          {#if selectedTemplate !== null}
+            <button
+              type="button"
+              class="border-0 bg-transparent p-0 text-[11px] text-text-60 underline hover:text-text cursor-pointer"
+              onclick={() => (selectedTemplate = null)}
+            >
+              Clear template
+            </button>
+          {/if}
+        </div>
+        <select
+          id="new-project-template"
+          class="mng-field h-9 text-[12px]"
+          value={selectedTemplate ?? ""}
+          onchange={(e) => onTemplateChange(e.currentTarget.value || null)}
+        >
+          <option value="">Blank (default starter)</option>
+          {#each templatesForEngine as tmpl (tmpl.id)}
+            <option value={tmpl.id}>{tmpl.name}</option>
+          {/each}
+        </select>
+        {#if activeTemplate}
+          <p class="m-0 text-[11px] leading-snug text-text-60">
+            {activeTemplate.description}
+          </p>
+        {/if}
+      </div>
       <div class="flex flex-col gap-1.5 text-xs text-text-60">
         <label for="new-project-location">Create in</label>
         <div class="flex gap-2">

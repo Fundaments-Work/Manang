@@ -10,13 +10,14 @@
 
 import { SvelteMap } from "svelte/reactivity";
 
-import { errorMessage, kernel } from "$lib/kernel";
+import { errorMessage, kernel, reportError } from "$lib/kernel";
 import { projectApi } from "$lib/kernel/api";
 import type {
   Engine,
   ProjectEntry,
   ProjectPatch,
   ProjectSort,
+  TemplateSummary,
 } from "$lib/kernel/types";
 import {
   applyPatch,
@@ -25,6 +26,7 @@ import {
   type HomeSection,
   type HomeView,
 } from "$lib/workbench/home";
+import { selectTemplates, type TemplateFilterEngine } from "$lib/workbench/templates";
 import { clearKey, loadJson, saveJson } from "$lib/workbench/persist";
 
 import { notice } from "./notice.svelte";
@@ -50,8 +52,11 @@ export class HomeState {
   view = $state<HomeView>("grid");
   entries = $state.raw<readonly ProjectEntry[]>([]);
   loaded = $state(false);
-  /** The New project dialog, with the language it starts on. */
-  creating = $state<{ engine: Engine } | null>(null);
+  templates = $state.raw<readonly TemplateSummary[]>([]);
+  templatesLoaded = $state(false);
+  templateFilter = $state<TemplateFilterEngine>("all");
+  /** The New project dialog, with the language it starts on and optional template. */
+  creating = $state<{ engine: Engine; template?: string | null } | null>(null);
   /** The typed-path form, when there is no native folder picker. */
   typingPath = $state(false);
   /** Bumped per project when its thumbnail changes, so cards reload it. */
@@ -62,6 +67,12 @@ export class HomeState {
       section: this.section,
       query: this.query,
       sort: this.sort,
+    }),
+  );
+  readonly shownTemplates = $derived(
+    selectTemplates(this.templates, {
+      query: this.query,
+      engine: this.templateFilter,
     }),
   );
   readonly counts = $derived(sectionCounts(this.entries));
@@ -109,6 +120,17 @@ export class HomeState {
     } finally {
       this.loaded = true;
     }
+    void this.loadTemplates();
+  }
+
+  async loadTemplates(): Promise<void> {
+    if (this.templatesLoaded) return;
+    try {
+      this.templates = await api.templates();
+      this.templatesLoaded = true;
+    } catch (error) {
+      reportError("home.loadTemplates", error);
+    }
   }
 
   /** Show Home over the open project (or as the only surface). */
@@ -128,8 +150,8 @@ export class HomeState {
     else this.show();
   }
 
-  openNew(engine: Engine = "typst"): void {
-    this.creating = { engine };
+  openNew(engine: Engine = "typst", template?: string | null): void {
+    this.creating = { engine, template: template ?? null };
   }
 
   /** Change a project's metadata: shown at once, undone if the kernel refuses. */
