@@ -1811,6 +1811,318 @@ async function main() {
     }
 
     /* ------------------------------------------------------------------ */
+    section("AI agent");
+    {
+      const SECRET_KEY = "sk-verify-ui-secret-key-0123456789abcdef";
+      const pageText = () =>
+        page.evaluate(
+          `document.body.innerText + [...document.querySelectorAll("input, textarea")].map((i) => i.value).join(" ")`,
+        );
+      const runCommand = async (title) => {
+        await press(page, "k", { ctrl: true, wait: 300 });
+        await insertText(page, title);
+        await press(page, "Enter", { wait: 400 });
+      };
+      const closeSettingsPage = async () => {
+        for (
+          let i = 0;
+          i < 3 && (await exists(page, 'section[aria-label="Settings"]'));
+          i++
+        )
+          await press(page, "Escape");
+        await waitFor(page, `!document.querySelector('section[aria-label="Settings"]')`, {
+          label: "settings closed",
+        });
+      };
+      const openSettingsPage = async () => {
+        await click(
+          page,
+          'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
+        );
+        await waitFor(
+          page,
+          `!!document.querySelector('section[aria-label="Settings"] [data-group]')`,
+          { label: "settings open" },
+        );
+      };
+      /** Triple-click the editor line containing `text`: selects the whole line. */
+      const selectLine = async (text) => {
+        const at = await page.evaluate(`(() => {
+          const line = [...document.querySelectorAll(".cm-line")].find((l) => l.textContent.includes(${JSON.stringify(text)}));
+          if (!line) return null;
+          line.scrollIntoView({ block: "center" });
+          const r = line.getBoundingClientRect();
+          return { x: r.left + 40, y: r.top + r.height / 2 };
+        })()`);
+        if (at === null) throw new Error(`no editor line containing ${text}`);
+        for (const count of [1, 2, 3]) {
+          await mouse(page, "mouseMoved", at.x, at.y);
+          await mouse(page, "mousePressed", at.x, at.y, "left", count);
+          await mouse(page, "mouseReleased", at.x, at.y, "left", count);
+        }
+        await sleep(200);
+      };
+      // The document's own text: the diff widget (inserted text and buttons) is not part of it.
+      const docText = () =>
+        page.evaluate(`(() => {
+          const c = document.querySelector(".cm-content")?.cloneNode(true);
+          if (!c) return "";
+          c.querySelectorAll(".mng-ai-inline").forEach((n) => n.remove());
+          return c.textContent;
+        })()`);
+      const agentLog = () =>
+        page.evaluate(`document.querySelector("[data-agent-log]")?.innerText ?? ""`);
+
+      // A document tab to work in.
+      if (!(await exists(page, '[role="tab"][data-tab="main.typ"]'))) {
+        await press(page, "p", { ctrl: true, wait: 300 });
+        await insertText(page, "main.typ");
+        await press(page, "Enter", { wait: 500 });
+      } else {
+        await click(page, '[role="tab"][data-tab="main.typ"]');
+      }
+      await waitFor(page, `document.querySelector(".cm-content")?.textContent.includes("generalizes")`);
+      const original = await docText();
+
+      // Not set up: the view says so and offers Set up; nothing is sent.
+      await runCommand("Show AI agent");
+      check("the Agent tab is part of the bottom panel", await exists(page, "#panel-tab-agent"));
+      check(
+        "Agent is a tab, not a new activity-bar item",
+        !(await page.evaluate(
+          `[...document.querySelectorAll('nav[aria-label="Workbench views"] button')].some((b) => /agent|ai/i.test(b.getAttribute("aria-label") ?? ""))`,
+        )),
+      );
+      await expectEventually(
+        page,
+        "before set-up the header says not set up and offers Set up",
+        `/not set up/.test(document.querySelector("[data-agent-status]")?.innerText ?? "") && !!document.querySelector("[data-agent-setup]")`,
+      );
+      check(
+        "the view labels the provider as a mock in the browser",
+        await exists(page, "[data-agent-mock]"),
+      );
+      await shoot(page, "ai-01-not-set-up");
+
+      // Set up: provider and key in Settings.
+      await click(page, "[data-agent-setup]");
+      await waitFor(page, `!!document.querySelector('[data-group="agent-provider"]')`, {
+        label: "provider panel",
+      });
+      check(
+        "Settings has a Provider and key panel",
+        await page.evaluate(
+          `document.querySelector('[data-group="agent-provider"]').innerText.includes("Provider and key")`,
+        ),
+      );
+      check(
+        "the key field is a password field",
+        await page.evaluate(
+          `document.querySelector("[data-agent-key]").type === "password"`,
+        ),
+      );
+      await page.evaluate(`document.querySelector("[data-agent-key]").focus()`);
+      await insertText(page, SECRET_KEY);
+      await click(page, "[data-agent-key-save]");
+      await expectEventually(
+        page,
+        "after saving, the field is empty and the panel only says where the key is held",
+        `document.querySelector("[data-agent-key]").value === "" && /Not saved: stored for this session only/.test(document.querySelector("[data-agent-key-status]").innerText)`,
+      );
+      check("the key is never displayed back", !(await pageText()).includes(SECRET_KEY));
+      await click(page, "[data-agent-test]");
+      await expectEventually(
+        page,
+        "Test connection answers in plain words",
+        `/Connected/.test(document.querySelector("[data-agent-test-result]")?.innerText ?? "")`,
+      );
+      await shoot(page, "ai-02-provider-and-key");
+      await closeSettingsPage();
+
+      // A selection action: consent first, then an inline diff.
+      await click(page, ".cm-content");
+      await selectLine("generalizes Landauer");
+      await runCommand("AI: Shorten selection");
+      await expectEventually(
+        page,
+        "the first request asks for consent and says what is sent and where",
+        `(() => { const d = document.querySelector('[role="alertdialog"]'); return !!d && /Anthropic/.test(d.innerText) && /sends the text you attach/.test(d.innerText); })()`,
+      );
+      await shoot(page, "ai-03-consent");
+      await clickText(page, '[role="alertdialog"] button', "Agree");
+      await expectEventually(
+        page,
+        "the result is an inline diff: removed text struck through, inserted text after it",
+        `!!document.querySelector(".cm-content .mng-ai-removed") && !!document.querySelector(".cm-content .mng-ai-inserted")`,
+        { timeout: 15000 },
+      );
+      check(
+        "removed text is dim and struck through",
+        await page.evaluate(
+          `getComputedStyle(document.querySelector(".mng-ai-removed")).textDecorationLine.includes("line-through")`,
+        ),
+      );
+      check(
+        "inserted text uses the Sage token",
+        await page.evaluate(
+          `getComputedStyle(document.querySelector(".mng-ai-inserted")).color === getComputedStyle(document.documentElement).getPropertyValue("--mng-math").trim().replace(/^#(..)(..)(..)$/, (_, r, g, b) => "rgb(" + [r, g, b].map((x) => parseInt(x, 16)).join(", ") + ")")`,
+        ),
+      );
+      check(
+        "the diff widget has square Accept and Reject buttons and no shadow",
+        await page.evaluate(
+          `(() => { const b = document.querySelector("[data-ai-accept]"); const s = getComputedStyle(b); return !!document.querySelector("[data-ai-reject]") && s.borderRadius === "0px" && s.boxShadow === "none"; })()`,
+        ),
+      );
+      check("the document is unchanged until Accept", (await docText()) === original);
+      check(
+        "the Agent view shows the proposal as a card with the one lime action, Accept",
+        await page.evaluate(`(() => {
+          const accept = document.querySelector("[data-agent-accept]");
+          const send = document.querySelector("[data-agent-send]");
+          const lime = (el) => getComputedStyle(el).backgroundColor === "rgb(198, 241, 53)";
+          return !!accept && lime(accept) && !!send && !lime(send);
+        })()`),
+      );
+      check(
+        "the context tray shows the selection chip with a token count",
+        await page.evaluate(
+          `(() => { const c = document.querySelector('[data-chip="selection"]'); return !!c && /\\d/.test(c.innerText) && /tokens/.test(document.querySelector("[data-tray-tokens]").innerText); })()`,
+        ),
+      );
+      check(
+        "the usage line labels cost as an estimate",
+        await page.evaluate(
+          `/estimate/.test(document.querySelector("[data-agent-usage]").innerText)`,
+        ),
+      );
+      await shoot(page, "ai-04-inline-diff");
+
+      // Preview what will be sent.
+      await click(page, "[data-agent-preview]");
+      await expectEventually(
+        page,
+        "Preview shows the exact payload with the selected text",
+        `(() => { const d = document.querySelector("[data-agent-preview-dialog]"); return !!d && /What will be sent/.test(d.innerText) && /generalizes Landauer/.test(d.querySelector("[data-preview-body]")?.innerText ?? ""); })()`,
+      );
+      check(
+        "the preview is read-only and reports tokens and the redaction count",
+        await page.evaluate(
+          `(() => { const d = document.querySelector("[data-agent-preview-dialog]"); return !d.querySelector("input, textarea") && !!d.querySelector("[data-preview-tokens]") && !!d.querySelector("[data-redactions]"); })()`,
+        ),
+      );
+      await shoot(page, "ai-05-preview");
+      await press(page, "Escape");
+      check(
+        "Esc closes the preview",
+        !(await exists(page, "[data-agent-preview-dialog]")),
+      );
+
+      // Accept: one transaction, undone by one Ctrl+Z.
+      await click(page, "[data-ai-accept]");
+      await expectEventually(
+        page,
+        "Accept applies the edit and removes the diff",
+        `!document.querySelector(".cm-content .mng-ai-removed") && !document.querySelector("[data-ai-accept]")`,
+      );
+      const accepted = await docText();
+      check("the text changed", accepted !== original && accepted.length < original.length);
+      await press(page, "z", { ctrl: true, wait: 300 });
+      check("one Ctrl+Z restores the original text", (await docText()) === original);
+      check("and nothing else was left edited", (await dirtyTabs(page)).length === 0);
+
+      // Reject with Esc leaves the text alone.
+      await selectLine("generalizes Landauer");
+      await runCommand("AI: Rewrite selection");
+      await expectEventually(
+        page,
+        "Rewrite also proposes an inline diff",
+        `!!document.querySelector("[data-ai-accept]")`,
+        { timeout: 15000 },
+      );
+      await page.evaluate(`document.querySelector(".cm-content").focus()`);
+      await press(page, "Escape", { wait: 400 });
+      check(
+        "Esc rejects: the diff goes and the text is untouched",
+        !(await exists(page, "[data-ai-accept]")) && (await docText()) === original,
+      );
+      check(
+        "the card says it was rejected",
+        (await agentLog()).includes("Rejected."),
+      );
+
+      // Stop cancels a stream.
+      await page.evaluate(`document.querySelector("[data-agent-input]").focus()`);
+      await insertText(page, "explain this slow please");
+      await click(page, "[data-agent-send]");
+      await expectEventually(
+        page,
+        "while streaming the Send button becomes Stop",
+        `!!document.querySelector("[data-agent-stop]")`,
+      );
+      await click(page, "[data-agent-stop]");
+      await expectEventually(
+        page,
+        "Stop ends the stream with a quiet notice and Send returns",
+        `!!document.querySelector("[data-agent-send]") && /Stopped\\./.test(document.querySelector("[data-agent-log]").innerText)`,
+      );
+
+      // Fix with AI on a Problems entry.
+      await click(page, ".cm-content");
+      await press(page, "End", { ctrl: true });
+      await insertText(page, "\nA broken formula $x + y\n");
+      await expectEventually(
+        page,
+        "a problem appears",
+        `/1 error/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+        { timeout: 10000 },
+      );
+      await click(page, "#panel-tab-problems");
+      await expectEventually(
+        page,
+        "the Problems list offers Fix with AI",
+        `!!document.querySelector("#bottom-panel [data-fix-with-ai]")`,
+      );
+      await click(page, "#bottom-panel [data-fix-with-ai]");
+      await expectEventually(
+        page,
+        "Fix with AI sends the diagnostic and proposes an edit as an inline diff",
+        `!!document.querySelector(".cm-content [data-ai-accept]")`,
+        { timeout: 15000 },
+      );
+      check(
+        "its context tray holds the problem chip, not the whole file",
+        await page.evaluate(
+          `!!document.querySelector('[data-chip="diagnostics"]') && !document.querySelector('[data-chip="file"]')`,
+        ),
+      );
+      await page.evaluate(`document.querySelector(".cm-content").focus()`);
+      await press(page, "Escape", { wait: 300 });
+      // Put the document back exactly as it was.
+      await click(page, ".cm-content");
+      for (let i = 0; i < 4 && (await docText()) !== original; i++)
+        await press(page, "z", { ctrl: true, wait: 250 });
+      check("the document is restored after the fix test", (await docText()) === original);
+
+      // Disabled state.
+      await openSettingsPage();
+      await click(page, '[data-setting="agent.enabled"] button[role="switch"]');
+      await closeSettingsPage();
+      await runCommand("Show AI agent");
+      await expectEventually(
+        page,
+        "when disabled the view shows Set up",
+        `/off/.test(document.querySelector("[data-agent-status]")?.innerText ?? "") && !!document.querySelector("[data-agent-setup]")`,
+      );
+      await openSettingsPage();
+      await click(page, '[data-setting="agent.enabled"] button[role="switch"]');
+      await closeSettingsPage();
+      check("the key never appeared anywhere on the page", !(await pageText()).includes(SECRET_KEY));
+      check("no document is left edited by the AI tests", (await dirtyTabs(page)).length === 0);
+      await click(page, "#bottom-panel button[aria-label='Close panel']");
+    }
+
+    /* ------------------------------------------------------------------ */
     section("Files tree");
     await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
     check(

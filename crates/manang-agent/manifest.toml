@@ -122,11 +122,11 @@ title = "Base URL"
 description = "Empty uses the provider's address. Set it for a custom or local server."
 
 [[contributes.settings]]
-id = "agent.engine"
+id = "agent.client"
 type = "enum"
 values = ["rig", "builtin"]
 default = "rig"
-title = "Provider engine"
+title = "Provider client"
 description = "rig is the default client layer; builtin is Manang's own, kept as a fallback."
 
 [[contributes.settings]]

@@ -1,7 +1,7 @@
 //! Building a provider from the settings, the preset and the key.
 //!
 //! The default engine is Rig behind `manang-agent-rig`; the in-house adapters of
-//! `manang-agent-providers` are the selectable fallback (`agent.engine = builtin`). Both sit
+//! `manang-agent-providers` are the selectable fallback (`agent.client = builtin`). Both sit
 //! behind `manang_agent_core::Provider`, so nothing else in this crate knows which one runs.
 //! Tests substitute a [`ProviderFactory`] that replays cassettes.
 

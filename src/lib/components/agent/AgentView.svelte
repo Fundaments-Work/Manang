@@ -3,6 +3,7 @@
 
   import { formatCost } from "$lib/agent/reducer";
   import { agent } from "$lib/state/agent.svelte";
+  import { layout } from "$lib/state/layout.svelte";
 
   import ContextTray from "./ContextTray.svelte";
   import PreviewDialog from "./PreviewDialog.svelte";
@@ -16,7 +17,11 @@
 
   let log: HTMLElement | undefined = $state();
 
+  /** Room for the conversation, the tray and the input. */
+  const MIN_PANEL_HEIGHT = 340;
+
   onMount(() => {
+    if (layout.panelHeight < MIN_PANEL_HEIGHT) layout.setPanelHeight(MIN_PANEL_HEIGHT);
     agent.listen();
     agent.attachSelection();
     void agent.refreshStatus();
@@ -34,6 +39,12 @@
   const status = $derived(agent.status);
   const view = $derived(agent.view);
   const notReady = $derived(status !== null && !status.ready);
+  /** Only the first-use consent is missing: it is asked for at the first Send. */
+  const consentOnly = $derived(
+    status !== null &&
+      status.problems.length > 0 &&
+      status.problems.every((p) => p === "consent_required"),
+  );
 
   const SETUP_TEXT: Record<string, string> = {
     disabled: "The AI agent is turned off.",
@@ -66,8 +77,8 @@
     class="flex h-8 shrink-0 items-center gap-3 border-b border-line px-3 text-[11px]"
   >
     <span class="text-text" data-agent-status>
-      AI: {#if status === null}checking{:else if status.ready}ready{:else if !status.enabled}off{:else}not
-        set up{/if}
+      AI: {#if status === null}checking{:else if status.ready}ready{:else if consentOnly}ready,
+        asks for consent at the first Send{:else if !status.enabled}off{:else}not set up{/if}
     </span>
     {#if status !== null}
       <span class="min-w-0 truncate text-text-60"
@@ -79,7 +90,7 @@
         >
       {/if}
     {/if}
-    {#if notReady}
+    {#if notReady && !consentOnly}
       <button
         type="button"
         class="mng-btn h-6 px-2 text-[11px]"
