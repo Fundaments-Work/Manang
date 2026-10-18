@@ -167,6 +167,7 @@ fn legacy_entries(recent: &RecentStore) -> Vec<ProjectEntry> {
                 pinned: false,
                 archived: false,
                 tags: Vec::new(),
+                trashed_at: None,
             })
         })
         .collect()
@@ -182,6 +183,7 @@ fn entry_json(entry: &ProjectEntry, thumbnails: &Thumbnails) -> Value {
         "pinned": entry.pinned,
         "archived": entry.archived,
         "tags": entry.tags,
+        "trashed_at": entry.trashed_at,
         "exists": Path::new(&entry.path).join(CONFIG_FILE).is_file(),
         "has_thumbnail": thumbnails.exists(&entry.path),
     })
@@ -295,6 +297,23 @@ mod args {
         pub sort: Option<crate::registry::Sort>,
         #[serde(default)]
         pub include_archived: bool,
+        #[serde(default)]
+        pub include_trashed: bool,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Purge {
+        pub path: String,
+        #[serde(default)]
+        pub delete_files: bool,
+    }
+
+    #[derive(Deserialize, Default)]
+    #[serde(deny_unknown_fields)]
+    pub struct EmptyTrash {
+        #[serde(default)]
+        pub older_than_days: Option<u32>,
     }
 
     #[derive(Deserialize)]
@@ -435,6 +454,7 @@ impl Plugin for ProjectPlugin {
                     query: a.query,
                     sort: a.sort.unwrap_or(Sort::Modified),
                     include_archived: a.include_archived,
+                    include_trashed: a.include_trashed,
                 };
                 let entries: Vec<Value> = registry::select(&self.registry.all(), &query)
                     .iter()
@@ -478,6 +498,70 @@ impl Plugin for ProjectPlugin {
                     self.thumbnails.remove(&a.path);
                 }
                 Ok(Payload::Json(json!({ "removed": removed })))
+            }
+            "project.trash" => {
+                let a: args::Dir = parse(input)?;
+                if self
+                    .state
+                    .read()
+                    .as_ref()
+                    .is_some_and(|o| o.root.path() == Path::new(&a.path))
+                {
+                    *self.state.write() = None;
+                }
+                let stamp = chrono::Utc::now().to_rfc3339();
+                match self.registry.trash(&a.path, &stamp).map_err(failed)? {
+                    Some(entry) => Ok(Payload::Json(entry_json(&entry, &self.thumbnails))),
+                    None => Err(failed(ProjectError::NotFound(a.path))),
+                }
+            }
+            "project.restore" => {
+                let a: args::Dir = parse(input)?;
+                match self.registry.restore(&a.path).map_err(failed)? {
+                    Some(entry) => Ok(Payload::Json(entry_json(&entry, &self.thumbnails))),
+                    None => Err(failed(ProjectError::NotFound(a.path))),
+                }
+            }
+            "project.purge" => {
+                let a: args::Purge = parse(input)?;
+                if self.registry.get(&a.path).is_none() {
+                    return Err(failed(ProjectError::NotFound(a.path)));
+                }
+                if self
+                    .state
+                    .read()
+                    .as_ref()
+                    .is_some_and(|o| o.root.path() == Path::new(&a.path))
+                {
+                    *self.state.write() = None;
+                }
+                self.registry.forget(&a.path).map_err(failed)?;
+                self.thumbnails.remove(&a.path);
+                if a.delete_files {
+                    let path = Path::new(&a.path);
+                    if path.exists() {
+                        trash::delete(path).map_err(|e| {
+                            PluginError::Failed(format!(
+                                "failed to move `{}` to system trash: {e}",
+                                a.path
+                            ))
+                        })?;
+                    }
+                }
+                Ok(Payload::Json(
+                    json!({ "purged": true, "deleted_files": a.delete_files }),
+                ))
+            }
+            "project.empty-trash" => {
+                let a: args::EmptyTrash = parse(input)?;
+                let removed = self
+                    .registry
+                    .empty_trash(a.older_than_days, Some(chrono::Utc::now()))
+                    .map_err(failed)?;
+                for entry in &removed {
+                    self.thumbnails.remove(&entry.path);
+                }
+                Ok(Payload::Json(json!({ "count": removed.len() })))
             }
             "project.thumbnail-get" => {
                 let a: args::Dir = parse(input)?;
@@ -525,6 +609,7 @@ impl Plugin for ProjectPlugin {
                 let wanted = a.force || export::wants_pdf(&open.root, open.config.project.engine);
                 json_payload(&export::export_pdf(ctx, &open.root, &a.path, wanted).map_err(failed)?)
             }
+            "project.templates" => json_payload(&crate::template::list_templates()),
             other => Err(PluginError::UnknownCommand(other.to_owned())),
         }
     }

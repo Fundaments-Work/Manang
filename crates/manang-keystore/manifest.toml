@@ -1,0 +1,18 @@
+[plugin]
+name = "agent"
+version = "0.1.0"
+description = "AI agent API key storage in the OS keychain (never returns the key)"
+tier = "native"
+
+[contributes]
+[[contributes.commands]]
+id = "agent.key.set"
+title = "Save an AI provider API key"
+
+[[contributes.commands]]
+id = "agent.key.status"
+title = "Report whether an AI provider key is stored, and where"
+
+[[contributes.commands]]
+id = "agent.key.clear"
+title = "Remove an AI provider API key"

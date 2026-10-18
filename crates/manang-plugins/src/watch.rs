@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use notify::{EventKind, RecursiveMode, Watcher};
 
 use crate::error::{LoadFailure, ManagerError};
+use crate::events::ManagerEvent;
 use crate::manager::{PluginInfo, PluginManager, SyncOutcome};
 
 /// How often the loop checks the stop flag and the debounce timer.
@@ -22,6 +23,13 @@ pub enum PluginEvent {
     Loaded(PluginInfo),
     Reloaded(PluginInfo),
     Unloaded(String),
+    /// Switched off (or hidden by a project): unloaded, files untouched.
+    Disabled(String),
+    /// Asks for permissions nobody approved: left unloaded.
+    NeedsApproval {
+        name: String,
+        version: String,
+    },
     Failed(LoadFailure),
     /// The operating-system watcher reported an error.
     WatchError(String),
@@ -129,7 +137,12 @@ impl PluginManager {
                                 last = Instant::now();
                             }
                         }
-                        Ok(Err(e)) => on_event(PluginEvent::WatchError(e.to_string())),
+                        Ok(Err(e)) => {
+                            manager.emit(ManagerEvent::WatchError {
+                                error: e.to_string(),
+                            });
+                            on_event(PluginEvent::WatchError(e.to_string()));
+                        }
                         Err(RecvTimeoutError::Timeout) => {}
                         Err(RecvTimeoutError::Disconnected) => break,
                     }
@@ -141,6 +154,12 @@ impl PluginManager {
                                 SyncOutcome::Loaded(i) => on_event(PluginEvent::Loaded(i)),
                                 SyncOutcome::Reloaded(i) => on_event(PluginEvent::Reloaded(i)),
                                 SyncOutcome::Unloaded(n) => on_event(PluginEvent::Unloaded(n)),
+                                SyncOutcome::Disabled { name, .. } => {
+                                    on_event(PluginEvent::Disabled(name));
+                                }
+                                SyncOutcome::NeedsApproval { name, version } => {
+                                    on_event(PluginEvent::NeedsApproval { name, version });
+                                }
                                 SyncOutcome::Failed(f) => on_event(PluginEvent::Failed(f)),
                                 SyncOutcome::Unchanged(_) | SyncOutcome::Absent => {}
                             }

@@ -320,8 +320,9 @@ export function createProject(
   path: string,
   name: string,
   engine: Engine,
+  template?: string,
 ): Promise<boolean> {
-  return startProject(() => workspace.create(path, name, engine));
+  return startProject(() => workspace.create(path, name, engine, template));
 }
 
 /** Show Home over the open project without closing it. */
@@ -348,8 +349,8 @@ export function goHome(): void {
   home.show();
 }
 
-export async function closeProject(): Promise<void> {
-  if (!(await confirmDiscard())) return;
+export async function closeProject(): Promise<boolean> {
+  if (!(await confirmDiscard())) return false;
   rememberSession();
   resetEditors();
   await workspace.close();
@@ -358,6 +359,7 @@ export async function closeProject(): Promise<void> {
   home.hide();
   void home.load();
   void build.compile();
+  return true;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -117,6 +117,10 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     permissions: {},
     settingsContexts: ["engine:markdown"],
   },
+  plugins: {
+    description: "Install, approve, enable, disable and remove plugins",
+    permissions: {},
+  },
   project: {
     description:
       "Project config, file tree, confined file operations, watching and git status",

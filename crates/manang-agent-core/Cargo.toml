@@ -1,0 +1,21 @@
+[package]
+name = "manang-agent-core"
+description = "Manang AI agent core: provider-neutral types, policy, audit, redaction and a cassette mock provider (no I/O, builds for wasm32)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+futures-core = "0.3"
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
+sha2 = "0.10"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { version = "0.3", default-features = false, features = ["executor", "std"] }
+insta = { version = "1", features = ["json"] }
+proptest = "1"

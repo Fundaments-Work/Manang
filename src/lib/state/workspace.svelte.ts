@@ -109,11 +109,12 @@ export class WorkspaceState {
     path: string,
     name: string,
     engine: Engine,
+    template?: string,
   ): Promise<ProjectInfo | null> {
     this.opening = true;
     this.error = "";
     try {
-      return this.#adopt(await api.create(path, name, engine));
+      return this.#adopt(await api.create(path, name, engine, template));
     } catch (error) {
       this.error = errorMessage(error);
       return null;

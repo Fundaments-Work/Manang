@@ -30,6 +30,7 @@ import type {
   ProjectPatch,
   ProjectSummary,
   RecentProject,
+  TemplateSummary,
   TreePage,
   TreeQuery,
 } from "./types";
@@ -45,8 +46,14 @@ export interface CompileRequest {
 export function projectApi(kernel: Kernel) {
   return {
     open: (path: string) => kernel.run<ProjectSummary>("project.open", { path }),
-    create: (path: string, name: string, engine: Engine) =>
-      kernel.run<ProjectSummary>("project.create", { path, name, engine }),
+    create: (path: string, name: string, engine: Engine, template?: string) =>
+      kernel.run<ProjectSummary>("project.create", {
+        path,
+        name,
+        engine,
+        ...(template !== undefined ? { template } : {}),
+      }),
+    templates: () => kernel.run<TemplateSummary[]>("project.templates"),
     close: () => kernel.run<null>("project.close"),
     tree: (query: TreeQuery = {}) => kernel.run<TreePage>("project.tree", { ...query }),
     readFile: (path: string) => kernel.run<string>("project.read-file", { path }),
@@ -69,6 +76,22 @@ export function projectApi(kernel: Kernel) {
     /** Drops the project from the list; never touches its folder. */
     forget: (path: string) =>
       kernel.run<{ removed: boolean }>("project.forget", { path }),
+    /** Move a project to trash in the registry. */
+    trashProject: (path: string) => kernel.run<ProjectEntry>("project.trash", { path }),
+    /** Restore a project from trash in the registry. */
+    restoreProject: (path: string) =>
+      kernel.run<ProjectEntry>("project.restore", { path }),
+    /** Purge a project from the registry, optionally deleting files to OS trash. */
+    purgeProject: (path: string, deleteFiles = false) =>
+      kernel.run<{ purged: boolean; deleted_files: boolean }>("project.purge", {
+        path,
+        delete_files: deleteFiles,
+      }),
+    /** Empty all trashed projects (or those older than given days) from the registry. */
+    emptyTrash: (olderThanDays?: number) =>
+      kernel.run<{ count: number }>("project.empty-trash", {
+        older_than_days: olderThanDays,
+      }),
     /** SVG bytes. Only call when the entry has `has_thumbnail`. */
     thumbnail: (path: string) => kernel.runBinary("project.thumbnail-get", { path }),
     setThumbnail: (path: string, svg: string) =>
@@ -676,6 +699,44 @@ export interface GitBlameResponse {
   readonly ranges: readonly GitBlameRange[];
 }
 
+export interface GitIdentity {
+  readonly name: string | null;
+  readonly email: string | null;
+  readonly source: "repo" | "global" | "none";
+}
+
+export interface GitVersionInfo {
+  readonly hash: string;
+  readonly short: string;
+  readonly subject: string;
+  readonly author_name: string;
+  /** Seconds since the Unix epoch. */
+  readonly time: number;
+  readonly files_changed: number;
+  /** Made by "Save a version". */
+  readonly labelled: boolean;
+}
+
+export interface GitVersionsPage {
+  readonly versions: readonly GitVersionInfo[];
+  readonly next_cursor: string | null;
+}
+
+export interface GitSavedVersion {
+  readonly sha: string;
+  readonly short: string;
+  readonly subject: string;
+  readonly files_changed: number;
+}
+
+export interface GitRestored {
+  readonly restored: readonly string[];
+  /** Files that exist now but not in that version; left untouched. */
+  readonly untouched_new: readonly string[];
+  readonly safety_version: string | null;
+  readonly trash: string | null;
+}
+
 export function gitApi(kernel: Kernel) {
   return {
     open: (root: string) =>
@@ -724,6 +785,10 @@ export function gitApi(kernel: Kernel) {
       message: string;
       amend?: boolean | undefined;
       hooks?: boolean | undefined;
+      /** `Key: value` lines appended to the message, e.g. `Co-authored-by: ...`. */
+      trailers?: readonly string[] | undefined;
+      /** Stage every non-ignored change first. */
+      all?: boolean | undefined;
       root?: string | undefined;
     }) =>
       kernel.run<{ hash: string; short: string; subject: string; amended: boolean }>(
@@ -740,6 +805,43 @@ export function gitApi(kernel: Kernel) {
       }),
     init: (req: { root?: string | undefined } = {}) =>
       kernel.run<GitStatusReport>("git.init", { ...req }),
+    identityGet: (req: { root?: string | undefined } = {}) =>
+      kernel.run<GitIdentity>("git.identity-get", { ...req }),
+    identitySet: (req: {
+      name: string;
+      email: string;
+      /** Write to the global config instead of this project's. */
+      global?: boolean | undefined;
+      root?: string | undefined;
+    }) => kernel.run<{ ok: boolean }>("git.identity-set", { ...req }),
+    saveVersion: (
+      req: {
+        name?: string | undefined;
+        message?: string | undefined;
+        root?: string | undefined;
+      } = {},
+    ) => kernel.run<GitSavedVersion>("git.save-version", { ...req }),
+    versions: (
+      req: {
+        path?: string | undefined;
+        limit?: number | undefined;
+        cursor?: string | undefined;
+        root?: string | undefined;
+      } = {},
+    ) => kernel.run<GitVersionsPage>("git.versions", { ...req }),
+    versionFiles: (req: { rev: string; root?: string | undefined }) =>
+      kernel.run<{ rev: string; files: readonly GitFileDiff[] }>("git.version-files", {
+        ...req,
+      }),
+    versionDiff: (req: { rev: string; path: string; root?: string | undefined }) =>
+      kernel.run<GitFileDiff>("git.version-diff", { ...req }),
+    restore: (req: {
+      rev: string;
+      paths?: readonly string[] | undefined;
+      whole?: boolean | undefined;
+      save_first?: boolean | undefined;
+      root?: string | undefined;
+    }) => kernel.run<GitRestored>("git.restore", { ...req }),
     sync: (req: {
       action: "fetch" | "pull" | "push";
       remote?: string | undefined;

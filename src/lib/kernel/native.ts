@@ -24,6 +24,22 @@ export async function pickFolder(title: string): Promise<string | null> {
   return typeof picked === "string" ? picked : null;
 }
 
+/**
+ * Ask for a `.manangplugin` archive. Resolves to its path, or null when
+ * cancelled or unavailable.
+ */
+export async function pickPluginArchive(title: string): Promise<string | null> {
+  if (!inTauri()) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({
+    directory: false,
+    multiple: false,
+    title,
+    filters: [{ name: "Manang plugin", extensions: ["manangplugin"] }],
+  });
+  return typeof picked === "string" ? picked : null;
+}
+
 /** Ask where to save a file. Resolves to an absolute path, or null when cancelled. */
 export async function pickSavePath(
   defaultName: string,
