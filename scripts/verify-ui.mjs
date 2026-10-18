@@ -3501,6 +3501,350 @@ async function main() {
     await noStrayEdits(page, "menu bar, narrow");
 
     /* ------------------------------------------------------------------ */
+    section("Versions");
+    const dialogTitle = () =>
+      page.evaluate(`document.querySelector("#dialog-title")?.textContent ?? null`);
+    const dialogText = () =>
+      page.evaluate(`document.querySelector('[role="alertdialog"]')?.innerText ?? ""`);
+    const dialogOpen = () => exists(page, '[role="alertdialog"]');
+    const versionRows = () =>
+      page.evaluate(
+        `[...document.querySelectorAll('#side-panel ul[aria-label="Versions"] > li')].map((li) => li.querySelector("button").innerText.replace(/\\s+/g, " ").trim())`,
+      );
+    const openMenuCommand = async (bar, command) => {
+      await clickText(page, "header [data-menu-bar]", bar);
+      await waitFor(
+        page,
+        `document.querySelector('header [role="menu"] [data-command="${command}"]') !== null`,
+      );
+      await click(page, `header [role="menu"] [data-command="${command}"]`);
+    };
+    /** Type at the top of the open document (the viewport stays on it). */
+    const typeAtEnd = async (text) => {
+      await focusEditor(page);
+      await press(page, "Home", { ctrl: true });
+      await insertText(page, text);
+    };
+    const pressDialogButton = async (label) => {
+      const ok = await page.evaluate(`(() => {
+        const b = [...document.querySelectorAll('[role="alertdialog"] button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)});
+        if (!b) return false;
+        b.click();
+        return true;
+      })()`);
+      if (!ok) throw new Error(`no dialog button "${label}"`);
+      await sleep(300);
+    };
+    const pressPrimary = async () => {
+      const ok = await page.evaluate(`(() => {
+        const b = [...document.querySelectorAll('[role="alertdialog"] button')].find((x) => getComputedStyle(x).backgroundColor === "rgb(198, 241, 53)");
+        if (!b) return false;
+        b.click();
+        return true;
+      })()`);
+      if (!ok) throw new Error("no lime dialog button");
+      await sleep(300);
+    };
+
+    await focusEditor(page);
+    await openMenuCommand("File", "file.save-version");
+    await expectEventually(
+      page,
+      "File > Save a version opens a one-field dialog",
+      `document.querySelector("#dialog-title")?.textContent === "Save a version"`,
+    );
+    check(
+      "the dialog shows how many files changed and asks only for an optional name",
+      (await dialogText()).includes("changed since the last version") ||
+        (await dialogText()).includes("Nothing has changed"),
+      await dialogText(),
+    );
+    await press(page, "Escape");
+
+    // The first edit and its version.
+    await typeAtEnd("\n// versions-check\n");
+    await press(page, "s", { ctrl: true, alt: true, wait: 500 });
+    await expectEventually(
+      page,
+      "Ctrl+Alt+S opens Save a version",
+      `document.querySelector("#dialog-title")?.textContent === "Save a version"`,
+    );
+    check(
+      "the field is labelled 'Name this version (optional)'",
+      await page.evaluate(
+        `document.querySelector('[role="alertdialog"] label')?.innerText.includes("Name this version (optional)")`,
+      ),
+    );
+    check(
+      "the dialog counts the changed files",
+      /\d+ files? (has|have) changed since the last version/.test(await dialogText()),
+      await dialogText(),
+    );
+    check(
+      "Save is the one lime action in the dialog",
+      await page.evaluate(`(() => {
+        const lime = "rgb(198, 241, 53)";
+        const bs = [...document.querySelectorAll('[role="alertdialog"] button')];
+        const limed = bs.filter((b) => getComputedStyle(b).backgroundColor === lime);
+        return limed.length === 1 && limed[0].textContent.trim() === "Save";
+      })()`),
+    );
+    await shoot(page, "30-save-a-version");
+    await insertText(page, "Draft one");
+    await pressDialogButton("Save");
+    await expectEventually(
+      page,
+      "saving shows a status message with the name",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes('Saved version "Draft one"')`,
+    );
+    check("the dialog closes after saving", !(await dialogOpen()));
+    check(
+      "unsaved edits were saved first, so no tab is left unsaved",
+      (await dirtyTabs(page)).length === 0,
+    );
+
+    // The second.
+    await typeAtEnd("// second-edit\n");
+    await openMenuCommand("File", "file.save-version");
+    await waitFor(
+      page,
+      `document.querySelector('[role="alertdialog"] input') !== null`,
+    );
+    await insertText(page, "Draft two");
+    await pressDialogButton("Save");
+    await expectEventually(
+      page,
+      "a second version is saved from the menu",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes('Saved version "Draft two"')`,
+    );
+
+    // The panel.
+    await openMenuCommand("View", "view.versions");
+    await expectEventually(
+      page,
+      "View > Versions opens the Source control view in Versions mode",
+      `document.querySelector('aside[aria-label="Source control panel"]') !== null && document.querySelector('[role="radiogroup"][aria-label="Source control mode"] [role="radio"][aria-checked="true"]')?.textContent.trim() === "Versions"`,
+    );
+    check(
+      "Versions adds no activity-bar entry",
+      !(await exists(
+        page,
+        'nav[aria-label="Workbench views"] button[aria-label="Versions"]',
+      )),
+    );
+    check(
+      "the header switch offers Changes and Versions",
+      (await page.evaluate(
+        `[...document.querySelectorAll('[role="radiogroup"][aria-label="Source control mode"] [role="radio"]')].map((r) => r.textContent.trim()).join()`,
+      )) === "Changes,Versions",
+    );
+    await expectEventually(
+      page,
+      "the timeline lists the saved versions newest first",
+      `document.querySelectorAll('#side-panel ul[aria-label="Versions"] > li').length >= 4`,
+    );
+    {
+      const rows = await versionRows();
+      check(
+        "the newest version is on top, marked as a Saved version",
+        rows[0]?.includes("Draft two") === true && rows[0]?.includes("Saved version"),
+        rows[0],
+      );
+      check(
+        "each row shows author, relative time and file count",
+        /· (just now|\d+m ago) · \d+ files?/.test(rows[0] ?? ""),
+        rows[0],
+      );
+      check(
+        "versions made outside Save a version carry no marker",
+        rows.some((r) => !r.includes("Saved version")),
+      );
+    }
+    await shoot(page, "31-versions-list");
+
+    // Select, diff.
+    await clickText(
+      page,
+      '#side-panel ul[aria-label="Versions"] > li > button',
+      "Draft one",
+    );
+    await expectEventually(
+      page,
+      "selecting a version lists its changed files",
+      `[...document.querySelectorAll('#side-panel ul[aria-label="Files in this version"] li')].some((li) => li.textContent.includes("main.typ"))`,
+    );
+    await expectEventually(
+      page,
+      "the file's diff shows the added line",
+      `document.querySelector('#side-panel [role="region"][aria-label^="Changes in"]')?.innerText.includes("versions-check")`,
+    );
+    await shoot(page, "32-version-diff");
+
+    // Restore a file (clean tree).
+    await clickText(page, "#side-panel button", "Restore this file");
+    await expectEventually(
+      page,
+      "Restore this file asks first",
+      `document.querySelector("#dialog-title")?.textContent === "Restore this file?"`,
+    );
+    check(
+      "the confirmation says plainly that nothing is deleted",
+      (await dialogText()).includes("Nothing is deleted"),
+      await dialogText(),
+    );
+    await pressDialogButton("Restore");
+    await expectEventually(
+      page,
+      "restoring brings the old content back into the open tab",
+      `(() => { const t = document.querySelector(".cm-content")?.innerText ?? ""; return t.includes("versions-check") && !t.includes("second-edit"); })()`,
+      { show: `document.querySelector(".cm-content")?.innerText.slice(0, 120)` },
+    );
+    check(
+      "a status message reports the restore",
+      (await statusText(page)).includes("Restored main.typ"),
+      await statusText(page),
+    );
+    check(
+      "the restored tab is not marked unsaved",
+      (await dirtyTabs(page)).length === 0,
+      (await dirtyTabs(page)).join(),
+    );
+
+    // Dirty tree: the safety save is offered.
+    await typeAtEnd("// unsaved-bit\n");
+    await clickText(page, "#side-panel button", "Restore this file");
+    await expectEventually(
+      page,
+      "restoring over unsaved work offers 'Save my changes first'",
+      `[...document.querySelectorAll('[role="alertdialog"] button')].some((b) => b.textContent.includes("Save my changes first"))`,
+    );
+    check(
+      "the confirmation names the safety version",
+      (await dialogText()).includes("saved first") &&
+        (await dialogText()).includes("Before restoring"),
+      await dialogText(),
+    );
+    await shoot(page, "33-restore-dirty");
+    await pressDialogButton("Save my changes first, then restore");
+    await expectEventually(
+      page,
+      "the old content is back and the unsaved text was kept in a version",
+      `(() => { const t = document.querySelector(".cm-content")?.innerText ?? ""; return !t.includes("unsaved-bit"); })()`,
+    );
+    await expectEventually(
+      page,
+      "a 'Before restoring' version is on top of the timeline",
+      `document.querySelector('#side-panel ul[aria-label="Versions"] > li > button')?.innerText.includes("Before restoring")`,
+    );
+
+    // Restore the whole project from the oldest demo version.
+    await clickText(
+      page,
+      '#side-panel ul[aria-label="Versions"] > li > button',
+      "feat(bounds)",
+    );
+    await expectEventually(
+      page,
+      "an earlier version lists its files",
+      `document.querySelectorAll('#side-panel ul[aria-label="Files in this version"] li').length >= 1`,
+    );
+    await clickText(page, "#side-panel button", "Restore whole project");
+    await expectEventually(
+      page,
+      "Restore whole project asks first",
+      `document.querySelector("#dialog-title")?.textContent === "Restore the whole project?"`,
+    );
+    await pressPrimary();
+    await expectEventually(
+      page,
+      "restoring the whole project returns main.typ to that version",
+      `(() => { const t = document.querySelector(".cm-content")?.innerText ?? ""; return t.includes("Landauer") && !t.includes("versions-check"); })()`,
+    );
+
+    // Filter by file.
+    await clickText(
+      page,
+      '#side-panel [role="radiogroup"][aria-label="Show versions of"] [role="radio"]',
+      "This file",
+    );
+    await expectEventually(
+      page,
+      "filtering to the current file keeps versions that changed it",
+      `document.querySelectorAll('#side-panel ul[aria-label="Versions"] > li').length >= 1 && document.querySelector('#side-panel [role="radio"][aria-checked="true"]') !== null`,
+    );
+    await clickText(
+      page,
+      '#side-panel [role="radiogroup"][aria-label="Show versions of"] [role="radio"]',
+      "All files",
+    );
+
+    // No identity yet: the prompt.
+    await typeAtEnd("// identity-check\n");
+    await page.evaluate(`localStorage.setItem("manang.mock.git-identity", "none")`);
+    await press(page, "s", { ctrl: true, alt: true, wait: 500 });
+    await expectEventually(
+      page,
+      "saving without an identity asks 'Your name and email' first",
+      `document.querySelector("#dialog-title")?.textContent === "Your name and email"`,
+    );
+    check(
+      "the prompt has name and email fields",
+      (await page.evaluate(
+        `document.querySelectorAll('[role="alertdialog"] input').length`,
+      )) === 2,
+    );
+    check(
+      "'Only for this project' is the default, 'Use for all projects' the alternative",
+      await page.evaluate(
+        `(() => { const r = [...document.querySelectorAll('[role="alertdialog"] [role="radio"]')]; return r.length === 2 && r[0].textContent.trim() === "Only for this project" && r[0].getAttribute("aria-checked") === "true" && r[1].textContent.trim() === "Use for all projects"; })()`,
+      ),
+    );
+    await shoot(page, "34-identity");
+    await insertText(page, "Ada Lovelace");
+    await click(page, '[role="alertdialog"] label:nth-of-type(2) input');
+    await insertText(page, "not an email");
+    await pressDialogButton("Continue");
+    check(
+      "a bad email is refused with a reason and the prompt stays",
+      (await dialogTitle()) === "Your name and email" &&
+        (await dialogText()).includes("does not look like an email"),
+      await dialogText(),
+    );
+    await page.evaluate(
+      `(() => { const i = document.querySelectorAll('[role="alertdialog"] input')[1]; i.focus(); i.select(); })()`,
+    );
+    await insertText(page, "ada@example.org");
+    await pressDialogButton("Continue");
+    await expectEventually(
+      page,
+      "after the identity it continues to Save a version",
+      `document.querySelector("#dialog-title")?.textContent === "Save a version"`,
+    );
+    await insertText(page, "By Ada");
+    await pressDialogButton("Save");
+    await expectEventually(
+      page,
+      "the version is saved under the new identity",
+      `document.querySelector('#side-panel ul[aria-label="Versions"] > li > button')?.innerText.includes("Ada Lovelace")`,
+    );
+    await page.evaluate(`localStorage.removeItem("manang.mock.git-identity")`);
+
+    check(
+      "no version control is left unfinished: no dialog open",
+      !(await dialogOpen()),
+    );
+    check(
+      "the Versions panel obeys the brand: hairline switch, no radius, no shadow",
+      await page.evaluate(
+        `(() => { const g = getComputedStyle(document.querySelector('#side-panel [role="radiogroup"]')); const b = getComputedStyle(document.querySelector('#side-panel [role="radio"]')); return g.borderTopWidth === "1px" && g.borderTopLeftRadius === "0px" && b.boxShadow === "none"; })()`,
+      ),
+    );
+    await noStrayEdits(page, "Versions");
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    if (!(await exists(page, 'aside[aria-label="Files panel"]')))
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+
+    /* ------------------------------------------------------------------ */
     section("Persistence");
     await press(page, "j", { ctrl: true });
     const tabsBefore = await tabNames(page);

@@ -282,7 +282,7 @@
                         aria-current={activeFile === file.path}
                         onclick={() => void openFile(version, file.path)}
                       >
-                        <span class="font-mono text-[10px] {badge.textClass}"
+                        <span class="font-mono text-[10px] text-text-60"
                           >{badge.label}</span
                         >
                         <span class="truncate text-text">{basename(file.path)}</span>
