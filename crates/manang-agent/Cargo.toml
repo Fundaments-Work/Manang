@@ -1,0 +1,37 @@
+[package]
+name = "manang-agent"
+description = "Manang AI agent: the first-party plugin that orchestrates providers, tools, approvals, proposals and storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+manang-agent-core = { path = "../manang-agent-core" }
+# Default provider layer (Rig behind our adapter) and the in-house fallback, chosen at runtime by
+# the `agent.client` setting. Both use rustls with ring: no C libraries (AGENTS.md 7.4).
+manang-agent-rig = { path = "../manang-agent-rig" }
+manang-agent-providers = { path = "../manang-agent-providers" }
+manang-keystore = { path = "../manang-keystore" }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+parking_lot = "0.12"
+# CPU-bound tool calls run on this pool, never on a Tokio worker (AGENTS.md section 2.3).
+rayon = "1.12"
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
+thiserror = { workspace = true }
+toml = "0.8"
+# Tokio is for streaming, timers and cancellation only.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros", "net"] }
+tokio-util = { version = "0.7", default-features = false }
+url = "2"
+
+[dev-dependencies]
+manang-figure = { path = "../manang-figure" }
+insta = { version = "1", features = ["json"] }
+proptest = "1"
+tempfile = "3"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros", "net", "io-util"] }

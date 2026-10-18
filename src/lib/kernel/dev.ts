@@ -14,6 +14,7 @@ import {
   type SeedProject,
 } from "./mockProject";
 import { recoveryPlugin } from "./mockRecovery";
+import { agentPlugin } from "./mockAgent";
 import { citationsPlugin } from "./mockCitations";
 import { diagramPlugin } from "./mockDiagram";
 import { figurePlugin } from "./mockFigure";
@@ -468,6 +469,7 @@ export function createDevKernel(
       pluginsPlugin(),
       settingsPlugin(host),
       writingPlugin(),
+      agentPlugin,
     ],
   });
   return Object.assign(kernel, { host });

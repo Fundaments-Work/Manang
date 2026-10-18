@@ -6160,6 +6160,7 @@ name = "manang"
 version = "0.1.0"
 dependencies = [
  "log",
+ "manang-agent",
  "manang-citations",
  "manang-diagram",
  "manang-editor",
@@ -6189,6 +6190,31 @@ dependencies = [
  "tauri-plugin-window-state",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "manang-agent"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "insta",
+ "manang-agent-core",
+ "manang-agent-providers",
+ "manang-agent-rig",
+ "manang-figure",
+ "manang-kernel",
+ "manang-keystore",
+ "parking_lot",
+ "proptest",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "toml 0.8.2",
+ "url",
 ]
 
 [[package]]

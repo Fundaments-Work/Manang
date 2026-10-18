@@ -9,6 +9,7 @@ describe("plugins panel model", () => {
   it("groups the kernel's commands by plugin, sorted by name then id", async () => {
     const groups = groupPlugins(await createDevKernel().commands());
     expect(groups.map((g) => g.name)).toEqual([
+      "agent",
       "citations",
       "diagram",
       "editor",
@@ -55,10 +56,10 @@ describe("plugins panel model", () => {
       "typst.render",
       "typst.svg-to-pdf",
     ]);
-    // citations 7, diagram 5, editor 8, figure 21, git 22, latex 4, markdown 4,
+    // agent 21, citations 7, diagram 5, editor 8, figure 21, git 22, latex 4, markdown 4,
     // plugins 10, project 30, recovery 4, search 6, settings 14, typst 7, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      7 + 5 + 8 + 21 + 22 + 4 + 4 + 10 + 30 + 4 + 6 + 14 + 7 + 14,
+      21 + 7 + 5 + 8 + 21 + 22 + 4 + 4 + 10 + 30 + 4 + 6 + 14 + 7 + 14,
     );
   });
 

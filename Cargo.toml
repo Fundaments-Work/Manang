@@ -24,6 +24,7 @@ members = [
     "crates/manang-formats",
     "crates/manang-recovery",
     "crates/manang-agent-rig",
+    "crates/manang-agent",
     "crates/manang-live",
     "crates/manang-relay",
 ]

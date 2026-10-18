@@ -1,8 +1,10 @@
 <script lang="ts">
   import { tick } from "svelte";
 
+  import AgentView from "$lib/components/agent/AgentView.svelte";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { goToProblem } from "$lib/state/actions";
+  import { agent } from "$lib/state/agent.svelte";
   import { build } from "$lib/state/build.svelte";
   import { diagram } from "$lib/state/diagram.svelte";
   import { layout } from "$lib/state/layout.svelte";
@@ -24,6 +26,7 @@
   const tabsList: readonly { id: PanelTab; label: string }[] = [
     { id: "problems", label: "Problems" },
     { id: "output", label: "Output" },
+    { id: "agent", label: "Agent" },
   ];
 
   // Compiler diagnostics, diagram checks and prose-lint findings share one
@@ -152,7 +155,9 @@
     id="panel-body"
     role="tabpanel"
     aria-labelledby="panel-tab-{layout.panelTab}"
-    class="min-h-0 flex-1 overflow-y-auto"
+    class="min-h-0 flex-1 {layout.panelTab === 'agent'
+      ? 'overflow-hidden'
+      : 'overflow-y-auto'}"
   >
     {#if layout.panelTab === "problems"}
       {#if groups.length === 0}
@@ -172,45 +177,58 @@
               >
             </p>
             {#each group.items as problem (problem.id)}
-              <button
-                type="button"
-                data-problem
-                class="inset-focus flex w-full items-start gap-2.5 px-4 py-1 text-left text-xs hover:bg-surface-hi disabled:cursor-default"
-                disabled={problem.file === ""}
-                onclick={() => void goToProblem(problem)}
-                onkeydown={onRowKey}
-              >
-                <Icon
-                  name={problem.severity === "error" ? "error" : "warning"}
-                  size={14}
-                  class="mt-px shrink-0 {problem.severity === 'error'
-                    ? 'text-text'
-                    : problem.severity === 'warning'
-                      ? 'text-text-60'
-                      : 'text-text-muted'}"
-                />
-                <span class="min-w-0 flex-1">
-                  <span class="sr-only">{SEVERITY_LABEL[problem.severity]}</span>
-                  <span class="text-text">{problem.message}</span>
-                  {#if problem.source !== undefined}
-                    <span class="ml-2 font-mono text-[10px] text-text-muted"
-                      >{problem.source}{problem.code ? `: ${problem.code}` : ""}</span
+              <div class="flex items-start hover:bg-surface-hi">
+                <button
+                  type="button"
+                  data-problem
+                  class="inset-focus flex min-w-0 flex-1 items-start gap-2.5 px-4 py-1 text-left text-xs disabled:cursor-default"
+                  disabled={problem.file === ""}
+                  onclick={() => void goToProblem(problem)}
+                  onkeydown={onRowKey}
+                >
+                  <Icon
+                    name={problem.severity === "error" ? "error" : "warning"}
+                    size={14}
+                    class="mt-px shrink-0 {problem.severity === 'error'
+                      ? 'text-text'
+                      : problem.severity === 'warning'
+                        ? 'text-text-60'
+                        : 'text-text-muted'}"
+                  />
+                  <span class="min-w-0 flex-1">
+                    <span class="sr-only">{SEVERITY_LABEL[problem.severity]}</span>
+                    <span class="text-text">{problem.message}</span>
+                    {#if problem.source !== undefined}
+                      <span class="ml-2 font-mono text-[10px] text-text-muted"
+                        >{problem.source}{problem.code ? `: ${problem.code}` : ""}</span
+                      >
+                    {/if}
+                    {#each problem.hints as hint (hint)}
+                      <span class="block text-[11px] text-text-60">Hint: {hint}</span>
+                    {/each}
+                  </span>
+                  {#if problem.line !== null}
+                    <span class="shrink-0 font-mono text-[10px] text-text-muted"
+                      >Ln {problem.line}, Col {problem.column ?? 1}</span
                     >
                   {/if}
-                  {#each problem.hints as hint (hint)}
-                    <span class="block text-[11px] text-text-60">Hint: {hint}</span>
-                  {/each}
-                </span>
-                {#if problem.line !== null}
-                  <span class="shrink-0 font-mono text-[10px] text-text-muted"
-                    >Ln {problem.line}, Col {problem.column ?? 1}</span
+                </button>
+                {#if problem.file !== "" && problem.severity !== "info"}
+                  <button
+                    type="button"
+                    class="mng-lime-hover inset-focus h-6 shrink-0 px-3 text-[11px] text-text-60"
+                    data-fix-with-ai
+                    aria-label="Fix with AI: {problem.message}"
+                    onclick={() => void agent.fixProblem(problem)}>Fix with AI</button
                   >
                 {/if}
-              </button>
+              </div>
             {/each}
           </div>
         {/each}
       {/if}
+    {:else if layout.panelTab === "agent"}
+      <AgentView />
     {:else}
       <div
         role="log"
