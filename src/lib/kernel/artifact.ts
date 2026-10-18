@@ -26,7 +26,9 @@ export function sniffArtifact(bytes: Uint8Array): Artifact | null {
   const head = decoder.decode(bytes.subarray(0, 1024));
   if (head.includes("%PDF-")) return { kind: "pdf", mime: MIME.pdf };
   // `trimStart` already strips a leading byte-order mark (U+FEFF is whitespace).
-  const trimmed = head.trimStart();
+  // Leading comments too: the SVGs Manang writes next to diagrams start with
+  // `<!-- manang-diagram ... -->`.
+  const trimmed = head.trimStart().replace(/^(?:<!--[\s\S]*?-->\s*)+/, "");
   if (
     trimmed.startsWith("<svg") ||
     (trimmed.startsWith("<?xml") && head.includes("<svg"))
@@ -41,7 +43,7 @@ export interface UrlApi {
   revoke(url: string): void;
 }
 
-const browserUrls: UrlApi = {
+export const browserUrls: UrlApi = {
   create: (blob) => URL.createObjectURL(blob),
   revoke: (url) => URL.revokeObjectURL(url),
 };

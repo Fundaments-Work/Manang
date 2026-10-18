@@ -339,6 +339,7 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["typst.export-pdf", "Export PDF"],
   ["typst.jump-from-click", "Jump from preview to source"],
   ["typst.jump-from-cursor", "Jump from source to preview"],
+  ["typst.svg-to-pdf", "Convert an SVG to a one-page PDF"],
 ];
 
 function uint(args: Record<string, unknown>, key: string): number {
@@ -496,6 +497,18 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
         },
       },
       binaryHandlers: {
+        // A PDF header around nothing: the demo cannot lay out an SVG.
+        "typst.svg-to-pdf": (args) => {
+          const svg = args["svg"];
+          if (typeof svg !== "string" || !svg.includes("<svg")) {
+            throw {
+              message: "[invalid_svg] the SVG could not be placed: not an SVG document",
+            };
+          }
+          return new TextEncoder().encode(
+            "%PDF-1.7\n% Manang browser mock: one page.\n%%EOF\n",
+          );
+        },
         "typst.render": (args) => {
           if (latest === null) {
             throw { message: "nothing has been compiled successfully yet" };

@@ -10,12 +10,19 @@
  */
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
-import type { MarkdownDiagnostic, MarkdownHeading, MarkdownRender } from "./types";
+import type {
+  DiagramLanguageId,
+  MarkdownDiagnostic,
+  MarkdownFence,
+  MarkdownHeading,
+  MarkdownRender,
+} from "./types";
 
 const COMMANDS: readonly (readonly [string, string])[] = [
   ["markdown.render-html", "Render Markdown to sanitized HTML"],
   ["markdown.outline", "Extract Markdown document outline"],
   ["markdown.to-typst", "Convert Markdown to Typst markup"],
+  ["markdown.diagrams", "List the diagram fences of a Markdown document"],
 ];
 
 function escape(text: string): string {
@@ -65,6 +72,44 @@ function split(source: string): {
   };
 }
 
+/** Fence info words and their diagram language, as `crates/manang-markdown` `diagrams.rs`. */
+const FENCES: Readonly<Record<string, DiagramLanguageId>> = {
+  mermaid: "mermaid",
+  pikchr: "pikchr",
+  bob: "svgbob",
+  svgbob: "svgbob",
+};
+
+function diagramFence(info: string): DiagramLanguageId | null {
+  const word = info.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  return FENCES[word] ?? null;
+}
+
+/** FNV-1a 64 over language, NUL, source: the Rust plugin's `fence_key`. */
+export function fenceKey(language: string, source: string): string {
+  let hash = 0xcbf29ce484222325n;
+  const bytes = new TextEncoder().encode(`${language}\u0000${source}`);
+  for (const byte of bytes) {
+    hash ^= BigInt(byte);
+    hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn;
+  }
+  return hash.toString(16).padStart(16, "0");
+}
+
+function makeFence(
+  language: DiagramLanguageId,
+  code: readonly string[],
+  line: number,
+  endLine: number,
+): MarkdownFence {
+  const source = code.length === 0 ? "" : `${code.join("\n")}\n`;
+  return { language, source, line, endLine, key: fenceKey(language, source) };
+}
+
+function placeholder(fence: MarkdownFence): string {
+  return `<figure class="mng-diagram" data-diagram="${fence.key}" data-language="${fence.language}" data-line="${fence.line}"></figure>`;
+}
+
 export function render(source: string): MarkdownRender {
   const { body, skipped, frontmatter } = split(source);
   const headings: MarkdownHeading[] = [];
@@ -74,6 +119,9 @@ export function render(source: string): MarkdownRender {
   let list: "ul" | "ol" | null = null;
   let fence = false;
   let code: string[] = [];
+  let fenceLanguage: DiagramLanguageId | null = null;
+  let fenceLine = 0;
+  const diagrams: MarkdownFence[] = [];
 
   const flush = (): void => {
     if (paragraph.length > 0) html.push(`<p>${inline(paragraph.join(" "))}</p>`);
@@ -84,16 +132,25 @@ export function render(source: string): MarkdownRender {
     list = null;
   };
 
-  body.split("\n").forEach((raw, index) => {
+  const lines = body.split("\n");
+  lines.forEach((raw, index) => {
     const line = raw.replace(/\r$/, "");
     const lineNo = index + 1 + skipped;
     if (line.startsWith("```")) {
       if (fence) {
-        html.push(`<pre><code>${escape(code.join("\n"))}\n</code></pre>`);
+        if (fenceLanguage !== null) {
+          const fenced = makeFence(fenceLanguage, code, fenceLine, lineNo);
+          diagrams.push(fenced);
+          html.push(placeholder(fenced));
+        } else {
+          html.push(`<pre><code>${escape(code.join("\n"))}\n</code></pre>`);
+        }
         code = [];
       } else {
         flush();
         close();
+        fenceLanguage = diagramFence(line.slice(3));
+        fenceLine = lineNo;
       }
       fence = !fence;
       return;
@@ -153,9 +210,15 @@ export function render(source: string): MarkdownRender {
     close();
     paragraph.push(line.trim());
   });
+  if (fence && fenceLanguage !== null) {
+    // An unclosed fence runs to the end of the document.
+    const fenced = makeFence(fenceLanguage, code, fenceLine, lines.length + skipped);
+    diagrams.push(fenced);
+    html.push(placeholder(fenced));
+  }
   flush();
   close();
-  return { html: html.join("\n"), frontmatter, headings, diagnostics };
+  return { html: html.join("\n"), frontmatter, headings, diagnostics, diagrams };
 }
 
 /** Typst text escapes, as `typst.rs` `escape_typst_text`. */
@@ -255,6 +318,11 @@ export function markdownPlugin(): MockPluginFactory {
         const source = args["source"];
         if (typeof source !== "string") throw { message: "`source` must be a string" };
         return toTypst(source);
+      },
+      "markdown.diagrams": (args) => {
+        const source = args["source"];
+        if (typeof source !== "string") throw { message: "`source` must be a string" };
+        return { diagrams: render(source).diagrams };
       },
     },
   });

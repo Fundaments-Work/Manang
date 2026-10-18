@@ -13,6 +13,7 @@ import type {
   Engine,
 } from "$lib/kernel/types";
 
+import type { DialogAnswer, DialogRequest } from "./dialogRequest";
 import { basename, extension } from "./paths";
 import type { Theme } from "./layout";
 
@@ -44,6 +45,8 @@ export function diagramTheme(theme: Theme): DiagramTheme {
 export interface DiagramKind {
   readonly id: string;
   readonly label: string;
+  /** The label in the dialog's kind selector, which has little room. */
+  readonly short: string;
   readonly extension: string;
   readonly template: string;
 }
@@ -52,6 +55,7 @@ export const DIAGRAM_KINDS: readonly DiagramKind[] = [
   {
     id: "mermaid-flowchart",
     label: "Mermaid flowchart",
+    short: "Flowchart",
     extension: "mmd",
     template: `flowchart TD
   %% Nodes are an id and a label; arrows join them.
@@ -62,6 +66,7 @@ export const DIAGRAM_KINDS: readonly DiagramKind[] = [
   {
     id: "mermaid-sequence",
     label: "Mermaid sequence",
+    short: "Sequence",
     extension: "mmd",
     template: `sequenceDiagram
   %% Each arrow is one message between participants.
@@ -74,6 +79,7 @@ export const DIAGRAM_KINDS: readonly DiagramKind[] = [
   {
     id: "pikchr",
     label: "Pikchr",
+    short: "Pikchr",
     extension: "pikchr",
     template: `box "Input" fit
 arrow
@@ -85,6 +91,7 @@ box "Output" fit
   {
     id: "ascii",
     label: "ASCII",
+    short: "ASCII",
     extension: "bob",
     template: `+--------+     +---------+
 | Source |---->| Picture |
@@ -96,7 +103,7 @@ box "Output" fit
 /** `figures/<name>.<ext>` for a new diagram; the name loses a typed extension. */
 export function diagramPath(name: string, kind: DiagramKind): string {
   const stem = name.trim().replace(/\.(mmd|mermaid|pikchr|bob)$/i, "");
-  return `figures/${stem}.${kind.extension}`;
+  return `${DIAGRAM_DIR}/${stem}.${kind.extension}`;
 }
 
 /** Why `name` cannot name a new diagram, or null when it can. */
@@ -108,19 +115,55 @@ export function diagramNameProblem(name: string): string | null {
   return null;
 }
 
-/**
- * The line that includes a diagram's rendered picture in a document of
- * `engine`: Typst and Markdown take the SVG, LaTeX the PDF.
- */
-export function includeLine(engine: Engine, path: string): string {
+/** The New diagram dialog: a name, the kind as a single-select, one Create. */
+export function newDiagramRequest(name: string, kindId: string): DialogRequest {
+  const kind = DIAGRAM_KINDS.find((k) => k.id === kindId) ?? DIAGRAM_KINDS[0];
+  return {
+    title: "New diagram",
+    message: `A Mermaid, Pikchr or ASCII diagram in ${DIAGRAM_DIR}/. Saving it writes the picture next to it for your documents.`,
+    input: { label: "Name", value: name },
+    choice: {
+      label: "Kind",
+      options: DIAGRAM_KINDS.map((k) => ({ id: k.id, label: k.short })),
+      value: kind?.id ?? "",
+    },
+    actions: [{ id: "create", label: "Create" }],
+  };
+}
+
+/** The kind a New diagram answer asks for, or null when it was cancelled. */
+export function chosenKind(answer: DialogAnswer): DiagramKind | null {
+  if (answer.id !== "create") return null;
+  return DIAGRAM_KINDS.find((k) => k.id === answer.choice) ?? null;
+}
+
+/** Where new diagrams go. */
+export const DIAGRAM_DIR = "figures";
+
+/** `figures/x.mmd` -> `figures/x` (the rendered files' path without extension). */
+function renderedBase(path: string): { base: string; stem: string } {
   const name = basename(path);
   const dot = name.lastIndexOf(".");
   const stem = dot <= 0 ? name : name.slice(0, dot);
   const dir = path.slice(0, path.length - name.length);
-  const base = `${dir}${stem}`;
+  return { base: `${dir}${stem}`, stem };
+}
+
+/** The picture `project.export-diagram` writes next to a diagram file. */
+export function renderedSvgPath(path: string): string {
+  return `${renderedBase(path).base}.svg`;
+}
+
+/**
+ * The line that includes a diagram's rendered picture in a document of
+ * `engine`: Typst and Markdown take the SVG, LaTeX the PDF (both written
+ * next to the source on save).
+ */
+export function includeLine(engine: Engine, path: string): string {
+  const { base, stem } = renderedBase(path);
   switch (engine) {
     case "typst":
-      return `#image("${base}.svg")`;
+      return `#figure(image("${base}.svg"))`;
     case "latex":
       return `\\includegraphics{${base}.pdf}`;
     case "markdown":

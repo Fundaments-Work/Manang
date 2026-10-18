@@ -264,3 +264,14 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/**
+ * A modification time (ms since the epoch) as a local date and time
+ * ("2026-10-18 14:05"), or "" when unknown.
+ */
+export function formatModified(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms)) return "";
+  const d = new Date(ms);
+  const two = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
+}

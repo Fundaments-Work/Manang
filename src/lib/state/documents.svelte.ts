@@ -180,6 +180,7 @@ export class DocumentsStore {
 
   readonly #status = new SvelteMap<DocSession, SyncStatus>();
   readonly #editListeners: (() => void)[] = [];
+  readonly #saveListeners: ((path: string) => void)[] = [];
   #statsTimer: ReturnType<typeof setTimeout> | undefined;
 
   /* ----------------------------------------------------------------------- */
@@ -207,6 +208,11 @@ export class DocumentsStore {
   /** Called after any edit to any document; the build uses it to recompile. */
   onEdit(listener: () => void): void {
     this.#editListeners.push(listener);
+  }
+
+  /** Called with the path after a document reached the disk. */
+  onSave(listener: (path: string) => void): void {
+    this.#saveListeners.push(listener);
   }
 
   /** Open a document's session, reading the file on first use. */
@@ -345,6 +351,7 @@ export class DocumentsStore {
     try {
       await workspace.writeFile(path, doc.toString());
       session.markSaved(doc);
+      for (const listener of this.#saveListeners) listener(path);
       return true;
     } catch (error) {
       notice.error(`Could not save ${path}: ${errorMessage(error)}`);

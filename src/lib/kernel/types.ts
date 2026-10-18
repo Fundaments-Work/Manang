@@ -196,12 +196,53 @@ export interface MarkdownHeading {
   readonly line: number;
 }
 
-/** What `markdown.render-html` answers with. `html` is already sanitised in Rust. */
+/**
+ * A diagram fence of a Markdown document (`crates/manang-markdown`
+ * `DiagramFence`). `line` is the opening fence's line: a diagnostic at line `n`
+ * of `source` is at line `line + n` of the document.
+ */
+export interface MarkdownFence {
+  readonly language: DiagramLanguageId;
+  readonly source: string;
+  readonly line: number;
+  readonly endLine: number;
+  /** Names the fence's placeholder in the HTML (`data-diagram`). */
+  readonly key: string;
+}
+
+/**
+ * What `markdown.render-html` answers with. `html` is already sanitised in
+ * Rust; each diagram fence is an empty
+ * `<figure class="mng-diagram" data-diagram="<key>">` the preview fills.
+ */
 export interface MarkdownRender {
   readonly html: string;
   readonly frontmatter: unknown;
   readonly headings: readonly MarkdownHeading[];
   readonly diagnostics: readonly MarkdownDiagnostic[];
+  readonly diagrams: readonly MarkdownFence[];
+}
+
+/** What `project.export-diagram` / `project.cache-diagram` / `project.export-pdf` did. */
+export interface DiagramExport {
+  /** False when the source has an error; the previous files are untouched. */
+  readonly ok: boolean;
+  /** Project-relative path of the SVG, when there is one. */
+  readonly svg: string | null;
+  /** Project-relative path of the PDF, in projects that include PDFs (LaTeX). */
+  readonly pdf: string | null;
+  /** The files this call wrote; empty when they were current. */
+  readonly written: readonly string[];
+  /** The diagram plugin's message (`[diagram_error] line L:C: ...`) when not ok. */
+  readonly error: string | null;
+}
+
+/** `project.stat`: an entry's size, date and kind, without reading it. */
+export interface FileStat {
+  readonly size: number;
+  /** Milliseconds since the Unix epoch, or null when unknown. */
+  readonly modified: number | null;
+  readonly kind: "file" | "dir" | "other";
 }
 
 /* -------------------------------------------------------------------------- */

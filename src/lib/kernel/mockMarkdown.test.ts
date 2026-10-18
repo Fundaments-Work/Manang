@@ -13,6 +13,7 @@ describe("mock markdown plugin", () => {
       .filter((c) => c.plugin === "markdown")
       .map((c) => c.id);
     expect(ids).toEqual([
+      "markdown.diagrams",
       "markdown.outline",
       "markdown.render-html",
       "markdown.to-typst",

@@ -544,6 +544,24 @@
     max-width: 100%;
     height: auto;
   }
+  /* Diagram fences: the picture centred, or a quiet note when it has an error. */
+  .mng-paper-prose :global(figure.mng-diagram) {
+    margin: 0 0 1em;
+    text-align: center;
+  }
+  .mng-paper-prose :global(figure.mng-diagram img) {
+    display: inline-block;
+  }
+  .mng-paper-prose :global(figure[data-diagram-error]) {
+    padding: 10px 14px;
+    border: 1px solid var(--mng-paper-ink-60);
+    color: var(--mng-paper-ink-60);
+    font-size: 12px;
+    text-align: left;
+  }
+  .mng-paper-prose :global(figure[data-diagram-error] p) {
+    margin: 0;
+  }
   .mng-paper-prose :global(:last-child) {
     margin-bottom: 0;
   }

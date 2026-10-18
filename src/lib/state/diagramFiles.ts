@@ -1,25 +1,31 @@
 /**
- * Diagram file actions for the palette: create a new diagram from a template,
- * and copy the line that includes the active diagram in the main document.
+ * Diagram files: create a new diagram from a template, write its rendered
+ * picture next to it on every save (`project.export-diagram`: a print-ready
+ * SVG, plus a PDF in LaTeX projects), and copy the line that includes it in a
+ * document.
  */
 
-import { errorMessage, reportError } from "$lib/kernel";
+import { errorMessage, kernel, reportError } from "$lib/kernel";
+import { projectApi } from "$lib/kernel/api";
 import {
-  DIAGRAM_KINDS,
+  DIAGRAM_DIR,
+  chosenKind,
   diagramLanguageOf,
   diagramNameProblem,
   diagramPath,
   includeLine,
+  newDiagramRequest,
 } from "$lib/workbench/diagram";
 import { basename } from "$lib/workbench/paths";
 
 import { openFile } from "./actions";
 import { dialog } from "./dialog.svelte";
+import { documents } from "./documents.svelte";
 import { notice } from "./notice.svelte";
 import { tabs } from "./tabs.svelte";
 import { workspace } from "./workspace.svelte";
 
-const DIR = "figures";
+const project = projectApi(kernel);
 
 /** Ask for a name and a kind, write `figures/<name>.<ext>` and open it. Never overwrites. */
 export async function newDiagram(): Promise<void> {
@@ -28,24 +34,22 @@ export async function newDiagram(): Promise<void> {
     return;
   }
   let name = "diagram";
+  let kindId = "";
   for (;;) {
-    const answer = await dialog.prompt({
-      title: "New diagram",
-      message: `A diagram file in ${DIR}/, drawn beside its source as you type. Pick its kind.`,
-      input: { label: "Name", value: name },
-      actions: DIAGRAM_KINDS.map((k) => ({ id: k.id, label: k.label })),
-    });
-    const kind = DIAGRAM_KINDS.find((k) => k.id === answer.id);
-    if (kind === undefined) return;
+    const answer = await dialog.prompt(newDiagramRequest(name, kindId));
+    const kind = chosenKind(answer);
+    if (kind === null) return;
     name = answer.value;
+    kindId = kind.id;
     const problem = diagramNameProblem(name);
     if (problem !== null) {
       notice.error(problem);
       continue;
     }
     const path = diagramPath(name, kind);
-    if (workspace.namesIn("").includes(DIR)) await workspace.loadDir(DIR);
-    if (workspace.namesIn(DIR).includes(basename(path))) {
+    if (workspace.namesIn("").includes(DIAGRAM_DIR))
+      await workspace.loadDir(DIAGRAM_DIR);
+    if (workspace.namesIn(DIAGRAM_DIR).includes(basename(path))) {
       const choice = await dialog.ask({
         title: `${path} already exists`,
         message:
@@ -60,9 +64,10 @@ export async function newDiagram(): Promise<void> {
       return;
     }
     try {
-      await workspace.createFile(DIR, basename(path), kind.template);
+      await workspace.createFile(DIAGRAM_DIR, basename(path), kind.template);
       await workspace.reveal(path);
       await openFile(path);
+      await exportDiagram(path);
     } catch (error) {
       reportError("new diagram", error);
       notice.error(`Could not create the diagram: ${errorMessage(error)}`);
@@ -77,6 +82,31 @@ export function diagramIsActive(): boolean {
   return active?.kind === "document" && diagramLanguageOf(active.path) !== null;
 }
 
+/**
+ * Write the rendered files of the diagram at `path` (what is on disk). A
+ * source with errors keeps the previous files: Problems already shows why.
+ * Returns false when the files could not be brought up to date.
+ */
+export async function exportDiagram(path: string): Promise<boolean> {
+  try {
+    const result = await project.exportDiagram(path);
+    return result.ok;
+  } catch (error) {
+    reportError("diagram export", error);
+    notice.error(
+      `Could not write the picture of ${basename(path)}: ${errorMessage(error)}`,
+    );
+    return false;
+  }
+}
+
+/** Keep every diagram's rendered files current. Call once at boot. */
+export function exportDiagramsOnSave(): void {
+  documents.onSave((path) => {
+    if (diagramLanguageOf(path) !== null) void exportDiagram(path);
+  });
+}
+
 /** Copy the include line for the active diagram, for the project's engine. */
 export async function copyIncludeLine(): Promise<void> {
   const active = tabs.active;
@@ -86,11 +116,14 @@ export async function copyIncludeLine(): Promise<void> {
   }
   const engine = workspace.project?.engine ?? workspace.engine;
   const line = includeLine(engine, active.path);
-  const picture = engine === "latex" ? "PDF" : "SVG";
+  // Make sure the picture the line names exists (the saved source's).
+  const current = await exportDiagram(active.path);
   try {
     await navigator.clipboard.writeText(line);
     notice.show(
-      `Copied ${line}. Manang does not write the ${picture} next to the diagram yet; that comes with the document integration.`,
+      current && !documents.isDirty(active.path)
+        ? `Copied ${line}`
+        : `Copied ${line}. Save the diagram (without errors) to update its picture.`,
     );
   } catch (error) {
     reportError("copy include line", error);
