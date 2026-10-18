@@ -1,7 +1,7 @@
 /**
  * In-memory `git` plugin.
  *
- * Reproduces `crates/manang-git` command surface (22 commands)
+ * Reproduces `crates/manang-git` command surface (27 commands)
  * over `MockProjectHost` in browser and tests.
  */
 
@@ -17,8 +17,12 @@ import type {
   GitFileDiff,
   GitIdentity,
   GitLogResponse,
+  GitRemoteInfo,
   GitRestored,
   GitSavedVersion,
+  GitShared,
+  GitSyncStatus,
+  GitUpdated,
   GitVersionInfo,
   GitVersionsPage,
   GitStatusFile,
@@ -38,7 +42,12 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["git.init", "Initialise repository"],
   ["git.log", "Commit log"],
   ["git.open", "Set the git project root"],
+  ["git.get-updates", "Get updates"],
+  ["git.remote-get", "Read the shared location"],
+  ["git.remote-set", "Set the shared location"],
   ["git.restore", "Restore files from a version"],
+  ["git.share", "Share your versions"],
+  ["git.sync-status", "Share status"],
   ["git.save-version", "Save a version"],
   ["git.show", "File content at revision"],
   ["git.stage", "Stage files"],
@@ -52,6 +61,24 @@ const COMMANDS: readonly (readonly [string, string])[] = [
 
 /** The dev kernel's switch for "no author identity yet" (`localStorage`). */
 export const MOCK_IDENTITY_FLAG = "manang.mock.git-identity";
+
+/**
+ * The dev kernel's switch for the shared copy (`localStorage`): `behind`,
+ * `diverged` and `conflicts` put two updates on the remote; `rejected`,
+ * `auth` and `unreachable` make Share and Get updates fail as the real
+ * plugin does.
+ */
+export const MOCK_SHARE_FLAG = "manang.mock.git-share";
+
+function shareFlag(): string {
+  try {
+    return typeof localStorage === "undefined"
+      ? ""
+      : (localStorage.getItem(MOCK_SHARE_FLAG) ?? "");
+  } catch {
+    return "";
+  }
+}
 
 function gitFail(code: string, message: string, extra: Record<string, unknown> = {}): never {
   throw { message: JSON.stringify({ code, message, ...extra }) };
@@ -185,6 +212,10 @@ export function gitPlugin(host: MockProjectHost): MockPluginFactory {
   const labelled = new Set<string>();
   /** `undefined` follows the dev flag; `null` is "no identity yet". */
   let identity: { name: string; email: string } | null | undefined;
+  let remoteUrl: string | null = null;
+  /** Newest version the shared copy has; `null` while it has none of ours. */
+  let sharedHash: string | null = null;
+  let received = false;
   const DEFAULT_IDENTITY = { name: "Rolf Landauer", email: "landauer@ibm.com" };
 
   function currentIdentity(): { name: string; email: string } | null {
@@ -303,6 +334,66 @@ export function gitPlugin(host: MockProjectHost): MockPluginFactory {
     stagedPaths.clear();
     const commit = recordCommit(fs, subject, true);
     return { sha: commit.hash, short: commit.short, subject, files_changed: filesChanged };
+  }
+
+  function shareAhead(): number {
+    if (sharedHash === null) return commits.length;
+    const at = commits.findIndex((c) => c.hash === sharedHash);
+    return at < 0 ? commits.length : at;
+  }
+
+  function shareBehind(): number {
+    const flag = shareFlag();
+    const incoming = flag === "behind" || flag === "diverged" || flag === "conflicts";
+    return incoming && !received ? 2 : 0;
+  }
+
+  function requireRemote(): void {
+    if (remoteUrl === null) {
+      gitFail(
+        "no-remote",
+        "this project is not connected to a shared location yet; add its address first",
+      );
+    }
+  }
+
+  function reachRemote(): void {
+    const flag = shareFlag();
+    if (flag === "unreachable") {
+      gitFail(
+        "remote-unreachable",
+        "the shared location could not be reached; check the address and your connection",
+      );
+    }
+    if (flag === "auth") {
+      gitFail(
+        "auth-failed",
+        "the shared location did not accept your sign-in; check that you have access, and that git is set up with your credentials or ssh key",
+      );
+    }
+  }
+
+  function syncStatusOf(fs: MockProjectFs): GitSyncStatus {
+    const uncommitted = computeStatusFiles(fs).length;
+    const base = {
+      remote: remoteUrl === null ? null : "origin",
+      branch: currentBranch,
+      uncommitted,
+    };
+    if (remoteUrl === null) {
+      return { ...base, state: "no-remote", ahead: 0, behind: 0, never_shared: false };
+    }
+    const ahead = shareAhead();
+    const behind = shareBehind();
+    const state =
+      ahead > 0 && behind > 0
+        ? "diverged"
+        : ahead > 0
+          ? "ahead"
+          : behind > 0
+            ? "behind"
+            : "up-to-date";
+    return { ...base, state, ahead, behind, never_shared: sharedHash === null };
   }
 
   const commits: GitCommitInfo[] = [
@@ -863,6 +954,91 @@ export function gitPlugin(host: MockProjectHost): MockPluginFactory {
           })),
         });
         return result;
+      },
+
+      "git.remote-get": (args) => {
+        getFs(optStr(args, "root"));
+        const info: GitRemoteInfo =
+          remoteUrl === null
+            ? { name: null, url: null }
+            : { name: "origin", url: remoteUrl };
+        return info;
+      },
+
+      "git.remote-set": (args) => {
+        const fs = getFs(optStr(args, "root"));
+        const url = str(args, "url").trim();
+        if (url === "" || /\s/.test(url) || url.startsWith("-") || url.startsWith("ext:")) {
+          gitFail(
+            "bad-remote-url",
+            "that does not look like a repository address; use an https:// or ssh address",
+          );
+        }
+        remoteUrl = url;
+        emit("git.changed", { root: fs.root });
+        const info: GitRemoteInfo = { name: "origin", url };
+        return info;
+      },
+
+      "git.sync-status": (args) => {
+        const fs = getFs(optStr(args, "root"));
+        if (optBool(args, "refresh") && remoteUrl !== null) reachRemote();
+        return syncStatusOf(fs);
+      },
+
+      "git.share": (args) => {
+        const fs = getFs(optStr(args, "root"));
+        requireRemote();
+        reachRemote();
+        if (shareFlag() === "rejected" || shareBehind() > 0) {
+          gitFail(
+            "share-rejected",
+            "someone else has shared changes since you last got updates; get updates first, then share again",
+          );
+        }
+        const pushed = shareAhead();
+        sharedHash = commits[0]?.hash ?? null;
+        emit("git.changed", { root: fs.root });
+        const shared: GitShared = { remote: "origin", branch: currentBranch, pushed };
+        return shared;
+      },
+
+      "git.get-updates": (args) => {
+        const fs = getFs(optStr(args, "root"));
+        requireRemote();
+        reachRemote();
+        const strategy = optStr(args, "strategy") ?? "merge";
+        const behind = shareBehind();
+        const ahead = shareAhead();
+        const done = (over: Partial<GitUpdated>): GitUpdated => ({
+          result: "up-to-date",
+          files: [],
+          received: 0,
+          safety_version: null,
+          ...over,
+        });
+        if (behind === 0) return done({});
+        if (ahead > 0 && strategy === "ff-only") {
+          return done({ result: "diverged", received: behind });
+        }
+        if (shareFlag() === "conflicts" && ahead > 0) {
+          return done({ result: "conflicts", files: [fs.main], received: behind });
+        }
+        let safety: string | null = null;
+        if (hasChanges(fs) && strategy !== "ff-only") {
+          safety = saveVersion(fs, "Before getting updates").sha;
+        }
+        recordCommit(fs, "Updates from collaborators", false);
+        received = true;
+        const merged = ahead > 0 || safety !== null;
+        if (!merged) sharedHash = commits[0]?.hash ?? null;
+        emit("git.changed", { root: fs.root });
+        emit("project.changed", { root: fs.root, changes: [] });
+        return done({
+          result: merged ? "merged" : "fast-forwarded",
+          received: behind,
+          safety_version: safety,
+        });
       },
 
       "git.sync": (args) => {

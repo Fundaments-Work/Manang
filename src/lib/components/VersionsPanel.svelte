@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
 
+  import SharePanel from "$lib/components/SharePanel.svelte";
   import VersionDiff from "$lib/components/VersionDiff.svelte";
   import { kernel, reportError } from "$lib/kernel";
   import { gitApi, type GitFileDiff, type GitVersionInfo } from "$lib/kernel/api";
@@ -220,6 +221,8 @@
         Save a version
       </button>
     </div>
+
+    <SharePanel />
 
     {#if problem !== ""}
       <p class="m-0 px-3 py-2 text-xs text-text">{problem}</p>
