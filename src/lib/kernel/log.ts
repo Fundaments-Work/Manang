@@ -44,12 +44,14 @@ function forward(level: Level, text: string): void {
 
 /** Log a failure the caller handles (it shows a notice, falls back, ...). */
 export function reportError(where: string, error: unknown): void {
-  console.error(`[manang] ${where}:`, error);
+  // The text first: WebKit's console shows a bare object as "Object".
+  console.error(`[manang] ${where}: ${describe(error)}`, error);
 }
 
 /** Log something unexpected that is not a failure. */
 export function reportWarning(where: string, detail: unknown): void {
-  console.warn(`[manang] ${where}:`, detail);
+  // The text first: WebKit's console shows a bare object as "Object".
+  console.warn(`[manang] ${where}: ${describe(detail)}`, detail);
 }
 
 /**

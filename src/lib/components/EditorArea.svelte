@@ -1,10 +1,11 @@
 <script lang="ts">
-  import type { Component } from "svelte";
+  import { untrack, type Component } from "svelte";
 
   import EditorPane from "./EditorPane.svelte";
   import FileViewer from "./FileViewer.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
+  import { reportError } from "$lib/kernel";
   import { newFileHere } from "$lib/state/actions";
   import { figures } from "$lib/state/figures.svelte";
   import type { FigureState } from "$lib/state/figure.svelte";
@@ -13,6 +14,7 @@
   import { tabs } from "$lib/state/tabs.svelte";
   import { detectPlatform } from "$lib/util/keyboard";
   import { DEFAULT_LAYOUT, SPLIT_MAX, SPLIT_MIN } from "$lib/workbench/layout";
+  import { basename } from "$lib/workbench/paths";
 
   /**
    * The editor area: whatever the active tab holds. A document shows its editor
@@ -31,24 +33,68 @@
   let Figure = $state.raw<Component<{ figure: FigureState }> | undefined>();
   let Slides = $state.raw<Component<{ path: string }> | undefined>();
 
+  /**
+   * Why a heavy view could not load (its chunk failed to import, or the figure
+   * could not be read). Shown with a Retry; before, a failed import left the
+   * tab on "Opening figure" for good.
+   */
+  let loadError = $state("");
+  let attempt = $state(0);
+
+  function lazy<T>(load: () => Promise<{ default: T }>, set: (c: T) => void): void {
+    load()
+      .then((m) => set(m.default))
+      .catch((error: unknown) => {
+        reportError("a view could not be loaded", error);
+        loadError = "This view could not be loaded.";
+      });
+  }
+
   $effect(() => {
+    void attempt;
     if (
       tab?.kind === "document" &&
       tab.view === "text" &&
       mode !== "editor" &&
       Preview === undefined
     ) {
-      void import("./PreviewPane.svelte").then((m) => (Preview = m.default));
+      lazy(
+        () => import("./PreviewPane.svelte"),
+        (c) => (Preview = c),
+      );
     }
     if (tab?.kind === "figure" && Figure === undefined) {
-      void import("./FigureEditor.svelte").then((m) => (Figure = m.default));
+      lazy(
+        () => import("./FigureEditor.svelte"),
+        (c) => (Figure = c),
+      );
     }
     if (tab?.kind === "document" && tab.view === "slides" && Slides === undefined) {
-      void import("./SlidesView.svelte").then((m) => (Slides = m.default));
+      lazy(
+        () => import("./SlidesView.svelte"),
+        (c) => (Slides = c),
+      );
     }
   });
 
   const figure = $derived(tab?.kind === "figure" ? figures.get(tab.path) : undefined);
+
+  // A figure tab whose scene is not loaded (restored, or its state was lost)
+  // loads it instead of waiting for someone else to.
+  $effect(() => {
+    void attempt;
+    if (tab?.kind !== "figure" || figure !== undefined) return;
+    const path = tab.path;
+    void untrack(() => figures.open(path)).then((loaded) => {
+      if (loaded === null && tabs.active?.path === path)
+        loadError = `${basename(path)} could not be opened.`;
+    });
+  });
+
+  function retry(): void {
+    loadError = "";
+    attempt += 1;
+  }
   const labelledBy = $derived(
     tab === undefined
       ? undefined
@@ -86,6 +132,11 @@
   {:else if tab.kind === "figure"}
     {#if figure !== undefined && Figure !== undefined}
       <Figure {figure} />
+    {:else if loadError !== ""}
+      <div class="m-auto flex flex-col items-center gap-3 text-xs" role="alert">
+        <p class="m-0 text-text-60">{loadError}</p>
+        <button type="button" class="mng-btn" onclick={retry}>Retry</button>
+      </div>
     {:else}
       <p class="m-auto text-xs text-text-muted" role="status">Opening figure</p>
     {/if}
