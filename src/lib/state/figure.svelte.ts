@@ -15,7 +15,12 @@
  */
 
 import { applyEdit, translatedScene, type FigureEdit } from "$lib/figure/edit";
-import { allAnchors, snapToAnchors, type SnapResult } from "$lib/figure/geometry";
+import {
+  allAnchors,
+  normalizeRect,
+  snapToAnchors,
+  type SnapResult,
+} from "$lib/figure/geometry";
 import {
   createScene,
   formatNodeId,
@@ -397,16 +402,13 @@ export class FigureState {
       }
 
       if (this.tool === "geometry") {
-        const width = to.x - from.x;
-        const height = to.y - from.y;
-        if (Math.abs(width) > 8 && Math.abs(height) > 8) {
+        // Dragged up or left gives a negative size, which SVG does not draw.
+        const box = normalizeRect(from.x, from.y, to.x - from.x, to.y - from.y);
+        if (box.width > 8 && box.height > 8) {
           this.add({
             kind: "rect",
             id: this.nextId(),
-            x: from.x,
-            y: from.y,
-            width,
-            height,
+            ...box,
             stroke: "#e8e6e1",
             fill: "#1c1c20",
           });

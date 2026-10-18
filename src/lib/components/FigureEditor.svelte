@@ -3,6 +3,7 @@
   import {
     arrowHead,
     nodeBounds,
+    normalizeRect,
     polygonToPath,
     strokeToPath,
   } from "$lib/figure/geometry";
@@ -172,11 +173,13 @@
         {#if node.kind === "stroke"}
           <path d={strokeToPath(node)} fill={node.color} />
         {:else if node.kind === "rect"}
+          <!-- Normalised: older scenes may hold a negative size from an upward drag. -->
+          {@const box = normalizeRect(node.x, node.y, node.width, node.height)}
           <rect
-            x={node.x}
-            y={node.y}
-            width={node.width}
-            height={node.height}
+            x={box.x}
+            y={box.y}
+            width={box.width}
+            height={box.height}
             fill={node.fill ?? "none"}
             stroke={node.stroke}
             stroke-width="1"
@@ -263,7 +266,24 @@
           stroke-width="1"
           stroke-dasharray="4 4"
         />
-      {:else if figure.dragStart !== null && figure.dragCurrent !== null}
+      {:else if figure.tool === "geometry" && figure.dragStart !== null && figure.dragCurrent !== null}
+        {@const box = normalizeRect(
+          figure.dragStart.x,
+          figure.dragStart.y,
+          figure.dragCurrent.x - figure.dragStart.x,
+          figure.dragCurrent.y - figure.dragStart.y,
+        )}
+        <rect
+          x={box.x}
+          y={box.y}
+          width={box.width}
+          height={box.height}
+          fill="none"
+          stroke="var(--mng-accent)"
+          stroke-width="1"
+          stroke-dasharray="4 4"
+        />
+      {:else if figure.tool === "arrow" && figure.dragStart !== null && figure.dragCurrent !== null}
         <line
           x1={figure.dragStart.x}
           y1={figure.dragStart.y}
