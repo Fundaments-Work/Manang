@@ -142,7 +142,14 @@ export class FiguresStore {
       const gone = change.kind === "removed" ? change.path : change.from;
       if (gone !== undefined) {
         const figure = this.#open.get(gone);
-        if (figure !== undefined && figure.external !== "deleted") {
+        // Saving replaces the file, which the watcher can report as a removal
+        // before the new one appears: only a file that is really gone counts.
+        if (
+          figure !== undefined &&
+          figure.external !== "deleted" &&
+          Date.now() - figure.savedAt >= 2500 &&
+          !(await this.#exists(gone))
+        ) {
           figure.external = "deleted";
           notice.error(`${basename(gone)} was deleted or moved on disk.`);
         }
@@ -150,6 +157,9 @@ export class FiguresStore {
       if (change.kind === "removed") continue;
       const figure = this.#open.get(change.path);
       if (figure === undefined) continue;
+      // It came back (a replaced file looked deleted for a moment): clear the mark.
+      if (figure.external === "deleted" && (await this.#exists(change.path)))
+        figure.external = null;
       // Our own save comes back through the watcher a moment later.
       if (Date.now() - figure.savedAt < 2500) continue;
       let disk: { content: string; hash: string } | null;
