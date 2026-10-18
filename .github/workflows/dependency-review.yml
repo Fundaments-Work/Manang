@@ -1,0 +1,19 @@
+name: Dependency review
+
+# Blocks pull requests that add a dependency with a known vulnerability or a
+# licence we cannot ship. Needs a public repository (or Advanced Security).
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

@@ -45,8 +45,9 @@ Local-first scientific writing: Typst, LaTeX and Markdown with live PDF preview,
 
 ## Checklist before the repository goes public
 
-- [ ] Choose and add the LICENSE file (workspace manifests declare MIT).
-- [ ] Secrets scan of history; confirm no keys in `docs/` or fixtures.
+- [x] LICENSE (MIT, holder Fundaments.work: confirm), CODE_OF_CONDUCT, SECURITY, SUPPORT, CONTRIBUTING, issue and PR templates, Dependabot, CodeQL, dependency review.
+- [x] Secrets scan of history (2026-10-18, pattern scan): only obvious fakes in redaction tests and AWS's documented example key. Re-run with gitleaks on the final history.
+- [ ] Decide what history goes public. Today's history has (1) about 200 MB of build output from an early commit (`echo-guest/target`, removed later but still in the pack, 225 MB `.git`) and (2) a personal email address as the author of all 399 commits. Options: publish a squashed or filtered history to the public repository (recommended: `git filter-repo` with `--path ... --invert-paths` and a `.mailmap` to a noreply address, done on a fresh clone) and keep this private repository as the archive; or open the full history as is.
 - [ ] Replace sample-data screenshots with desktop screenshots.
 - [ ] Set description, topics and social preview; enable Discussions and issue templates.
 - [ ] Tag `v0.1.0-beta.1` with release notes from `docs/beta/release-notes-template.md`.

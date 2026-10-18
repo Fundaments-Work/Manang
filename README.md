@@ -127,4 +127,4 @@ Bug reports and feature requests use the issue templates.
 
 ## License
 
-MIT, as declared in the workspace. Made by [Fundaments.work](https://fundaments.work).
+[MIT](LICENSE). Made by [Fundaments.work](https://fundaments.work).
