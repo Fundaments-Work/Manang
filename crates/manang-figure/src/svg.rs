@@ -13,8 +13,8 @@ use crate::geometry::{format_coord, freedraw_path, node_bounds, node_rect, union
 use crate::palette::{self, Theme};
 use crate::route::end_directions;
 use crate::scene::{
-    ConnectorNode, FigureNode, FigureScene, FontFamily, Head, Rect, ShapeNode, StrokeStyle, Style,
-    TextAlign, Vec2,
+    ConnectorNode, FigureNode, FigureScene, FontFamily, Head, MathNode, Rect, ShapeNode,
+    StrokeStyle, Style, TextAlign, Vec2,
 };
 use crate::sketch::{self, Rng};
 use crate::text::{self, LINE_HEIGHT};
@@ -85,6 +85,30 @@ pub fn export_region(scene: &FigureScene, frame: Option<&str>) -> Rect {
     )
 }
 
+/// The backdrop of an export: an exported frame's own fill; else the
+/// scene's `background`; else `paper` when `options.background` asks for it;
+/// else none (transparent).
+fn background_paint(scene: &FigureScene, options: &SvgExportOptions) -> Option<(String, f64)> {
+    let theme = options.theme;
+    if let Some(FigureNode::Frame(frame)) =
+        options.frame.as_deref().and_then(|id| scene.node_by_id(id))
+        && frame.style.fill() != "none"
+    {
+        let paint = palette::fill(frame.style.fill(), theme);
+        let alpha = frame
+            .style
+            .fill_opacity
+            .map_or(paint.alpha, |p| (p / 100.0).clamp(0.0, 1.0));
+        return Some((paint.colour, alpha));
+    }
+    if let Some(bg) = &scene.background {
+        return Some((palette::stroke(bg, theme), 1.0));
+    }
+    options
+        .background
+        .then(|| (palette::stroke("paper", theme), 1.0))
+}
+
 /// Renders with default options and no embeds.
 pub fn render_svg(scene: &FigureScene, options: &SvgExportOptions) -> String {
     render_svg_with(scene, options, &BTreeMap::new())
@@ -109,11 +133,15 @@ pub fn render_svg_with(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"{x} {y} {w} {h}\" width=\"{w}\" height=\"{h}\">"
     );
     let theme = options.theme;
-    if options.background {
+    if let Some((colour, alpha)) = background_paint(scene, options) {
+        let opacity = if alpha < 1.0 {
+            format!(" fill-opacity=\"{}\"", format_coord(alpha))
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             svg,
-            "  <rect x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" fill=\"{}\"/>",
-            palette::stroke("paper", theme)
+            "  <rect x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" fill=\"{colour}\"{opacity}/>"
         );
     }
     if options.include_frame && scene.width > 1.0 && scene.height > 1.0 {
@@ -187,13 +215,17 @@ fn font(family: FontFamily) -> &'static str {
 /// Default font size of connector labels.
 pub const CONNECTOR_FONT_SIZE: f64 = 14.0;
 
+/// The share of a diamond's width and height its text box (the inscribed
+/// rectangle) uses.
+pub const DIAMOND_TEXT_BOX: f64 = 0.6;
+
 /// Horizontal padding inside a shape before its label.
 pub const LABEL_PADDING: f64 = 8.0;
 
 /// The width a label may use inside a box of `width` for `kind`.
 pub fn label_width(kind: &str, width: f64) -> f64 {
     let usable = match kind {
-        "diamond" => width * 0.55,
+        "diamond" => return (width.abs() * DIAMOND_TEXT_BOX).max(1.0),
         "ellipse" => width * 0.72,
         "text" => return width.abs(),
         _ => width.abs(),
@@ -207,7 +239,10 @@ impl Ctx<'_> {
     }
 
     fn fill_attrs(&self, style: &Style) -> String {
-        let paint = palette::fill(style.fill(), self.theme);
+        let mut paint = palette::fill(style.fill(), self.theme);
+        if let Some(percent) = style.fill_opacity {
+            paint.alpha = (percent / 100.0).clamp(0.0, 1.0);
+        }
         if paint.alpha < 1.0 {
             format!(
                 "fill=\"{}\" fill-opacity=\"{}\"",
@@ -282,21 +317,40 @@ impl Ctx<'_> {
                 );
                 svg.push_str("  </g>\n");
             }
-            FigureNode::Math(m) => {
-                self.open_group(svg, &m.id, &m.style, None);
+            FigureNode::Math(m) => self.math(svg, m),
+        }
+    }
+
+    /// A formula: its rendered vector paths nested at the node's box, in
+    /// the node's colour. Without a rendering (no engine, or a formula that
+    /// does not compile) a dashed placeholder marks the place.
+    fn math(&self, svg: &mut String, m: &MathNode) {
+        self.open_group(svg, &m.id, &m.style, None);
+        let colour = self.stroke(&m.style);
+        let rendered = self.embeds.get(&m.id).and_then(|e| {
+            let (w, h) = crate::math::svg_size(e)?;
+            Some((nested_math(e, m, w, h, &colour)?, w, h))
+        });
+        match rendered {
+            Some((nested, _, _)) => {
+                svg.push_str("    ");
+                svg.push_str(&nested);
+                svg.push('\n');
+            }
+            None => {
+                let (w, h) = m.box_size();
+                let muted = palette::stroke("muted", self.theme);
                 let _ = writeln!(
                     svg,
-                    "    <text x=\"{}\" y=\"{}\" fill=\"{}\" font-family=\"{}\" font-size=\"{}\">{}</text>",
+                    "    <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"{muted}\" stroke-width=\"1\" stroke-dasharray=\"4 4\"/>",
                     format_coord(m.x),
                     format_coord(m.y),
-                    self.stroke(&m.style),
-                    font(FontFamily::Mono),
-                    format_coord(m.size),
-                    escape_xml(&m.tex)
+                    format_coord(w),
+                    format_coord(h)
                 );
-                svg.push_str("  </g>\n");
             }
         }
+        svg.push_str("  </g>\n");
     }
 
     fn shape(&self, svg: &mut String, kind: &str, s: &ShapeNode) {
@@ -362,9 +416,14 @@ impl Ctx<'_> {
             self.fill_attrs(&s.style)
         );
         if let Some(label) = &s.label {
+            let title = s
+                .style
+                .label_color
+                .as_deref()
+                .map_or_else(|| stroke.clone(), |c| palette::stroke(c, self.theme));
             let _ = writeln!(
                 svg,
-                "    <text x=\"{}\" y=\"{}\" fill=\"{stroke}\" font-family=\"{}\" font-size=\"12\">{}</text>",
+                "    <text x=\"{}\" y=\"{}\" fill=\"{title}\" font-family=\"{}\" font-size=\"12\">{}</text>",
                 format_coord(r.x),
                 format_coord(r.y - 6.0),
                 font(FontFamily::Mono),
@@ -410,9 +469,22 @@ impl Ctx<'_> {
     fn label(&self, svg: &mut String, kind: &str, s: &ShapeNode, label: &str) {
         let r = crate::geometry::normalize_rect(s.x, s.y, s.width, s.height);
         let style = &s.style;
-        let size = style.font_size();
         let family = style.font_family();
-        let lines = text::wrap(label, label_width(kind, r.width), size, family);
+        let (lines, size) = if kind == "diamond" {
+            text::fit_label(
+                label,
+                label_width(kind, r.width),
+                r.height * DIAMOND_TEXT_BOX,
+                style.font_size(),
+                family,
+            )
+        } else {
+            let size = style.font_size();
+            (
+                text::wrap(label, label_width(kind, r.width), size, family),
+                size,
+            )
+        };
         let lh = size * LINE_HEIGHT;
         let total = lh * lines.len() as f64;
         let top = if kind == "text" {
@@ -431,7 +503,7 @@ impl Ctx<'_> {
             TextAlign::Center => (r.center().x, "middle"),
             TextAlign::Right => (r.right() - pad, "end"),
         };
-        let colour = self.stroke(style);
+        let colour = palette::stroke(style.label_colour(), self.theme);
         self.text_lines(
             svg,
             &TextBlock {
@@ -535,7 +607,7 @@ impl Ctx<'_> {
                     size,
                     family,
                     anchor: "middle",
-                    colour: &stroke,
+                    colour: &palette::stroke(c.style.label_colour(), self.theme),
                     halo: true,
                 },
             );
@@ -625,6 +697,27 @@ pub fn head_svg(head: Head, tip: Vec2, dir: Vec2, width: f64, colour: &str) -> O
         }
         Head::None => return None,
     })
+}
+
+/// A rendered formula as a nested `<svg>` at the node's corner, painting in
+/// `colour` (the rendering's own paints are `currentColor`).
+fn nested_math(document: &str, m: &MathNode, w: f64, h: f64, colour: &str) -> Option<String> {
+    let start = document.find("<svg")?;
+    let open_end = start + document[start..].find('>')?;
+    let close = document.rfind("</svg>")?;
+    if close < open_end {
+        return None;
+    }
+    let inner = document[open_end + 1..close].trim();
+    Some(format!(
+        "<svg x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\" color=\"{colour}\" fill=\"{colour}\">{inner}</svg>",
+        format_coord(m.x),
+        format_coord(m.y),
+        format_coord(w),
+        format_coord(h),
+        format_coord(w),
+        format_coord(h),
+    ))
 }
 
 /// A rendered SVG document as a nested `<svg>` filling `r`: the prolog is

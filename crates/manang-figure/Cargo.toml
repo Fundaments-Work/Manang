@@ -14,6 +14,13 @@ dugong = "=0.9.0"
 manang-kernel = { path = "../manang-kernel" }
 parking_lot = "0.12"
 perfect_freehand = "0.1.1"
+quick-xml = "0.42"
+# RaTeX (MIT), already in the tree through merman: LaTeX math to outline
+# paths with the KaTeX fonts embedded; pure Rust, no C library.
+ratex-layout = "=0.1.15"
+ratex-parser = "=0.1.15"
+ratex-svg = { version = "=0.1.15", features = ["embed-fonts"] }
+ratex-types = "=0.1.15"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -21,7 +28,6 @@ thiserror = { workspace = true }
 [dev-dependencies]
 manang-diagram = { path = "../manang-diagram" }
 criterion = { version = "0.8", default-features = false }
-quick-xml = "0.42"
 manang-project = { path = "../manang-project" }
 manang-typst = { path = "../manang-typst" }
 insta = { version = "1", features = ["json"] }

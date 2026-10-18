@@ -91,7 +91,7 @@ const SCENE: FigureScene = {
       id: "x",
       x: 20,
       y: 250,
-      tex: "a<b",
+      source: "a<b",
       size: 16,
       style: { stroke: "sage" },
     },
@@ -108,6 +108,7 @@ describe("render", () => {
     expect(svg).toContain('opacity="0.5"');
     expect(svg).toContain("<circle");
     expect(svg).toContain("a&lt;b");
+    expect(svg).toContain("data-approximate-math");
     expect(svg).not.toMatch(/var\(--/);
   });
 
@@ -125,7 +126,7 @@ describe("render", () => {
 
   it("measures label room and path midpoints", () => {
     expect(labelWidth("rect", 120)).toBe(104);
-    expect(labelWidth("diamond", 100)).toBeCloseTo(39);
+    expect(labelWidth("diamond", 100)).toBeCloseTo(60);
     expect(labelWidth("text", -50)).toBe(50);
     expect(
       pathMidpoint([

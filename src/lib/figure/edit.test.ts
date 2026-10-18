@@ -25,7 +25,7 @@ function sceneWith(): FigureScene {
         start: { node: "a" },
         end: { node: "b" },
       },
-      { kind: "math", id: "m", x: 5, y: 5, tex: "x", size: 20 },
+      { kind: "math", id: "m", x: 5, y: 5, source: "x", size: 20 },
       { kind: "freedraw", id: "f", points: [{ x: 1, y: 1, pressure: 0.5 }], size: 2 },
     ],
   };

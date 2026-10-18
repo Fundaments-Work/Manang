@@ -47,6 +47,10 @@ id = "figure.export-svg"
 title = "Export SVG"
 
 [[contributes.commands]]
+id = "figure.render-math"
+title = "Render a formula to vector SVG"
+
+[[contributes.commands]]
 id = "figure.hit-test"
 title = "Hit test coordinates"
 

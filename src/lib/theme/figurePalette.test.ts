@@ -74,6 +74,17 @@ describe("figure palette", () => {
     for (const n of palette.neutral) expect(Object.keys(palette.tokens)).toContain(n);
   });
 
+  it("every colour token reads as a stroke or text on paper in each theme (at least 3:1)", () => {
+    const quiet = new Set(["line", "surface", "paper"]);
+    for (const theme of ["dark", "light", "print"] as const) {
+      for (const [name, values] of Object.entries(palette.tokens)) {
+        if (quiet.has(name)) continue;
+        const ratio = contrast(values[theme], palette.tokens.paper[theme]);
+        expect(ratio, `${name} in ${theme}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
   it("ink reads on paper in each theme (contrast at least 7:1)", () => {
     for (const theme of ["dark", "light", "print"] as const) {
       const ratio = contrast(palette.tokens.ink[theme], palette.tokens.paper[theme]);
