@@ -10,6 +10,7 @@
 
 use std::collections::BTreeMap;
 
+use manang_kernel::manifest::{DEFAULT_SETTINGS_CONTEXT, check_settings_contexts};
 use manang_kernel::{SettingKind, SettingScope, SettingSpec};
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value, json};
@@ -264,6 +265,14 @@ pub struct SettingDef {
     /// First id segment, for grouping in the UI. Set by the registry.
     #[serde(default, skip_deserializing)]
     pub category: String,
+    /// Where the setting's group belongs in a contextual Settings page
+    /// (`document`, `engine:typst`, ...; see
+    /// [`manang_kernel::manifest::SETTINGS_CONTEXTS`]). Core settings take
+    /// their category's contexts from [`crate::defaults::category_contexts`],
+    /// plugin settings their manifest's `settings_contexts`. Registration
+    /// fills an empty list with `["app"]`.
+    #[serde(default)]
+    pub contexts: Vec<String>,
 }
 
 impl SettingDef {
@@ -285,7 +294,15 @@ impl SettingDef {
             title: None,
             owner: String::new(),
             category: String::new(),
+            contexts: Vec::new(),
         }
+    }
+
+    /// Set the contexts the setting's group belongs to.
+    #[must_use]
+    pub fn with_contexts(mut self, contexts: &[&str]) -> Self {
+        self.contexts = contexts.iter().map(|c| (*c).to_owned()).collect();
+        self
     }
 
     /// Set the human label shown by the Settings UI.
@@ -342,6 +359,7 @@ impl From<&SettingSpec> for SettingDef {
             title: spec.title.clone(),
             owner: String::new(),
             category: String::new(),
+            contexts: Vec::new(),
         }
     }
 }
@@ -433,6 +451,7 @@ impl Registry {
         }
         def.validate(&def.default)
             .map_err(|e| bad(format!("the default is invalid: {e}")))?;
+        check_settings_contexts(&def.contexts).map_err(bad)?;
         if let Some(existing) = self.defs.get(&def.id) {
             let same = SettingDef {
                 owner: String::new(),
@@ -479,6 +498,9 @@ impl Registry {
         let mut staged = self.clone();
         let mut added = 0;
         for mut def in defs {
+            if def.contexts.is_empty() {
+                def.contexts = vec![DEFAULT_SETTINGS_CONTEXT.to_owned()];
+            }
             if staged.check(&def, owner)? {
                 def.owner = owner.to_owned();
                 def.category = def.id.split('.').next().unwrap_or_default().to_owned();

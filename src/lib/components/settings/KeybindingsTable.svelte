@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from "$lib/components/ui/Icon.svelte";
   import type { KeybindingConflict, KeybindingItem } from "$lib/kernel/api";
+  import { keybindingRows, type KeybindingRow } from "$lib/workbench/keybindingRows";
   import {
     findCommandConflicts,
     formatShortcutDisplay,
@@ -28,10 +29,11 @@
   let recording = $state<string | null>(null);
   let recorded = $state("");
 
+  const rows = $derived(keybindingRows(bindings));
   const filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
-    if (q === "") return bindings;
-    return bindings.filter(
+    if (q === "") return rows;
+    return rows.filter(
       (b) =>
         b.command.toLowerCase().includes(q) ||
         (titles.get(b.command) ?? "").toLowerCase().includes(q) ||
@@ -39,8 +41,9 @@
     );
   });
 
-  function start(item: KeybindingItem): void {
-    recording = item.command;
+  /** The row being recorded (its id), not the command: a command may have several rows. */
+  function start(item: KeybindingRow): void {
+    recording = item.id;
     recorded = "";
   }
 
@@ -54,9 +57,9 @@
     }
     if (event.key === "Enter" && recorded !== "") {
       event.preventDefault();
-      const command = recording;
+      const row = rows.find((r) => r.id === recording);
       recording = null;
-      void onchange(command, recorded);
+      if (row !== undefined) void onchange(row.command, recorded);
       return;
     }
     const shortcut = recordShortcutFromEvent(event);
@@ -77,7 +80,7 @@
   </p>
 {:else}
   <ul class="m-0 list-none p-0" aria-label="Keyboard shortcuts">
-    {#each filtered as item (`${item.command} ${item.key}`)}
+    {#each filtered as item (item.id)}
       {@const clashes = findCommandConflicts(item.command, conflicts)}
       {@const title = titles.get(item.command)}
       <li
@@ -102,7 +105,7 @@
         </div>
 
         <div class="flex items-center gap-2">
-          {#if recording === item.command}
+          {#if recording === item.id}
             <span
               class="inline-flex h-7 items-center border border-accent px-2 font-mono text-xs text-text"
               role="status"
@@ -120,7 +123,7 @@
         </div>
 
         <div class="flex items-center gap-1 @xl:justify-end">
-          {#if recording === item.command}
+          {#if recording === item.id}
             <span class="mr-2 text-[11px] text-text-60"
               >Enter to apply, Esc to cancel</span
             >

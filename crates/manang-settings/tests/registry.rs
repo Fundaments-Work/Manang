@@ -17,6 +17,86 @@ fn core_registry_builds_and_defaults_validate() {
 }
 
 #[test]
+fn core_categories_declare_their_contexts() {
+    let reg = Registry::with_core();
+    let contexts = |id: &str| reg.get(id).map(|d| d.contexts.clone()).unwrap_or_default();
+    assert_eq!(contexts("appearance.theme"), ["app"]);
+    assert_eq!(contexts("editor.font-size"), ["document", "diagram"]);
+    assert_eq!(contexts("preview.auto-compile"), ["document", "pdf"]);
+    assert_eq!(contexts("compile.engine"), ["document"]);
+    assert_eq!(contexts("files.autosave"), ["app", "project"]);
+    // Every setting of a category shares its category's contexts.
+    for def in reg.iter() {
+        assert_eq!(
+            def.contexts,
+            manang_settings::defaults::category_contexts(&def.category),
+            "{}",
+            def.id
+        );
+    }
+}
+
+#[test]
+fn registration_fills_and_validates_contexts() {
+    let mut reg = Registry::new();
+    let plain = SettingDef::new(
+        "demo.flag",
+        SettingType::Bool,
+        json!(true),
+        Scope::User,
+        false,
+        "A flag.",
+    );
+    reg.register(plain.clone(), "demo").expect("register");
+    assert_eq!(
+        reg.get("demo.flag").map(|d| d.contexts.clone()),
+        Some(vec!["app".to_owned()])
+    );
+
+    let scoped = SettingDef::new(
+        "other.flag",
+        SettingType::Bool,
+        json!(true),
+        Scope::User,
+        false,
+        "A flag.",
+    )
+    .with_contexts(&["document", "engine:typst"]);
+    reg.register(scoped, "other").expect("register");
+    assert_eq!(
+        reg.get("other.flag").map(|d| d.contexts.clone()),
+        Some(vec!["document".to_owned(), "engine:typst".to_owned()])
+    );
+
+    for bad in [&["editor"][..], &["engine:"], &["document", "document"]] {
+        let def = SettingDef::new(
+            "bad.flag",
+            SettingType::Bool,
+            json!(true),
+            Scope::User,
+            false,
+            "A flag.",
+        )
+        .with_contexts(bad);
+        let err = reg.register(def, "bad").expect_err("invalid contexts");
+        assert!(err.to_string().contains("settings context"), "{err}");
+    }
+    assert!(reg.get("bad.flag").is_none());
+
+    // Contexts arrive over `settings.register` as JSON.
+    let def: SettingDef = serde_json::from_value(json!({
+        "id": "json.flag", "type": "bool", "default": false,
+        "description": "A flag.", "contexts": ["figure"],
+    }))
+    .expect("parse");
+    reg.register(def, "json").expect("register");
+    assert_eq!(
+        reg.get("json.flag").map(|d| d.contexts.clone()),
+        Some(vec!["figure".to_owned()])
+    );
+}
+
+#[test]
 fn schema_snapshot() {
     insta::assert_json_snapshot!(Registry::with_core().schema());
 }
