@@ -8,6 +8,7 @@
  * (`settingsPage.origin`), not dropped.
  */
 
+import { helpPage } from "$lib/state/helpPage.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
 import { settingsPage } from "$lib/state/settingsPage.svelte";
@@ -41,16 +42,19 @@ function originEditor(origin: SettingsOrigin): {
 
 class ContextState {
   readonly current: UiContext = $derived.by(() => {
-    const surface = settingsPage.open
-      ? "settings"
-      : home.showing
-        ? "home"
-        : "workbench";
+    const surface = helpPage.open
+      ? "help"
+      : settingsPage.open
+        ? "settings"
+        : home.showing
+          ? "home"
+          : "workbench";
     const base = {
       surface,
       project: workspace.project !== null,
       zen: layout.zen,
     } as const;
+    if (helpPage.open) return { ...base, editor: null, engine: null };
     if (settingsPage.open) return { ...base, ...originEditor(settingsPage.origin) };
     const active = tabs.active;
     const editor: EditorKind | null =

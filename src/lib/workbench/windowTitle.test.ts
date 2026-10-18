@@ -19,7 +19,7 @@ describe("windowTitle", () => {
     ).toBe("Entropy paper");
   });
 
-  it("names the page on Home and in Settings", () => {
+  it("names the page on Home, Settings, and Help", () => {
     expect(
       windowTitle({ surface: "home", project: "Entropy paper", file: "a.typ" }),
     ).toBe("Home");
@@ -28,6 +28,12 @@ describe("windowTitle", () => {
     ).toBe("Settings — Entropy paper");
     expect(windowTitle({ surface: "settings", project: null, file: null })).toBe(
       "Settings",
+    );
+    expect(
+      windowTitle({ surface: "help", project: "Entropy paper", file: "a.typ" }),
+    ).toBe("User guide — Entropy paper");
+    expect(windowTitle({ surface: "help", project: null, file: null })).toBe(
+      "User guide",
     );
   });
 
