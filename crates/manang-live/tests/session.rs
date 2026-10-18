@@ -256,3 +256,93 @@ fn pending_updates_trigger_a_resync_request() {
     sim.advance(3_000);
     assert!(sim.converged(), "pending update did not trigger a resync");
 }
+
+#[test]
+fn commits_list_the_people_who_edited() {
+    use manang_live::vcs::coauthor_trailers;
+    let mut sim = Sim::<LoroEngine>::new(3, SEED, 9, NetConfig::CLEAN).expect("sim");
+    sim.advance(5_000);
+    sim.edit(1, 0, 0, "from one ").expect("edit");
+    sim.edit(2, 0, 0, "from two ").expect("edit");
+    sim.advance(1_000);
+    let who = sim.clients[0].session.take_contributors();
+    let names: Vec<&str> = who.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, vec!["peer1", "peer2"]);
+    // Nobody shared an email in this room, so no trailer, but they are listed.
+    let plan = coauthor_trailers(&who, None, Some("peer0"));
+    assert!(plan.trailers.is_empty());
+    assert_eq!(plan.without_email, vec!["peer1", "peer2"]);
+    // The log resets after a commit.
+    assert!(sim.clients[0].session.take_contributors().is_empty());
+    sim.edit(2, 0, 0, "again ").expect("edit");
+    sim.advance(1_000);
+    let who = sim.clients[0].session.take_contributors();
+    assert_eq!(who.len(), 1);
+}
+
+fn divergence_is_detected<E: TextCrdt>() {
+    use manang_live::bridge::LiveDoc;
+    use manang_live::session::{Session, SessionConfig};
+    use ropey::Rope;
+
+    // Two peers that (wrongly) seeded different files: the deterministic seed
+    // collides on operation ids, so the engines cannot reconcile them. The
+    // digest exchange must notice.
+    let mut rng = Rng(5);
+    let secret = RoomSecret::generate(&mut rng).expect("secret");
+    let make = |peer: u64, text: &str, seed: u64| {
+        Session::new(
+            LiveDoc::<E>::seeded(peer, text).expect("doc"),
+            secret.derive().expect("keys"),
+            Rng(seed),
+            SessionConfig::default(),
+        )
+    };
+    let mut a = make(10, "host text\n", 1);
+    let mut b = make(11, "joiner text\n", 2);
+    let mut ra = Rope::from_str("host text\n");
+    let mut rb = Rope::from_str("joiner text\n");
+    let mut to_b: Vec<Vec<u8>> = Vec::new();
+    let mut to_a: Vec<Vec<u8>> = Vec::new();
+    let sends = |out: Vec<Output>, sink: &mut Vec<Vec<u8>>, seen: &mut bool| {
+        for o in out {
+            match o {
+                Output::Send(f) => sink.push(f),
+                Output::Diverged { .. } => *seen = true,
+                _ => {}
+            }
+        }
+    };
+    let mut diverged = false;
+    sends(a.handle(0, Input::Up, &mut ra), &mut to_b, &mut diverged);
+    sends(b.handle(0, Input::Up, &mut rb), &mut to_a, &mut diverged);
+    for round in 0..6 {
+        for f in std::mem::take(&mut to_b) {
+            sends(
+                b.handle(round, Input::Frame(&f), &mut rb),
+                &mut to_a,
+                &mut diverged,
+            );
+        }
+        for f in std::mem::take(&mut to_a) {
+            sends(
+                a.handle(round, Input::Frame(&f), &mut ra),
+                &mut to_b,
+                &mut diverged,
+            );
+        }
+    }
+    assert!(
+        diverged,
+        "{}: texts {:?} vs {:?} but no divergence reported",
+        E::name(),
+        ra.to_string(),
+        rb.to_string()
+    );
+}
+
+#[test]
+fn divergence_is_reported_not_silent() {
+    divergence_is_detected::<LoroEngine>();
+    divergence_is_detected::<YrsEngine>();
+}

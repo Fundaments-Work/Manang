@@ -24,7 +24,8 @@ use crate::engine::TextCrdt;
 use crate::envelope::{Entropy, Kind, RoomKeys};
 use crate::error::LiveError;
 use crate::presence::{Presence, PresenceBook, PresenceMessage, Selection};
-use crate::protocol::{Message, SyncStage};
+use crate::protocol::{Message, SyncStage, text_digest};
+use crate::vcs::{ContributionLog, Contributor};
 
 /// Tunables, in milliseconds.
 #[derive(Debug, Clone)]
@@ -33,6 +34,8 @@ pub struct SessionConfig {
     pub name: String,
     /// Colour slot for this peer (`0..PALETTE_SLOTS`).
     pub slot: u8,
+    /// Commit identity email to share with the room (opt-in), for trailers.
+    pub email: Option<String>,
     /// Anti-entropy request period while live.
     pub resync_interval_ms: u64,
     /// Presence heartbeat period.
@@ -55,6 +58,7 @@ impl Default for SessionConfig {
         Self {
             name: String::new(),
             slot: 0,
+            email: None,
             resync_interval_ms: 10_000,
             presence_interval_ms: 5_000,
             presence_ttl_ms: 20_000,
@@ -118,6 +122,14 @@ pub enum Output {
     PresenceChanged,
     /// The state changed.
     State(SessionState),
+    /// A peer reports the same version as ours but different text: the
+    /// replicas diverged and no further exchange can repair it. The driver
+    /// should rejoin from a snapshot of the host. Never expected in a healthy
+    /// room.
+    Diverged {
+        /// The peer whose digest disagrees.
+        peer: u64,
+    },
     /// A frame was dropped (wrong key, tampered, malformed). Informational:
     /// never fatal, because the relay and other peers are not trusted to send
     /// well-formed data.
@@ -148,12 +160,14 @@ pub struct Session<E: TextCrdt, N: Entropy> {
     state: SessionState,
     presence: PresenceBook,
     presence_seq: u64,
+    contributions: ContributionLog,
     local_selection: Option<Selection>,
     next_resync: u64,
     next_presence: u64,
     sync_deadline: u64,
     last_pending_request: Option<u64>,
     failed_attempts: u32,
+    digest_cache: Option<(Vec<u8>, u64)>,
 }
 
 impl<E: TextCrdt, N: Entropy> Session<E, N> {
@@ -168,12 +182,14 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             state: SessionState::Idle,
             presence: PresenceBook::new(ttl),
             presence_seq: 0,
+            contributions: ContributionLog::default(),
             local_selection: None,
             next_resync: 0,
             next_presence: 0,
             sync_deadline: 0,
             last_pending_request: None,
             failed_attempts: 0,
+            digest_cache: None,
         }
     }
 
@@ -264,6 +280,12 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                 })
             })
             .collect()
+    }
+
+    /// Everyone who edited the document through this session since the last
+    /// call, for `Co-authored-by:` trailers. Call when a commit is made.
+    pub fn take_contributors(&mut self) -> Vec<Contributor> {
+        self.contributions.take()
     }
 
     /// Remote peers currently present (with or without a caret).
@@ -415,16 +437,29 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
         let me = self.peer();
         match msg {
             Message::Update { from, update } if from != me => {
-                self.apply(now, &update, target, out);
+                let units = self.apply(now, &update, target, out);
+                let (name, email) = self.presence.iter().find(|p| p.peer == from).map_or_else(
+                    || (format!("peer {from}"), None),
+                    |p| (p.name.clone(), p.email.clone()),
+                );
+                let name = if name.is_empty() {
+                    format!("peer {from}")
+                } else {
+                    name
+                };
+                self.contributions
+                    .record(from, &name, email.as_deref(), units);
             }
             Message::Sync {
                 from,
                 to,
                 stage,
                 version,
+                digest,
                 update,
             } if from != me && to.is_none_or(|t| t == me) => match stage {
                 SyncStage::Request => {
+                    self.check_divergence(from, &version, digest, out);
                     let known = self.presence.iter().any(|p| p.peer == from);
                     if version != self.doc.engine().version() {
                         self.push_reply(from, &version, out);
@@ -435,6 +470,7 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                 }
                 SyncStage::Reply => {
                     self.apply(now, &update, target, out);
+                    self.check_divergence(from, &version, digest, out);
                     if self.state == SessionState::Syncing {
                         self.set_state(SessionState::Live, out);
                     }
@@ -444,25 +480,32 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                 }
                 SyncStage::Final => {
                     self.apply(now, &update, target, out);
+                    self.check_divergence(from, &version, digest, out);
                 }
             },
             _ => {}
         }
     }
 
+    /// Apply a remote update; returns how many characters it changed.
     fn apply<T: TextTarget>(
         &mut self,
         now: u64,
         update: &[u8],
         target: &mut T,
         out: &mut Vec<Output>,
-    ) {
+    ) -> usize {
         if update.is_empty() {
-            return;
+            return 0;
         }
         match self.doc.apply_remote(target, update) {
             Ok(applied) => {
                 let pending = applied.pending;
+                let units: usize = applied
+                    .changes
+                    .iter()
+                    .map(|c| c.char_delete + c.insert.chars().count())
+                    .sum();
                 if !applied.changes.is_empty() {
                     out.push(Output::Remote(applied));
                 }
@@ -475,16 +518,41 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                         self.push_request(out);
                     }
                 }
+                units
             }
-            Err(e) => out.push(Output::Rejected(e.to_string())),
+            Err(e) => {
+                out.push(Output::Rejected(e.to_string()));
+                0
+            }
+        }
+    }
+
+    /// Digest of our text, cached per version so anti-entropy stays cheap.
+    fn digest(&mut self) -> u64 {
+        let version = self.doc.engine().version();
+        if let Some((v, d)) = &self.digest_cache
+            && *v == version
+        {
+            return *d;
+        }
+        let d = text_digest(&self.doc.engine().text());
+        self.digest_cache = Some((version, d));
+        d
+    }
+
+    fn check_divergence(&mut self, from: u64, version: &[u8], digest: u64, out: &mut Vec<Output>) {
+        if version == self.doc.engine().version().as_slice() && digest != self.digest() {
+            out.push(Output::Diverged { peer: from });
         }
     }
 
     fn push_request(&mut self, out: &mut Vec<Output>) {
+        let digest = self.digest();
         let msg = Message::Sync {
             from: self.peer(),
             to: None,
             stage: SyncStage::Request,
+            digest,
             version: self.doc.engine().version(),
             update: Vec::new(),
         };
@@ -494,10 +562,12 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     fn push_reply(&mut self, to: u64, their_version: &[u8], out: &mut Vec<Output>) {
         match self.doc.engine().export_since(their_version) {
             Ok(update) => {
+                let digest = self.digest();
                 let msg = Message::Sync {
                     from: self.peer(),
                     to: Some(to),
                     stage: SyncStage::Reply,
+                    digest,
                     version: self.doc.engine().version(),
                     update,
                 };
@@ -510,10 +580,12 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     fn push_final(&mut self, to: u64, their_version: &[u8], out: &mut Vec<Output>) {
         match self.doc.engine().export_since(their_version) {
             Ok(update) => {
+                let digest = self.digest();
                 let msg = Message::Sync {
                     from: self.peer(),
                     to: Some(to),
                     stage: SyncStage::Final,
+                    digest,
                     version: self.doc.engine().version(),
                     update,
                 };
@@ -537,6 +609,7 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             seq: self.presence_seq,
             name: self.config.name.clone(),
             slot: self.config.slot,
+            email: self.config.email.clone(),
             selection: self.local_selection.clone(),
         });
         match msg.encode() {

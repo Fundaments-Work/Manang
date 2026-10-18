@@ -40,6 +40,10 @@ pub enum Message {
         stage: SyncStage,
         /// Sender's encoded version.
         version: Vec<u8>,
+        /// Digest of the sender's text at that version. Equal versions with
+        /// different digests mean the replicas diverged (a bug, or two peers
+        /// that seeded different files): see `Output::Diverged`.
+        digest: u64,
         /// CRDT update bytes (may be empty).
         update: Vec<u8>,
     },
@@ -50,6 +54,18 @@ pub enum Message {
         /// CRDT update bytes.
         update: Vec<u8>,
     },
+}
+
+/// 64-bit FNV-1a of the document text: a cheap divergence detector (not a
+/// security feature; every room member is trusted equally).
+#[must_use]
+pub fn text_digest(text: &str) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in text.as_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    h
 }
 
 impl Message {
@@ -75,6 +91,7 @@ mod tests {
             to: Some(9),
             stage: SyncStage::Reply,
             version: vec![1, 2, 3],
+            digest: 77,
             update: vec![9; 300],
         };
         assert_eq!(Message::decode(&m.encode().expect("enc")).expect("dec"), m);
