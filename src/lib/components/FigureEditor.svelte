@@ -8,6 +8,7 @@
   import { TOOLS } from "$lib/figure/keymap";
   import { isConnector, type FigureNode } from "$lib/figure/scene";
   import { cull, toScreen, viewBox, visibleRect } from "$lib/figure/viewport";
+  import { focusedSurface } from "$lib/commands/surface";
   import { reportError } from "$lib/kernel";
   import { figures } from "$lib/state/figures.svelte";
   import { layout } from "$lib/state/layout.svelte";
@@ -124,6 +125,59 @@
     }
     if (figure.key(event)) event.preventDefault();
   }
+
+  /**
+   * Chords pressed while a properties button has focus (after clicking
+   * "Align top", say) still reach the canvas; text fields keep their keys.
+   */
+  function hostKeydown(event: KeyboardEvent): void {
+    const el = event.target;
+    if (el === surface || !(el instanceof HTMLElement)) return;
+    if (el.closest("input, textarea, select, [contenteditable]") !== null) return;
+    const chord = event.ctrlKey || event.metaKey || event.key === "Delete";
+    if (chord && figure.key(event)) event.preventDefault();
+  }
+
+  // Edit > Undo, Cut, Copy, Paste, Select all reach the canvas when it (or
+  // its panels) had focus.
+  $effect(() => {
+    const root = host;
+    if (root === undefined) return;
+    const writeClipboard = (text: string | null) => {
+      if (text !== null) {
+        navigator.clipboard
+          .writeText(text)
+          .catch((e: unknown) => reportError("figure.copy", e));
+      }
+    };
+    return focusedSurface.register({
+      id: `figure:${figure.path}`,
+      contains: (el) => root.parentElement?.contains(el as Node) ?? false,
+      available: () => root.isConnected,
+      actions: {
+        undo: () => figure.undo(),
+        redo: () => figure.redo(),
+        copy: () => writeClipboard(figure.copyText()),
+        cut: () => writeClipboard(figure.cut()),
+        paste: async () => {
+          try {
+            figure.pasteText(await navigator.clipboard.readText());
+          } catch (error) {
+            reportError("figure.paste", error);
+          }
+        },
+        selectAll: () => {
+          figure.key({
+            key: "a",
+            ctrlKey: true,
+            metaKey: false,
+            shiftKey: false,
+            altKey: false,
+          });
+        },
+      },
+    });
+  });
 
   function onkeyup(event: KeyboardEvent): void {
     if (event.key === " ") figure.spaceHeld = false;
@@ -289,6 +343,7 @@
     bind:clientHeight={hostHeight}
     class="relative min-h-0 flex-1 overflow-hidden"
     role="presentation"
+    onkeydown={hostKeydown}
     ondragover={(e) => e.preventDefault()}
     {ondrop}
   >
