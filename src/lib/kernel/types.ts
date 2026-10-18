@@ -77,6 +77,7 @@ export interface ProjectEntry {
   /** False when the folder or its `manang.toml` has gone. */
   readonly exists: boolean;
   readonly has_thumbnail: boolean;
+  readonly trashed_at?: string | null;
 }
 
 export type ProjectSort = "modified" | "name" | "created";
@@ -85,6 +86,7 @@ export interface ProjectListQuery {
   readonly query?: string;
   readonly sort?: ProjectSort;
   readonly include_archived?: boolean;
+  readonly include_trashed?: boolean;
 }
 
 export interface ProjectPatch {

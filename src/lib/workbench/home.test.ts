@@ -114,6 +114,42 @@ describe("home sections", () => {
       selectProjects(sample, { section: "templates", query: "", sort: "name" }),
     ).toEqual([]);
   });
+
+  it("trash section shows trashed projects and hides them from every other section", () => {
+    const epsilon = entry({
+      path: "/p/epsilon",
+      name: "Epsilon",
+      last_opened: 60,
+      pinned: true,
+      trashed_at: "2026-10-18T10:00:00Z",
+    });
+    const withTrash = [...sample, epsilon];
+    const q = { query: "", sort: "modified" as const };
+    // Not in projects, pinned, recent or archive
+    expect(
+      names(selectProjects(withTrash, { ...q, section: "projects" })),
+    ).not.toContain("Epsilon");
+    expect(names(selectProjects(withTrash, { ...q, section: "pinned" }))).not.toContain(
+      "Epsilon",
+    );
+    expect(names(selectProjects(withTrash, { ...q, section: "recent" }))).not.toContain(
+      "Epsilon",
+    );
+    expect(
+      names(selectProjects(withTrash, { ...q, section: "archive" })),
+    ).not.toContain("Epsilon");
+    // Visible in trash
+    expect(names(selectProjects(withTrash, { ...q, section: "trash" }))).toEqual([
+      "Epsilon",
+    ]);
+    // Counts include trash
+    expect(sectionCounts(withTrash)).toEqual({
+      projects: 3,
+      pinned: 1,
+      archive: 1,
+      trash: 1,
+    });
+  });
 });
 
 describe("home search", () => {
@@ -152,7 +188,12 @@ describe("pin and archive", () => {
   });
 
   it("counts for the nav", () => {
-    expect(sectionCounts(sample)).toEqual({ projects: 3, pinned: 1, archive: 1 });
+    expect(sectionCounts(sample)).toEqual({
+      projects: 3,
+      pinned: 1,
+      archive: 1,
+      trash: 0,
+    });
   });
 });
 

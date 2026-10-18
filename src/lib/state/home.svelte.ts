@@ -8,7 +8,7 @@
  * puts the old value back and says why.
  */
 
-import { SvelteMap } from "svelte/reactivity";
+import { SvelteDate, SvelteMap } from "svelte/reactivity";
 
 import { errorMessage, kernel } from "$lib/kernel";
 import { projectApi } from "$lib/kernel/api";
@@ -103,7 +103,10 @@ export class HomeState {
 
   async load(): Promise<void> {
     try {
-      this.entries = await api.list({ include_archived: true });
+      this.entries = await api.list({
+        include_archived: true,
+        include_trashed: true,
+      });
     } catch (error) {
       notice.error(`Could not read your projects: ${errorMessage(error)}`);
     } finally {
@@ -147,6 +150,68 @@ export class HomeState {
     } catch (error) {
       this.entries = before;
       notice.error(`Could not update the project: ${errorMessage(error)}`);
+      return false;
+    }
+  }
+
+  /** Move to trash. The project is marked trashed with the current timestamp. */
+  async trash(path: string): Promise<boolean> {
+    const before = this.entries;
+    const nowStamp = new SvelteDate().toISOString();
+    this.entries = this.entries.map((e) =>
+      e.path === path ? { ...e, trashed_at: nowStamp } : e,
+    );
+    try {
+      const saved = await api.trashProject(path);
+      this.entries = this.entries.map((e) => (e.path === path ? saved : e));
+      return true;
+    } catch (error) {
+      this.entries = before;
+      notice.error(`Could not move project to trash: ${errorMessage(error)}`);
+      return false;
+    }
+  }
+
+  /** Restore a trashed project. */
+  async restoreProject(path: string): Promise<boolean> {
+    const before = this.entries;
+    this.entries = this.entries.map((e) =>
+      e.path === path ? { ...e, trashed_at: null } : e,
+    );
+    try {
+      const saved = await api.restoreProject(path);
+      this.entries = this.entries.map((e) => (e.path === path ? saved : e));
+      return true;
+    } catch (error) {
+      this.entries = before;
+      notice.error(`Could not restore project: ${errorMessage(error)}`);
+      return false;
+    }
+  }
+
+  /** Purge a project from the registry, optionally deleting files to OS trash. */
+  async purge(path: string, deleteFiles: boolean): Promise<boolean> {
+    const before = this.entries;
+    this.entries = before.filter((e) => e.path !== path);
+    try {
+      await api.purgeProject(path, deleteFiles);
+      this.thumbVersions.delete(path);
+      return true;
+    } catch (error) {
+      this.entries = before;
+      notice.error(`Could not delete project: ${errorMessage(error)}`);
+      return false;
+    }
+  }
+
+  /** Empty trash (all trashed projects, or older than given days). */
+  async emptyTrash(olderThanDays?: number): Promise<boolean> {
+    try {
+      await api.emptyTrash(olderThanDays);
+      await this.load();
+      return true;
+    } catch (error) {
+      notice.error(`Could not empty trash: ${errorMessage(error)}`);
       return false;
     }
   }
