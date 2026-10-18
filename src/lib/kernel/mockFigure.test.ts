@@ -90,6 +90,7 @@ describe("browser figure plugin", () => {
       json: renamed,
       svg: `${DEMO_ROOT}/figures/renamed.svg`,
       revision: 1,
+      pdf: null,
     });
     const svg = new TextDecoder().decode(
       await project.readBytes("figures/renamed.svg"),

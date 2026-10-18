@@ -131,6 +131,7 @@ describe("dev kernel latex and markdown", () => {
     );
     expect(Object.keys(out).sort()).toEqual([
       "diagnostics",
+      "diagrams",
       "frontmatter",
       "headings",
       "html",

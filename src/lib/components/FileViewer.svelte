@@ -2,7 +2,12 @@
   import Icon from "$lib/components/ui/Icon.svelte";
   import { openAsText, openInSystemApp, revealFile } from "$lib/state/actions";
   import { viewers } from "$lib/state/viewers.svelte";
-  import { PREVIEW_BYTES, describeFile, formatSize } from "$lib/workbench/opener";
+  import {
+    PREVIEW_BYTES,
+    describeFile,
+    formatModified,
+    formatSize,
+  } from "$lib/workbench/opener";
   import { basename, extension } from "$lib/workbench/paths";
 
   /**
@@ -178,6 +183,10 @@
         <dd class="m-0 text-text">{describeFile(path)}</dd>
         <dt>Size</dt>
         <dd class="m-0 font-mono text-text">{formatSize(file.size)}</dd>
+        {#if file.modified !== null}
+          <dt>Modified</dt>
+          <dd class="m-0 font-mono text-text">{formatModified(file.modified)}</dd>
+        {/if}
         <dt>Path</dt>
         <dd class="m-0 truncate font-mono text-text" title={path}>{path}</dd>
       </dl>

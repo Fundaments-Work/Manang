@@ -5,13 +5,15 @@
  * Bytes come raw through `project.read-bytes` (never base64). An image is
  * shown through a `blob:` URL, revoked when its tab closes or the file is
  * reloaded; a PDF keeps its bytes for the PDF viewer; large text keeps only
- * the start of the file; a binary keeps nothing but its size.
+ * the start of the file; a binary is only stat'ed (`project.stat`) for its
+ * size and date, never read.
  */
 
 import { SvelteMap } from "svelte/reactivity";
 
 import { errorMessage, kernel, reportError } from "$lib/kernel";
 import { projectApi } from "$lib/kernel/api";
+import type { FileStat } from "$lib/kernel/types";
 import { PREVIEW_BYTES, type OpenAs } from "$lib/workbench/opener";
 import { imageType } from "$lib/workbench/paths";
 
@@ -26,6 +28,8 @@ export interface ViewedFile {
   readonly kind: ViewerKind;
   /** Size on disk, in bytes. */
   readonly size: number;
+  /** Last modified (ms since the epoch), when known: the info tab shows it. */
+  readonly modified: number | null;
   /** A `blob:` URL for an image. */
   readonly url: string | null;
   /** The raw PDF. */
@@ -44,7 +48,15 @@ export function viewedFile(
   kind: ViewerKind,
   bytes: Uint8Array,
 ): ViewedFile {
-  const base = { path, kind, size: bytes.length, url: null, pdf: null, preview: null };
+  const base = {
+    path,
+    kind,
+    size: bytes.length,
+    modified: null,
+    url: null,
+    pdf: null,
+    preview: null,
+  };
   switch (kind) {
     case "pdf":
       return { ...base, pdf: bytes };
@@ -62,6 +74,32 @@ export function viewedFile(
       return { ...base, url: URL.createObjectURL(blob) };
     }
   }
+}
+
+/** The info tab of a file Manang cannot show: its size and date, never its bytes. */
+export function binaryInfo(path: string, stat: FileStat): ViewedFile {
+  return {
+    path,
+    kind: "binary",
+    size: stat.size,
+    modified: stat.modified,
+    url: null,
+    pdf: null,
+    preview: null,
+  };
+}
+
+/**
+ * Load `path` for a viewer of `kind`: an info tab only stats the file
+ * (`project.stat`); the others need the bytes (`project.read-bytes`).
+ */
+async function load(
+  path: string,
+  kind: ViewerKind,
+  bytes?: Uint8Array,
+): Promise<ViewedFile> {
+  if (kind === "binary") return binaryInfo(path, await api.stat(path));
+  return viewedFile(path, kind, bytes ?? (await api.readBytes(path)));
 }
 
 function release(file: ViewedFile): void {
@@ -85,7 +123,7 @@ export class ViewersStore {
     const existing = this.#open.get(path);
     if (existing !== undefined && existing.kind === as) return true;
     try {
-      const next = viewedFile(path, as, bytes ?? (await api.readBytes(path)));
+      const next = await load(path, as, bytes);
       this.#open.set(path, next);
       if (existing !== undefined) release(existing);
       return true;
@@ -102,7 +140,7 @@ export class ViewersStore {
       const old = this.#open.get(path);
       if (old === undefined) continue;
       try {
-        const next = viewedFile(path, old.kind, await api.readBytes(path));
+        const next = await load(path, old.kind);
         // The tab may have closed while reading.
         if (this.#open.get(path) !== old) {
           release(next);

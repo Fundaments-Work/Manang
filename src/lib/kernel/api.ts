@@ -15,11 +15,14 @@ import type {
   MarkdownDiagnostic,
   CompileReport,
   DiagramDiagnostic,
+  DiagramExport,
   DiagramLanguage,
   DiagramLanguageId,
   DiagramTheme,
   Engine,
+  FileStat,
   LatexReport,
+  MarkdownFence,
   MarkdownRender,
   GitStatus,
   ProjectEntry,
@@ -70,6 +73,21 @@ export function projectApi(kernel: Kernel) {
     thumbnail: (path: string) => kernel.runBinary("project.thumbnail-get", { path }),
     setThumbnail: (path: string, svg: string) =>
       kernel.run<null>("project.thumbnail-set", { path, svg }),
+    /** Size, date and kind of a project entry, without reading it. */
+    stat: (path: string) => kernel.run<FileStat>("project.stat", { path }),
+    /**
+     * Write the diagram file's print SVG next to it (and its PDF in LaTeX
+     * projects). Skips files that are current; a source with errors answers
+     * `ok: false` and leaves the old files.
+     */
+    exportDiagram: (path: string) =>
+      kernel.run<DiagramExport>("project.export-diagram", { path }),
+    /** An inline diagram's print SVG under `.manang/cache/diagrams/`. */
+    cacheDiagram: (language: DiagramLanguageId, source: string) =>
+      kernel.run<DiagramExport>("project.cache-diagram", { language, source }),
+    /** The PDF next to a figure's SVG, in projects that include PDFs. */
+    exportPdf: (path: string) =>
+      kernel.run<DiagramExport>("project.export-pdf", { path }),
   };
 }
 
@@ -346,6 +364,11 @@ export function markdownApi(kernel: Kernel) {
     /** Typst markup for a Markdown source; frontmatter is dropped. */
     toTypst: (source: string) =>
       kernel.run<MarkdownToTypst>("markdown.to-typst", { source }),
+    /** The diagram fences of a document, in order. */
+    diagrams: (source: string) =>
+      kernel.run<{ diagrams: readonly MarkdownFence[] }>("markdown.diagrams", {
+        source,
+      }),
   };
 }
 
@@ -1023,6 +1046,8 @@ export interface FigureSaved {
   readonly json: string;
   readonly svg: string;
   readonly revision: number;
+  /** Project-relative path of the PDF written for LaTeX projects, else null. */
+  readonly pdf?: string | null;
 }
 
 export interface FigureInfo {
