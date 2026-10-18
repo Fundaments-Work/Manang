@@ -87,6 +87,7 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 | **Figures** | `view.figures` | — | Shows vector figures in the project. |
 | **References** | `view.references` | — | Shows bibliography entries and citation tools. |
 | **Plugins** | `view.plugins` | `Ctrl+Shift+X` (`Cmd+Shift+X`) | Shows installed plugins and permissions. |
+| **Agent** | `agent.toggle` | `Ctrl+Shift+A` (`Cmd+Shift+A`) | Opens or closes the AI agent chat column on the right. See [using the agent](../ai/using-the-agent.md). |
 | *— Separator —* | | | |
 | **Toggle side panel** | `view.toggle-side` | `Ctrl+B` (`Cmd+B`) | Expands or collapses the active sidebar panel. |
 | **Toggle panel** | `view.toggle-panel` | `Ctrl+J` (`Cmd+J`) | Expands or collapses the bottom panel (Problems/Output). |
