@@ -60,6 +60,8 @@ interface Pending {
   readonly label: string;
   readonly targeted: readonly string[];
   readonly errorsBefore: number;
+  /** The fix was saved to disk for the compiler: Undo saves the undone text too. */
+  readonly saved: boolean;
 }
 
 export class HealState {
@@ -289,23 +291,21 @@ export class HealState {
       notice.error("That fix no longer applies. The text changed.");
       return false;
     }
-    this.#pending = {
+    // LaTeX compiles what is on disk. Save only when that writes nothing but
+    // the fix; otherwise the person saves, as they would after any edit.
+    const saves = workspace.engineFor(file) === "latex" && !wasDirty;
+    const pending: Pending = {
       file,
       label,
       targeted,
       errorsBefore: countProblems(build.problems).errors,
+      saved: saves,
     };
-    notice.show(done, "info", { label: "Undo", run: () => this.undo(file) });
-    // LaTeX compiles what is on disk. Save only when that writes nothing but
-    // the fix; otherwise the person saves, as they would after any edit.
-    if (workspace.engineFor(file) === "latex") {
-      if (!wasDirty) await this.#save(file);
-      else
-        notice.show(`${done} Save to compile.`, "info", {
-          label: "Undo",
-          run: () => this.undo(file),
-        });
-    }
+    this.#pending = pending;
+    const undo = { label: "Undo", run: () => this.undo(pending) };
+    const needsSave = workspace.engineFor(file) === "latex" && wasDirty;
+    notice.show(needsSave ? `${done} Save to compile.` : done, "info", undo);
+    if (saves) await this.#save(file);
     return true;
   }
 
@@ -318,14 +318,16 @@ export class HealState {
     }
   }
 
-  undo(file: string): void {
+  /** Undo the fix of `pending` (one history step), and save again if the fix was saved. */
+  undo(pending: Pending): void {
     this.#pending = null;
-    const session = documents.get(file);
+    const session = documents.get(pending.file);
     if (session === undefined || !session.undoLast()) {
       notice.error("Nothing to undo.");
       return;
     }
     notice.show("Fix undone.");
+    if (pending.saved) void this.#save(pending.file);
   }
 
   /* ----------------------------------------------------------------------- */
@@ -341,7 +343,7 @@ export class HealState {
       return;
     notice.show(noProgressText(pending.label), "info", {
       label: "Undo",
-      run: () => this.undo(pending.file),
+      run: () => this.undo(pending),
     });
   }
 
