@@ -5,6 +5,7 @@
 //! git status. See [`plugin`] for the command surface.
 
 mod config;
+pub mod diff;
 mod error;
 pub mod export;
 pub mod fsops;

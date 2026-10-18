@@ -12,12 +12,14 @@ rust-version.workspace = true
 [dependencies]
 gix = { version = "0.89", default-features = false, features = ["sha1", "status", "index"] }
 ignore = "0.4"
+manang-formats = { path = "../manang-formats" }
 manang-kernel = { path = "../manang-kernel" }
 notify = "8.2"
 notify-debouncer-full = "0.7"
 parking_lot = "0.12"
 serde = { workspace = true }
 serde_json = { workspace = true }
+similar = "2"
 blake3 = "1.8"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 tempfile = "3"

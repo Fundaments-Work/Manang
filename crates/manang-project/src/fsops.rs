@@ -179,6 +179,34 @@ fn sync_dir(dir: &Path) {
 /// Atomically write UTF-8 text to a project file, creating parent
 /// directories. Returns the number of bytes written.
 pub fn write_text(root: &ProjectRoot, raw: &str, content: &str) -> Result<usize, ProjectError> {
+    write_text_checked(root, raw, content, None).map(|w| w.bytes)
+}
+
+/// What a checked write stored.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Written {
+    pub bytes: usize,
+    /// Fingerprint of the content now on disk.
+    pub hash: String,
+}
+
+/// The `expected` value meaning "the file must not exist yet".
+pub const EXPECT_ABSENT: &str = "absent";
+
+/// Like [`write_text`], but when `expected` is given the write only happens if
+/// the file on disk still has that fingerprint (the one `read_text_hashed` or
+/// the previous write returned), or, for [`EXPECT_ABSENT`], does not exist.
+/// Otherwise nothing is written and the error is [`ProjectError::Conflict`], so
+/// the shell can ask before overwriting another program's change.
+///
+/// The check and the rename are not one atomic step: a change landing in
+/// between is still possible, but the window is microseconds, not minutes.
+pub fn write_text_checked(
+    root: &ProjectRoot,
+    raw: &str,
+    content: &str,
+    expected: Option<&str>,
+) -> Result<Written, ProjectError> {
     if content.len() > MAX_WRITE_BYTES {
         return Err(ProjectError::TooLarge {
             path: display(raw),
@@ -190,13 +218,47 @@ pub fn write_text(root: &ProjectRoot, raw: &str, content: &str) -> Result<usize,
     if path.is_dir() {
         return Err(ProjectError::NotAFile(display(raw)));
     }
+    if let Some(expected) = expected {
+        check_expected(root, raw, &path, expected)?;
+    }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             ProjectError::io(format!("creating directories for {}", display(raw)), e)
         })?;
     }
     atomic_write(&path, content.as_bytes())?;
-    Ok(content.len())
+    Ok(Written {
+        bytes: content.len(),
+        hash: hash_bytes(content.as_bytes()),
+    })
+}
+
+fn check_expected(
+    root: &ProjectRoot,
+    raw: &str,
+    path: &Path,
+    expected: &str,
+) -> Result<(), ProjectError> {
+    let conflict = |what: &'static str| ProjectError::Conflict {
+        path: display(raw),
+        what,
+    };
+    let exists = path.symlink_metadata().is_ok();
+    if expected == EXPECT_ABSENT {
+        return if exists {
+            Err(conflict("already exists on disk"))
+        } else {
+            Ok(())
+        };
+    }
+    if !exists {
+        return Err(conflict("was deleted on disk since it was loaded"));
+    }
+    if file_hash(root, raw)? == expected {
+        Ok(())
+    } else {
+        Err(conflict("changed on disk since it was loaded"))
+    }
 }
 
 /// Rename or move an entry within the project. Refuses to overwrite.
