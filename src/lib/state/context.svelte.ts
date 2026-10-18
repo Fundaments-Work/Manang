@@ -22,7 +22,7 @@ class ContextState {
   readonly current: UiContext = $derived.by(() => {
     const active = tabs.active;
     const editor: EditorKind | null =
-      active === undefined
+      active === undefined || active.kind === "viewer"
         ? null
         : active.kind === "figure"
           ? "figure"

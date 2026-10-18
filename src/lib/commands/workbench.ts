@@ -289,7 +289,7 @@ export function workbenchCommands(
       id: "file.new-figure",
       title: "New figure",
       group: "Workbench",
-      keywords: "draw diagram",
+      keywords: "draw diagram sketch figure.create",
       enabled: hasProject,
       run: () => void actions.newFigure(),
     },

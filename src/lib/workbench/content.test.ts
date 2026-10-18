@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fileKind, engineOf, isOpenable } from "./paths";
+import { fileKind, engineOf, imageType } from "./paths";
 import {
   authorSummary,
   citationFor,
@@ -156,8 +156,12 @@ describe("file classification", () => {
     expect(fileKind("README")).toBe("text");
     expect(engineOf("x.tex")).toBe("latex");
     expect(engineOf("x.bib")).toBeNull();
-    expect(isOpenable("x.png")).toBe(false);
-    expect(isOpenable("x.svg")).toBe(false);
-    expect(isOpenable("x.bib")).toBe(true);
+  });
+
+  it("knows the media type of the images a viewer shows", () => {
+    expect(imageType("a.jpg")).toBe("image/jpeg");
+    expect(imageType("a.svg")).toBe("image/svg+xml");
+    expect(imageType("a.pdf")).toBeNull();
+    expect(imageType("constructor")).toBeNull();
   });
 });
