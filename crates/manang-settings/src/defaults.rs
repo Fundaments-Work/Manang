@@ -33,7 +33,7 @@ pub const CATEGORY_CONTEXTS: &[(&str, &[&str])] = &[
     ("editor", &["document", "diagram"]),
     ("preview", &["document", "pdf"]),
     ("compile", &["document"]),
-    ("files", &["app", "project"]),
+    ("files", &["app", "project", "document"]),
 ];
 
 /// The contexts of a core category (`["app"]` when it declares none).
