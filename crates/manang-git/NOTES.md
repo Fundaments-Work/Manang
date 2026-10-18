@@ -55,3 +55,15 @@
 None required. (`manang-project` could expose its `.manang` trash for discard
 copies; discard uses `<git-dir>/manang-trash` instead so the work tree stays
 clean.)
+
+## Share and get updates (`remote.rs`)
+
+| command | args | result |
+| --- | --- | --- |
+| git.remote-get | `{}` | `{name, url}` (null without a remote) |
+| git.remote-set | `{url}` | `{name, url}`; adds origin or updates the existing remote; refuses `-`, `ext:`, whitespace |
+| git.sync-status | `{refresh?}` | `{state: no-remote/up-to-date/ahead/behind/diverged, remote, branch, ahead, behind, never_shared, uncommitted}`; local data only unless `refresh` |
+| git.share | `{}` | `{remote, branch, pushed}`; plain push with upstream, never forced |
+| git.get-updates | `{strategy?: merge (default) or ff-only}` | `{result: up-to-date/fast-forwarded/merged/diverged/conflicts, files, received, safety_version}` |
+
+`conflicts` and `diverged` are results, not errors: HEAD and the work tree are unchanged (detected with `git merge-tree --write-tree`, git 2.38+). With `merge`, unsaved work is saved as a version first. Error codes: no-remote, bad-remote-url, nothing-to-share, share-rejected, auth-failed, remote-unreachable, unrelated-histories. Credentials come from the system git; the runner never prompts.
