@@ -5,6 +5,7 @@
 //! version can reuse it. Network adapters live in `manang-agent-providers`.
 
 pub mod block;
+pub mod compact;
 pub mod error;
 pub mod event;
 pub mod log;

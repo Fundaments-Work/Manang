@@ -3018,7 +3018,7 @@ async function main() {
       await expectEventually(
         page,
         "step 3 says what is sent and where",
-        `(() => { const t = document.querySelector("[data-agent-consent-text]")?.innerText ?? ""; return /Anthropic/.test(t) && /sends the text you attach/.test(t); })()`,
+        `(() => { const t = document.querySelector("[data-agent-consent-text]")?.innerText ?? ""; return /Anthropic/.test(t) && /sends your message/.test(t); })()`,
       );
       check(
         "Agree and start is now the one lime action",
@@ -3032,23 +3032,46 @@ async function main() {
       await click(page, "[data-agent-agree]");
       await expectEventually(
         page,
-        "after agreeing the card goes, the chip says ready and suggestions appear",
-        `!document.querySelector("[data-agent-setup-card]") && document.querySelector("[data-ai-chip]")?.innerText.trim() === "AI: ready" && document.querySelectorAll("[data-suggest]").length === 4`,
+        "after agreeing the card goes, the chip says ready and the commands appear",
+        `!document.querySelector("[data-agent-setup-card]") && document.querySelector("[data-ai-chip]")?.innerText.trim() === "AI: ready" && document.querySelectorAll("[data-suggest]").length === 6`,
       );
       check(
-        "the empty state greets with four suggested rows, not buttons",
+        "the empty state lists the slash commands as quiet rows, not buttons",
         await page.evaluate(
-          `(() => { const e = document.querySelector("[data-agent-empty]"); return /How can I help/.test(e.innerText) && [...e.querySelectorAll("[data-suggest]")].every((b) => getComputedStyle(b).borderRadius === "0px"); })()`,
+          `(() => { const e = document.querySelector("[data-agent-empty]"); return /How can I help/.test(e.innerText) && /\\/rewrite/.test(e.innerText) && [...e.querySelectorAll("[data-suggest]")].every((b) => getComputedStyle(b).borderRadius === "0px"); })()`,
         ),
       );
       check(
-        "the composer is pinned under the conversation with a context line",
+        "the composer is pinned under the conversation with one quiet context line",
         await page.evaluate(`(() => {
           const c = document.querySelector("[data-agent-input]").getBoundingClientRect();
           const p = document.querySelector("#agent-panel").getBoundingClientRect();
-          return Math.abs(p.bottom - document.querySelector("[data-agent-usage]").getBoundingClientRect().bottom) < 4 && c.top > p.top + 200;
+          return Math.abs(p.bottom - document.querySelector("[data-agent-context]").getBoundingClientRect().bottom) < 12 && c.top > p.top + 200;
         })()`),
       );
+      check(
+        "there is no chip tray, no usage footer and no preview button in the panel",
+        await page.evaluate(
+          `!document.querySelector("[data-chip]") && !document.querySelector("[data-tray-tokens]") && !document.querySelector("[data-agent-usage]") && !document.querySelector("[data-agent-preview]")`,
+        ),
+      );
+      // The slash menu: "/" lists the commands, Tab completes one.
+      await page.evaluate(`document.querySelector("[data-agent-input]").focus()`);
+      await insertText(page, "/re");
+      await expectEventually(
+        page,
+        "typing / offers the matching commands",
+        `[...document.querySelectorAll("[data-agent-menu] [role='option']")].map((o) => o.querySelector("span").innerText.trim()).join(",") === "/rewrite"`,
+      );
+      await press(page, "Tab", { wait: 200 });
+      check(
+        "Tab completes the command",
+        await page.evaluate(
+          `document.querySelector("[data-agent-input]").value === "/rewrite " && !document.querySelector("[data-agent-menu]")`,
+        ),
+      );
+      await page.evaluate(`document.querySelector("[data-agent-input]").select()`);
+      await press(page, "Backspace");
       await shoot(page, "ai-03b-chat-empty");
 
       // A selection action: an inline diff in the editor and a card in the Agent.
@@ -3081,11 +3104,25 @@ async function main() {
       );
       check("the document is unchanged until Accept", (await docText()) === original);
       check(
-        "the card names the file and counts lines added and removed",
+        "the chat shows one quiet row for the proposal: the file and how many changes",
         await page.evaluate(
-          `(() => { const c = document.querySelector("[data-proposal]"); return !!c && /main\\.typ/.test(c.innerText) && /\\+\\d+ .\\d+/.test(c.innerText); })()`,
+          `(() => { const c = document.querySelector("[data-proposal]"); return !!c && /Edit to main\\.typ, 1 change/.test(c.innerText) && document.querySelectorAll("[data-proposal]").length === 1 && !c.querySelector("pre"); })()`,
         ),
       );
+      check(
+        "the tool calls folded into one row that says what happened",
+        await page.evaluate(
+          `(() => { const rows = document.querySelectorAll("[data-agent-tool]"); return rows.length === 1 && /Read .*searched for/.test(rows[0].innerText); })()`,
+        ),
+      );
+      await click(page, "[data-agent-tool] button");
+      check(
+        "expanding the row lists each call",
+        await page.evaluate(
+          `document.querySelectorAll("[data-agent-tool] li").length === 2`,
+        ),
+      );
+      await click(page, "[data-agent-tool] button");
       check(
         "the request shows as a user block labelled You, in a surface with a hairline",
         await page.evaluate(
@@ -3102,20 +3139,29 @@ async function main() {
         })()`),
       );
       check(
-        "the context tray shows the selection chip with a token count",
+        "the user block says what travelled with the message, in one line",
         await page.evaluate(
-          `(() => { const c = document.querySelector('[data-chip="selection"]'); return !!c && /\\d/.test(c.innerText) && /tokens/.test(document.querySelector("[data-tray-tokens]").innerText); })()`,
+          `/main\\.typ, selection \\(\\d+ words?\\)/.test(document.querySelector("[data-agent-user]").innerText)`,
         ),
       );
       check(
-        "the usage line labels cost as an estimate",
+        "the quiet context line under the composer names the file and the selection",
         await page.evaluate(
-          `/estimate/.test(document.querySelector("[data-agent-usage]").innerText)`,
+          `/main\\.typ/.test(document.querySelector("[data-agent-context-text]").innerText)`,
         ),
       );
+      await click(page, '#agent-panel button[aria-label^="More"]');
+      check(
+        "the session cost is in the header menu and labelled an estimate",
+        await page.evaluate(
+          `/estimate/.test(document.querySelector("[data-agent-usage]")?.innerText ?? "")`,
+        ),
+      );
+      await press(page, "Escape", { wait: 200 });
       await shoot(page, "ai-04-inline-diff");
 
-      // Preview what will be sent.
+      // Show what will be sent (in the header menu).
+      await click(page, '#agent-panel button[aria-label^="More"]');
       await click(page, "[data-agent-preview]");
       await expectEventually(
         page,
@@ -3219,6 +3265,40 @@ async function main() {
         `!!document.querySelector("[data-agent-send]") && /Stopped\\./.test(document.querySelector("[data-agent-log]").innerText)`,
       );
 
+      // A question from the model: plain line with buttons, answered with one click.
+      await page.evaluate(`document.querySelector("[data-agent-input]").focus()`);
+      await insertText(page, "delete the whole introduction");
+      await press(page, "Enter", { wait: 300 });
+      await expectEventually(
+        page,
+        "ask_user shows a plain question with answer buttons, not a dialog",
+        `document.querySelectorAll("[data-agent-ask-choice]").length === 2 && /Delete that section\\?/.test(document.querySelector("[data-agent-ask]").innerText) && !document.querySelector('[role="dialog"]')`,
+        { timeout: 10000 },
+      );
+      await click(page, "[data-agent-ask-choice]");
+      await expectEventually(
+        page,
+        "answering sends the choice as the next message",
+        `/You answered: Yes, delete it/.test(document.querySelector("[data-agent-ask]").innerText)`,
+      );
+      await waitFor(page, `!!document.querySelector("[data-agent-send]")`, {
+        label: "idle",
+      });
+      // A network tool asks in one line that names the host.
+      await page.evaluate(`document.querySelector("[data-agent-input]").focus()`);
+      await insertText(page, "verify this reference");
+      await press(page, "Enter", { wait: 300 });
+      await expectEventually(
+        page,
+        "a network tool asks in one line that names the host",
+        `/verify citation \\(api\\.crossref\\.org\\)\\?/.test(document.querySelector("[data-agent-approval]")?.innerText ?? "")`,
+        { timeout: 10000 },
+      );
+      await click(page, "[data-agent-allow]");
+      await waitFor(page, `!!document.querySelector("[data-agent-send]")`, {
+        label: "idle",
+      });
+
       // Fix with AI on a Problems entry.
       await click(page, ".cm-content");
       await press(page, "End", { ctrl: true });
@@ -3260,9 +3340,9 @@ async function main() {
         { timeout: 15000 },
       );
       check(
-        "its context tray holds the problem chip, not the whole file",
+        "it sent the problem, not the whole file",
         await page.evaluate(
-          `!!document.querySelector('[data-chip="diagnostics"]') && !document.querySelector('[data-chip="file"]')`,
+          `(() => { const u = [...document.querySelectorAll("[data-agent-user]")].at(-1); return !!u && /@problems/.test(u.innerText) && !/selection/.test(u.innerText); })()`,
         ),
       );
       await page.evaluate(`document.querySelector(".cm-content").focus()`);

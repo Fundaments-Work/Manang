@@ -17,6 +17,8 @@ pub enum RiskClass {
     Read,
     /// Returns a proposal the user must accept.
     Propose,
+    /// Talks to the author (`ask_user`); changes nothing.
+    Interaction,
     /// Reaches the network.
     Network,
     /// Runs a process.

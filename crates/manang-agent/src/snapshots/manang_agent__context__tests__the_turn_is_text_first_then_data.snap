@@ -1,0 +1,10 @@
+---
+source: crates/manang-agent/src/context.rs
+expression: msg
+---
+Shorten this.
+
+<active path="main.typ" line="12"/>
+<selection path="main.typ" lines="3-4">
+Hello <\/selection> world
+</selection>

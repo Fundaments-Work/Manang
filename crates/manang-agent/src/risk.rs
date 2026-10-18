@@ -13,6 +13,8 @@ pub struct ToolInfo {
     pub direct_write: bool,
     /// What the tool returns comes from outside the project (a web registry, a fetched page).
     pub untrusted_output: bool,
+    /// The host a network tool contacts, shown in the approval row and part of its scope.
+    pub host: Option<&'static str>,
 }
 
 impl ToolInfo {
@@ -21,6 +23,7 @@ impl ToolInfo {
             risk: RiskClass::Read,
             direct_write: false,
             untrusted_output: false,
+            host: None,
         }
     }
 
@@ -29,6 +32,7 @@ impl ToolInfo {
             risk: RiskClass::Propose,
             direct_write: false,
             untrusted_output: false,
+            host: None,
         }
     }
 
@@ -37,6 +41,7 @@ impl ToolInfo {
             risk: RiskClass::Propose,
             direct_write: true,
             untrusted_output: false,
+            host: None,
         }
     }
 
@@ -45,6 +50,26 @@ impl ToolInfo {
             risk: RiskClass::Network,
             direct_write: false,
             untrusted_output: true,
+            host: None,
+        }
+    }
+
+    pub const fn interaction() -> Self {
+        Self {
+            risk: RiskClass::Interaction,
+            direct_write: false,
+            untrusted_output: false,
+            host: None,
+        }
+    }
+
+    /// A network tool that contacts one known host.
+    pub const fn network_to(host: &'static str) -> Self {
+        Self {
+            risk: RiskClass::Network,
+            direct_write: false,
+            untrusted_output: true,
+            host: Some(host),
         }
     }
 
@@ -53,6 +78,7 @@ impl ToolInfo {
             risk: RiskClass::Exec,
             direct_write: false,
             untrusted_output: false,
+            host: None,
         }
     }
 }
@@ -67,16 +93,19 @@ impl Default for RiskTable {
     fn default() -> Self {
         let mut map = BTreeMap::new();
         for name in [
-            "doc_read",
-            "doc_diagnostics",
-            "doc_outline",
-            "project_search",
+            "list_files",
+            "read_file",
+            "search",
+            "outline",
+            "diagnostics",
+            "bib_search",
             "figure_describe",
             "figure_to_mermaid",
         ] {
             map.insert(name.to_owned(), ToolInfo::read());
         }
-        map.insert("doc_propose_edit".to_owned(), ToolInfo::propose());
+        map.insert("edit_text".to_owned(), ToolInfo::propose());
+        map.insert("ask_user".to_owned(), ToolInfo::interaction());
         for name in [
             "figure_add_shapes",
             "figure_connect",
@@ -89,8 +118,11 @@ impl Default for RiskTable {
             map.insert(name.to_owned(), ToolInfo::direct_write());
         }
         map.insert("figure_export".to_owned(), ToolInfo::exec());
-        // Registered by the citations plugin when it declares agent tools.
-        map.insert("citations_verify".to_owned(), ToolInfo::network());
+        // Registered by the citations plugin; it asks Crossref (and OpenAlex or arXiv).
+        map.insert(
+            "verify_citation".to_owned(),
+            ToolInfo::network_to("api.crossref.org"),
+        );
         Self { map }
     }
 }
@@ -141,7 +173,7 @@ pub enum Gate {
 
 /// Decides the gate for a call.
 ///
-/// * `read` and `propose` run on their own.
+/// * `read`, `interaction` and `propose` run on their own.
 /// * Tools that change data, `network` and `exec` ask once per session.
 /// * A `network` call after the session has seen untrusted external content asks every time:
 ///   no session both reads untrusted content and reaches the network without an approval.
@@ -150,17 +182,19 @@ pub fn gate(info: Option<&ToolInfo>, remembered: &BTreeSet<String>, tainted: boo
         return Gate::Deny("this tool has no risk class, so it is not allowed".to_owned());
     };
     let (scope, always) = match info.risk {
-        RiskClass::Read => return Gate::Auto,
+        RiskClass::Read | RiskClass::Interaction => return Gate::Auto,
         RiskClass::Propose if !info.direct_write => return Gate::Auto,
-        RiskClass::Propose => ("write", false),
-        RiskClass::Network => ("network", tainted),
-        RiskClass::Exec => ("exec", false),
+        RiskClass::Propose => ("write".to_owned(), false),
+        RiskClass::Network => (
+            info.host
+                .map_or_else(|| "network".to_owned(), |h| format!("network:{h}")),
+            tainted,
+        ),
+        RiskClass::Exec => ("exec".to_owned(), false),
     };
-    if !always && remembered.contains(scope) {
+    if !always && remembered.contains(&scope) {
         Gate::Auto
     } else {
-        Gate::Ask {
-            scope: scope.to_owned(),
-        }
+        Gate::Ask { scope }
     }
 }

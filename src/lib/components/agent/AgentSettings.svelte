@@ -36,7 +36,7 @@
       id: "model",
       title: "Model",
       note: "Which model of that provider is used.",
-      ids: ["agent.model", "agent.include-thinking"],
+      ids: ["agent.model", "agent.reasoning-effort", "agent.include-thinking"],
     },
     { id: "key", title: "Key", note: "", ids: [] },
     {
@@ -49,7 +49,7 @@
       id: "cost",
       title: "Cost",
       note: "",
-      ids: ["agent.max-context-tokens"],
+      ids: ["agent.context-window", "agent.use-agents-md"],
     },
   ] as const;
 

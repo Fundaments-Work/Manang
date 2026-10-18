@@ -330,7 +330,7 @@ function aiCommands(isDocument: boolean): Command[] {
   const action = (
     id: string,
     title: string,
-    feature: "rewrite" | "shorten" | "translate" | "explain",
+    command: "rewrite" | "shorten" | "translate" | "explain",
     order: number,
     keywords: string,
   ): Command => ({
@@ -341,7 +341,7 @@ function aiCommands(isDocument: boolean): Command[] {
     keywords: `ai assistant ${keywords}`,
     enabled: isDocument,
     menu: at("edit", "5_ai", order),
-    run: () => void agent.runSelection(feature),
+    run: () => void agent.runCommand(command),
   });
   return [
     {

@@ -13,7 +13,9 @@ pub const BASE_URL: &str = "agent.base-url";
 pub const ENGINE: &str = "agent.client";
 pub const OFFLINE: &str = "agent.offline";
 pub const INCLUDE_THINKING: &str = "agent.include-thinking";
-pub const MAX_CONTEXT_TOKENS: &str = "agent.max-context-tokens";
+pub const CONTEXT_WINDOW: &str = "agent.context-window";
+pub const REASONING_EFFORT: &str = "agent.reasoning-effort";
+pub const USE_AGENTS_MD: &str = "agent.use-agents-md";
 pub const REDACT_EMAILS: &str = "agent.redact-emails";
 pub const REDACT_PATHS: &str = "agent.redact-paths";
 pub const RETENTION_DAYS: &str = "agent.retention-days";
@@ -36,6 +38,26 @@ impl Engine {
     }
 }
 
+/// How hard a reasoning model thinks (DeepSeek's `reasoning_effort`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Effort {
+    Auto,
+    Low,
+    High,
+}
+
+impl Effort {
+    /// The value sent to the provider for a session that starts with a slash command or not.
+    pub fn resolve(self, command: bool) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::High => "high",
+            Self::Auto if command => "low",
+            Self::Auto => "high",
+        }
+    }
+}
+
 /// The effective user settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
@@ -47,8 +69,14 @@ pub struct Settings {
     pub base_url: String,
     pub engine: Engine,
     pub offline: bool,
+    /// Developer flag: stream the model's reasoning text to the UI.
     pub include_thinking: bool,
-    pub max_context_tokens: u64,
+    /// Working window in tokens: compaction thresholds are shares of it.
+    pub context_window: u64,
+    /// `auto` (low for slash commands, high for open chat), `low` or `high`.
+    pub reasoning_effort: Effort,
+    /// Read `AGENTS.md` / `CLAUDE.md` as project instructions when `MANANG.md` is absent.
+    pub use_agents_md: bool,
     pub redact_emails: bool,
     pub redact_paths: bool,
     pub retention_days: u32,
@@ -64,7 +92,9 @@ impl Default for Settings {
             engine: Engine::Rig,
             offline: false,
             include_thinking: false,
-            max_context_tokens: 32_000,
+            context_window: 100_000,
+            reasoning_effort: Effort::Auto,
+            use_agents_md: false,
             redact_emails: false,
             redact_paths: false,
             retention_days: 30,
@@ -136,13 +166,28 @@ impl Settings {
         if let Some(v) = bool_of(values, INCLUDE_THINKING)? {
             next.include_thinking = v;
         }
-        if let Some(v) = int_of(values, MAX_CONTEXT_TOKENS)? {
-            if !(1_000..=1_000_000).contains(&v) {
+        if let Some(v) = int_of(values, CONTEXT_WINDOW)? {
+            if !(8_000..=1_000_000).contains(&v) {
                 return Err(AgentError::invalid(format!(
-                    "`{MAX_CONTEXT_TOKENS}` must be between 1000 and 1000000"
+                    "`{CONTEXT_WINDOW}` must be between 8000 and 1000000"
                 )));
             }
-            next.max_context_tokens = v;
+            next.context_window = v;
+        }
+        if let Some(v) = text_of(values, REASONING_EFFORT)? {
+            next.reasoning_effort = match v {
+                "auto" => Effort::Auto,
+                "low" => Effort::Low,
+                "high" => Effort::High,
+                other => {
+                    return Err(AgentError::invalid(format!(
+                        "unknown reasoning effort `{other}`"
+                    )));
+                }
+            };
+        }
+        if let Some(v) = bool_of(values, USE_AGENTS_MD)? {
+            next.use_agents_md = v;
         }
         if let Some(v) = bool_of(values, REDACT_EMAILS)? {
             next.redact_emails = v;
@@ -166,7 +211,7 @@ impl Settings {
     pub fn policy_layer(&self) -> PolicyLayer {
         PolicyLayer {
             enabled: Some(self.enabled),
-            max_context_tokens: Some(self.max_context_tokens),
+            max_context_tokens: Some(self.context_window),
             ..PolicyLayer::default()
         }
     }
