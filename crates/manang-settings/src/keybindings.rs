@@ -197,21 +197,79 @@ pub struct KeybindingSet {
     user: Vec<UserEntry>,
 }
 
-/// Defaults the shell ships. Command ids are proposals the shell registers.
+/// Defaults the shell ships, under the frontend's command ids
+/// (`src/lib/commands/workbench.ts`). The frontend keeps a copy in
+/// `src/lib/commands/defaults.ts` for the browser build; a vitest test reads
+/// this table and fails if the two drift apart.
+///
+/// Keys handled by the focused surface itself (Undo, Copy, Find in the
+/// editor, ...) and Escape, which dismisses whatever is on top, are not here:
+/// they are not commands the shell dispatches.
 pub const CORE_DEFAULTS: &[(&str, &str, &str)] = &[
-    ("palette.open", "Mod+K", ""),
-    ("palette.close", "Escape", "paletteOpen"),
-    ("library.toggle", "Mod+P", ""),
-    ("editor.save", "Mod+S", "editorFocus"),
-    ("editor.find", "Mod+F", "editorFocus"),
-    ("project.open", "Mod+O", ""),
-    ("settings.open", "Mod+,", ""),
-    ("zen.toggle", "Mod+\\", ""),
-    ("zen.toggle", "F11", ""),
-    ("zen.exit", "Escape", "zenMode && !paletteOpen"),
-    ("view.toggle-split", "Mod+Shift+\\", ""),
-    ("compile.run", "Mod+Enter", ""),
+    ("palette.commands", "Mod+K", ""),
+    ("palette.commands", "Mod+Shift+P", ""),
+    ("goto.file", "Mod+P", ""),
+    ("project.switch", "Mod+O", ""),
+    ("home.show", "Mod+Shift+H", ""),
+    ("view.files", "Mod+Shift+E", ""),
+    ("view.search", "Mod+Shift+F", ""),
+    ("view.plugins", "Mod+Shift+X", ""),
+    ("view.settings", "Mod+,", ""),
+    ("view.toggle-side", "Mod+B", ""),
+    ("view.toggle-panel", "Mod+J", ""),
+    ("view.problems", "Mod+Shift+M", ""),
+    ("view.cycle-preview", "Mod+Shift+V", ""),
+    ("view.zen", "Mod+\\", ""),
+    ("tab.next", "Mod+PageDown", ""),
+    ("tab.next", "Mod+Tab", ""),
+    ("tab.previous", "Mod+PageUp", ""),
+    ("tab.previous", "Mod+Shift+Tab", ""),
+    ("tab.close", "Mod+W", ""),
+    ("tab.go-1", "Mod+1", ""),
+    ("tab.go-2", "Mod+2", ""),
+    ("tab.go-3", "Mod+3", ""),
+    ("tab.go-4", "Mod+4", ""),
+    ("tab.go-5", "Mod+5", ""),
+    ("tab.go-6", "Mod+6", ""),
+    ("tab.go-7", "Mod+7", ""),
+    ("tab.go-8", "Mod+8", ""),
+    ("tab.go-9", "Mod+9", ""),
+    ("file.new", "Mod+N", ""),
+    ("file.save", "Mod+S", ""),
+    ("file.save-all", "Mod+Shift+S", ""),
+    ("doc.compile", "Mod+Shift+B", ""),
+    ("doc.export-pdf", "Mod+E", ""),
+    ("doc.format", "Alt+Shift+F", ""),
+    ("doc.show-in-preview", "Mod+Alt+J", ""),
+    ("doc.present", "F5", ""),
+    ("help.shortcuts", "Mod+/", ""),
+    ("dev.inspect", "F12", ""),
+    ("dev.inspect", "Mod+Shift+I", ""),
+    ("app.quit", "Mod+Q", ""),
 ];
+
+/// Command ids that earlier versions shipped, and the id each became. A user's
+/// `keybindings.toml` written against an old id keeps working: it is read
+/// (and rewritten, when changed from Settings) under the new id.
+pub const COMMAND_ALIASES: &[(&str, &str)] = &[
+    ("palette.open", "palette.commands"),
+    ("library.toggle", "goto.file"),
+    ("editor.save", "file.save"),
+    ("editor.find", "edit.find"),
+    ("project.open", "project.switch"),
+    ("settings.open", "view.settings"),
+    ("zen.toggle", "view.zen"),
+    ("view.toggle-split", "view.cycle-preview"),
+    ("compile.run", "doc.compile"),
+];
+
+/// The current id for `command`: itself, or what an old id became.
+pub fn canonical_command(command: &str) -> &str {
+    COMMAND_ALIASES
+        .iter()
+        .find(|(old, _)| *old == command)
+        .map_or(command, |(_, new)| new)
+}
 
 pub fn valid_command(id: &str) -> Result<(), KeyError> {
     if valid_dotted_id(id) {
@@ -445,7 +503,7 @@ fn parse_entry(raw: &Value) -> Result<UserEntry, String> {
         Some(_) => return Err("`when` must be a string".to_owned()),
     };
     Ok(UserEntry {
-        command: command.to_owned(),
+        command: canonical_command(command).to_owned(),
         keys,
         when,
     })
@@ -471,11 +529,12 @@ fn remove_command(aot: &mut ArrayOfTables, command: Option<&str>) -> bool {
     let mut i = aot.len();
     while i > 0 {
         i -= 1;
+        // An entry under an old id counts as the command it became.
         let matches = command.is_none_or(|c| {
             aot.get(i)
                 .and_then(|t| t.get("command"))
                 .and_then(Item::as_str)
-                == Some(c)
+                .is_some_and(|stored| canonical_command(stored) == canonical_command(c))
         });
         if matches {
             aot.remove(i);
@@ -496,7 +555,7 @@ pub fn write_override(
     let aot = bindings_table(doc, path)?;
     remove_command(aot, Some(command));
     let mut table = Table::new();
-    table["command"] = toml_edit::value(command);
+    table["command"] = toml_edit::value(canonical_command(command));
     let mut array = Array::new();
     for key in keys {
         array.push(key.to_string());
@@ -580,31 +639,39 @@ mod tests {
     #[test]
     fn resolves_by_context_and_platform() {
         let s = set();
-        let got = s.resolve(&ctx(&["editorFocus"]), "ctrl+s");
+        let got = s.resolve(&ctx(&[]), "ctrl+s");
         assert_eq!(
             got,
             Ok(Resolution::Matched {
-                command: "editor.save".to_owned()
+                command: "file.save".to_owned()
             })
         );
-        assert_eq!(s.resolve(&ctx(&[]), "Ctrl+S"), Ok(Resolution::None));
         let mac = KeybindingSet::with_core(Platform::Mac);
         assert_eq!(
-            mac.resolve(&ctx(&["editorFocus"]), "Cmd+S"),
+            mac.resolve(&ctx(&[]), "Cmd+S"),
             Ok(Resolution::Matched {
-                command: "editor.save".to_owned()
+                command: "file.save".to_owned()
             })
         );
-        assert_eq!(
-            mac.resolve(&ctx(&["editorFocus"]), "Ctrl+S"),
-            Ok(Resolution::None)
-        );
+        assert_eq!(mac.resolve(&ctx(&[]), "Ctrl+S"), Ok(Resolution::None));
     }
 
     #[test]
     fn more_specific_when_wins() {
-        let s = set();
-        // zen.exit (3 clauses worth: zenMode && !paletteOpen) vs palette.close.
+        let mut s = KeybindingSet::new(Platform::Linux);
+        s.register(vec![
+            DefaultSpec {
+                command: "palette.close".to_owned(),
+                key: "Escape".to_owned(),
+                when: "paletteOpen".to_owned(),
+            },
+            DefaultSpec {
+                command: "zen.exit".to_owned(),
+                key: "Escape".to_owned(),
+                when: "zenMode && !paletteOpen".to_owned(),
+            },
+        ])
+        .expect("register");
         let got = s.resolve(&ctx(&["zenMode"]), "Escape");
         assert_eq!(
             got,
@@ -647,14 +714,14 @@ mod tests {
     #[test]
     fn user_override_replaces_defaults_and_reports_shadowing() {
         let mut s = set();
-        s.set_user(vec![entry("compile.run", &["Mod+S"], "")]);
+        s.set_user(vec![entry("doc.compile", &["Mod+S"], "")]);
         // The old key is gone.
-        assert_eq!(s.resolve(&ctx(&[]), "Ctrl+Enter"), Ok(Resolution::None));
-        // The user binding wins over editor.save's default...
+        assert_eq!(s.resolve(&ctx(&[]), "Ctrl+Shift+B"), Ok(Resolution::None));
+        // The user binding wins over file.save's default...
         assert_eq!(
-            s.resolve(&ctx(&["editorFocus"]), "Ctrl+S"),
+            s.resolve(&ctx(&[]), "Ctrl+S"),
             Ok(Resolution::Matched {
-                command: "compile.run".to_owned()
+                command: "doc.compile".to_owned()
             })
         );
         // ...but the displacement is reported.
@@ -663,7 +730,7 @@ mod tests {
             vec![Conflict {
                 key: "Ctrl+S".to_owned(),
                 kind: "shadowed",
-                commands: vec!["compile.run".to_owned(), "editor.save".to_owned()],
+                commands: vec!["doc.compile".to_owned(), "file.save".to_owned()],
             }]
         );
     }
@@ -672,11 +739,11 @@ mod tests {
     fn ties_are_conflicts_not_picks() {
         let mut s = set();
         s.set_user(vec![
-            entry("a.one", &["Ctrl+J"], ""),
-            entry("a.two", &["Ctrl+J"], ""),
+            entry("a.one", &["Ctrl+Alt+Y"], ""),
+            entry("a.two", &["Ctrl+Alt+Y"], ""),
         ]);
         assert_eq!(
-            s.resolve(&ctx(&[]), "Ctrl+J"),
+            s.resolve(&ctx(&[]), "Ctrl+Alt+Y"),
             Ok(Resolution::Conflict {
                 commands: vec!["a.one".to_owned(), "a.two".to_owned()]
             })
@@ -688,7 +755,7 @@ mod tests {
     #[test]
     fn unbinding_with_no_keys() {
         let mut s = set();
-        s.set_user(vec![entry("project.open", &[], "")]);
+        s.set_user(vec![entry("project.switch", &[], "")]);
         assert_eq!(s.resolve(&ctx(&[]), "Ctrl+O"), Ok(Resolution::None));
     }
 
@@ -716,5 +783,68 @@ mod tests {
         assert!(remove_override(&mut doc, "p", None).expect("remove"));
         assert!(doc.get("bindings").is_none());
         assert!(!remove_override(&mut doc, "p", None).expect("remove"));
+    }
+
+    #[test]
+    fn core_defaults_use_frontend_ids_not_old_ones() {
+        for (command, _, _) in CORE_DEFAULTS {
+            assert_eq!(
+                canonical_command(command),
+                *command,
+                "{command} is an old id"
+            );
+        }
+        for (old, new) in COMMAND_ALIASES {
+            assert_ne!(old, new);
+            assert!(valid_command(new).is_ok(), "{new}");
+            assert_eq!(canonical_command(new), *new, "aliases do not chain");
+        }
+        assert_eq!(canonical_command("view.files"), "view.files");
+    }
+
+    #[test]
+    fn old_ids_in_the_user_file_are_read_as_the_new_ones() {
+        let text = "[[bindings]]\ncommand = \"editor.save\"\nkeys = [\"Ctrl+Alt+S\"]\n\n[[bindings]]\ncommand = \"palette.open\"\nkeys = [\"F1\"]\n";
+        let doc: DocumentMut = text.parse().expect("toml");
+        let (entries, warnings) = parse_user(&crate::store::doc_to_json(&doc));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let commands: Vec<&str> = entries.iter().map(|e| e.command.as_str()).collect();
+        assert_eq!(commands, vec!["file.save", "palette.commands"]);
+        let mut s = set();
+        s.set_user(entries);
+        // The override replaces the default under the new id: Ctrl+S is free.
+        assert_eq!(s.resolve(&ctx(&[]), "Ctrl+S"), Ok(Resolution::None));
+        assert_eq!(
+            s.resolve(&ctx(&[]), "Ctrl+Alt+S"),
+            Ok(Resolution::Matched {
+                command: "file.save".to_owned()
+            })
+        );
+        assert_eq!(
+            s.resolve(&ctx(&[]), "F1"),
+            Ok(Resolution::Matched {
+                command: "palette.commands".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn rewriting_an_old_id_replaces_it_under_the_new_one() {
+        let mut doc: DocumentMut =
+            "[[bindings]]\ncommand = \"compile.run\"\nkeys = [\"Ctrl+Enter\"]\n"
+                .parse()
+                .expect("toml");
+        let key = Shortcut::parse("Mod+Shift+R").expect("key");
+        write_override(&mut doc, "p", "doc.compile", &[key], &When::default()).expect("write");
+        let text = doc.to_string();
+        assert!(!text.contains("compile.run"), "{text}");
+        assert_eq!(text.matches("[[bindings]]").count(), 1, "{text}");
+        assert!(text.contains("command = \"doc.compile\""), "{text}");
+        // Resetting by the new id removes an entry stored under the old one.
+        let mut old: DocumentMut = "[[bindings]]\ncommand = \"zen.toggle\"\nkeys = []\n"
+            .parse()
+            .expect("toml");
+        assert!(remove_override(&mut old, "p", Some("view.zen")).expect("remove"));
+        assert!(old.get("bindings").is_none());
     }
 }
