@@ -3,6 +3,7 @@ name = "citations"
 version = "0.1.0"
 description = "Bibliography management, CSL-JSON & BibTeX index, formatting, and Crossref/OpenAlex/arXiv verification"
 tier = "native"
+settings_contexts = ["document"]
 
 [permissions]
 network = ["api.crossref.org", "api.openalex.org", "export.arxiv.org"]

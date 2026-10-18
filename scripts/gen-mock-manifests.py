@@ -4,20 +4,36 @@
 The browser demo kernel shows each plugin's description, permissions and
 settings exactly as the Rust manifests declare them. Run after changing a
 manifest:  python3 scripts/gen-mock-manifests.py && pnpm exec prettier --write src/lib/kernel/mockManifests.ts
+
+Paths are resolved from the repository root (this script's parent folder),
+so it works from any working directory. It refuses to write when it finds
+no manifest, rather than wiping the generated file.
 """
 
 import glob
 import json
+import pathlib
+import sys
 import tomllib
 
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+OUT = ROOT / "src/lib/kernel/mockManifests.ts"
+
+paths = sorted(glob.glob(str(ROOT / "crates/manang-*/manifest.toml")))
+if not paths:
+    sys.exit(f"no crates/manang-*/manifest.toml under {ROOT}; nothing written")
+
 entries = []
-for path in sorted(glob.glob("crates/manang-*/manifest.toml")):
+for path in paths:
     with open(path, "rb") as f:
         m = tomllib.load(f)
     entry = {
         "description": m["plugin"].get("description", ""),
         "permissions": m.get("permissions", {}),
     }
+    contexts = m["plugin"].get("settings_contexts", [])
+    if contexts:
+        entry["settingsContexts"] = contexts
     settings = m.get("contributes", {}).get("settings", [])
     for s in settings:
         s.setdefault("scope", "user")
@@ -30,7 +46,7 @@ body = ",\n".join(
     f"  {json.dumps(n) if '-' in n else n}: {json.dumps(e, ensure_ascii=False)}"
     for n, e in entries
 )
-with open("src/lib/kernel/mockManifests.ts", "w") as out:
+with open(OUT, "w") as out:
     out.write(
         f"""/**
  * The `[plugin]`, `[permissions]` and `[[contributes.settings]]` tables of the
@@ -45,6 +61,8 @@ import type {{ PluginPermissions }} from "./client";
 export interface MockManifest {{
   readonly description: string;
   readonly permissions: PluginPermissions;
+  /** `[plugin] settings_contexts`: where its Settings section belongs. */
+  readonly settingsContexts?: readonly string[];
   readonly settings?: readonly Omit<SettingDef, "owner" | "category">[];
 }}
 

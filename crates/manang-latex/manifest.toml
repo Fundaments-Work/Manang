@@ -3,6 +3,7 @@ name = "latex"
 version = "0.1.0"
 description = "LaTeX compilation with the system TeX (optional Tectonic), structured diagnostics and SyncTeX"
 tier = "native"
+settings_contexts = ["engine:latex"]
 
 [permissions]
 filesystem = ["read:project", "write:cache"]

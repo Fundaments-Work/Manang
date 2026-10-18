@@ -11,6 +11,8 @@ import type { PluginPermissions } from "./client";
 export interface MockManifest {
   readonly description: string;
   readonly permissions: PluginPermissions;
+  /** `[plugin] settings_contexts`: where its Settings section belongs. */
+  readonly settingsContexts?: readonly string[];
   readonly settings?: readonly Omit<SettingDef, "owner" | "category">[];
 }
 
@@ -22,6 +24,7 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
       network: ["api.crossref.org", "api.openalex.org", "export.arxiv.org"],
       filesystem: ["read:project"],
     },
+    settingsContexts: ["document"],
     settings: [
       {
         id: "citations.style",
@@ -40,6 +43,7 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     description:
       "Text diagrams (Mermaid, Pikchr, ASCII) to deterministic SVG. Diagnostics use 1-based lines and 1-based columns counted in characters, end exclusive, like the Typst plugin.",
     permissions: {},
+    settingsContexts: ["diagram"],
   },
   editor: {
     description: "Document store, edits and the active-buffer service",
@@ -49,6 +53,7 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     description:
       "Typed SVG scene graph, deterministic headless renderer and vector studio",
     permissions: { filesystem: ["write:project"] },
+    settingsContexts: ["figure"],
   },
   git: {
     description: "Git status, diffs, history and safe write operations",
@@ -58,6 +63,7 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     description:
       "LaTeX compilation with the system TeX (optional Tectonic), structured diagnostics and SyncTeX",
     permissions: { filesystem: ["read:project", "write:cache"] },
+    settingsContexts: ["engine:latex"],
     settings: [
       {
         id: "latex.backend",
@@ -109,6 +115,7 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     description:
       "Markdown rendering, outline extraction, XSS sanitization, and Typst conversion",
     permissions: {},
+    settingsContexts: ["engine:markdown"],
   },
   project: {
     description:
@@ -119,6 +126,7 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     description:
       "Fuzzy file finder, project-wide text search, atomic replace and in-document find",
     permissions: { filesystem: ["write:project"] },
+    settingsContexts: ["app", "project"],
     settings: [
       {
         id: "search.exclude",
@@ -152,11 +160,13 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     description:
       "Typst compiler: incremental compile, SVG page render, PDF export and source/preview jumps",
     permissions: { filesystem: ["read:project"] },
+    settingsContexts: ["engine:typst"],
   },
   writing: {
     description:
       "Writing tools: formatting, spell check, prose lint, symbols, snippets and statistics",
     permissions: { filesystem: ["read:config", "write:config"] },
+    settingsContexts: ["document"],
     settings: [
       {
         id: "writing.spellcheck",
