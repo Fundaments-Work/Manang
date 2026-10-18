@@ -158,7 +158,7 @@ The figure plugin's tools are the reference implementation
 | `figure_style` | `figure.style` | named presets or explicit style |
 | `figure_export` | `figure.export` | save; write the SVG (and PDF, and one frame) |
 
-Every figure tool takes `path` (a `.figure.json`, opened when needed) or
+Every figure tool takes `path` (a `.figure` or `.figure.json`, opened when needed) or
 `figure` (an open figure's id); without either it works on the active
 figure. Edits are announced as `figure.changed { id, revision }` so an open
 editor tab picks them up. A typical session: `figure_add_shapes`, then

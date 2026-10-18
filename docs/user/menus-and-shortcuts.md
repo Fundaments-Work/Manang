@@ -34,7 +34,7 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 | :--- | :--- | :--- | :--- |
 | **New project** | `home.new-project` | — | Opens the Home view with the New Project dialog. |
 | **New file** | `file.new` | `Ctrl+N` (`Cmd+N`) | Creates a new file in the current project directory. |
-| **New figure** | `file.new-figure` | — | Creates a new vector figure (`.figure.json`). |
+| **New figure** | `file.new-figure` | — | Creates a new vector figure (`.figure`). |
 | **New diagram** | `file.new-diagram` | — | Creates a new text diagram (Mermaid, Pikchr, ASCII). |
 | *— Separator —* | | | |
 | **Open folder…** | `project.open-folder` | — | Opens a project folder using the system file picker. |
@@ -154,7 +154,7 @@ In addition to menu commands, specific editing surfaces handle specialized keys 
 
 ### Vector figure studio
 
-When editing a `.figure.json` file on the canvas:
+When editing a figure (`.figure` or legacy `.figure.json`) on the canvas:
 
 | Action | Shortcut | Description |
 | :--- | :--- | :--- |
@@ -170,7 +170,7 @@ When editing a `.figure.json` file on the canvas:
 | **Frame tool** | `F` | Draw containers that group and organize nested shapes. |
 | **Eraser tool** | `E` | Click or drag across shapes to erase them. |
 | **Laser tool** | `K` | Temporary laser pointer trail for live presentations. |
-| **Formula tool** | `M` | Insert mathematical formula (*coming soon*). |
+| **Formula tool** | `M` | Insert mathematical formula (Typst or LaTeX notation). |
 | **Nudge selection** | `Arrow keys` | Nudges selected shapes by 1 point (`Shift+Arrow` for 10 points). |
 | **Move without snap** | Hold `Alt` | Drag shapes freely without snapping to anchor points. |
 | **Duplicate** | `Ctrl+D` (`Cmd+D`) | Clones selected elements with a slight offset. |

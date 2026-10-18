@@ -28,6 +28,18 @@ Manang is a fast, local-first scientific authoring and illustration desktop appl
 - **[Projects and files](projects-and-files.md)**  
   Manage files in the sidebar tree, view images and PDFs, launch external system applications, delete files safely, use Home trash, and commit changes with the source control panel.
 
+- **[Crash recovery and safety copies](crash-recovery.md)**  
+  Understand automatic hot exit recovery snapshots, recover unsaved work after unexpected quits, and inspect automatic safety copies.
+
+- **[Version history and restore](version-history.md)**  
+  Capture named project milestone snapshots, browse the history timeline, inspect visual diffs, and restore previous drafts safely.
+
+- **[The Trash](trash.md)**  
+  Manage deleted projects on the Home screen, restore trashed projects, perform permanent purges, and recover deleted workspace files.
+
+- **[Templates](templates.md)**  
+  Scaffold ready-to-compile projects from built-in Typst, LaTeX, and Markdown templates completely offline.
+
 - **[Settings and shortcuts](settings-and-shortcuts.md)**  
   Adjust contextual, user, and project settings, switch themes, search keyboard shortcuts, and customize keybindings.
 

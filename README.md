@@ -26,6 +26,10 @@ A guide for authors in [`docs/user/`](docs/user/index.md):
 - **[Figures and diagrams](docs/user/figures-and-diagrams.md)** — Vector figure editor, text diagrams (Mermaid, Pikchr, ASCII), and document includes.
 - **[References](docs/user/references.md)** — Bibliographies, citation styles, inserting citations, and online verification.
 - **[Projects and files](docs/user/projects-and-files.md)** — File tree, openers, system apps, and Git source control.
+- **[Crash recovery](docs/user/crash-recovery.md)** — Hot exit snapshots, restoring unsaved edits after crashes, and safety copies.
+- **[Version history](docs/user/version-history.md)** — Project milestone snapshots, diff inspection, and restoring drafts.
+- **[The Trash](docs/user/trash.md)** — Project trash on Home screen, purging, and restoring workspace files.
+- **[Templates](docs/user/templates.md)** — Built-in Typst, LaTeX, and Markdown starter templates and offline setup.
 - **[Settings and shortcuts](docs/user/settings-and-shortcuts.md)** — User vs project scope, preferences, and keyboard shortcuts.
 - **[Menus and shortcuts](docs/user/menus-and-shortcuts.md)** — Menu bar hierarchy, keyboard mnemonics, and surface keybindings.
 - **[Plugins](docs/user/plugins.md)** — Built-in and sandboxed WebAssembly plugins, permissions, and status indicators.

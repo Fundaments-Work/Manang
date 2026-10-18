@@ -95,7 +95,7 @@ The Manang workbench is divided into six functional areas:
    - Press `Ctrl+B` (`Cmd+B`) to toggle the sidebar open or closed.
 4. **Editor area:**
    - The central workspace with tabbed documents.
-   - Displays the CodeMirror 6 text editor for source files, the vector figure canvas for `.figure.json` files, and viewers for images and PDFs.
+   - Displays the CodeMirror 6 text editor for source files, the vector figure canvas for `.figure` (and legacy `.figure.json`) files, and viewers for images and PDFs.
    - Switch between open tabs using `Ctrl+Tab` / `Ctrl+Shift+Tab` (`Cmd+Tab` / `Cmd+Shift+Tab`) or `Ctrl+PageDown` / `Ctrl+PageUp`. Jump directly to tabs 1 through 8 with `Ctrl+1`–`Ctrl+8` (`Cmd+1`–`Cmd+8`), or to the last tab with `Ctrl+9` (`Cmd+9`).
    - Close the active tab with `Ctrl+W` (`Cmd+W`).
 5. **Preview pane:**

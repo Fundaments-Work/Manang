@@ -277,6 +277,7 @@
             ? 'bg-surface-hi text-text'
             : 'text-text-muted hover:text-text'}"
           title="Match case (Alt+C)"
+          aria-label="Match case"
           aria-pressed={matchCase}
           onclick={() => (matchCase = !matchCase)}
         >
@@ -288,6 +289,7 @@
             ? 'bg-surface-hi text-text'
             : 'text-text-muted hover:text-text'}"
           title="Match whole word (Alt+W)"
+          aria-label="Match whole word"
           aria-pressed={wholeWord}
           onclick={() => (wholeWord = !wholeWord)}
         >
@@ -299,6 +301,7 @@
             ? 'bg-surface-hi text-text'
             : 'text-text-muted hover:text-text'}"
           title="Use regular expression (Alt+R)"
+          aria-label="Use regular expression"
           aria-pressed={useRegex}
           onclick={() => (useRegex = !useRegex)}
         >
@@ -441,6 +444,8 @@
       <button
         type="button"
         class="flex w-full items-center gap-1.5 px-4 pt-1.5 pb-1 text-left text-[11px] font-normal text-text-60 hover:bg-surface-hi hover:text-text"
+        aria-expanded={!isCollapsed}
+        aria-label="Toggle matches for {basename(file.path)}"
         onclick={() => toggleFileCollapse(file.path)}
       >
         <Icon
