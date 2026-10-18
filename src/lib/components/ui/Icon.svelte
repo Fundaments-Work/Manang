@@ -26,6 +26,7 @@
     preview: "M2 3h12v10H2z M5.5 5.5h5v5h-5z",
     export: "M8 2v8 M4.5 6.5L8 10l3.5-3.5 M3 13.5h10",
     zen: "M2 6V2h4 M10 2h4v4 M14 10v4h-4 M6 14H2v-4",
+    maximise: "M2.5 2.5h11v11h-11z M6 10l4-4 M6.5 6H10v3.5",
     error: "M2.5 2.5h11v11h-11z M5.5 5.5l5 5 M10.5 5.5l-5 5",
     warning: "M8 2.5l6 11H2z M8 6.5v3.5 M8 11.5v.5",
     check: "M3 8.5l3.5 3.5L13 4.5",
