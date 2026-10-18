@@ -14,7 +14,7 @@ export type SideView =
   | "figures"
   | "references"
   | "plugins";
-export type PanelTab = "problems" | "output" | "agent";
+export type PanelTab = "problems" | "output";
 export type PreviewMode = "split" | "editor" | "preview";
 export type Theme = "dark" | "light";
 
@@ -45,6 +45,9 @@ export interface LayoutModel {
   readonly panelOpen: boolean;
   readonly panelHeight: number;
   readonly panelTab: PanelTab;
+  /** The Agent column on the right (its own dock, beside the preview). */
+  readonly agentOpen: boolean;
+  readonly agentWidth: number;
   readonly preview: PreviewMode;
   /** Fraction of the editor+preview area given to the editor. */
   readonly splitRatio: number;
@@ -53,6 +56,10 @@ export interface LayoutModel {
 
 export const SIDE_MIN = 200;
 export const SIDE_MAX = 480;
+export const AGENT_MIN = 320;
+export const AGENT_MAX = 640;
+/** Below this viewport width the Agent column overlays the editor. */
+export const AGENT_OVERLAY_BELOW = 900;
 export const PANEL_MIN = 96;
 export const PANEL_MAX = 560;
 export const SPLIT_MIN = 0.25;
@@ -68,6 +75,8 @@ export const DEFAULT_LAYOUT: LayoutModel = {
   panelOpen: false,
   panelHeight: 200,
   panelTab: "problems",
+  agentOpen: false,
+  agentWidth: 380,
   preview: "split",
   splitRatio: 0.5,
   theme: "dark",
@@ -79,9 +88,15 @@ export function clamp(value: number, min: number, max: number): number {
 
 export const clampSide = (width: number): number =>
   clamp(Math.round(width), SIDE_MIN, SIDE_MAX);
+export const clampAgent = (width: number): number =>
+  clamp(Math.round(width), AGENT_MIN, AGENT_MAX);
 export const clampPanel = (height: number): number =>
   clamp(Math.round(height), PANEL_MIN, PANEL_MAX);
 export const clampSplit = (ratio: number): number => clamp(ratio, SPLIT_MIN, SPLIT_MAX);
+
+export function agentOverlays(viewportWidth: number): boolean {
+  return viewportWidth < AGENT_OVERLAY_BELOW;
+}
 
 export function isNarrow(viewportWidth: number): boolean {
   return viewportWidth < NARROW_BELOW;
@@ -177,9 +192,11 @@ export function sanitizeLayout(raw: unknown): LayoutModel {
     panelHeight: finite(r["panelHeight"])
       ? clampPanel(r["panelHeight"])
       : d.panelHeight,
-    panelTab: isOneOf(r["panelTab"], ["problems", "output", "agent"] as const)
+    panelTab: isOneOf(r["panelTab"], ["problems", "output"] as const)
       ? r["panelTab"]
       : d.panelTab,
+    agentOpen: typeof r["agentOpen"] === "boolean" ? r["agentOpen"] : d.agentOpen,
+    agentWidth: finite(r["agentWidth"]) ? clampAgent(r["agentWidth"]) : d.agentWidth,
     preview: isOneOf(r["preview"], PREVIEW_CYCLE) ? r["preview"] : d.preview,
     splitRatio: finite(r["splitRatio"]) ? clampSplit(r["splitRatio"]) : d.splitRatio,
     theme: isOneOf(r["theme"], ["dark", "light"] as const) ? r["theme"] : d.theme,

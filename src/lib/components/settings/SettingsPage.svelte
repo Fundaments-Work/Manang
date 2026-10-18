@@ -34,6 +34,7 @@
   } from "$lib/workbench/settings";
   import AboutView from "./AboutView.svelte";
   import KeybindingsTable from "./KeybindingsTable.svelte";
+  import AgentSettings from "$lib/components/agent/AgentSettings.svelte";
   import PluginSection from "./PluginSection.svelte";
   import SettingRow from "./SettingRow.svelte";
 
@@ -598,7 +599,9 @@
                 {/if}
                 {#each pluginRows as { entry, defs } (entry.name)}
                   <PluginSection {entry}>
-                    {#if defs.length > 0}
+                    {#if entry.name === "agent"}
+                      <AgentSettings {defs} {rows} />
+                    {:else if defs.length > 0}
                       {@render rows(defs)}
                     {/if}
                   </PluginSection>

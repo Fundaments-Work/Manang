@@ -214,6 +214,7 @@ pub const CORE_DEFAULTS: &[(&str, &str, &str)] = &[
     ("view.files", "Mod+Shift+E", ""),
     ("view.search", "Mod+Shift+F", ""),
     ("view.plugins", "Mod+Shift+X", ""),
+    ("agent.toggle", "Mod+Shift+A", ""),
     ("view.settings", "Mod+,", ""),
     ("view.toggle-side", "Mod+B", ""),
     ("view.toggle-panel", "Mod+J", ""),

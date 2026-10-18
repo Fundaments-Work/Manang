@@ -2304,22 +2304,61 @@ async function main() {
       );
       const original = await docText();
 
-      // Not set up: the view says so and offers Set up; nothing is sent.
-      await runCommand("Show AI agent");
+      // The Agent is a column on the right, opened from the activity bar.
       check(
-        "the Agent tab is part of the bottom panel",
-        await exists(page, "#panel-tab-agent"),
+        "the Agent has an activity-bar button with its shortcut in the tooltip",
+        await page.evaluate(
+          `(() => { const b = document.querySelector('nav[aria-label="Workbench views"] button[aria-label="Agent"]'); return !!b && b.textContent.includes("Ctrl+Shift+A"); })()`,
+        ),
       );
       check(
-        "Agent is a tab, not a new activity-bar item",
-        !(await page.evaluate(
-          `[...document.querySelectorAll('nav[aria-label="Workbench views"] button')].some((b) => /agent|ai/i.test(b.getAttribute("aria-label") ?? ""))`,
-        )),
+        "the bottom panel no longer has an Agent tab",
+        !(await exists(page, "#panel-tab-agent")),
       );
-      await expectEventually(
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Agent"]');
+      await waitFor(
         page,
-        "before set-up the header says not set up and offers Set up",
-        `/not set up/.test(document.querySelector("[data-agent-status]")?.innerText ?? "") && !!document.querySelector("[data-agent-setup]")`,
+        `!!document.querySelector("#agent-panel [data-agent-view]")`,
+        {
+          label: "agent panel",
+        },
+      );
+      check(
+        "the Agent docks to the right of the editor, full height",
+        await page.evaluate(`(() => {
+          const a = document.querySelector("#agent-panel").getBoundingClientRect();
+          const m = document.querySelector("main").getBoundingClientRect();
+          return a.left >= m.right - 1 && a.width >= 320 && a.height > 400;
+        })()`),
+      );
+      check(
+        "the preview keeps working beside it",
+        await exists(page, 'section[aria-label="Preview"]'),
+      );
+      check(
+        "the activity-bar button shows it is open",
+        await page.evaluate(
+          `document.querySelector('nav[aria-label="Workbench views"] button[aria-label="Agent"]').getAttribute("aria-pressed") === "true"`,
+        ),
+      );
+      check(
+        "the column can be resized with a handle",
+        await exists(page, '[role="separator"][aria-label="Resize agent panel"]'),
+      );
+      check(
+        "the status bar chip says the agent is not set up",
+        await page.evaluate(
+          `document.querySelector("[data-ai-chip]")?.innerText.trim() === "AI: not set up"`,
+        ),
+      );
+      check(
+        "the first-use card has three steps and one lime action",
+        await page.evaluate(`(() => {
+          const card = document.querySelector("[data-agent-setup-card]");
+          const lime = (el) => getComputedStyle(el).backgroundColor === "rgb(198, 241, 53)";
+          const limes = [...document.querySelectorAll("#agent-panel button")].filter(lime);
+          return !!card && ["setup-1", "setup-2", "setup-3"].every((id) => !!card.querySelector("#" + id)) && limes.length === 1;
+        })()`),
       );
       check(
         "the view labels the provider as a mock in the browser",
@@ -2327,55 +2366,90 @@ async function main() {
       );
       await shoot(page, "ai-01-not-set-up");
 
-      // Set up: provider and key in Settings.
-      await click(page, "[data-agent-setup]");
-      await waitFor(page, `!!document.querySelector('[data-group="agent-provider"]')`, {
-        label: "provider panel",
-      });
-      check(
-        "Settings has a Provider and key panel",
-        await page.evaluate(
-          `document.querySelector('[data-group="agent-provider"]').innerText.includes("Provider and key")`,
-        ),
-      );
+      // The setup card: provider and key, then a connection test.
+      await page.evaluate(`document.querySelector("[data-agent-card-key]").focus()`);
       check(
         "the key field is a password field",
         await page.evaluate(
-          `document.querySelector("[data-agent-key]").type === "password"`,
+          `document.querySelector("[data-agent-card-key]").type === "password"`,
         ),
       );
-      await page.evaluate(`document.querySelector("[data-agent-key]").focus()`);
       await insertText(page, SECRET_KEY);
-      await click(page, "[data-agent-key-save]");
+      await click(page, "[data-agent-card-test]");
       await expectEventually(
         page,
-        "after saving, the field is empty and the panel only says where the key is held",
-        `document.querySelector("[data-agent-key]").value === "" && /Not saved: stored for this session only/.test(document.querySelector("[data-agent-key-status]").innerText)`,
+        "Test connection answers in plain words and the key field is emptied",
+        `/Connected/.test(document.querySelector("[data-agent-card-result]")?.innerText ?? "") && document.querySelector("[data-agent-card-key]").value === ""`,
       );
       check(
         "the key is never displayed back",
         !(await pageText()).includes(SECRET_KEY),
       );
-      await click(page, "[data-agent-test]");
-      await expectEventually(
-        page,
-        "Test connection answers in plain words",
-        `/Connected/.test(document.querySelector("[data-agent-test-result]")?.innerText ?? "")`,
+
+      // The same choices are in Settings, in clear groups.
+      await click(page, "#agent-panel [data-agent-setup]");
+      await waitFor(page, `!!document.querySelector('[data-group="agent-provider"]')`, {
+        label: "agent settings",
+      });
+      check(
+        "Settings, Agent has Provider, Model, Key, Privacy and Cost groups",
+        await page.evaluate(
+          `(() => { const s = document.querySelector('[data-group="plugin:agent"]'); const h = [...s.querySelectorAll("h4")].map((e) => e.textContent.trim()); return ["Provider", "Model", "Key", "Privacy", "Cost"].every((t) => h.includes(t)); })()`,
+        ),
+        await page.evaluate(
+          `[...document.querySelectorAll('[data-plugin="agent"] h4')].map((e) => e.textContent.trim()).join("|")`,
+        ),
+      );
+      check(
+        "the Key group says where the key is held and never shows it",
+        await page.evaluate(
+          `/Not saved: stored for this session only/.test(document.querySelector("[data-agent-key-status]").innerText) && document.querySelector("[data-agent-key]").type === "password"`,
+        ),
       );
       await shoot(page, "ai-02-provider-and-key");
       await closeSettingsPage();
 
-      // A selection action: consent first, then an inline diff.
+      // Step 3 of the card: what is sent and where, then agree.
+      await expectEventually(
+        page,
+        "step 3 says what is sent and where",
+        `(() => { const t = document.querySelector("[data-agent-consent-text]")?.innerText ?? ""; return /Anthropic/.test(t) && /sends the text you attach/.test(t); })()`,
+      );
+      check(
+        "Agree and start is now the one lime action",
+        await page.evaluate(`(() => {
+          const lime = (el) => getComputedStyle(el).backgroundColor === "rgb(198, 241, 53)";
+          const limes = [...document.querySelectorAll("#agent-panel button")].filter(lime);
+          return limes.length === 1 && limes[0].hasAttribute("data-agent-agree");
+        })()`),
+      );
+      await shoot(page, "ai-03-consent");
+      await click(page, "[data-agent-agree]");
+      await expectEventually(
+        page,
+        "after agreeing the card goes, the chip says ready and suggestions appear",
+        `!document.querySelector("[data-agent-setup-card]") && document.querySelector("[data-ai-chip]")?.innerText.trim() === "AI: ready" && document.querySelectorAll("[data-suggest]").length === 4`,
+      );
+      check(
+        "the empty state greets with four suggested rows, not buttons",
+        await page.evaluate(
+          `(() => { const e = document.querySelector("[data-agent-empty]"); return /How can I help/.test(e.innerText) && [...e.querySelectorAll("[data-suggest]")].every((b) => getComputedStyle(b).borderRadius === "0px"); })()`,
+        ),
+      );
+      check(
+        "the composer is pinned under the conversation with a context line",
+        await page.evaluate(`(() => {
+          const c = document.querySelector("[data-agent-input]").getBoundingClientRect();
+          const p = document.querySelector("#agent-panel").getBoundingClientRect();
+          return Math.abs(p.bottom - document.querySelector("[data-agent-usage]").getBoundingClientRect().bottom) < 4 && c.top > p.top + 200;
+        })()`),
+      );
+      await shoot(page, "ai-03b-chat-empty");
+
+      // A selection action: an inline diff in the editor and a card in the Agent.
       await click(page, ".cm-content");
       await selectLine("generalizes Landauer");
       await runCommand("AI: Shorten selection");
-      await expectEventually(
-        page,
-        "the first request asks for consent and says what is sent and where",
-        `(() => { const d = document.querySelector('[role="alertdialog"]'); return !!d && /Anthropic/.test(d.innerText) && /sends the text you attach/.test(d.innerText); })()`,
-      );
-      await shoot(page, "ai-03-consent");
-      await clickText(page, '[role="alertdialog"] button', "Agree");
       await expectEventually(
         page,
         "the result is an inline diff: removed text struck through, inserted text after it",
@@ -2401,6 +2475,18 @@ async function main() {
         ),
       );
       check("the document is unchanged until Accept", (await docText()) === original);
+      check(
+        "the card names the file and counts lines added and removed",
+        await page.evaluate(
+          `(() => { const c = document.querySelector("[data-proposal]"); return !!c && /main\\.typ/.test(c.innerText) && /\\+\\d+ .\\d+/.test(c.innerText); })()`,
+        ),
+      );
+      check(
+        "the request shows as a user block labelled You, in a surface with a hairline",
+        await page.evaluate(
+          `(() => { const u = document.querySelector("[data-agent-user]"); if (!u) return false; const s = getComputedStyle(u); return s.borderTopWidth === "1px" && s.borderRadius === "0px" && s.boxShadow === "none" && /You/.test(u.parentElement.innerText); })()`,
+        ),
+      );
       check(
         "the Agent view shows the proposal as a card with the one lime action, Accept",
         await page.evaluate(`(() => {
@@ -2477,8 +2563,43 @@ async function main() {
       );
       check("the card says it was rejected", (await agentLog()).includes("Rejected."));
 
+      // Accept from the card, then Undo from the card.
+      await selectLine("generalizes Landauer");
+      await runCommand("AI: Shorten selection");
+      await expectEventually(
+        page,
+        "a second proposal waits in the Agent",
+        `!!document.querySelector('[data-proposal-state="pending"] [data-agent-accept]')`,
+        { timeout: 15000 },
+      );
+      await click(page, '[data-proposal-state="pending"] [data-agent-accept]');
+      await expectEventually(
+        page,
+        "Accept from the card applies the edit and offers Undo",
+        `!!document.querySelector("[data-agent-undo]") && !document.querySelector(".cm-content .mng-ai-removed")`,
+      );
+      check("the text changed", (await docText()) !== original);
+      await click(page, "[data-agent-undo]");
+      await expectEventually(
+        page,
+        "Undo restores the original text and the card says so",
+        `!document.querySelector("[data-agent-undo]") && /undone/.test(document.querySelector("[data-agent-log]").innerText)`,
+      );
+      check("the original text is back", (await docText()) === original);
+
       // Stop cancels a stream.
       await page.evaluate(`document.querySelector("[data-agent-input]").focus()`);
+      await insertText(page, "line one");
+      await press(page, "Enter", { shift: true });
+      await insertText(page, "line two");
+      check(
+        "Shift+Enter adds a line and the box grows instead of sending",
+        await page.evaluate(
+          `(() => { const t = document.querySelector("[data-agent-input]"); return t.value.includes("\\n") && t.offsetHeight > 40; })()`,
+        ),
+      );
+      await page.evaluate(`document.querySelector("[data-agent-input]").select()`);
+      await press(page, "Backspace");
       await insertText(page, "explain this slow please");
       await click(page, "[data-agent-send]");
       await expectEventually(
@@ -2503,13 +2624,30 @@ async function main() {
         `/1 error/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
         { timeout: 10000 },
       );
-      await click(page, "#panel-tab-problems");
+      await runCommand("Show problems");
       await expectEventually(
         page,
         "the Problems list offers Fix with AI",
         `!!document.querySelector("#bottom-panel [data-fix-with-ai]")`,
       );
+      await page.evaluate(`document.activeElement?.blur()`);
+      await press(page, "a", { ctrl: true, shift: true, wait: 300 });
+      check(
+        "Ctrl+Shift+A closes the Agent column",
+        !(await exists(page, "#agent-panel")),
+      );
+      check(
+        "the bottom panel offers Problems and Output only",
+        await page.evaluate(
+          `[...document.querySelectorAll('#bottom-panel [role="tab"]')].map((t) => t.innerText.replace(/\\d+/g, "").trim()).join(",") === "Problems,Output"`,
+        ),
+      );
       await click(page, "#bottom-panel [data-fix-with-ai]");
+      await expectEventually(
+        page,
+        "Fix with AI opens the Agent column by itself",
+        `!!document.querySelector("#agent-panel [data-agent-view]")`,
+      );
       await expectEventually(
         page,
         "Fix with AI sends the diagnostic and proposes an edit as an inline diff",
@@ -2540,9 +2678,10 @@ async function main() {
       await runCommand("Show AI agent");
       await expectEventually(
         page,
-        "when disabled the view shows Set up",
-        `/off/.test(document.querySelector("[data-agent-status]")?.innerText ?? "") && !!document.querySelector("[data-agent-setup]")`,
+        "when disabled the chip says off and the view offers Turn on",
+        `document.querySelector("[data-ai-chip]")?.innerText.trim() === "AI: off" && !!document.querySelector("[data-agent-turn-on]")`,
       );
+      await shoot(page, "ai-06-off");
       await openSettingsPage();
       await click(page, '[data-setting="agent.enabled"] button[role="switch"]');
       await closeSettingsPage();
@@ -2554,12 +2693,52 @@ async function main() {
         "no document is left edited by the AI tests",
         (await dirtyTabs(page)).length === 0,
       );
-      // The Agent view made the panel taller; a double click on the resizer restores its size.
-      await page.evaluate(
-        `document.querySelector('[aria-label="Resize bottom panel"]')?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`,
+      // Narrow windows and the light theme.
+      if (!(await exists(page, "#agent-panel")))
+        await click(
+          page,
+          'nav[aria-label="Workbench views"] button[aria-label="Agent"]',
+        );
+      await resize(page, 760, 700);
+      check(
+        "under 900px the Agent floats over the editor and nothing scrolls sideways",
+        await page.evaluate(
+          `getComputedStyle(document.querySelector("#agent-panel")).position === "absolute" && document.documentElement.scrollWidth <= window.innerWidth`,
+        ),
       );
-      await sleep(200);
-      await click(page, "#bottom-panel button[aria-label='Close panel']");
+      await resize(page, 640, 600);
+      check(
+        "at 640px the Agent fits the window, composer included",
+        await page.evaluate(`(() => {
+          const a = document.querySelector("#agent-panel").getBoundingClientRect();
+          const c = document.querySelector("[data-agent-send]").getBoundingClientRect();
+          return a.right <= window.innerWidth && a.left >= 48 && c.right <= window.innerWidth && document.documentElement.scrollWidth <= window.innerWidth;
+        })()`),
+      );
+      await shoot(page, "ai-07-640");
+      await page.evaluate(
+        `document.documentElement.classList.replace("theme-dark", "theme-light")`,
+      );
+      await resize(page, 1280, 820);
+      await shoot(page, "ai-08-light");
+      check(
+        "in the light theme the Agent uses the paper tokens",
+        await page.evaluate(
+          `getComputedStyle(document.querySelector("#agent-panel")).backgroundColor === "rgb(244, 243, 240)"`,
+        ),
+      );
+      await page.evaluate(
+        `document.documentElement.classList.replace("theme-light", "theme-dark")`,
+      );
+
+      // Leave the layout as found: the bottom panel closed, the Agent column closed.
+      if (await exists(page, "#bottom-panel"))
+        await click(page, "#bottom-panel button[aria-label='Close panel']");
+      if (await exists(page, "#agent-panel"))
+        await click(
+          page,
+          'nav[aria-label="Workbench views"] button[aria-label="Agent"]',
+        );
     }
 
     /* ------------------------------------------------------------------ */
