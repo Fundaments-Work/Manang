@@ -801,10 +801,13 @@ async function main() {
     );
     await click(page, 'header input[aria-label="Search settings and plugins"]');
     await insertText(page, "engine");
+    // `compile.engine` and `latex.engine` match by name; the LaTeX plugin also
+    // matches as a whole (its `latex.status` command is "LaTeX engines
+    // available"), so all of its settings stay listed.
     await expectEventually(
       page,
       "searching narrows settings and plugins together",
-      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.backend,latex.engine"; })()`,
+      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.backend,latex.engine,latex.latexmk,latex.timeout-seconds"; })()`,
       {
         show: `[...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join()`,
       },
@@ -1565,6 +1568,83 @@ async function main() {
     );
 
     /* ------------------------------------------------------------------ */
+    section("Source and preview");
+    await clickText(page, '[role="tab"]', "main.typ");
+    await waitFor(page, `document.querySelector('img[alt^="Page 1"]') !== null`, {
+      label: "the Typst page",
+    });
+    const caretLine = () =>
+      page.evaluate(
+        `Number(document.querySelector('footer[aria-label="Status"]').innerText.match(/Ln (\\d+)/)?.[1] ?? 0)`,
+      );
+    // Caret a few lines into main.typ (past the `#set` line), then "Show in preview".
+    await focusEditor(page);
+    await press(page, "Home", { ctrl: true });
+    for (let i = 0; i < 10; i += 1) await press(page, "ArrowDown", { wait: 30 });
+    const sourceLine = await caretLine();
+    await page.evaluate(
+      `document.querySelector('[role="region"][aria-label="Rendered page"]').scrollTop = 1e6`,
+    );
+    await press(page, "j", { ctrl: true, alt: true, wait: 500 });
+    const markRect = await rect(page, "[data-preview-mark]");
+    const region = await rect(page, '[role="region"][aria-label="Rendered page"]');
+    check(
+      '"Show in preview" (Ctrl+Alt+J) outlines the caret\'s text on the page',
+      markRect !== null && sourceLine > 2,
+      `line ${sourceLine}`,
+    );
+    check(
+      "the preview scrolls the mark into view",
+      markRect !== null &&
+        region !== null &&
+        markRect.top >= region.top &&
+        markRect.bottom <= region.bottom,
+      JSON.stringify({ markRect, region }),
+    );
+    check(
+      "the mark is a 1px acid-lime outline, square, without a shadow",
+      await page.evaluate(
+        `(() => { const s = getComputedStyle(document.querySelector("[data-preview-mark]")); return s.borderTopWidth === "1px" && s.borderTopColor === "rgb(198, 241, 53)" && s.borderRadius === "0px" && s.boxShadow === "none"; })()`,
+      ),
+    );
+    await shoot(page, "18-show-in-preview");
+
+    // Move the caret away, then a plain click on the page leaves it there.
+    await press(page, "Home", { ctrl: true });
+    const target = markRect ?? { x: 0, y: 0 };
+    await mouse(page, "mouseMoved", target.x, target.y);
+    await mouse(page, "mousePressed", target.x, target.y);
+    await mouse(page, "mouseReleased", target.x, target.y);
+    await sleep(300);
+    check("a plain click on the page keeps the caret", (await caretLine()) === 1);
+
+    // Ctrl+click on the same spot opens the source line there.
+    for (const type of ["mousePressed", "mouseReleased"]) {
+      await page.send("Input.dispatchMouseEvent", {
+        type,
+        x: target.x,
+        y: target.y,
+        button: "left",
+        buttons: 1,
+        clickCount: 1,
+        modifiers: 2,
+      });
+    }
+    await expectEventually(
+      page,
+      "Ctrl+click on the rendered page moves the caret to the source line",
+      `/Ln ${sourceLine},/.test(document.querySelector('footer[aria-label="Status"]').innerText) && document.querySelector(".cm-line[data-source-flash]") !== null`,
+      { timeout: 4000 },
+    );
+    check(
+      "the line it lands on is highlighted briefly",
+      await page.evaluate(
+        `document.querySelector(".cm-line[data-source-flash]")?.innerText.trim().length > 0`,
+      ),
+    );
+    await shoot(page, "18-source-jump");
+
+    /* ------------------------------------------------------------------ */
     section("Zen mode");
     await clickText(page, '[role="tab"]', "main.typ");
     await sleep(500);
@@ -1822,6 +1902,37 @@ async function main() {
       doc,
       "a chapter is compiled through main.tex",
       `document.querySelector('section[aria-label="Preview"]').innerText.includes("via main.tex")`,
+    );
+
+    // SyncTeX both ways: line 2 of the chapter to the PDF and back.
+    await focusEditor(doc);
+    await press(doc, "Home", { ctrl: true });
+    await press(doc, "ArrowDown");
+    await press(doc, "j", { ctrl: true, alt: true, wait: 600 });
+    const pdfMark = await rect(doc, "[data-pdf-viewer] [data-preview-mark]");
+    check(
+      '"Show in preview" outlines the chapter line in the PDF (SyncTeX forward)',
+      pdfMark !== null,
+    );
+    await press(doc, "Home", { ctrl: true });
+    if (pdfMark !== null) {
+      for (const type of ["mousePressed", "mouseReleased"]) {
+        await doc.send("Input.dispatchMouseEvent", {
+          type,
+          x: pdfMark.x,
+          y: pdfMark.y,
+          button: "left",
+          buttons: 1,
+          clickCount: 1,
+          modifiers: 2,
+        });
+      }
+    }
+    await expectEventually(
+      doc,
+      "Ctrl+click on the PDF opens the chapter at that line (SyncTeX reverse)",
+      `/Ln 2,/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+      { timeout: 4000 },
     );
 
     // Saving a broken chapter reaches Problems and keeps the last good PDF.
