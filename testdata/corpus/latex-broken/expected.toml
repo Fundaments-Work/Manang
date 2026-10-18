@@ -1,0 +1,4 @@
+engine = "latex"
+main = "main.tex"
+compile = false
+diagnostic_lines = [9]

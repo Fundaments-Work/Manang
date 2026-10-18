@@ -362,7 +362,9 @@ export class BuildState {
       this.status = "ok";
       this.generation += 1;
       this.#write(
-        `Compiled ${main} in ${formatMs(durationMs)} (${pages} ${pages === 1 ? "page" : "pages"}).`,
+        // The page count is unknown when the engine's log did not say; say
+        // nothing then, rather than "0 pages".
+        `Compiled ${main} in ${formatMs(durationMs)}${pages > 0 ? ` (${pages} ${pages === 1 ? "page" : "pages"})` : ""}.`,
         "info",
       );
     } else {

@@ -440,3 +440,60 @@ fn synctex_round_trips_through_an_input_file() {
         assert_eq!(reverse["line"], line, "{reverse}");
     }
 }
+
+/// TeX wraps its log at 79 columns. Under a long build path that splits the
+/// "Output written on ... (1 page" line, and the page count used to come back
+/// unknown (the app showed "0 pages"). Both pipelines, in-place compile like
+/// the app's, with a deliberately long cache directory.
+#[test]
+fn page_count_survives_a_long_build_path() {
+    let Some(tools) = system_tex() else { return };
+    let base = tempfile::tempdir().expect("tmp");
+    let cache = base
+        .path()
+        .join("a-rather-long-directory-name-like-a-home-folder")
+        .join("work.fundaments.manang")
+        .join("manang")
+        .join("latex")
+        .join("builds");
+    fs::create_dir_all(&cache).expect("cache dir");
+    let project = tempfile::tempdir().expect("project");
+    let main = project.path().join("main.tex");
+    fs::write(&main, MINIMAL).expect("main.tex");
+    let k = kernel_with(tools, &cache);
+    for latexmk in [true, false] {
+        let report = compile(
+            &k,
+            json!({"main": main.to_string_lossy(), "latexmk": latexmk}),
+        );
+        assert_eq!(report["ok"], true, "latexmk={latexmk}: {report}");
+        assert_eq!(report["pages"], 1, "latexmk={latexmk}: {report}");
+    }
+}
+
+/// The error the owner hit: `\includegraphics` without `graphicx` names the
+/// command and says which package to load.
+#[test]
+fn a_missing_package_is_named_in_the_diagnostic() {
+    let Some(tools) = system_tex() else { return };
+    let cache = tempfile::tempdir().expect("tmp");
+    let k = kernel_with(tools, cache.path());
+    let doc =
+        "\\documentclass{article}\n\\begin{document}\n\\includegraphics{x.pdf}\n\\end{document}\n";
+    let report = compile(
+        &k,
+        json!({"main": "main.tex", "sources": {"main.tex": doc}}),
+    );
+    assert_eq!(report["ok"], false, "{report}");
+    let first = &report["diagnostics"][0];
+    assert_eq!(
+        first["message"],
+        "Undefined control sequence: \\includegraphics"
+    );
+    assert!(
+        first["hint"]
+            .as_str()
+            .is_some_and(|h| h.contains("\\usepackage{graphicx}")),
+        "{first}"
+    );
+}
