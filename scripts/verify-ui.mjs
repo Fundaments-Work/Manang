@@ -475,6 +475,67 @@ async function caretToEnd(cdp) {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Send feedback: the dialog explains that nothing is sent, shows the
+ * diagnostics that would be shared, and Copy puts message plus diagnostics on
+ * the clipboard. About shows the build and what is new.
+ */
+async function feedbackSection(browser) {
+  section("Send feedback");
+  const page = await newPage(browser);
+  current = page;
+  await clickText(page, "[data-project] button", "Entropy paper");
+  await waitFor(
+    page,
+    `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+    { label: "editor shows main.typ" },
+  );
+  await press(page, "Escape", { wait: 150 });
+  await click(page, ".cm-content");
+  await press(page, "k", { ctrl: true, wait: 300 });
+  await insertText(page, "Send feedback");
+  await press(page, "Enter", { wait: 500 });
+  await expectEventually(
+    page,
+    "Send feedback opens a dialog with a message field and the diagnostics",
+    `(() => { const d = document.querySelector('[data-testid="feedback-dialog"]'); return !!d && !!d.querySelector("textarea") && (d.querySelector('[data-testid="feedback-report"]')?.innerText ?? "").includes("Manang"); })()`,
+  );
+  check(
+    "the dialog says nothing is sent by Manang",
+    await page.evaluate(
+      `document.querySelector('[data-testid="feedback-dialog"]').innerText.includes("sends nothing by itself")`,
+    ),
+  );
+  await insertText(page, "The preview flickers");
+  await page.evaluate(
+    `(() => { window.__copied = ""; navigator.clipboard.writeText = (t) => { window.__copied = t; return Promise.resolve(); }; })()`,
+  );
+  await click(page, '[data-testid="feedback-copy"]');
+  await sleep(300);
+  check(
+    "Copy puts the message and the diagnostics on the clipboard",
+    await page.evaluate(
+      `window.__copied.includes("The preview flickers") && window.__copied.includes("--- diagnostics ---")`,
+    ),
+  );
+  await shoot(page, "feedback-dialog");
+  await press(page, "Escape", { wait: 300 });
+  check(
+    "Escape closes the dialog",
+    !(await exists(page, '[data-testid="feedback-dialog"]')),
+  );
+  await press(page, "k", { ctrl: true, wait: 300 });
+  await insertText(page, "About Manang");
+  await press(page, "Enter", { wait: 600 });
+  check(
+    "About shows what is new from the changelog",
+    await page.evaluate(
+      `(document.querySelector('[data-testid="whats-new"]')?.innerText ?? "").includes("What's new")`,
+    ),
+  );
+  await press(page, "Escape", { wait: 200 });
+}
+
+/**
  * Autosave (`files.autosave`): after a pause in typing the document is written
  * and its tab is no longer marked unsaved; on-focus-loss writes when the window
  * loses focus; off leaves it unsaved. Self-contained, like the live section.
@@ -1075,8 +1136,13 @@ async function main() {
     );
     const browser = await Cdp.open(version.webSocketDebuggerUrl);
 
-    if (process.env.MANANG_ONLY === "live" || process.env.MANANG_ONLY === "autosave") {
-      if (process.env.MANANG_ONLY === "autosave") await autosaveSection(browser);
+    if (
+      process.env.MANANG_ONLY === "live" ||
+      process.env.MANANG_ONLY === "autosave" ||
+      process.env.MANANG_ONLY === "feedback"
+    ) {
+      if (process.env.MANANG_ONLY === "feedback") await feedbackSection(browser);
+      else if (process.env.MANANG_ONLY === "autosave") await autosaveSection(browser);
       else await liveSection(browser);
       browser.close();
       child.kill("SIGTERM");
@@ -7485,6 +7551,7 @@ async function main() {
     ext.close();
     current = page;
 
+    await feedbackSection(browser);
     await autosaveSection(browser);
     await liveSection(browser);
 

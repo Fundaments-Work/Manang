@@ -5,6 +5,8 @@
 //! application lifecycle; the document engine arrives as sibling crates in
 //! `crates/`.
 
+mod diagnostics;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,7 +30,18 @@ pub struct AppInfo {
     pub name: &'static str,
     pub version: &'static str,
     pub target: &'static str,
+    /// The commit the build was made from (`unknown` outside a checkout).
+    pub commit: &'static str,
+    /// `beta` for a beta build (`MANANG_CHANNEL=beta` at build time), else `dev`.
+    pub channel: &'static str,
+    pub os: &'static str,
+    pub arch: &'static str,
 }
+
+const CHANNEL: &str = match option_env!("MANANG_CHANNEL") {
+    Some(channel) => channel,
+    None => "dev",
+};
 
 #[tauri::command]
 fn app_info() -> AppInfo {
@@ -36,7 +49,54 @@ fn app_info() -> AppInfo {
         name: "Manang",
         version: env!("CARGO_PKG_VERSION"),
         target: "typst",
+        commit: env!("MANANG_GIT_COMMIT"),
+        channel: CHANNEL,
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
     }
+}
+
+/// The text behind Help > Send feedback: versions, plugins and the end of the
+/// log, with home folders and key-like strings removed. Nothing is sent.
+#[tauri::command]
+fn diagnostics_report(app: tauri::AppHandle, shell: State<'_, Shell>) -> Result<String, IpcError> {
+    use tauri::Manager;
+    let plugins: Vec<String> = plugin_summaries(&shell.kernel)
+        .into_iter()
+        .map(|p| format!("{} {}", p.name, p.version))
+        .collect();
+    let log = newest_log(&app).unwrap_or_default();
+    let home = app
+        .path()
+        .home_dir()
+        .ok()
+        .map(|dir| dir.to_string_lossy().into_owned());
+    let webview = tauri::webview_version().unwrap_or_else(|_| "unknown".to_owned());
+    Ok(diagnostics::format_report(&diagnostics::ReportInput {
+        version: env!("CARGO_PKG_VERSION"),
+        commit: env!("MANANG_GIT_COMMIT"),
+        channel: CHANNEL,
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
+        webview: &webview,
+        plugins: &plugins,
+        log: &log,
+        home: home.as_deref(),
+    }))
+}
+
+/// The newest `.log` file in the app's log folder, read as text.
+fn newest_log(app: &tauri::AppHandle) -> Option<String> {
+    use tauri::Manager;
+    let dir = app.path().app_log_dir().ok()?;
+    let newest = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "log"))
+        .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
+        .max_by_key(|(modified, _)| *modified)?;
+    let bytes = std::fs::read(newest.1).ok()?;
+    Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Structured failure for the shell; it never parses error strings.
@@ -696,6 +756,7 @@ pub fn run() -> Result<(), tauri::Error> {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            diagnostics_report,
             kernel_commands,
             kernel_plugins,
             kernel_agent_tools,
