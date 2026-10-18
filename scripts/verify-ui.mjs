@@ -1830,9 +1830,13 @@ async function main() {
           i++
         )
           await press(page, "Escape");
-        await waitFor(page, `!document.querySelector('section[aria-label="Settings"]')`, {
-          label: "settings closed",
-        });
+        await waitFor(
+          page,
+          `!document.querySelector('section[aria-label="Settings"]')`,
+          {
+            label: "settings closed",
+          },
+        );
       };
       const openSettingsPage = async () => {
         await click(
@@ -1881,12 +1885,18 @@ async function main() {
       } else {
         await click(page, '[role="tab"][data-tab="main.typ"]');
       }
-      await waitFor(page, `document.querySelector(".cm-content")?.textContent.includes("generalizes")`);
+      await waitFor(
+        page,
+        `document.querySelector(".cm-content")?.textContent.includes("generalizes")`,
+      );
       const original = await docText();
 
       // Not set up: the view says so and offers Set up; nothing is sent.
       await runCommand("Show AI agent");
-      check("the Agent tab is part of the bottom panel", await exists(page, "#panel-tab-agent"));
+      check(
+        "the Agent tab is part of the bottom panel",
+        await exists(page, "#panel-tab-agent"),
+      );
       check(
         "Agent is a tab, not a new activity-bar item",
         !(await page.evaluate(
@@ -1929,7 +1939,10 @@ async function main() {
         "after saving, the field is empty and the panel only says where the key is held",
         `document.querySelector("[data-agent-key]").value === "" && /Not saved: stored for this session only/.test(document.querySelector("[data-agent-key-status]").innerText)`,
       );
-      check("the key is never displayed back", !(await pageText()).includes(SECRET_KEY));
+      check(
+        "the key is never displayed back",
+        !(await pageText()).includes(SECRET_KEY),
+      );
       await click(page, "[data-agent-test]");
       await expectEventually(
         page,
@@ -2026,7 +2039,10 @@ async function main() {
         `!document.querySelector(".cm-content .mng-ai-removed") && !document.querySelector("[data-ai-accept]")`,
       );
       const accepted = await docText();
-      check("the text changed", accepted !== original && accepted.length < original.length);
+      check(
+        "the text changed",
+        accepted !== original && accepted.length < original.length,
+      );
       await press(page, "z", { ctrl: true, wait: 300 });
       check("one Ctrl+Z restores the original text", (await docText()) === original);
       check("and nothing else was left edited", (await dirtyTabs(page)).length === 0);
@@ -2046,10 +2062,7 @@ async function main() {
         "Esc rejects: the diff goes and the text is untouched",
         !(await exists(page, "[data-ai-accept]")) && (await docText()) === original,
       );
-      check(
-        "the card says it was rejected",
-        (await agentLog()).includes("Rejected."),
-      );
+      check("the card says it was rejected", (await agentLog()).includes("Rejected."));
 
       // Stop cancels a stream.
       await page.evaluate(`document.querySelector("[data-agent-input]").focus()`);
@@ -2102,7 +2115,10 @@ async function main() {
       await click(page, ".cm-content");
       for (let i = 0; i < 4 && (await docText()) !== original; i++)
         await press(page, "z", { ctrl: true, wait: 250 });
-      check("the document is restored after the fix test", (await docText()) === original);
+      check(
+        "the document is restored after the fix test",
+        (await docText()) === original,
+      );
 
       // Disabled state.
       await openSettingsPage();
@@ -2117,8 +2133,14 @@ async function main() {
       await openSettingsPage();
       await click(page, '[data-setting="agent.enabled"] button[role="switch"]');
       await closeSettingsPage();
-      check("the key never appeared anywhere on the page", !(await pageText()).includes(SECRET_KEY));
-      check("no document is left edited by the AI tests", (await dirtyTabs(page)).length === 0);
+      check(
+        "the key never appeared anywhere on the page",
+        !(await pageText()).includes(SECRET_KEY),
+      );
+      check(
+        "no document is left edited by the AI tests",
+        (await dirtyTabs(page)).length === 0,
+      );
       // The Agent view made the panel taller; a double click on the resizer restores its size.
       await page.evaluate(
         `document.querySelector('[aria-label="Resize bottom panel"]')?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`,
