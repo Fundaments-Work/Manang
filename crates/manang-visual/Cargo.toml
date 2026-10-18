@@ -1,0 +1,27 @@
+[package]
+name = "manang-visual"
+description = "Core of Manang's Visual editor: format-adapter trait, span-table encoding and the stateful session host (web-capable, no OS dependencies)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+parking_lot = "0.12"
+ropey = "1.6"
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+proptest = "1"
+# Cycle on purpose: the benches measure the real adapters through the host.
+# Benches and integration tests link the one library build, so types agree.
+manang-markdown = { path = "../manang-markdown" }
+manang-typst = { path = "../manang-typst" }
+
+[[bench]]
+name = "keystroke"
+harness = false

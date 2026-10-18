@@ -50,6 +50,8 @@ manang-diagram = { path = "../crates/manang-diagram" }
 manang-citations = { path = "../crates/manang-citations" }
 manang-agent = { path = "../crates/manang-agent" }
 manang-live-plugin = { path = "../crates/manang-live-plugin" }
+manang-visual = { path = "../crates/manang-visual" }
+manang-visual-plugin = { path = "../crates/manang-visual-plugin" }
 manang-plugins = { path = "../crates/manang-plugins" }
 manang-recovery = { path = "../crates/manang-recovery" }
 manang-wasm-host = { path = "../crates/manang-wasm-host" }
