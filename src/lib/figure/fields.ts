@@ -60,7 +60,8 @@ export function parseField(text: string, bounds: Bounds = {}): number | undefine
 /** `a op b op c` with + - * / and a leading sign, left to right, `*` and `/` first. */
 function evaluate(source: string): number | undefined {
   const tokens = source.match(/\d*\.?\d+(?:e[+-]?\d+)?|[+\-*/]|\S/gi);
-  if (tokens === null || tokens.join("") !== source.replace(/\s+/g, "")) return undefined;
+  if (tokens === null || tokens.join("") !== source.replace(/\s+/g, ""))
+    return undefined;
   const terms: (number | string)[] = [];
   let sign = 1;
   let expectNumber = true;

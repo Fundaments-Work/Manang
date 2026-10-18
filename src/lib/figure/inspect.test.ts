@@ -53,7 +53,10 @@ describe("layoutEdit", () => {
   it("keeps the proportions when locked", () => {
     const op = layoutEdit(scene, ["a"], "height", 100, true);
     if (op === undefined) throw new Error("no op");
-    expect(applyOp(scene, op).scene.nodes[0]).toMatchObject({ width: 200, height: 100 });
+    expect(applyOp(scene, op).scene.nodes[0]).toMatchObject({
+      width: 200,
+      height: 100,
+    });
   });
 
   it("scales a multi-selection from its top left", () => {

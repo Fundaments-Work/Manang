@@ -46,6 +46,13 @@ import {
   type Axis,
   type ZOrder,
 } from "$lib/figure/ops";
+import {
+  displayRange,
+  layoutEdit,
+  moveLayerOp,
+  type DropSide,
+  type LayoutField,
+} from "$lib/figure/inspect";
 import { naturalSize } from "$lib/figure/text";
 import {
   FORMULA_SIZE,
@@ -96,6 +103,7 @@ import {
 import { errorMessage, reportError } from "$lib/kernel";
 import type { FigureApplyResult, FigureOp, FigureSaved } from "$lib/kernel/api";
 
+import { figureUi } from "./figureUi.svelte";
 import { layout } from "./layout.svelte";
 import { mathRenders } from "./mathRenders.svelte";
 import { notice } from "./notice.svelte";
@@ -323,6 +331,7 @@ export class FigureState {
   #formulaTimer: ReturnType<typeof setTimeout> | undefined;
   #press: { readonly screen: Vec; readonly point: Vec; moved: boolean } | null = null;
   #fitted = false;
+  #layerAnchor: string | null = null;
 
   constructor(path: string, scene: FigureScene, backend: FigureBackend, id = 0) {
     this.path = path;
@@ -830,7 +839,7 @@ export class FigureState {
         if (press !== null && !press.moved) return;
         let delta = { x: p.point.x - g.start.x, y: p.point.y - g.start.y };
         this.guides = [];
-        if (!p.alt && g.ids.length > 0) {
+        if (!p.alt && figureUi.snap && g.ids.length > 0) {
           const moved = {
             ...g.startBounds,
             x: g.startBounds.x + delta.x,
@@ -853,7 +862,7 @@ export class FigureState {
           p.shift,
         );
         this.guides = [];
-        if (!p.alt && (g.node.angle ?? 0) === 0 && !p.shift) {
+        if (!p.alt && figureUi.snap && (g.node.angle ?? 0) === 0 && !p.shift) {
           const snapped = snapResize(
             box,
             handleEdges(g.handle),
@@ -1359,6 +1368,51 @@ export class FigureState {
     }
   }
 
+  /** The page size, keeping its background. */
+  setCanvasSize(width: number, height: number): void {
+    if (width === this.scene.width && height === this.scene.height) return;
+    this.edit({ op: "set-canvas", width, height });
+  }
+
+  /** Set one Layout field (X, Y, W or H) of the selection; one undo step. */
+  setLayout(field: LayoutField, value: number): void {
+    if (this.selection.length === 0) return;
+    const op = layoutEdit(
+      this.scene,
+      this.selection,
+      field,
+      value,
+      figureUi.lockAspect,
+    );
+    if (op !== undefined) this.edit(op);
+  }
+
+  /**
+   * A click in the layers panel: alone it selects the layer (and its group),
+   * with Ctrl or Cmd it toggles it, with Shift it selects the range from the
+   * last layer clicked. Switches to the Select tool.
+   */
+  selectLayer(id: string, mode: "replace" | "toggle" | "range"): void {
+    this.cancel();
+    this.tool = "select";
+    if (mode === "range" && this.#layerAnchor !== null) {
+      const ids = displayRange(this.scene, this.#layerAnchor, id);
+      if (ids.length > 0) {
+        this.selection = ids;
+        return;
+      }
+    }
+    this.#layerAnchor = id;
+    const group = expandGroups(this.scene, [id]);
+    this.selection = mode === "toggle" ? toggleSelection(this.selection, group) : group;
+  }
+
+  /** Move a layer next to another in the paint order (one undo step). */
+  moveLayer(id: string, target: string, side: DropSide): void {
+    const op = moveLayerOp(this.scene, id, target, side);
+    if (op !== undefined) this.edit(op);
+  }
+
   /** The page background: a token or `#rrggbb`, or undefined for transparent. */
   setBackground(background: string | undefined): void {
     this.edit({
@@ -1424,6 +1478,33 @@ export class FigureState {
         set: { locked: lock ? true : null },
       })),
     });
+  }
+
+  /** Lock or unlock the nodes `ids`; one undo step. */
+  setLocked(ids: readonly string[], lock: boolean): void {
+    if (ids.length === 0) return;
+    this.edit({
+      op: "batch",
+      ops: ids.map((id) => ({
+        op: "update" as const,
+        id,
+        set: { locked: lock ? true : null },
+      })),
+    });
+  }
+
+  /** Hide or show the nodes `ids` (a hidden node is neither drawn nor exported). */
+  setHidden(ids: readonly string[], hide: boolean): void {
+    if (ids.length === 0) return;
+    this.edit({
+      op: "batch",
+      ops: ids.map((id) => ({
+        op: "update" as const,
+        id,
+        set: { hidden: hide ? true : null },
+      })),
+    });
+    if (hide) this.selection = this.selection.filter((id) => !ids.includes(id));
   }
 
   clear(): void {
