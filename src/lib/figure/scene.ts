@@ -94,6 +94,8 @@ export interface ShapeNode {
   /** Group ids, innermost first. */
   readonly groups?: readonly string[];
   readonly locked?: boolean;
+  /** Not drawn on the canvas or in exports. */
+  readonly hidden?: boolean;
 }
 
 export interface Binding {
@@ -123,6 +125,8 @@ export interface ConnectorNode {
   readonly style?: Style;
   readonly groups?: readonly string[];
   readonly locked?: boolean;
+  /** Not drawn on the canvas or in exports. */
+  readonly hidden?: boolean;
 }
 
 export interface FreedrawNode {
@@ -134,6 +138,8 @@ export interface FreedrawNode {
   readonly style?: Style;
   readonly groups?: readonly string[];
   readonly locked?: boolean;
+  /** Not drawn on the canvas or in exports. */
+  readonly hidden?: boolean;
 }
 
 export type MathLanguage = "typst" | "latex";
@@ -159,6 +165,8 @@ export interface MathNode {
   readonly style?: Style;
   readonly groups?: readonly string[];
   readonly locked?: boolean;
+  /** Not drawn on the canvas or in exports. */
+  readonly hidden?: boolean;
 }
 
 export type FigureNode = ShapeNode | ConnectorNode | FreedrawNode | MathNode;

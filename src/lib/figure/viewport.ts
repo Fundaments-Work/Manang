@@ -148,5 +148,7 @@ export function cachedBounds(node: FigureNode): Rect {
 
 /** The nodes whose bounds meet `area`, in paint order. */
 export function cull(nodes: readonly FigureNode[], area: Rect): FigureNode[] {
-  return nodes.filter((n) => rectsIntersect(cachedBounds(n), area));
+  return nodes.filter(
+    (n) => n.hidden !== true && rectsIntersect(cachedBounds(n), area),
+  );
 }

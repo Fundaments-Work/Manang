@@ -93,7 +93,7 @@ Narrow behaviour: at 1024px everything fits; under 800px the side panel overlays
 
 **Slides.** A `.typ` document viewed as a deck: each heading is a slide. Thumbnail strip (listbox), current slide, Present (F5), full-window presentation (arrows, Space, Esc).
 
-**Figure editor.** Toolbar (select, freehand, rectangle, arrow, formula, clear), copy embed line, save. Scenes load and save as JSON through the project plugin.
+**Figure editor.** One toolbar row in groups (pointer tools, shapes, lines and drawing, text and formulas and Mermaid, history, zoom; Copy embed line and Save at the right), a layers panel on the left (icon, name, lock, visibility; click, Shift-click, F2 rename, drag to reorder), the canvas, and a contextual inspector on the right (the figure when nothing is selected; otherwise Layout, Appearance, Fill, Stroke, Text, Effects, Arrange, each collapsible and remembered). Numeric fields scrub from their labels and show Mixed across a disagreeing selection. Under 860px of studio width the panels become overlays opened from the toolbar. Scenes load and save as JSON through the project plugin.
 
 **Status bar.** Branch (`main*` when dirty), compile state with timing ("Compiled in 9 ms", "Compiling", "2 errors"), a transient notice, caret, words, engine, kernel connection ("Demo kernel" in the browser). Branch and compile state are buttons.
 

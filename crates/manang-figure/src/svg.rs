@@ -73,6 +73,7 @@ pub fn export_region(scene: &FigureScene, frame: Option<&str>) -> Rect {
     let content = scene
         .nodes
         .iter()
+        .filter(|n| !n.hidden())
         .fold(Rect::EMPTY, |acc, n| union_rect(&acc, &node_bounds(n)));
     if content.width == 0.0 && content.height == 0.0 || page.contains_rect(&content) {
         return page;
@@ -160,7 +161,7 @@ pub fn render_svg_with(
         export_frame: options.frame.as_deref(),
         embeds,
     };
-    for node in &scene.nodes {
+    for node in scene.nodes.iter().filter(|n| !n.hidden()) {
         ctx.node(&mut svg, node);
     }
     svg.push_str("</svg>\n");

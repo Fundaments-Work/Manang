@@ -96,6 +96,10 @@
     "distribute-v": "M2 2.5h12 M2 13.5h12 M5 6.5h6v3H5z",
     "to-front": "M8 13V5 M4.5 8.5L8 5l3.5 3.5 M3 2.5h10",
     "to-back": "M8 3v8 M4.5 7.5L8 11l3.5-3.5 M3 13.5h10",
+    ratio: "M3 3.5h10v9H3z M3 12.5L13 3.5",
+    eye: "M1.5 8l3-3.5h7L14.5 8l-3 3.5h-7z M7 7h2v2H7z",
+    "eye-off": "M1.5 8l3-3.5h7L14.5 8l-3 3.5h-7z M2.5 13.5l11-11",
+    layers: "M8 2.5l6 3-6 3-6-3z M2 8.5l6 3 6-3 M2 11.5l6 3 6-3",
   } as const;
 
   export type IconName = keyof typeof PATHS;

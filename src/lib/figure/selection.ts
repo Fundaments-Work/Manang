@@ -57,7 +57,12 @@ export function pickAt(
   let frame: FigureNode | undefined;
   for (let i = scene.nodes.length - 1; i >= 0; i -= 1) {
     const node = scene.nodes[i];
-    if (node === undefined || node.locked === true || !hits(node, p, tolerance))
+    if (
+      node === undefined ||
+      node.locked === true ||
+      node.hidden === true ||
+      !hits(node, p, tolerance)
+    )
       continue;
     if (node.kind === "frame") {
       frame ??= node;
@@ -71,7 +76,10 @@ export function pickAt(
 /** Ids a marquee selects: unlocked nodes wholly inside it, grown to groups. */
 export function marqueeSelect(scene: FigureScene, area: Rect): string[] {
   const inside = scene.nodes
-    .filter((n) => n.locked !== true && rectContainsRect(area, nodeBounds(n)))
+    .filter(
+      (n) =>
+        n.locked !== true && n.hidden !== true && rectContainsRect(area, nodeBounds(n)),
+    )
     .map((n) => n.id);
   return expandGroups(scene, inside);
 }
@@ -94,9 +102,11 @@ export function selectionBounds(scene: FigureScene, ids: readonly string[]): Rec
     .reduce<Rect>((acc, n) => unionRect(acc, nodeBounds(n)), EMPTY_RECT);
 }
 
-/** Every unlocked node id (Ctrl+A). */
+/** Every unlocked, visible node id (Ctrl+A). */
 export function selectAll(scene: FigureScene): string[] {
-  return scene.nodes.filter((n) => n.locked !== true).map((n) => n.id);
+  return scene.nodes
+    .filter((n) => n.locked !== true && n.hidden !== true)
+    .map((n) => n.id);
 }
 
 function translated(node: FigureNode, d: Vec): FigureNode {

@@ -4088,7 +4088,9 @@ async function main() {
     );
     check(
       "a version 1 scene loads (migrated) from the project file",
-      await page.evaluate(`document.body.innerText.includes("4 nodes")`),
+      await page.evaluate(
+        `/Layers\\s*4/.test(document.querySelector('aside[aria-label="Layers"] h2')?.innerText ?? "")`,
+      ),
     );
 
     {
@@ -4274,10 +4276,7 @@ async function main() {
         "the selection's controls appear in the properties column",
         await exists(page, "aside[data-properties] [data-properties-selection]"),
       );
-      await click(
-        page,
-        'aside[aria-label="Shape properties"] button[aria-label="Align top"]',
-      );
+      await click(page, 'aside[aria-label="Inspector"] button[aria-label="Align top"]');
       await sleep(300);
       const r2 = await nodeBox(drawn.rect);
       const e2 = await nodeBox(drawn.ellipse);
@@ -4289,10 +4288,7 @@ async function main() {
       await shoot(page, "17b-figure-properties");
 
       // Group: clicking one member selects the group, so Delete removes both.
-      await click(
-        page,
-        'aside[aria-label="Shape properties"] button[aria-label="Group"]',
-      );
+      await click(page, 'aside[aria-label="Inspector"] button[aria-label="Group"]');
       await sleep(300);
       const empty = at(0.97, 0.05);
       await tap(empty.x, empty.y);
@@ -4644,7 +4640,7 @@ async function main() {
         await tap(before.cx, before.cy);
         const handle = await rect(page, `${CANVAS} [data-handle="se"]`);
         const sizeBefore = await page.evaluate(
-          `document.querySelector('${PROPS} select[aria-label="Formula size"]')?.value`,
+          `document.querySelector('${PROPS} input[aria-label="Formula size"]')?.value`,
         );
         await drag(handle.x, handle.y, handle.x + 80, handle.y + 40);
         const after = await nodeBox(f1);
@@ -4657,7 +4653,7 @@ async function main() {
         check(
           "scaling changes the formula's size (not just its box)",
           (await page.evaluate(
-            `document.querySelector('${PROPS} select[aria-label="Formula size"]')?.value`,
+            `document.querySelector('${PROPS} input[aria-label="Formula size"]')?.value`,
           )) !== sizeBefore,
         );
         await clearSelection();
@@ -4704,7 +4700,7 @@ async function main() {
         check(
           "custom swatches are marked and sit after the tokens",
           await page.evaluate(
-            `(() => { const row = document.querySelector('${PROPS} [data-colour-control="Stroke"] [role="group"]'); const c = row.querySelector('button[data-custom="#d95f02"]'); if (!c) return false; const kids = [...row.children]; return c.classList.contains("mng-custom") && kids.indexOf(c) > kids.findIndex((k) => k.dataset.token === "ink") && getComputedStyle(c, "::after").content !== "none"; })()`,
+            `(() => { const ctl = document.querySelector('${PROPS} [data-colour-control="Stroke"]'); const c = ctl.querySelector('button[data-custom="#d95f02"]'); const ink = ctl.querySelector('button[data-token="ink"]'); if (!c || !ink) return false; return c.classList.contains("mng-custom") && !!(ink.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) && getComputedStyle(c, "::after").content !== "none"; })()`,
           ),
         );
         check(
@@ -4772,11 +4768,12 @@ async function main() {
           (await attr(boxId, "path", "fill-opacity")) === "0.2",
         );
         await page.evaluate(`(() => {
-          const r = document.querySelector('${PROPS} input[aria-label="Fill opacity"]');
-          r.value = "70";
-          r.dispatchEvent(new Event("change", { bubbles: true }));
+          const i = document.querySelector('${PROPS} input[aria-label="Fill opacity"]');
+          i.focus();
+          i.select();
         })()`);
-        await sleep(250);
+        await insertText(page, "70");
+        await press(page, "Enter", { wait: 300 });
         check(
           "fill opacity is separate from the overall opacity",
           (await attr(boxId, "path", "fill-opacity")) === "0.7" &&
@@ -5054,6 +5051,422 @@ async function main() {
           !(await dirtyTabs(page)).includes("figures/state_lattice.figure"),
         );
       }
+
+      /* ---------------------------------------------------------------- */
+      /* The inspector and the layers panel                                */
+      /* ---------------------------------------------------------------- */
+      section("Figure studio: inspector and layers");
+      const LAYERS = 'aside[aria-label="Layers"]';
+      const field = (name) => `${PROPS} input[aria-label="${name}"]`;
+      const fieldValue = (name) =>
+        page.evaluate(
+          `document.querySelector(${JSON.stringify(field(name))})?.value ?? null`,
+        );
+      const focusField = (name) =>
+        page.evaluate(`document.querySelector(${JSON.stringify(field(name))}).focus()`);
+      const typeInto = async (name, text, key = "Enter") => {
+        await focusField(name);
+        await insertText(page, text);
+        if (key !== null) await press(page, key, { wait: 300 });
+      };
+      const sceneNode = async (id) => (await sceneNodes()).find((n) => n.id === id);
+      const round2 = (n) => String(Math.round(n * 100) / 100);
+      await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
+      await clearSelection();
+
+      {
+        const b = await nodeBox(boxId);
+        await tap(b.cx, b.cy);
+        const sections = await page.evaluate(
+          `[...document.querySelectorAll('${PROPS} [data-section]')].map((e) => e.dataset.section)`,
+        );
+        check(
+          "the inspector's sections come in a fixed order",
+          JSON.stringify(sections) ===
+            JSON.stringify([
+              "layout",
+              "appearance",
+              "fill",
+              "stroke",
+              "text",
+              "effects",
+              "arrange",
+            ]),
+          JSON.stringify(sections),
+        );
+        check(
+          "the inspector names what is selected",
+          (await page.evaluate(
+            `document.querySelector('${PROPS} [data-inspector-title]')?.innerText`,
+          )) === "Rectangle",
+        );
+        const n0 = await sceneNode(boxId);
+        check(
+          "Layout shows the selection's box",
+          (await fieldValue("X position")) === round2(n0.x) &&
+            (await fieldValue("Y position")) === round2(n0.y) &&
+            (await fieldValue("Width")) === round2(n0.width) &&
+            (await fieldValue("Height")) === round2(n0.height),
+        );
+        await typeInto("Width", String(n0.width + 20));
+        await sleep(300);
+        const n1 = await sceneNode(boxId);
+        check(
+          "typing a width and pressing Enter resizes the shape and nothing else",
+          Math.abs(n1.width - (n0.width + 20)) < 0.01 &&
+            n1.height === n0.height &&
+            n1.x === n0.x,
+          JSON.stringify({ n0: n0.width, n1: n1.width }),
+        );
+        await typeInto("Width", "999", "Escape");
+        check(
+          "Escape puts the old value back and changes nothing",
+          (await fieldValue("Width")) === round2(n1.width) &&
+            (await sceneNode(boxId)).width === n1.width,
+          String(await fieldValue("Width")),
+        );
+        await typeInto("Width", "abc", "Enter");
+        check(
+          "text that is not a number is ignored",
+          (await sceneNode(boxId)).width === n1.width,
+        );
+        await focusField("Width");
+        await press(page, "ArrowUp", { shift: true, wait: 150 });
+        check(
+          "ArrowUp with Shift steps the draft by ten",
+          Math.abs(Number(await fieldValue("Width")) - (n1.width + 10)) < 0.02,
+          String(await fieldValue("Width")),
+        );
+        await press(page, "Enter", { wait: 300 });
+        const n2 = await sceneNode(boxId);
+        check(
+          "Enter applies the stepped value",
+          Math.abs(n2.width - (n1.width + 10)) < 0.02,
+        );
+        // Drag the label to scrub; Shift makes it ten times faster.
+        const label = await rect(page, `${PROPS} [data-field="Width"] .mng-num-label`);
+        await mouse(page, "mouseMoved", label.x, label.y);
+        await mouse(page, "mousePressed", label.x, label.y);
+        for (let i = 1; i <= 4; i += 1) {
+          await mouse(page, "mouseMoved", label.x + i * 10, label.y);
+        }
+        await mouse(page, "mouseReleased", label.x + 40, label.y);
+        await sleep(300);
+        const n3 = await sceneNode(boxId);
+        check(
+          "dragging a field's label scrubs the value (4px a step)",
+          Math.abs(n3.width - (n2.width + 10)) < 0.02,
+          `${n2.width} -> ${n3.width}`,
+        );
+        const label2 = await rect(page, `${PROPS} [data-field="Width"] .mng-num-label`);
+        const shiftMove = (type, x, y) =>
+          page.send("Input.dispatchMouseEvent", {
+            type,
+            x,
+            y,
+            button: "left",
+            buttons: type === "mouseReleased" ? 0 : 1,
+            clickCount: 1,
+            modifiers: 8,
+          });
+        await shiftMove("mouseMoved", label2.x, label2.y);
+        await shiftMove("mousePressed", label2.x, label2.y);
+        for (let i = 1; i <= 4; i += 1) {
+          await shiftMove("mouseMoved", label2.x + i * 5, label2.y);
+        }
+        await shiftMove("mouseReleased", label2.x + 20, label2.y);
+        await sleep(300);
+        const n4 = await sceneNode(boxId);
+        check(
+          "Shift while scrubbing multiplies the step by ten",
+          Math.abs(n4.width - (n3.width + 50)) < 0.02,
+          `${n3.width} -> ${n4.width}`,
+        );
+        for (let i = 0; i < 4; i += 1)
+          await press(page, "z", { ctrl: true, wait: 400 });
+        check(
+          "each field change is one undo step, from inside the field too",
+          Math.abs((await sceneNode(boxId)).width - n0.width) < 0.02,
+        );
+        await shoot(page, "17j-figure-inspector");
+
+        // Mixed values across a selection.
+        const other = (await nodeIds("ellipse"))[0];
+        await typeInto("Opacity", "50");
+        const e = await nodeBox(other);
+        const b2 = await nodeBox(boxId);
+        await tap(b2.cx, b2.cy);
+        await tap(e.cx, e.cy, { shift: true });
+        check(
+          "a setting that differs across the selection shows Mixed",
+          await page.evaluate(
+            `(() => { const i = document.querySelector(${JSON.stringify(field("Opacity"))}); return i.value === "" && i.placeholder === "Mixed"; })()`,
+          ),
+        );
+        await typeInto("Opacity", "80");
+        await sleep(300);
+        const opacityOf = async (id) => (await sceneNode(id)).style?.opacity;
+        check(
+          "typing over Mixed sets every selected node",
+          (await opacityOf(boxId)) === 80 && (await opacityOf(other)) === 80,
+        );
+        await press(page, "z", { ctrl: true, wait: 400 });
+        check(
+          "and one undo takes it back on all of them",
+          (await opacityOf(boxId)) === 50 && (await opacityOf(other)) !== 80,
+        );
+        await press(page, "z", { ctrl: true, wait: 400 });
+
+        // Sections collapse, and remember it.
+        await tap(b2.cx, b2.cy);
+        await click(page, `${PROPS} [data-section="fill"] button[aria-expanded]`);
+        check(
+          "a section collapses from its header and the choice is remembered",
+          !(await exists(page, `${PROPS} [data-colour-control="Fill"]`)) &&
+            (await page.evaluate(
+              `JSON.parse(localStorage.getItem("manang.figure.ui") ?? "{}").collapsed?.includes("fill") === true`,
+            )),
+        );
+        await click(page, `${PROPS} [data-section="fill"] button[aria-expanded]`);
+        check(
+          "and opens again",
+          await exists(page, `${PROPS} [data-colour-control="Fill"]`),
+        );
+        await clearSelection();
+      }
+
+      // --- The layers panel.
+      {
+        const ids = () =>
+          page.evaluate(
+            `[...document.querySelectorAll('${LAYERS} [data-layer]')].map((e) => e.dataset.layer)`,
+          );
+        const total = await sceneCount();
+        const listed = await ids();
+        const paint = (await sceneNodes()).map((n) => n.id);
+        check(
+          "the layers panel lists every node, topmost first",
+          listed.length === total &&
+            JSON.stringify(listed) === JSON.stringify([...paint].reverse()),
+          `${listed.length} vs ${total}`,
+        );
+        check(
+          "the layers panel is a labelled listbox",
+          await page.evaluate(
+            `(() => { const l = document.querySelector('${LAYERS} [role="listbox"]'); return l?.getAttribute("aria-label") === "Layers" && l.querySelectorAll('[role="option"]').length > 0; })()`,
+          ),
+        );
+        await click(page, `${LAYERS} [data-layer="${dId}"]`);
+        check(
+          "clicking a layer selects it on the canvas",
+          await exists(page, `${CANVAS} [data-selected="${dId}"]`),
+        );
+        await clearSelection();
+        const bb = await nodeBox(boxId);
+        await tap(bb.cx, bb.cy);
+        check(
+          "selecting on the canvas highlights the layer",
+          await exists(page, `${LAYERS} [data-layer="${boxId}"][aria-selected="true"]`),
+        );
+        // Shift-click a range.
+        const first = await rect(page, `${LAYERS} [data-layer="${listed[0]}"]`);
+        await tap(first.x, first.y);
+        const last = await rect(page, `${LAYERS} [data-layer="${listed[2]}"]`);
+        await tap(last.x, last.y, { shift: true });
+        check(
+          "Shift-click selects the range of layers",
+          (await page.evaluate(
+            `document.querySelectorAll('${LAYERS} [aria-selected="true"]').length`,
+          )) === 3,
+        );
+        await clearSelection();
+
+        // Rename with F2.
+        await page.evaluate(
+          `document.querySelector('${LAYERS} [data-layer="${boxId}"]').focus()`,
+        );
+        await press(page, "F2", { wait: 250 });
+        check(
+          "F2 renames the focused layer in place",
+          await exists(page, `${LAYERS} input[data-rename]`),
+        );
+        await page.evaluate(
+          `document.querySelector('${LAYERS} input[data-rename]').select()`,
+        );
+        await insertText(page, "Renamed box");
+        await press(page, "Enter", { wait: 350 });
+        check(
+          "Enter commits the name (the label)",
+          (await sceneNode(boxId)).label === "Renamed box" &&
+            (await page.evaluate(
+              `document.querySelector('${LAYERS} [data-layer="${boxId}"] [data-layer-name]')?.innerText.trim()`,
+            )) === "Renamed box",
+        );
+        await page.evaluate(
+          `document.querySelector('${LAYERS} [data-layer="${boxId}"]').focus()`,
+        );
+        await press(page, "F2", { wait: 250 });
+        await insertText(page, "discard");
+        await press(page, "Escape", { wait: 250 });
+        check(
+          "Escape cancels a rename",
+          (await sceneNode(boxId)).label === "Renamed box",
+        );
+
+        // Lock and visibility.
+        await click(page, `${LAYERS} [data-layer="${dId}"] [data-layer-lock]`);
+        check("the lock toggle locks the node", (await sceneNode(dId)).locked === true);
+        await click(page, `${LAYERS} [data-layer="${dId}"] [data-layer-lock]`);
+        check("and unlocks it", (await sceneNode(dId)).locked !== true);
+        await click(page, `${LAYERS} [data-layer="${dId}"] [data-layer-visibility]`);
+        await sleep(200);
+        check(
+          "the visibility toggle hides the node on the canvas",
+          (await sceneNode(dId)).hidden === true && !(await nodeIds()).includes(dId),
+        );
+        await click(page, `${LAYERS} [data-layer="${dId}"] [data-layer-visibility]`);
+        await sleep(200);
+        check(
+          "and shows it again",
+          (await sceneNode(dId)).hidden !== true && (await nodeIds()).includes(dId),
+        );
+
+        // Drag a layer above another.
+        const all = (await sceneNodes()).map((n) => n.id);
+        const a = all[0];
+        const target = all[all.length - 2];
+        await page.evaluate(`(() => {
+          const from = document.querySelector('${LAYERS} [data-layer="${a}"]');
+          const to = document.querySelector('${LAYERS} [data-layer="${target}"]');
+          to.scrollIntoView({ block: "nearest" });
+          const dt = new DataTransfer();
+          const r = to.getBoundingClientRect();
+          const fire = (el, type, y) =>
+            el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 5, clientY: y }));
+          fire(from, "dragstart", r.top);
+          fire(to, "dragover", r.top + 2);
+          fire(to, "drop", r.top + 2);
+          fire(from, "dragend", r.top);
+        })()`);
+        await sleep(400);
+        const after = (await sceneNodes()).map((n) => n.id);
+        check(
+          "dragging a layer onto another changes the stacking order",
+          after.indexOf(a) === after.indexOf(target) + 1,
+          JSON.stringify({ all, after }),
+        );
+        await press(page, "z", { ctrl: true, wait: 400 });
+        check(
+          "and it is one undo step",
+          JSON.stringify((await sceneNodes()).map((n) => n.id)) === JSON.stringify(all),
+        );
+
+        await shoot(page, "17k-figure-layers");
+        const open0 = await rect(page, LAYERS);
+        await click(page, `${LAYERS} [data-layers-toggle]`);
+        const shut = await rect(page, LAYERS);
+        check(
+          "the layers panel collapses to a strip",
+          shut.w < 48 && open0.w > 150,
+          JSON.stringify({ open: open0.w, shut: shut.w }),
+        );
+        await click(page, `${LAYERS} [data-layers-toggle]`);
+        check("and opens again", (await rect(page, LAYERS)).w > 150);
+      }
+
+      // --- Keyboard: the toolbar is one tab stop with arrow keys along it.
+      {
+        await page.evaluate(
+          `document.querySelector('${FIG_TOOLS} button[aria-label="Select"]').focus()`,
+        );
+        await press(page, "ArrowRight", { wait: 150 });
+        check(
+          "the arrow keys move along the toolbar",
+          (await page.evaluate(
+            `document.activeElement?.getAttribute("aria-label")`,
+          )) === "Hand",
+        );
+        check(
+          "the toolbar has one tab stop (the active tool)",
+          (await page.evaluate(
+            `document.querySelectorAll('${FIG_TOOLS} button[tabindex="0"]').length`,
+          )) === 1,
+        );
+        check(
+          "every tool names its shortcut in its tooltip",
+          await page.evaluate(
+            `[...document.querySelectorAll('${FIG_TOOLS} [aria-pressed][aria-keyshortcuts]')].every((b) => /\\(.+\\)$/.test(b.title))`,
+          ),
+        );
+        await click(page, `${FIG_TOOLS} button[aria-label="Select"]`);
+      }
+
+      // --- Narrow windows: the panels become overlays and the toolbar still fits.
+      for (const [w, shot] of [
+        [1024, "17l-figure-1024"],
+        [640, "17m-figure-640"],
+      ]) {
+        await resize(page, w, 820);
+        await sleep(300);
+        // Under 800px the side panel overlays the editor, covering the toolbar's
+        // left end; close it as a person would before using the toolbar.
+        if (w < 800 && (await exists(page, 'aside[aria-label="Figures panel"]'))) {
+          await click(
+            page,
+            'nav[aria-label="Workbench views"] button[aria-label="Figures"]',
+          );
+          await sleep(300);
+        }
+        check(
+          `at ${w}px the toolbar and the page fit without sideways scrolling`,
+          await page.evaluate(
+            `(() => { const bar = document.querySelector('${FIG_TOOLS}'); return document.documentElement.scrollWidth <= window.innerWidth && bar.scrollWidth <= bar.clientWidth; })()`,
+          ),
+        );
+        const narrowNow = await page.evaluate(
+          `document.querySelector('${FIG_TOOLS} button[aria-label="Layers"]') !== null`,
+        );
+        if (narrowNow) {
+          check(
+            `at ${w}px the panels are closed overlays, opened from the toolbar`,
+            !(await exists(page, LAYERS)) &&
+              !(await exists(page, "aside[data-properties]")),
+          );
+          await click(page, `${FIG_TOOLS} button[aria-label="Layers"]`);
+          check(
+            `at ${w}px the layers panel opens over the canvas`,
+            await page.evaluate(
+              `(() => { const a = document.querySelector('${LAYERS}'); if (!a) return false; const r = a.getBoundingClientRect(); return getComputedStyle(a).position === "absolute" && r.left >= 0 && r.right <= window.innerWidth; })()`,
+            ),
+          );
+          await shoot(page, `${shot}-layers`);
+          await click(page, `${FIG_TOOLS} button[aria-label="Inspector"]`);
+          check(
+            `at ${w}px the inspector opens over the canvas and replaces the layers`,
+            (await page.evaluate(
+              `(() => { const a = document.querySelector("aside[data-properties]"); if (!a) return false; const r = a.getBoundingClientRect(); return getComputedStyle(a).position === "absolute" && r.right <= window.innerWidth; })()`,
+            )) && !(await exists(page, LAYERS)),
+          );
+          await shoot(page, shot);
+          await click(page, `${FIG_TOOLS} button[aria-label="Inspector"]`);
+          check(
+            `at ${w}px the inspector closes again`,
+            !(await exists(page, "aside[data-properties]")),
+          );
+        } else {
+          check(
+            `at ${w}px the studio still has room for both panels beside the canvas`,
+            (await exists(page, LAYERS)) &&
+              (await exists(page, "aside[data-properties]")),
+          );
+          await shoot(page, shot);
+        }
+      }
+      await resize(page, 1280, 820);
+      await sleep(300);
+      await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
+      await clearSelection();
+      await press(page, "s", { ctrl: true, wait: 500 });
     }
 
     // A figure whose SVG was never written: Copy embed line writes it first.
