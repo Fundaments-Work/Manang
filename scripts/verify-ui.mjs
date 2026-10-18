@@ -681,10 +681,64 @@ async function main() {
     );
     check("main.typ opened in a tab on open", (await activeTab(page)) === "main.typ");
     check(
-      "breadcrumb names the project and file",
+      "the title bar has the logo only: no name, no breadcrumb",
       await page.evaluate(
-        `document.querySelector('nav[aria-label="Breadcrumb"]').innerText.replace(/\\s+/g, " ").includes("Entropy paper / main.typ")`,
+        `(() => { const b = document.querySelector('header button[aria-label="Home"]'); return b.innerText.trim() === "" && !document.querySelector('header nav[aria-label="Breadcrumb"]') && !!b.querySelector("svg"); })()`,
       ),
+    );
+    {
+      const logo = await rect(page, 'header button[aria-label="Home"]');
+      const colour = () =>
+        page.evaluate(
+          `getComputedStyle(document.querySelector('header button[aria-label="Home"] svg')).color`,
+        );
+      const bg = () =>
+        page.evaluate(
+          `getComputedStyle(document.querySelector('header button[aria-label="Home"]')).backgroundColor`,
+        );
+      const before = await colour();
+      await mouse(page, "mouseMoved", logo.x, logo.y);
+      await sleep(250);
+      check(
+        "hovering the logo turns it lime, without a background",
+        (await colour()) !== before &&
+          (await colour()) === "rgb(198, 241, 53)" &&
+          ["rgba(0, 0, 0, 0)", "transparent"].includes(await bg()),
+        `${before} -> ${await colour()}, bg ${await bg()}`,
+      );
+      await mouse(page, "mouseMoved", 640, 400);
+      // Every icon button turns lime on hover, with no background: a shared
+      // icon button (the Files panel header) and an activity-bar button. (The
+      // window controls only exist in the desktop app.)
+      for (const [name, selector] of [
+        ["a panel icon button", "#side-panel button.mng-icon-btn"],
+        [
+          "an activity-bar button",
+          'nav[aria-label="Workbench views"] button[aria-label="Search"]',
+        ],
+      ]) {
+        const target = await rect(page, selector);
+        if (target === null) {
+          check(`hover colour: ${name} exists`, false);
+          continue;
+        }
+        await mouse(page, "mouseMoved", target.x, target.y);
+        await sleep(250);
+        const seen = await page.evaluate(
+          `(() => { const s = getComputedStyle(document.querySelector(${JSON.stringify(selector)})); return s.color + " | " + s.backgroundColor; })()`,
+        );
+        check(
+          `hovering ${name} turns it lime, without a background`,
+          seen.startsWith("rgb(198, 241, 53)") &&
+            /\| (rgba\(0, 0, 0, 0\)|transparent)$/.test(seen),
+          seen,
+        );
+        await mouse(page, "mouseMoved", 640, 400);
+      }
+    }
+    check(
+      "the window title names the file and the project",
+      await page.evaluate(`document.title === "main.typ — Entropy paper"`),
     );
     check(
       "status bar shows engine, caret, words, git branch and kernel",
@@ -2780,10 +2834,7 @@ async function main() {
 
     /* ------------------------------------------------------------------ */
     section("Home inside a project, and switching");
-    const crumb = (cdp) =>
-      cdp.evaluate(
-        `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.replace(/\\s+/g, " ") ?? ""`,
-      );
+    const crumb = (cdp) => cdp.evaluate(`document.title`);
     await click(page, 'header button[aria-label="Home"]');
     await expectEventually(
       page,
@@ -2820,14 +2871,12 @@ async function main() {
     // Switch from Home.
     await click(page, 'header button[aria-label="Home"]');
     await clickText(page, "[data-project] button", "Lecture notes");
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Lecture notes")`,
-      { label: "switched to Lecture notes" },
-    );
+    await waitFor(page, `document.title.includes("Lecture notes")`, {
+      label: "switched to Lecture notes",
+    });
     check(
       "switching opens the other project's main file",
-      (await crumb(page)).includes("Lecture notes / index.md"),
+      (await crumb(page)).includes("index.md — Lecture notes"),
       await crumb(page),
     );
     check(
@@ -2853,11 +2902,9 @@ async function main() {
     await shoot(page, "24-switcher");
     await insertText(page, "entropy");
     await press(page, "Enter", { wait: 500 });
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
-      { label: "switched back" },
-    );
+    await waitFor(page, `document.title.includes("Entropy paper")`, {
+      label: "switched back",
+    });
     check(
       "the switcher opens the project and its earlier tabs come back",
       (await tabNames(page)).length > 1 && (await tabNames(page)).includes("main.typ"),
@@ -2885,20 +2932,16 @@ async function main() {
     await insertText(page, "lecture");
     await press(page, "Enter", { wait: 400 });
     await clickText(page, '[role="alertdialog"] button', "Don't save");
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Lecture notes")`,
-      { label: "switched after discarding" },
-    );
+    await waitFor(page, `document.title.includes("Lecture notes")`, {
+      label: "switched after discarding",
+    });
     check("discarding switches", (await crumb(page)).includes("Lecture notes"));
     await press(page, "o", { ctrl: true, synthetic: true });
     await insertText(page, "entropy");
     await press(page, "Enter", { wait: 500 });
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
-      { label: "back in Entropy paper" },
-    );
+    await waitFor(page, `document.title.includes("Entropy paper")`, {
+      label: "back in Entropy paper",
+    });
 
     section("LaTeX and Markdown preview");
     const doc = await newPage(browser);

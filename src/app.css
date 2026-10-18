@@ -285,9 +285,9 @@
       background-color var(--duration-fast) var(--ease-manang),
       color var(--duration-fast) var(--ease-manang);
   }
+  /* Hover is the signal colour, not a background. */
   .mng-icon-btn:hover:not(:disabled) {
-    background: var(--mng-surface-hi);
-    color: var(--mng-text);
+    color: var(--mng-accent);
   }
   .mng-icon-btn:disabled {
     color: var(--mng-text-muted);
@@ -450,4 +450,14 @@
   100% {
     opacity: 0;
   }
+}
+
+/*
+ * Hover is the signal colour, never a background (the logo, the activity bar,
+ * the window controls). Unlayered on purpose: it must beat the text-* utilities
+ * that set the resting colour, and cascade layers rank above specificity. Plain
+ * CSS rather than hover:, which Tailwind wraps in a hover-capability media query.
+ */
+.mng-lime-hover:hover:not(:disabled) {
+  color: var(--mng-accent);
 }

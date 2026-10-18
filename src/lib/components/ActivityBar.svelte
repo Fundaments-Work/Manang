@@ -83,7 +83,7 @@
     data-view={item.view}
     class="group relative flex h-12 w-12 shrink-0 items-center justify-center inset-focus {needsProject
       ? 'opacity-40'
-      : ''} {open ? 'text-text' : 'text-text-60 hover:text-text'}"
+      : ''} {open ? 'text-text' : 'text-text-60 mng-lime-hover'}"
     aria-label={item.label}
     aria-pressed={open}
     aria-disabled={needsProject}
