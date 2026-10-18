@@ -376,12 +376,26 @@ fn parse_diagnostic(source: &str, diag: &TerminalDiagnostic) -> Diagnostic {
     let details = diag.terminal_diagnostic_details();
     let message = diag.terminal_safe_message();
     let code = Some(details.code);
-    match details.span {
-        Some(span) => {
-            Diagnostic::from_byte_span(source, span.start, span.end, Severity::Error, message, code)
+    let span = details
+        .span
+        .map(|span| (span.start, span.end))
+        .or_else(|| trailing_offset(&message).map(|at| (at, at)));
+    match span {
+        Some((start, end)) => {
+            Diagnostic::from_byte_span(source, start, end, Severity::Error, message, code)
         }
         None => Diagnostic::whole_source(source, Severity::Error, message, code),
     }
+}
+
+/// Some merman lexer errors carry no span but end in `at <byte offset>`
+/// (e.g. "Unexpected character at 33"); recover the location from it.
+fn trailing_offset(message: &str) -> Option<usize> {
+    let (_, digits) = message.trim_end().rsplit_once(" at ")?;
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
 }
 
 fn render_error(source: &str, error: RenderError) -> DiagramError {
