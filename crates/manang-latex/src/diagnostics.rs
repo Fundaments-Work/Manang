@@ -46,7 +46,7 @@ impl Diagnostic {
 
 /// Undo TeX's hard wrapping: a line of exactly [`WRAP_WIDTH`] characters
 /// continues on the next one.
-fn unwrap_lines(log: &str) -> Vec<String> {
+pub(crate) fn unwrap_lines(log: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut continuing = false;
     for raw in log.lines() {
@@ -126,9 +126,9 @@ pub fn parse_tex_log(log: &str, main: &str) -> Vec<Diagnostic> {
         let line = lines[i].as_str();
         let consumed = if let Some(rest) = line.strip_prefix("! ") {
             Some(parse_error_block(&lines, i, rest, &stack, &mut out))
-        } else if let Some(d) = parse_file_line_error(line) {
+        } else if let Some((d, consumed)) = parse_file_line_error(&lines, i) {
             out.push(d);
-            Some(1)
+            Some(consumed)
         } else if line.starts_with("Overfull \\") || line.starts_with("Underfull \\") {
             Some(parse_box_block(&lines, i, &stack, &mut out))
         } else if is_warning_start(line) {
@@ -209,7 +209,8 @@ fn parse_error_block(
 }
 
 /// `path.tex:12: message`, as printed with `-file-line-error`.
-fn parse_file_line_error(line: &str) -> Option<Diagnostic> {
+fn parse_file_line_error(lines: &[String], at: usize) -> Option<(Diagnostic, usize)> {
+    let line = lines.get(at)?.as_str();
     let (path, rest) = line.split_once(':')?;
     let (number, message) = rest.split_once(':')?;
     let n: u32 = number.parse().ok()?;
@@ -220,22 +221,64 @@ fn parse_file_line_error(line: &str) -> Option<Diagnostic> {
     if !looks_like_file || path.contains(' ') {
         return None;
     }
-    let message = message.trim().to_owned();
+    let mut message = message.trim().trim_end_matches(['.', ' ']).to_owned();
+    // `l.14 \includegraphics` follows: the text up to the error, whose last
+    // word is the offending token; the rest of the source line comes next.
+    let mut token = None;
+    let mut consumed = 1;
+    if let Some(context) = lines.get(at + 1).and_then(|l| l.strip_prefix("l."))
+        && context.starts_with(|c: char| c.is_ascii_digit())
+    {
+        let digits: String = context.chars().take_while(char::is_ascii_digit).collect();
+        token = context[digits.len()..]
+            .split_whitespace()
+            .last()
+            .map(str::to_owned);
+        consumed = 2;
+        if lines
+            .get(at + 2)
+            .is_some_and(|l| l.starts_with(' ') && !l.trim().is_empty())
+        {
+            consumed = 3;
+        }
+    }
+    let token = token.filter(|t| t.starts_with('\\'));
+    if message == "Undefined control sequence"
+        && let Some(t) = token.as_deref()
+    {
+        message = format!("{message}: {t}");
+    }
     let mut d = Diagnostic::new(Severity::Error, message.clone());
     d.file = Some(path.trim_start_matches("./").to_owned());
     d.line = Some(n);
-    d.hint = error_hint(&message, None);
-    Some(d)
+    d.hint = error_hint(&message, token.as_deref());
+    Some((d, consumed))
 }
 
 fn error_hint(message: &str, token: Option<&str>) -> Option<String> {
     if message.starts_with("Undefined control sequence") {
         return Some(match token.filter(|t| t.starts_with('\\')) {
-            Some(t) => format!(
-                "`{t}` is not defined: check the spelling or load the package that provides it"
-            ),
+            Some(t) => match package_for(t) {
+                Some(package) => format!(
+                    "`{t}` comes from the `{package}` package: add `\\usepackage{{{package}}}` \
+                     to the preamble"
+                ),
+                None => format!(
+                    "`{t}` is not defined: check the spelling or load the package that provides it"
+                ),
+            },
             None => "check the spelling or load the package that provides this command".to_owned(),
         });
+    }
+    if let Some(name) = message
+        .strip_prefix("LaTeX Error: Environment ")
+        .and_then(|r| r.strip_suffix(" undefined"))
+        && let Some(package) = package_for_environment(name)
+    {
+        return Some(format!(
+            "the `{name}` environment comes from the `{package}` package: add \
+             `\\usepackage{{{package}}}` to the preamble"
+        ));
     }
     if message.contains("not found") && (message.contains("File `") || message.contains("File '")) {
         return Some(
@@ -264,6 +307,59 @@ fn error_hint(message: &str, token: Option<&str>) -> Option<String> {
         return Some("an environment is closed with the wrong `\\end{...}`".to_owned());
     }
     None
+}
+
+/// The package that defines a commonly used command, for the "undefined
+/// control sequence" hint. Only unambiguous, widely used ones.
+fn package_for(command: &str) -> Option<&'static str> {
+    Some(match command {
+        "\\includegraphics" | "\\graphicspath" | "\\rotatebox" | "\\scalebox" | "\\resizebox" => {
+            "graphicx"
+        }
+        "\\textcolor" | "\\color" | "\\definecolor" | "\\colorbox" | "\\fcolorbox" => "xcolor",
+        "\\url" | "\\href" | "\\hyperref" | "\\autoref" | "\\nameref" => "hyperref",
+        "\\mathbb" | "\\mathfrak" | "\\checkmark" | "\\leqslant" | "\\geqslant" => "amssymb",
+        "\\text" | "\\tag" | "\\eqref" | "\\dfrac" | "\\tfrac" | "\\binom" | "\\boldsymbol"
+        | "\\substack" | "\\intertext" | "\\operatorname" => "amsmath",
+        "\\toprule" | "\\midrule" | "\\bottomrule" | "\\cmidrule" => "booktabs",
+        "\\multirow" => "multirow",
+        "\\SI" | "\\si" | "\\num" | "\\qty" | "\\unit" => "siunitx",
+        "\\lstinline" | "\\lstlisting" | "\\lstset" => "listings",
+        "\\subfloat" | "\\subcaption" | "\\captionof" => "subcaption",
+        "\\cref" | "\\Cref" | "\\crefrange" => "cleveref",
+        "\\citep" | "\\citet" | "\\citeauthor" | "\\citeyear" | "\\citealp" => "natbib",
+        "\\bm" => "bm",
+        "\\tikz" | "\\draw" | "\\node" | "\\fill" | "\\path" => "tikz",
+        "\\includepdf" => "pdfpages",
+        "\\FloatBarrier" => "placeins",
+        "\\xspace" => "xspace",
+        "\\cancel" | "\\bcancel" => "cancel",
+        "\\hl" => "soul",
+        "\\mathscr" => "mathrsfs",
+        "\\mathbbm" => "bbm",
+        "\\csvreader" => "csvsimple",
+        "\\textbackslash" | "\\textless" => return None,
+        _ => return None,
+    })
+}
+
+fn package_for_environment(name: &str) -> Option<&'static str> {
+    Some(
+        match name.trim_matches(|c| c == '`' || c == '\'' || c == ' ') {
+            "align" | "align*" | "equation*" | "gather" | "gather*" | "multline" | "multline*"
+            | "split" | "cases" | "aligned" | "alignat" | "flalign" | "matrix" | "pmatrix"
+            | "bmatrix" | "vmatrix" => "amsmath",
+            "tikzpicture" => "tikz",
+            "lstlisting" => "listings",
+            "subfigure" | "subtable" => "subcaption",
+            "algorithm" | "algorithmic" => "algorithm2e",
+            "tabularx" => "tabularx",
+            "longtable" => "longtable",
+            "multicols" => "multicol",
+            "theorem" | "lemma" | "proof" => "amsthm",
+            _ => return None,
+        },
+    )
 }
 
 fn is_warning_start(line: &str) -> bool {
@@ -437,6 +533,56 @@ fn bibtex_hint(message: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    /// The user's own project: `\includegraphics` without `graphicx`, in the
+    /// `-file-line-error` form the plugin runs TeX with.
+    const MISSING_GRAPHICX: &str = "(./main.tex\n\
+./main.tex:14: Undefined control sequence.\n\
+l.14 \\includegraphics\n\
+                     [width=0.8\\linewidth]{figures/untitled.pdf}\n\
+\n\
+./main.tex:14: Missing number, treated as zero.\n\
+l.14 \\includegraphics[\n\
+                      width=0.8\\linewidth]{figures/untitled.pdf}\n";
+
+    #[test]
+    fn an_undefined_command_is_named_and_its_package_suggested() {
+        let found = parse_tex_log(MISSING_GRAPHICX, "main.tex");
+        let first = &found[0];
+        assert_eq!(
+            first.message,
+            "Undefined control sequence: \\includegraphics"
+        );
+        assert_eq!(first.file.as_deref(), Some("main.tex"));
+        assert_eq!(first.line, Some(14));
+        let hint = first.hint.as_deref().unwrap_or_default();
+        assert!(hint.contains("graphicx"), "{hint}");
+        assert!(hint.contains("\\usepackage{graphicx}"), "{hint}");
+        // The context lines are consumed, not reported as errors of their own.
+        assert!(found.iter().all(|d| !d.message.starts_with("l.14")));
+    }
+
+    #[test]
+    fn an_unknown_command_gets_the_generic_hint() {
+        let log = "./a.tex:3: Undefined control sequence.\nl.3 \\frobnicate\n\n";
+        let found = parse_tex_log(log, "a.tex");
+        assert_eq!(found[0].message, "Undefined control sequence: \\frobnicate");
+        assert!(
+            found[0]
+                .hint
+                .as_deref()
+                .unwrap_or_default()
+                .contains("check the spelling")
+        );
+    }
+
+    #[test]
+    fn a_missing_environment_package_is_suggested() {
+        let log = "! LaTeX Error: Environment align undefined.\n\nSee the LaTeX manual.\nl.5 \\begin{align}\n";
+        let found = parse_tex_log(log, "a.tex");
+        let hint = found[0].hint.as_deref().unwrap_or_default();
+        assert!(hint.contains("amsmath"), "{hint}");
+    }
+
     use super::*;
 
     #[test]

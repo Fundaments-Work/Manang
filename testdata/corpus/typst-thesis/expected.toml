@@ -1,0 +1,4 @@
+engine = "typst"
+main = "main.typ"
+compile = true
+pages = 40

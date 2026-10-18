@@ -1,0 +1,4 @@
+[project]
+engine = "typst"
+name = "Deliberately Broken Document for Diagnostics"
+main = "main.typ"

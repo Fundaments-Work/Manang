@@ -1,0 +1,3 @@
+engine = "markdown"
+main = "index.md"
+compile = true
