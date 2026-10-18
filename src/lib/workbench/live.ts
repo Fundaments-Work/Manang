@@ -60,6 +60,47 @@ export function participantSummary(peers: readonly LivePeer[]): string {
   return `${names.slice(0, -1).join(", ")} and ${last}`;
 }
 
+/** How many people are in the session, you included. */
+export function peopleCount(peers: readonly LivePeer[]): number {
+  return peers.length + 1;
+}
+
+/**
+ * The status-bar chip while a session exists: "Live: 2 people". A connection
+ * that is not up says so in the same words as the session bar.
+ */
+export function liveChipText(
+  state: LiveConnection,
+  peers: readonly LivePeer[],
+): string {
+  switch (state) {
+    case "connecting":
+      return "Live: connecting";
+    case "reconnecting":
+      return "Live: reconnecting";
+    case "error":
+      return "Live: stopped";
+    case "left":
+      return "Live: left";
+    case "connected": {
+      const n = peopleCount(peers);
+      return n === 1 ? "Live: just you" : `Live: ${n} people`;
+    }
+  }
+}
+
+/** One or two capital letters for a person's mark: "Ada Lovelace" is "AL". */
+export function initials(name: string): string {
+  const words = name
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w !== "");
+  const first = [...(words[0] ?? "")][0];
+  if (first === undefined) return "?";
+  const last = words.length > 1 ? [...(words[words.length - 1] ?? "")][0] : undefined;
+  return (first + (last ?? "")).toUpperCase();
+}
+
 /** Text files only: a live session edits one text document. */
 export function canShareLive(
   kind: "document" | "figure" | "viewer" | undefined,

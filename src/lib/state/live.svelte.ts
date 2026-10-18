@@ -402,9 +402,9 @@ export class LiveState {
     this.copied = false;
   }
 
-  /** Open Settings at the live section (the relay address is there). */
+  /** Open Settings at the Collaboration page (the relay address is there). */
   openRelaySettings(): void {
-    settingsPage.show("live");
+    settingsPage.show("collaboration");
   }
 
   dismissRelayHint(): void {

@@ -52,6 +52,7 @@ export const DEFAULT_BINDINGS: readonly DefaultBinding[] = [
   { command: "doc.export-pdf", key: "Mod+E" },
   { command: "doc.format", key: "Alt+Shift+F" },
   { command: "doc.show-in-preview", key: "Mod+Alt+J" },
+  { command: "share.open", key: "Mod+Alt+L" },
   { command: "doc.present", key: "F5" },
   { command: "help.shortcuts", key: "Mod+/" },
   { command: "dev.inspect", key: "F12" },
