@@ -91,6 +91,17 @@
   }
 
   /** The Dark pages toggle writes the setting, so it sticks. */
+  /** What "Compile now" does and what last compiled: the engine and main file live here, not in the bar. */
+  const compileTitle = $derived(
+    [
+      "Compile now",
+      build.backend,
+      build.viaMain && build.target !== "" ? `via ${build.target}` : "",
+    ]
+      .filter((part) => part !== "")
+      .join(" · "),
+  );
+
   async function setDarkPages(dark: boolean): Promise<void> {
     preview.view.darkPages = dark;
     const failed = await settings.set("preview.dark-pages", dark, "user");
@@ -139,31 +150,13 @@
       >
     {/if}
 
-    {#if build.viaMain && build.target !== ""}
-      <span
-        class="ml-2 min-w-0 truncate font-mono text-[11px] text-text-muted"
-        title="This file is compiled through the project's main file"
-      >
-        via {build.target}
-      </span>
-    {/if}
-
-    {#if !isDiagram && kind === "pdf" && build.backend !== ""}
-      <span
-        class="ml-2 min-w-0 truncate font-mono text-[11px] text-text-muted"
-        title="The TeX engine that compiled this document"
-      >
-        {build.backend}
-      </span>
-    {/if}
-
     <span class="ml-auto"></span>
 
     <button
       type="button"
       class="mng-icon-btn @max-[340px]:hidden"
       aria-label="Refresh preview"
-      title={isDiagram ? "Draw the diagram again" : "Compile now"}
+      title={isDiagram ? "Draw the diagram again" : compileTitle}
       disabled={!isDiagram &&
         (build.status === "unsupported" || build.status === "unavailable")}
       onclick={() => (isDiagram ? diagram.refresh() : void build.compile(true))}
