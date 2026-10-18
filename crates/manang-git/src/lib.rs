@@ -9,9 +9,12 @@ pub mod ctx;
 pub mod diff;
 mod error;
 pub mod history;
+pub mod identity;
 mod plugin;
+pub mod restore;
 pub mod runner;
 pub mod status;
+pub mod versions;
 pub mod writes;
 
 pub use error::GitError;

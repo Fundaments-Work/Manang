@@ -46,6 +46,7 @@ export const DEFAULT_BINDINGS: readonly DefaultBinding[] = [
   { command: "file.new", key: "Mod+N" },
   { command: "file.save", key: "Mod+S" },
   { command: "file.save-all", key: "Mod+Shift+S" },
+  { command: "file.save-version", key: "Mod+Alt+S" },
   { command: "doc.compile", key: "Mod+Shift+B" },
   { command: "doc.export-pdf", key: "Mod+E" },
   { command: "doc.format", key: "Alt+Shift+F" },

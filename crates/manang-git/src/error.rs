@@ -35,6 +35,14 @@ pub enum GitError {
     AmendUnborn,
     #[error("uncommitted changes would be overwritten; commit, stage or discard them first:\n{0}")]
     DirtyTree(String),
+    #[error(
+        "{} file(s) have changes that restoring would overwrite; save a version first (or pass `save_first`): {}",
+        .0.len(),
+        .0.join(", ")
+    )]
+    DirtyPaths(Vec<String>),
+    #[error("there is nothing to save: no files have changed since the last version")]
+    NothingToSave,
     #[error("`{0}` is not a valid branch name")]
     BadBranchName(String),
     #[error("the system `git` executable was not found on PATH; install git to use this command")]
@@ -89,7 +97,8 @@ impl GitError {
             Self::EmptyMessage => "empty-message",
             Self::AmendPublished => "amend-published",
             Self::AmendUnborn => "amend-unborn",
-            Self::DirtyTree(_) => "dirty-tree",
+            Self::DirtyTree(_) | Self::DirtyPaths(_) => "dirty-tree",
+            Self::NothingToSave => "nothing-to-save",
             Self::BadBranchName(_) => "bad-branch-name",
             Self::GitMissing => "git-missing",
             Self::Timeout { .. } => "timeout",
@@ -105,7 +114,10 @@ impl GitError {
 
 impl From<GitError> for PluginError {
     fn from(e: GitError) -> Self {
-        let body = json!({ "code": e.code(), "message": e.to_string() });
+        let mut body = json!({ "code": e.code(), "message": e.to_string() });
+        if let GitError::DirtyPaths(paths) = &e {
+            body["paths"] = json!(paths);
+        }
         PluginError::Failed(body.to_string())
     }
 }

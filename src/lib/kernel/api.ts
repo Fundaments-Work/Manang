@@ -699,6 +699,44 @@ export interface GitBlameResponse {
   readonly ranges: readonly GitBlameRange[];
 }
 
+export interface GitIdentity {
+  readonly name: string | null;
+  readonly email: string | null;
+  readonly source: "repo" | "global" | "none";
+}
+
+export interface GitVersionInfo {
+  readonly hash: string;
+  readonly short: string;
+  readonly subject: string;
+  readonly author_name: string;
+  /** Seconds since the Unix epoch. */
+  readonly time: number;
+  readonly files_changed: number;
+  /** Made by "Save a version". */
+  readonly labelled: boolean;
+}
+
+export interface GitVersionsPage {
+  readonly versions: readonly GitVersionInfo[];
+  readonly next_cursor: string | null;
+}
+
+export interface GitSavedVersion {
+  readonly sha: string;
+  readonly short: string;
+  readonly subject: string;
+  readonly files_changed: number;
+}
+
+export interface GitRestored {
+  readonly restored: readonly string[];
+  /** Files that exist now but not in that version; left untouched. */
+  readonly untouched_new: readonly string[];
+  readonly safety_version: string | null;
+  readonly trash: string | null;
+}
+
 export function gitApi(kernel: Kernel) {
   return {
     open: (root: string) =>
@@ -747,6 +785,10 @@ export function gitApi(kernel: Kernel) {
       message: string;
       amend?: boolean | undefined;
       hooks?: boolean | undefined;
+      /** `Key: value` lines appended to the message, e.g. `Co-authored-by: ...`. */
+      trailers?: readonly string[] | undefined;
+      /** Stage every non-ignored change first. */
+      all?: boolean | undefined;
       root?: string | undefined;
     }) =>
       kernel.run<{ hash: string; short: string; subject: string; amended: boolean }>(
@@ -763,6 +805,43 @@ export function gitApi(kernel: Kernel) {
       }),
     init: (req: { root?: string | undefined } = {}) =>
       kernel.run<GitStatusReport>("git.init", { ...req }),
+    identityGet: (req: { root?: string | undefined } = {}) =>
+      kernel.run<GitIdentity>("git.identity-get", { ...req }),
+    identitySet: (req: {
+      name: string;
+      email: string;
+      /** Write to the global config instead of this project's. */
+      global?: boolean | undefined;
+      root?: string | undefined;
+    }) => kernel.run<{ ok: boolean }>("git.identity-set", { ...req }),
+    saveVersion: (
+      req: {
+        name?: string | undefined;
+        message?: string | undefined;
+        root?: string | undefined;
+      } = {},
+    ) => kernel.run<GitSavedVersion>("git.save-version", { ...req }),
+    versions: (
+      req: {
+        path?: string | undefined;
+        limit?: number | undefined;
+        cursor?: string | undefined;
+        root?: string | undefined;
+      } = {},
+    ) => kernel.run<GitVersionsPage>("git.versions", { ...req }),
+    versionFiles: (req: { rev: string; root?: string | undefined }) =>
+      kernel.run<{ rev: string; files: readonly GitFileDiff[] }>("git.version-files", {
+        ...req,
+      }),
+    versionDiff: (req: { rev: string; path: string; root?: string | undefined }) =>
+      kernel.run<GitFileDiff>("git.version-diff", { ...req }),
+    restore: (req: {
+      rev: string;
+      paths?: readonly string[] | undefined;
+      whole?: boolean | undefined;
+      save_first?: boolean | undefined;
+      root?: string | undefined;
+    }) => kernel.run<GitRestored>("git.restore", { ...req }),
     sync: (req: {
       action: "fetch" | "pull" | "push";
       remote?: string | undefined;
