@@ -6501,7 +6501,7 @@ dependencies = [
  "wat",
  "wit-component 0.262.0",
  "wit-parser 0.262.0",
- "zip",
+ "zip 9.0.3",
 ]
 
 [[package]]
@@ -10920,7 +10920,7 @@ dependencies = [
  "watchexec-signals",
  "watchexec-supervisor 5.4.1",
  "which",
- "zip",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -11028,7 +11028,7 @@ dependencies = [
  "tectonic_io_base",
  "tectonic_status_base",
  "url",
- "zip",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -14242,6 +14242,20 @@ dependencies = [
  "memchr",
  "typed-path",
  "zopfli",
+]
+
+[[package]]
+name = "zip"
+version = "9.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2d98561b612a84ae525331a7a094429ef8a5772514ed507ff6db5f54badc971"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap 2.14.2",
+ "memchr",
+ "nix",
+ "typed-path",
 ]
 
 [[package]]
