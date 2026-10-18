@@ -58,6 +58,7 @@ import { figures } from "./figures.svelte";
 import { viewers } from "./viewers.svelte";
 import { home } from "./home.svelte";
 import { layout } from "./layout.svelte";
+import { live } from "./live.svelte";
 import { notice } from "./notice.svelte";
 import { applyPreferences } from "./preferences.svelte";
 import { preview } from "./preview.svelte";
@@ -833,6 +834,8 @@ export async function boot(): Promise<void> {
   routeExternalLinks();
   documents.onEdit(() => build.schedule("edit"));
   recovery.start();
+  live.listen();
+  void live.reset();
   window.addEventListener("pagehide", () => void recovery.flushAll());
   diagram.start();
   exportDiagramsOnSave();

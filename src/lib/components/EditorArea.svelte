@@ -4,6 +4,7 @@
   import EditorPane from "./EditorPane.svelte";
   import ExternalChangeBar from "./ExternalChangeBar.svelte";
   import FileViewer from "./FileViewer.svelte";
+  import LiveBar from "./LiveBar.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
   import { reportError } from "$lib/kernel";
@@ -159,6 +160,7 @@
         style="flex: {mode === 'split' ? layout.splitRatio : 1} 1 0"
       >
         <ExternalChangeBar path={tab.path} kind="document" />
+        <LiveBar path={tab.path} />
         <div class="min-h-0 flex-1">
           <EditorPane path={tab.path} zen={layout.zen} />
         </div>

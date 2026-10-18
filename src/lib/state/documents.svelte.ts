@@ -30,6 +30,7 @@ import {
 import {
   createEditorState,
   languageCompartment,
+  liveCompartment,
   languageFor,
   loadLanguage,
   syncEditorPrefs,
@@ -42,6 +43,7 @@ import { decideExternal, isNotFoundError, type DiskNow } from "$lib/workbench/ex
 import { basename } from "$lib/workbench/paths";
 import { diffRange } from "$lib/kernel/offsets";
 import { KernelSync, type SyncStatus } from "$lib/kernel/sync";
+import type { LiveBinding, LiveHost } from "$lib/editor/live/binding";
 
 import { notice } from "./notice.svelte";
 import { dialog } from "./dialog.svelte";
@@ -150,6 +152,37 @@ export class DocSession {
         Transaction.addToHistory.of(false),
       ],
     }).state;
+  }
+
+  /** Whether this document is in a live session (its edits go to the session). */
+  live = $state(false);
+
+  /** The document as the live binding reads and writes it. */
+  liveHost(): LiveHost {
+    return {
+      state: () => {
+        const view = this.#store.view;
+        return this.#shown && view !== undefined ? view.state : this.state;
+      },
+      dispatch: (spec) => this.#dispatch(spec),
+    };
+  }
+
+  /**
+   * Join a live session: the binding takes over sending edits, so the kernel
+   * copy (which the Rust session keeps) stops following the editor.
+   */
+  attachLive(binding: LiveBinding): void {
+    this.sync.pause();
+    this.live = true;
+    this.#dispatch({ effects: liveCompartment.reconfigure(binding.extension) });
+  }
+
+  /** Leave the session: the kernel copy is brought up to what the editor shows. */
+  detachLive(): Promise<void> {
+    this.#dispatch({ effects: liveCompartment.reconfigure([]) });
+    this.live = false;
+    return this.sync.resume(this.text());
   }
 
   /** Caret and scroll, for the recovery snapshot and its restore. */
@@ -283,6 +316,7 @@ export class DocumentsStore {
   readonly #editListeners: (() => void)[] = [];
   readonly #saveListeners: ((path: string) => void)[] = [];
   readonly #changeListeners: ((path: string) => void)[] = [];
+  readonly #dropListeners: ((path: string) => void)[] = [];
   #statsTimer: ReturnType<typeof setTimeout> | undefined;
 
   /* ----------------------------------------------------------------------- */
@@ -315,6 +349,11 @@ export class DocumentsStore {
   /** Called with the path of the document each time its text changes. */
   onChange(listener: (path: string) => void): void {
     this.#changeListeners.push(listener);
+  }
+
+  /** Called with the path of a document that is being forgotten (tab closed, file gone). */
+  onDrop(listener: (path: string) => void): void {
+    this.#dropListeners.push(listener);
   }
 
   /** Called with the path after a document reached the disk. */
@@ -359,6 +398,7 @@ export class DocumentsStore {
   drop(path: string): void {
     const session = this.#sessions.get(path);
     if (session === undefined) return;
+    for (const listener of this.#dropListeners) listener(path);
     this.#sessions.delete(path);
     this.#status.delete(session);
     if (this.shown === session) this.shown = undefined;
