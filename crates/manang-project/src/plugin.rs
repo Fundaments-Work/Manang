@@ -468,6 +468,12 @@ impl Plugin for ProjectPlugin {
                     &a.content,
                 ))
             }
+            "project.backup" => {
+                let a: args::File = parse(input)?;
+                let open = self.current().map_err(failed)?;
+                let copy = fsops::backup_file(&open.root, &a.path).map_err(failed)?;
+                Ok(Payload::Json(json!({ "backup_to": copy })))
+            }
             "project.rename" => {
                 let a: args::Rename = parse(input)?;
                 let open = self.current().map_err(failed)?;

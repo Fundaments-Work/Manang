@@ -288,35 +288,95 @@ pub fn rename(root: &ProjectRoot, from: &str, to: &str) -> Result<(), ProjectErr
 
 static TRASH_SEQ: AtomicU64 = AtomicU64::new(0);
 
-/// Move an entry to the project's recoverable trash,
-/// `.manang/trash/<id>/<original path>`, and return the trashed path
-/// (project-relative, `/`-separated).
-///
-/// The trash lives inside the project so the move is an atomic same-volume
-/// rename that never copies data and never touches the user's OS trash.
-/// Restoring is moving the file back; `.manang/` is git-ignored by the
-/// starters.
-pub fn trash(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> {
-    let src = root.resolve_for_move(raw)?;
-    if src.symlink_metadata().is_err() {
-        return Err(ProjectError::NotFound(display(raw)));
-    }
-    let rel = lexical_relative(raw)?;
+/// A fresh directory `.manang/trash/<id>/` and its project-relative name.
+fn new_slot(root: &ProjectRoot) -> Result<(std::path::PathBuf, String), ProjectError> {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis());
     let base = root.path().join(STATE_DIR).join("trash");
     fs::create_dir_all(&base)
         .map_err(|e| ProjectError::io("creating the trash directory".to_owned(), e))?;
-    let (slot, id) = loop {
+    loop {
         let id = format!("{millis}-{}", TRASH_SEQ.fetch_add(1, Ordering::Relaxed));
         let slot = base.join(&id);
         match fs::create_dir(&slot) {
-            Ok(()) => break (slot, id),
+            Ok(()) => return Ok((slot, id)),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
             Err(e) => return Err(ProjectError::io("creating a trash slot".to_owned(), e)),
         }
+    }
+}
+
+/// Safety copies of files about to be changed or replaced, kept together in one
+/// `.manang/trash/<id>/` folder with their project-relative layout. Used by
+/// project-wide replace, Convert to Typst, and "Overwrite with my version", so a
+/// destructive step never leaves the original only in memory.
+#[derive(Debug)]
+pub struct BackupSlot {
+    dir: std::path::PathBuf,
+    name: String,
+}
+
+impl BackupSlot {
+    /// The slot's project-relative path, `.manang/trash/<id>`.
+    pub fn path(&self) -> String {
+        format!("{STATE_DIR}/trash/{}", self.name)
+    }
+
+    /// Keep `bytes` as the copy of project file `raw`.
+    pub fn save(&self, raw: &str, bytes: &[u8]) -> Result<(), ProjectError> {
+        let rel = lexical_relative(raw)?;
+        let dst = self.dir.join(rel);
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| ProjectError::io("preparing the backup folder".to_owned(), e))?;
+        }
+        atomic_write(&dst, bytes)
+    }
+
+    /// Remove the slot again when nothing was saved into it.
+    pub fn remove_if_empty(&self) {
+        // `remove_dir` fails on a folder with content, which is what we want.
+        let _ = fs::remove_dir(&self.dir);
+    }
+}
+
+/// Open a backup slot for the project.
+pub fn backup_slot(root: &ProjectRoot) -> Result<BackupSlot, ProjectError> {
+    let (dir, name) = new_slot(root)?;
+    Ok(BackupSlot { dir, name })
+}
+
+/// Copy one existing project file into a new trash slot and return the copy's
+/// project-relative path. `Ok(None)` when the file does not exist (nothing to
+/// lose). The original is left in place.
+pub fn backup_file(root: &ProjectRoot, raw: &str) -> Result<Option<String>, ProjectError> {
+    let bytes = match read_limited(root, raw) {
+        Ok(b) => b,
+        Err(ProjectError::NotFound(_)) => return Ok(None),
+        Err(e) => return Err(e),
     };
+    let slot = backup_slot(root)?;
+    slot.save(raw, &bytes)?;
+    let shown = to_slash(&lexical_relative(raw)?).unwrap_or_default();
+    Ok(Some(format!("{}/{shown}", slot.path())))
+}
+
+/// Move an entry to the project's recoverable trash,
+/// `.manang/trash/<id>/<original path>`, and return the trashed path
+/// (project-relative, `/`-separated).
+///
+/// The trash lives inside the project so the move is an atomic same-volume
+/// rename that never copies data and never touches the user's OS trash.
+/// Restoring is moving the file back; `.manang/` is ignored by version
+/// control in the starters.
+pub fn trash(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> {
+    let src = root.resolve_for_move(raw)?;
+    if src.symlink_metadata().is_err() {
+        return Err(ProjectError::NotFound(display(raw)));
+    }
+    let rel = lexical_relative(raw)?;
+    let (slot, id) = new_slot(root)?;
     let dst = slot.join(&rel);
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent)

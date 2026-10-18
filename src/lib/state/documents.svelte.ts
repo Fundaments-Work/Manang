@@ -36,7 +36,7 @@ import {
   type EditorLanguage,
 } from "$lib/editor/view";
 import { kernel, errorMessage, reportError } from "$lib/kernel";
-import { isConflictError } from "$lib/kernel/api";
+import { isConflictError, projectApi } from "$lib/kernel/api";
 import type { ProjectChange } from "$lib/kernel/types";
 import { decideExternal, isNotFoundError, type DiskNow } from "$lib/workbench/external";
 import { basename } from "$lib/workbench/paths";
@@ -525,6 +525,8 @@ export class DocumentsStore {
     });
     if (choice === "overwrite") {
       try {
+        // The other program's version is kept in the project trash first.
+        await projectApi(kernel).backup(path);
         const written = await workspace.writeFile(path, doc.toString(), disk.hash);
         return this.#saved(session, doc, written.hash);
       } catch (error) {
@@ -646,6 +648,10 @@ export class DocumentsStore {
     const session = this.#sessions.get(path);
     const disk = session?.diskNow;
     if (session === undefined || disk === null || disk === undefined) return;
+    // The next save replaces the disk version: keep a copy of it now.
+    projectApi(kernel)
+      .backup(path)
+      .catch((e: unknown) => reportError("documents.keepMine", e));
     session.rebase(disk.content, disk.hash);
   }
 

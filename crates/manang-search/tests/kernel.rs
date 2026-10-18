@@ -501,6 +501,17 @@ fn replace_preview_does_not_touch_disk_and_apply_is_atomic() {
         fs::read_to_string(h.root.join("a.txt")).expect("read"),
         "baz bar baz\nnext baz\n"
     );
+    // The original is kept in the project trash before the file is replaced.
+    let backup = a["backup"].as_str().expect("a backup folder is reported");
+    assert!(backup.starts_with(".manang/trash/"), "{backup}");
+    assert_eq!(
+        fs::read_to_string(h.root.join(backup).join("a.txt")).expect("the copy"),
+        "foo bar foo\nnext foo\n"
+    );
+    assert!(
+        !h.root.join(backup).join("b.txt").exists(),
+        "an untouched file has no copy"
+    );
     // No temp files left behind.
     let leftovers: Vec<_> = fs::read_dir(&h.root)
         .expect("dir")
@@ -633,7 +644,8 @@ fn replace_apply_confines_paths_to_the_root() {
         .num_threads(1)
         .build()
         .expect("pool");
-    let results = apply(&pool, &plan, None, &Limits::default());
+    let slot = manang_project::fsops::backup_slot(&plan.root).expect("slot");
+    let results = apply(&pool, &plan, None, &Limits::default(), &slot);
     assert_eq!(results.len(), 3);
     assert!(results.iter().all(|r| !r.ok), "{results:?}");
     assert_eq!(fs::read_to_string(&outside).expect("read"), "foo");

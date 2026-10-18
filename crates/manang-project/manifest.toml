@@ -49,6 +49,10 @@ id = "project.diff-text"
 title = "Line diff of a file on disk against given text"
 
 [[contributes.commands]]
+id = "project.backup"
+title = "Copy a file to the project trash before changing it"
+
+[[contributes.commands]]
 id = "project.rename"
 title = "Rename or move file"
 

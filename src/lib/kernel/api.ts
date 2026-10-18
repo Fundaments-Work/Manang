@@ -171,6 +171,12 @@ export function projectApi(kernel: Kernel) {
         content,
         ...(expected !== undefined ? { expected } : {}),
       }),
+    /**
+     * Copy a file into the project trash (`.manang/trash/<id>/`) before it is
+     * changed or replaced. `backup_to` is null when the file does not exist.
+     */
+    backup: (path: string) =>
+      kernel.run<{ backup_to: string | null }>("project.backup", { path }),
     /** A line diff of the file on disk against `content`. */
     diffText: (path: string, content: string) =>
       kernel.run<TextDiff>("project.diff-text", { path, content }),
@@ -681,6 +687,8 @@ export interface SearchApplyResponse {
   readonly applied: number;
   readonly failed: number;
   readonly files: readonly SearchApplyFileResult[];
+  /** Project-relative folder holding the originals of the replaced files. */
+  readonly backup?: string | null;
 }
 
 export interface SearchInTextRequest {

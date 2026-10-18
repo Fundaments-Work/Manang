@@ -162,3 +162,77 @@ fn diff_text_compares_the_disk_with_given_text() {
     );
     assert_eq!(missing["status"], "added");
 }
+
+#[test]
+fn backup_copies_a_file_into_the_project_trash_and_leaves_the_original() {
+    let h = harness();
+    h.ok(
+        "project.write-file",
+        json!({ "path": "chapters/one.typ", "content": "precious\n" }),
+    );
+    let first = h.ok("project.backup", json!({ "path": "chapters/one.typ" }));
+    let copy = first["backup_to"].as_str().expect("a copy path").to_owned();
+    assert!(
+        copy.starts_with(".manang/trash/") && copy.ends_with("/chapters/one.typ"),
+        "{copy}"
+    );
+    assert_eq!(
+        fs::read_to_string(h.file(&copy)).expect("copy"),
+        "precious\n"
+    );
+    assert_eq!(
+        fs::read_to_string(h.file("chapters/one.typ")).expect("original"),
+        "precious\n",
+        "the original stays where it is"
+    );
+    // Changing the file afterwards does not touch the copy; a second backup is
+    // a second copy, never an overwrite of the first.
+    h.ok(
+        "project.write-file",
+        json!({ "path": "chapters/one.typ", "content": "changed\n" }),
+    );
+    let second = h.ok("project.backup", json!({ "path": "chapters/one.typ" }));
+    assert_ne!(second["backup_to"], first["backup_to"]);
+    assert_eq!(
+        fs::read_to_string(h.file(&copy)).expect("copy"),
+        "precious\n"
+    );
+    // A file that is not there has nothing to lose.
+    let none = h.ok("project.backup", json!({ "path": "nope.typ" }));
+    assert!(none["backup_to"].is_null());
+    // Paths stay inside the project.
+    assert!(
+        h.call("project.backup", json!({ "path": "../outside" }))
+            .is_err()
+    );
+}
+
+#[test]
+fn delete_keeps_the_file_in_the_trash_and_rename_never_overwrites() {
+    let h = harness();
+    h.ok(
+        "project.write-file",
+        json!({ "path": "a.typ", "content": "keep me\n" }),
+    );
+    h.ok(
+        "project.write-file",
+        json!({ "path": "b.typ", "content": "and me\n" }),
+    );
+    // Moving onto an existing file is refused, so nothing is lost by a rename.
+    let err = h
+        .call("project.rename", json!({ "from": "a.typ", "to": "b.typ" }))
+        .expect_err("refused");
+    assert!(err.contains("already exists"), "{err}");
+    assert_eq!(
+        fs::read_to_string(h.file("b.typ")).expect("read"),
+        "and me\n"
+    );
+    // Delete moves it to the trash; restoring is moving it back.
+    let gone = h.ok("project.delete", json!({ "path": "a.typ" }));
+    let trashed = gone["trashed_to"].as_str().expect("path").to_owned();
+    assert!(!h.file("a.typ").exists());
+    assert_eq!(
+        fs::read_to_string(h.file(&trashed)).expect("trashed copy"),
+        "keep me\n"
+    );
+}
