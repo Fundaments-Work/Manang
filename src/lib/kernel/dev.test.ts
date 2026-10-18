@@ -177,14 +177,17 @@ describe("dev kernel: typst plugin", () => {
     });
   });
 
-  it("renders compiled pages as SVG bytes and exports a PDF", async () => {
+  it("renders compiled pages as SVG bytes and refuses to fake a PDF", async () => {
     const { typst } = await opened();
     await typst.compile({ main: "main.typ" });
     const page = await typst.render(0);
     expect(page).toBeInstanceOf(Uint8Array);
     expect(sniffArtifact(page)?.kind).toBe("svg");
     expect(new TextDecoder().decode(page)).toContain("Quantum thermodynamic bounds");
-    expect(sniffArtifact(await typst.exportPdf())?.kind).toBe("pdf");
+    // The demo kernel cannot typeset, so it points to the desktop app.
+    await expect(typst.exportPdf()).rejects.toMatchObject({
+      message: expect.stringContaining("desktop app") as unknown,
+    });
   });
 
   it("refuses to render before a successful compile or past the last page", async () => {

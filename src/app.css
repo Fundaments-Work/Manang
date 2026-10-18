@@ -115,8 +115,12 @@
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", monospace;
 
-  /* Two weights only. Hierarchy comes from size and colour. */
+  /* Two weights only. Hierarchy comes from size and colour. Clearing the
+   * default scale first means `font-medium` / `font-bold` generate nothing,
+   * so a faux-bold weight can never reach the screen. */
+  --font-weight-*: initial;
   --font-weight-light: 300;
+  --font-weight-normal: 400;
   --font-weight-regular: 400;
 
   /* The system's most visible invariant: radius 0, without exception.
@@ -222,16 +226,17 @@
     user-select: text;
   }
 
-  /* Motion answers an action; people who ask for none get none. */
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    ::before,
-    ::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
-    }
+  /* Motion answers an action; people who ask for none get none. The class is
+   * set from the appearance.reduced-motion setting, which defaults to
+   * following the operating system. */
+  .reduce-motion,
+  .reduce-motion *,
+  .reduce-motion ::before,
+  .reduce-motion ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -308,6 +313,38 @@
   .mng-field:focus {
     outline: none;
     border-color: var(--mng-accent);
+  }
+
+  /* Range input: a hairline track and a square thumb in the text colour. */
+  .mng-range {
+    height: 28px;
+    appearance: none;
+    background: transparent;
+  }
+  .mng-range::-webkit-slider-runnable-track {
+    height: 1px;
+    background: var(--mng-line);
+  }
+  .mng-range::-moz-range-track {
+    height: 1px;
+    background: var(--mng-line);
+  }
+  .mng-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    margin-top: -4.5px;
+    background: var(--mng-text);
+    border: none;
+  }
+  .mng-range::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    background: var(--mng-text);
+    border: none;
+  }
+  .mng-range:disabled {
+    opacity: 0.4;
   }
 
   .mng-kbd {

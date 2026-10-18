@@ -41,14 +41,17 @@ export interface PaletteInput {
   readonly kernel: readonly KernelCommand[];
   readonly runKernel: (id: string) => void;
   readonly openFile: (path: string) => void;
+  /** Whether a command's `when` clause holds; everything applies when absent. */
+  readonly applies?: (when: string | undefined) => boolean;
 }
 
 /** Every candidate for the current mode, before ranking. */
 export function paletteCandidates(input: PaletteInput): Command[] {
   const files = input.files.map((path) => fileCommand(path, input.openFile));
   if (input.mode === "files") return files;
+  const applies = input.applies ?? (() => true);
   const commands = mergeCommands(
-    input.workbench,
+    input.workbench.filter((c) => applies(c.when)),
     paletteKernelCommands(input.kernel, new Set(input.workbench.map((c) => c.id))),
     input.runKernel,
   );

@@ -296,24 +296,6 @@
   </button>
 </div>
 
-<div class="px-3 pb-2">
-  <input
-    type="search"
-    class="mng-field"
-    placeholder="Filter files"
-    aria-label="Filter files"
-    bind:value={workspace.filter}
-    spellcheck="false"
-    onkeydown={(event) => {
-      if (event.key === "Escape") workspace.filter = "";
-      else if (event.key === "ArrowDown" && rows[0] !== undefined) {
-        event.preventDefault();
-        void focusRow(rows[0].path);
-      }
-    }}
-  />
-</div>
-
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={treeEl}

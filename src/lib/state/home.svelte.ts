@@ -52,6 +52,8 @@ export class HomeState {
   loaded = $state(false);
   /** The New project dialog, with the language it starts on. */
   creating = $state<{ engine: Engine } | null>(null);
+  /** The typed-path form, when there is no native folder picker. */
+  typingPath = $state(false);
   /** Bumped per project when its thumbnail changes, so cards reload it. */
   readonly thumbVersions = new SvelteMap<string, number>();
 

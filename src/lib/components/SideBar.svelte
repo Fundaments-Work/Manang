@@ -2,10 +2,8 @@
   import FiguresPanel from "./panels/FiguresPanel.svelte";
   import FilesPanel from "./panels/FilesPanel.svelte";
   import OutlinePanel from "./panels/OutlinePanel.svelte";
-  import PluginsPanel from "./panels/PluginsPanel.svelte";
   import ReferencesPanel from "./panels/ReferencesPanel.svelte";
   import SearchPanel from "./panels/SearchPanel.svelte";
-  import SettingsPanel from "./panels/SettingsPanel.svelte";
   import SourceControlPanel from "./panels/SourceControlPanel.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import { layout } from "$lib/state/layout.svelte";
@@ -29,8 +27,6 @@
     outline: "Outline",
     figures: "Figures",
     references: "References",
-    plugins: "Plugins",
-    settings: "Settings",
   } as const;
 </script>
 
@@ -56,12 +52,8 @@
       <OutlinePanel />
     {:else if view === "figures"}
       <FiguresPanel />
-    {:else if view === "references"}
-      <ReferencesPanel />
-    {:else if view === "plugins"}
-      <PluginsPanel />
     {:else}
-      <SettingsPanel />
+      <ReferencesPanel />
     {/if}
   </aside>
   {#if !layout.narrow}

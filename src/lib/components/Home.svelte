@@ -6,11 +6,10 @@
   import ProjectCard from "./home/ProjectCard.svelte";
   import ContextMenu, { type MenuItem } from "./ui/ContextMenu.svelte";
   import Icon, { type IconName } from "./ui/Icon.svelte";
-  import { openProject } from "$lib/state/actions";
+  import { openFolder, openProject } from "$lib/state/actions";
   import { home } from "$lib/state/home.svelte";
-  import { layout } from "$lib/state/layout.svelte";
+  import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { notice } from "$lib/state/notice.svelte";
-  import { hasNativeDialogs, pickFolder } from "$lib/kernel/native";
   import type { ProjectEntry } from "$lib/kernel/types";
   import { workspace } from "$lib/state/workspace.svelte";
   import {
@@ -38,9 +37,7 @@
   };
 
   let now = $state(Math.floor(Date.now() / 1000));
-  let search: HTMLInputElement | undefined = $state();
   let folderInput: HTMLInputElement | undefined = $state();
-  let typingPath = $state(false);
   let folder = $state("");
   let menu = $state<{ x: number; y: number; entry: ProjectEntry } | null>(null);
   let editing = $state<{ mode: "name" | "tags"; entry: ProjectEntry } | null>(null);
@@ -62,30 +59,17 @@
       : workspace.error,
   );
 
-  async function openFolder(): Promise<void> {
-    workspace.error = "";
-    if (hasNativeDialogs()) {
-      try {
-        const picked = await pickFolder("Open project folder");
-        if (picked !== null) await openProject(picked);
-      } catch {
-        // The picker itself failed; offer the typed path instead.
-        typingPath = true;
-      }
-      if (!typingPath) return;
-    } else {
-      typingPath = true;
-    }
-    await tick();
-    folderInput?.focus();
-  }
+  // The typed-path form, opened by "Open folder" (top bar or empty state).
+  $effect(() => {
+    if (home.typingPath) void tick().then(() => folderInput?.focus());
+  });
 
   async function submitFolder(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     const path = folder.trim();
     if (path === "") return;
     if (await openProject(path)) {
-      typingPath = false;
+      home.typingPath = false;
       folder = "";
     }
   }
@@ -136,30 +120,9 @@
       },
     ];
   }
-
-  function onkeydown(event: KeyboardEvent): void {
-    const target = event.target as HTMLElement;
-    const typing = target.matches("input, textarea, select");
-    if (event.key === "/" && !typing && !event.ctrlKey && !event.metaKey) {
-      event.preventDefault();
-      search?.focus();
-      return;
-    }
-  }
-
-  function onsearchkey(event: KeyboardEvent): void {
-    if (event.key === "Escape" && home.query !== "") {
-      event.preventDefault();
-      event.stopPropagation();
-      home.query = "";
-    } else if (event.key === "Escape") {
-      search?.blur();
-    }
-  }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<section class="flex h-full min-w-0" aria-label="Home" {onkeydown}>
+<section class="flex h-full min-w-0" aria-label="Home">
   <nav
     class="flex w-[200px] shrink-0 flex-col border-r border-line bg-surface max-[800px]:w-12"
     aria-label="Home sections"
@@ -210,7 +173,7 @@
         class="inset-focus flex h-8 items-center gap-3 px-3 text-left text-xs text-text-60 hover:bg-surface-hi hover:text-text max-[800px]:justify-center max-[800px]:px-0"
         aria-label="Settings"
         title="Settings"
-        onclick={() => layout.showSide("settings")}
+        onclick={() => settingsPage.show()}
       >
         <Icon name="settings" size={14} />
         <span class="max-[800px]:hidden">Settings</span>
@@ -219,71 +182,8 @@
   </nav>
 
   <div class="flex min-w-0 flex-1 flex-col">
-    <header class="flex h-10 shrink-0 items-center gap-2 border-b border-line px-4">
-      <div class="relative min-w-0 flex-1 basis-0 max-w-[420px]">
-        <Icon
-          name="search"
-          size={14}
-          class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-text-muted"
-        />
-        <input
-          bind:this={search}
-          bind:value={home.query}
-          onkeydown={onsearchkey}
-          type="text"
-          role="searchbox"
-          class="mng-field pl-8"
-          placeholder="Search projects"
-          aria-label="Search projects"
-          spellcheck="false"
-          autocomplete="off"
-        />
-      </div>
-      <div class="flex-1"></div>
-      <label class="flex items-center gap-2 text-xs text-text-60 max-[800px]:hidden">
-        <span>Sort</span>
-        <select
-          class="mng-field w-auto"
-          aria-label="Sort projects"
-          value={home.sort}
-          onchange={(event) =>
-            home.setSort(event.currentTarget.value as "modified" | "name" | "created")}
-        >
-          {#each SORTS as sort (sort.id)}
-            <option value={sort.id}>{sort.label}</option>
-          {/each}
-        </select>
-      </label>
-      <div role="radiogroup" aria-label="View" class="flex gap-px">
-        <button
-          type="button"
-          role="radio"
-          aria-checked={home.view === "grid"}
-          aria-label="Grid"
-          title="Grid"
-          class="mng-btn px-2"
-          onclick={() => home.setView("grid")}><Icon name="grid" size={14} /></button
-        >
-        <button
-          type="button"
-          role="radio"
-          aria-checked={home.view === "list"}
-          aria-label="List"
-          title="List"
-          class="mng-btn px-2"
-          onclick={() => home.setView("list")}><Icon name="list" size={14} /></button
-        >
-      </div>
-      <button type="button" class="mng-btn" onclick={() => home.openNew()}>
-        <Icon name="plus" size={14} />New project
-      </button>
-      <button type="button" class="mng-btn" onclick={() => void openFolder()}>
-        <Icon name="folder-open" size={14} />Open folder
-      </button>
-    </header>
-
-    <div class="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-10 max-[800px]:px-4">
-      {#if typingPath}
+    <div class="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-10 max-[800px]:px-4">
+      {#if home.typingPath}
         <form
           class="mb-5 flex max-w-[640px] items-end gap-2"
           onsubmit={submitFolder}
@@ -305,8 +205,10 @@
             class="mng-btn"
             disabled={folder.trim() === "" || workspace.opening}>Open</button
           >
-          <button type="button" class="mng-btn" onclick={() => (typingPath = false)}
-            >Cancel</button
+          <button
+            type="button"
+            class="mng-btn"
+            onclick={() => (home.typingPath = false)}>Cancel</button
           >
         </form>
       {/if}
@@ -320,18 +222,58 @@
         </p>
       {/if}
 
-      <div class="mb-4 flex items-baseline gap-3">
+      <div class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1
           class="m-0 text-[15px] font-light text-text"
           style="letter-spacing: var(--tracking-headline)"
         >
           {label}
         </h1>
-        {#if home.section !== "templates" && home.shown.length > 0}
-          <span class="text-[11px] text-text-muted" aria-live="polite"
-            >{home.shown.length}
-            {home.shown.length === 1 ? "project" : "projects"}</span
-          >
+        {#if home.section !== "templates"}
+          <span class="text-xs text-text-60" aria-live="polite">
+            {home.shown.length}{home.query.trim() !== ""
+              ? ` matching “${home.query.trim()}”`
+              : ""}
+          </span>
+          <div class="ml-auto flex items-center gap-2">
+            <label class="flex items-center max-[800px]:hidden">
+              <select
+                class="mng-field w-auto"
+                aria-label="Sort projects"
+                value={home.sort}
+                onchange={(event) =>
+                  home.setSort(
+                    event.currentTarget.value as "modified" | "name" | "created",
+                  )}
+              >
+                {#each SORTS as sort (sort.id)}
+                  <option value={sort.id}>{sort.label}</option>
+                {/each}
+              </select>
+            </label>
+            <div role="radiogroup" aria-label="View" class="flex gap-px">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={home.view === "grid"}
+                aria-label="Grid"
+                title="Grid"
+                class="mng-btn px-2"
+                onclick={() => home.setView("grid")}
+                ><Icon name="grid" size={14} /></button
+              >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={home.view === "list"}
+                aria-label="List"
+                title="List"
+                class="mng-btn px-2"
+                onclick={() => home.setView("list")}
+                ><Icon name="list" size={14} /></button
+              >
+            </div>
+          </div>
         {/if}
       </div>
 
