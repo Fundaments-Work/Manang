@@ -126,8 +126,24 @@ Typst compiles using Manang's built-in Rust engine and requires no external tool
 2. Alternatively, download MiKTeX from [miktex.org](https://miktex.org/).
 3. Run the installer and ensure the option to add TeX binaries to your system `PATH` is enabled.
 
+### No TeX installed? Use the built-in engine
+If Manang finds no TeX on your computer, the preview, the **Problems** tab and the **Output** tab say "No TeX installation found" and offer **Download the built-in engine (about 14 MB)**. It is optional, and nothing is downloaded until you agree:
+
+1. Press the button. A window tells you exactly what will happen: the server the engine comes from, its size, its SHA-256 checksum, and the folder it will be saved in.
+2. Press **Download**. A progress line shows the download; **Cancel** stops it and leaves nothing behind. If the connection drops, press **Try again**: it continues where it stopped.
+3. Manang checks the file against the checksum it ships with. If it does not match, nothing is installed. It also starts the engine once to make sure it runs on your computer.
+4. When it says the engine is ready, your document compiles at once.
+
+Things to know about the built-in engine:
+- **Your own TeX comes first.** In the default setting (**Automatic**), Manang uses the TeX Live or MiKTeX it finds and only uses the built-in engine when there is none.
+- **It is XeTeX (Tectonic).** It handles most articles, theses and Beamer slides. It does not run `pdflatex`-only packages or LuaLaTeX, and it has no `biber` (BibTeX works). If a document needs those, install TeX Live.
+- **Packages come from the internet, once.** The first time a document uses a LaTeX package, the engine fetches it from `relay.fullyjustified.net` (the Tectonic project's package server) and keeps it on your computer. The first compile of a new document can therefore take a minute or more; later compiles need no network. To work fully offline, turn off **Fetch LaTeX packages on demand** in Settings under **LaTeX**; packages you never used then show up as "file not found".
+- **Where it lives.** The engine is in Manang's data folder, under `engines/tectonic-<version>/` (Linux: `~/.local/share/work.fundaments.manang/`; macOS: `~/Library/Application Support/work.fundaments.manang/`; Windows: `%APPDATA%\work.fundaments.manang\`). Downloaded packages are in Manang's cache folder under `latex/`.
+- **Remove it any time:** Settings > **LaTeX** > **Remove the built-in engine**. Your documents are never touched.
+
 ### Configure LaTeX settings in Manang
 1. Open Settings (`Ctrl+,` (`Cmd+,`)).
 2. Scroll to the **LaTeX** section:
-   - **Backend:** Keep set to `auto` to use the system TeX installation.
-   - **Engine:** Choose `pdflatex`, `xelatex`, or `lualatex` according to your document requirements.
+   - **LaTeX engine:** **Automatic** uses your TeX installation and falls back to the built-in engine. **System TeX** uses only your installation. **Built-in engine** uses only the downloaded one.
+   - **Engine:** Choose `pdflatex`, `xelatex`, or `lualatex` for your own TeX installation (the built-in engine always uses XeTeX).
+   - **Built-in engine** (below the settings): shows whether it is installed and which version, lets you download or remove it, and says which engine the last compile used. The Compile button's tooltip also names it (for example "xelatex, built-in engine").
