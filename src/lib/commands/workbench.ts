@@ -31,6 +31,7 @@ import { tabs } from "$lib/state/tabs.svelte";
 import { saveVersion } from "$lib/state/versionActions";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
+import { feedback } from "$lib/state/feedback.svelte";
 import { canOpenDevtools, inTauri, openDevtools } from "$lib/kernel/log";
 import { engineOf } from "$lib/workbench/paths";
 import { settingsOriginFor } from "$lib/workbench/settings";
@@ -924,9 +925,18 @@ export function workbenchCommands(
       id: "help.report-problem",
       title: "Report a problem",
       group: "Workbench",
-      keywords: "bug issue log feedback",
+      keywords: "bug issue log crash diagnostics",
       menu: at("help", "2_problem", 0),
-      run: () => void actions.revealLogs(true),
+      run: () => void feedback.show("problem"),
+    },
+    {
+      id: "help.send-feedback",
+      title: "Send feedback",
+      menuTitle: "Send feedback…",
+      group: "Workbench",
+      keywords: "feedback suggestion idea tester beta",
+      menu: at("help", "2_problem", 1),
+      run: () => void feedback.show("feedback"),
     },
     {
       id: "help.open-logs",
@@ -934,7 +944,7 @@ export function workbenchCommands(
       menuTitle: "Open logs",
       group: "Workbench",
       keywords: "log diagnostics",
-      menu: at("help", "2_problem", 1),
+      menu: at("help", "2_problem", 2),
       run: () => void actions.revealLogs(false),
     },
     {

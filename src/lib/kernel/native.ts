@@ -177,3 +177,42 @@ export async function setWindowTitle(title: string): Promise<void> {
     reportWarning("the window title could not be set", error);
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* About and feedback                                                          */
+/* -------------------------------------------------------------------------- */
+
+/** What the shell knows about this build (`app_info`). */
+export interface AppInfo {
+  readonly name: string;
+  readonly version: string;
+  readonly commit: string;
+  /** `beta` for a beta build, `dev` otherwise. */
+  readonly channel: string;
+  readonly os: string;
+  readonly arch: string;
+}
+
+/** The build's identity, or null in a browser. */
+export async function appInfo(): Promise<AppInfo | null> {
+  if (!inTauri()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<AppInfo>("app_info");
+  } catch (error) {
+    reportWarning("app info", error);
+    return null;
+  }
+}
+
+/**
+ * The text behind Send feedback: versions, plugins and the end of the log, with
+ * home folders and key-like strings removed by the shell. Nothing is sent.
+ */
+export async function diagnosticsReport(): Promise<string> {
+  if (!inTauri()) {
+    return `Manang (browser build)\nuser agent: ${navigator.userAgent}\nThe log is in the browser's developer console (F12).\n`;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("diagnostics_report");
+}

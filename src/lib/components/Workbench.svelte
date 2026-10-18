@@ -14,6 +14,7 @@
   import Home from "./Home.svelte";
   import ProjectSwitcher from "./ProjectSwitcher.svelte";
   import ConfirmDialog from "./ui/ConfirmDialog.svelte";
+  import FeedbackDialog from "./FeedbackDialog.svelte";
   import RecoveryReview from "./RecoveryReview.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import ShortcutOverlay from "./ShortcutOverlay.svelte";
@@ -219,7 +220,10 @@
         </div>
       {/if}
       {#if home.showing}
-        <div class="absolute inset-0 z-10 bg-bg" inert={settingsPage.open || helpPage.open}>
+        <div
+          class="absolute inset-0 z-10 bg-bg"
+          inert={settingsPage.open || helpPage.open}
+        >
           <Home />
         </div>
       {/if}
@@ -254,6 +258,7 @@
   <CommandPalette />
   <ProjectSwitcher />
   <ConfirmDialog />
+  <FeedbackDialog />
   <RecoveryReview />
   <ShortcutOverlay />
   {#if slides.presenting}

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Send feedback and Report a problem:** Help > Send feedback opens a dialog with a message field and a diagnostics report (versions, plugins, the end of the log, home folders and key-like strings removed) that the person reads and copies; nothing is sent by Manang. About now shows the real version, commit, channel and system, and what is new from this changelog.
 - **Vector Figure Studio:** In-house typed SVG scene graph (v2) supporting freehand ink (`perfect-freehand`), geometric shapes (Rect, Ellipse, Diamond, Line), bound arrows with auto-snapping to shape anchors, container frames, selection scaling, and deterministic headless SVG export.
 - **Mathematical Formulas in Figures:** Dedicated Typst and LaTeX formula nodes in the Figure Studio with docked properties and custom color palette.
 - **Text Diagram Support:** Integrated compilers for Mermaid (`.mmd`), Pikchr, and ASCII art (`svgbob`) generating standalone SVGs; automatic diagram rendering in Markdown code fences.
