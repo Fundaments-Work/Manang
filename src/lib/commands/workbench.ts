@@ -8,6 +8,7 @@
 
 import { build } from "$lib/state/build.svelte";
 import { convertToTypst } from "$lib/state/convert";
+import { copyIncludeLine, diagramIsActive, newDiagram } from "$lib/state/diagramFiles";
 import { documents } from "$lib/state/documents.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
@@ -53,6 +54,8 @@ const WHEN: Readonly<Record<string, string>> = {
   "doc.compile": "project",
   "file.new": "project",
   "file.new-figure": "project",
+  "file.new-diagram": "project",
+  "doc.copy-include": "workbench && document",
   "view.preview-split": "workbench && document",
   "view.preview-editor": "workbench && document",
   "view.preview-preview": "workbench && document",
@@ -88,6 +91,7 @@ const BRINGS_WORKBENCH: ReadonlySet<string> = new Set([
   "view.output",
   "file.new",
   "file.new-figure",
+  "file.new-diagram",
 ]);
 
 function toWorkbench(): void {
@@ -288,6 +292,22 @@ export function workbenchCommands(
       keywords: "draw diagram",
       enabled: hasProject,
       run: () => void actions.newFigure(),
+    },
+    {
+      id: "file.new-diagram",
+      title: "New diagram",
+      group: "Workbench",
+      keywords: "mermaid pikchr ascii svgbob flowchart sequence",
+      enabled: hasProject,
+      run: () => void newDiagram(),
+    },
+    {
+      id: "doc.copy-include",
+      title: "Copy include line",
+      group: "Workbench",
+      keywords: "diagram image includegraphics insert",
+      enabled: diagramIsActive(),
+      run: () => void copyIncludeLine(),
     },
     {
       id: "file.save",
