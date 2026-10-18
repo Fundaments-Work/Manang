@@ -1,14 +1,9 @@
 <script lang="ts">
   import FigureToolbar from "./FigureToolbar.svelte";
-  import {
-    arrowHead,
-    nodeBounds,
-    normalizeRect,
-    polygonToPath,
-    strokeToPath,
-  } from "$lib/figure/geometry";
-  import type { FigureNode } from "$lib/figure/scene";
+  import { freedrawPath, nodeBounds, normalizeRect } from "$lib/figure/geometry";
+  import { nodeVisual } from "$lib/figure/render";
   import { figures } from "$lib/state/figures.svelte";
+  import { layout } from "$lib/state/layout.svelte";
   import type { FigureState, PenTool } from "$lib/state/figure.svelte";
 
   import { FORMULA_FIELD } from "./FigureToolbar.svelte";
@@ -27,6 +22,9 @@
   }
 
   const { figure }: Props = $props();
+
+  /** Figure tokens drawn with the app theme's values (files use `print`). */
+  const theme = $derived(layout.theme);
 
   let surface: SVGSVGElement | undefined = $state();
 
@@ -170,65 +168,83 @@
       />
 
       {#each figure.scene.nodes as node (node.id)}
-        {#if node.kind === "stroke"}
-          <path d={strokeToPath(node)} fill={node.color} />
-        {:else if node.kind === "rect"}
-          <!-- Normalised: older scenes may hold a negative size from an upward drag. -->
-          {@const box = normalizeRect(node.x, node.y, node.width, node.height)}
-          <rect
-            x={box.x}
-            y={box.y}
-            width={box.width}
-            height={box.height}
-            fill={node.fill ?? "none"}
-            stroke={node.stroke}
-            stroke-width="1"
-          />
-        {:else if node.kind === "ellipse"}
-          <ellipse
-            cx={node.cx}
-            cy={node.cy}
-            rx={node.rx}
-            ry={node.ry}
-            fill={node.fill ?? "none"}
-            stroke={node.stroke}
-            stroke-width="1"
-          />
-        {:else if node.kind === "arrow"}
-          <line
-            x1={node.from.x}
-            y1={node.from.y}
-            x2={node.to.x}
-            y2={node.to.y}
-            stroke={node.color}
-            stroke-width="1"
-          />
-          <path d={polygonToPath(arrowHead(node.from, node.to))} fill={node.color} />
-          {#if node.label !== undefined}
-            <text
-              x={(node.from.x + node.to.x) / 2}
-              y={(node.from.y + node.to.y) / 2 - 8}
-              fill="var(--mng-text-60)"
-              font-family="var(--font-mono)"
-              font-size="13"
-              text-anchor="middle"
-            >
-              {node.label}
-            </text>
-          {/if}
-        {:else if node.kind === "math"}
-          <text
-            x={node.x}
-            y={node.y}
-            fill={node.color}
-            font-family="var(--font-mono)"
-            font-size={node.size}>{node.tex}</text
+        {@const visual = nodeVisual(figure.scene, node, theme)}
+        {#if visual !== undefined}
+          <g
+            data-node={node.id}
+            transform={visual.rotate === undefined
+              ? undefined
+              : `rotate(${visual.rotate.angle} ${visual.rotate.cx} ${visual.rotate.cy})`}
+            opacity={visual.opacity}
           >
+            {#each visual.items as item, i (i)}
+              {#if item.type === "path"}
+                <path
+                  d={item.d}
+                  fill={item.fill}
+                  fill-opacity={item.fillOpacity}
+                  stroke={item.stroke}
+                  stroke-width={item.strokeWidth}
+                  stroke-linecap={item.linecap}
+                  stroke-linejoin={item.linejoin}
+                  stroke-dasharray={item.dash}
+                />
+              {:else if item.type === "rect"}
+                <rect
+                  x={item.x}
+                  y={item.y}
+                  width={item.width}
+                  height={item.height}
+                  fill={item.fill}
+                  fill-opacity={item.fillOpacity}
+                  stroke={item.stroke}
+                  stroke-width="1"
+                  stroke-dasharray={item.dash}
+                />
+              {:else if item.type === "circle"}
+                <circle cx={item.cx} cy={item.cy} r={item.r} fill={item.fill} />
+              {:else if item.type === "image"}
+                <image
+                  href={item.href}
+                  x={item.x}
+                  y={item.y}
+                  width={item.width}
+                  height={item.height}
+                  preserveAspectRatio="xMidYMid meet"
+                />
+              {:else if item.type === "embed"}
+                <rect
+                  x={item.x}
+                  y={item.y}
+                  width={item.width}
+                  height={item.height}
+                  fill="none"
+                  stroke="var(--mng-line)"
+                  stroke-width="1"
+                  stroke-dasharray="4 4"
+                />
+              {:else if item.type === "text"}
+                <text
+                  fill={item.fill}
+                  font-family={item.family}
+                  font-size={item.size}
+                  text-anchor={item.anchor}
+                  stroke={item.halo}
+                  stroke-width={item.halo === undefined ? undefined : 4}
+                  stroke-linejoin={item.halo === undefined ? undefined : "round"}
+                  paint-order={item.halo === undefined ? undefined : "stroke"}
+                  >{#each item.lines as line, j (j)}<tspan x={line.x} y={line.y}
+                      >{line.text}</tspan
+                    >{/each}</text
+                >
+              {/if}
+            {/each}
+          </g>
         {/if}
 
         <!-- Selection is a hairline frame, never a glow. -->
         {#if figure.selectedId === node.id}
-          {@const bounds = nodeBounds(node as FigureNode)}
+          {@const bounds = nodeBounds(node)}
           <rect
             x={bounds.x - 3}
             y={bounds.y - 3}
@@ -244,13 +260,7 @@
 
       {#if figure.draft.length > 1}
         <path
-          d={strokeToPath({
-            kind: "stroke",
-            id: "draft",
-            points: figure.draft,
-            size: 2.5,
-            color: "var(--mng-text)",
-          })}
+          d={freedrawPath({ points: figure.draft, size: 2.5 })}
           fill="var(--mng-text)"
         />
       {/if}
