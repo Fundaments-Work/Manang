@@ -63,7 +63,14 @@
 
   // The typed-path form, opened by "Open folder" (top bar or empty state).
   $effect(() => {
-    if (home.typingPath) void tick().then(() => folderInput?.focus());
+    if (home.typingPath) {
+      folder = "";
+      workspace.error = "";
+      void tick().then(() => {
+        folderInput?.focus();
+        folderInput?.select();
+      });
+    }
   });
 
   async function submitFolder(event: SubmitEvent): Promise<void> {
@@ -288,7 +295,11 @@
           <button
             type="button"
             class="mng-btn"
-            onclick={() => (home.typingPath = false)}>Cancel</button
+            onclick={() => {
+              home.typingPath = false;
+              folder = "";
+              workspace.error = "";
+            }}>Cancel</button
           >
         </form>
       {/if}

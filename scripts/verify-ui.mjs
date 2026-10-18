@@ -730,13 +730,15 @@ async function main() {
 
     // Folder still exists in mock, so typing the path can find it.
     await clickText(page, "button", "Open folder");
+    await sleep(250);
     await click(page, 'input[placeholder*="my-paper"]');
     await insertText(page, "/home/author/lecture-notes");
-    await press(page, "Enter", { wait: 400 });
+    await press(page, "Enter", { wait: 500 });
     check(
       "folder still exists and can be re-opened",
       await page.evaluate(`!document.querySelector('[role="alert"]')`),
     );
+    await page.evaluate(`localStorage.removeItem("manang.session.v1")`);
 
     /* ------------------------------------------------------------------ */
     section("Workbench");
