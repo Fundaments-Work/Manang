@@ -3,7 +3,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use manang_kernel::{Access, Capability, Context, Hook, Manifest, Payload, Plugin, PluginError};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use serde_json::{Value, json};
 
 use crate::diagnostics::{Diagnostic, parse_bibtex_log, parse_tex_log};
@@ -34,7 +34,8 @@ struct Builds {
 /// Compiles LaTeX with the system TeX installation, or the optional
 /// Tectonic worker when no TeX is installed.
 pub struct LatexPlugin {
-    config: LatexConfig,
+    /// Replaced by `latex.configure`; compiles take a snapshot.
+    config: RwLock<LatexConfig>,
     builds: Mutex<Builds>,
     /// Detected once, on first use: the installed TeX does not change while
     /// the app runs (a restart picks up a new installation).
@@ -44,7 +45,7 @@ pub struct LatexPlugin {
 impl LatexPlugin {
     pub fn new(config: LatexConfig) -> Self {
         Self {
-            config,
+            config: RwLock::new(config),
             builds: Mutex::new(Builds::default()),
             tools: OnceLock::new(),
         }
@@ -61,12 +62,72 @@ impl LatexPlugin {
         self.tools.get_or_init(TexTools::detect)
     }
 
+    /// A snapshot of the current configuration.
+    pub fn config(&self) -> LatexConfig {
+        self.config.read().clone()
+    }
+
+    /// Apply `latex.configure {values: {id: value}}`. All-or-nothing: on a
+    /// bad value nothing changes. Unknown ids are ignored so an older plugin
+    /// tolerates settings a newer manifest added.
+    fn configure(&self, args: &Value) -> Result<Value, LatexError> {
+        let values = args
+            .get("values")
+            .and_then(Value::as_object)
+            .ok_or_else(|| LatexError::BadArgument("values", "must be an object".to_owned()))?;
+        let mut next = self.config();
+        for (id, value) in values {
+            match id.as_str() {
+                SETTING_BACKEND => {
+                    next.backend = value.as_str().and_then(parse_backend).ok_or_else(|| {
+                        LatexError::BadArgument(
+                            SETTING_BACKEND,
+                            "must be auto, system or tectonic".to_owned(),
+                        )
+                    })?;
+                }
+                SETTING_ENGINE => {
+                    next.engine = value.as_str().and_then(Engine::parse).ok_or_else(|| {
+                        LatexError::BadArgument(
+                            SETTING_ENGINE,
+                            "must be pdflatex, xelatex or lualatex".to_owned(),
+                        )
+                    })?;
+                }
+                SETTING_LATEXMK => {
+                    next.latexmk = value.as_bool().ok_or_else(|| {
+                        LatexError::BadArgument(SETTING_LATEXMK, "must be a boolean".to_owned())
+                    })?;
+                }
+                SETTING_TIMEOUT => {
+                    let secs = value
+                        .as_u64()
+                        .filter(|s| (MIN_TIMEOUT_SECS..=MAX_TIMEOUT_SECS).contains(s))
+                        .ok_or_else(|| {
+                            LatexError::BadArgument(
+                                SETTING_TIMEOUT,
+                                format!(
+                                    "must be an integer from {MIN_TIMEOUT_SECS} to {MAX_TIMEOUT_SECS}"
+                                ),
+                            )
+                        })?;
+                    next.timeout = Duration::from_secs(secs);
+                }
+                _ => {}
+            }
+        }
+        let out = settings_json(&next);
+        *self.config.write() = next;
+        Ok(out)
+    }
+
     /// What can compile LaTeX on this machine, for `latex.status`.
     fn status_json(&self) -> Value {
+        let config = self.config();
         let tools = self.tools();
         let engines: Vec<&str> = tools.engines.keys().map(|e| e.program()).collect();
-        let tectonic = crate::driver::worker_available(&self.config);
-        let default = match self.config.backend {
+        let tectonic = crate::driver::worker_available(&config);
+        let default = match config.backend {
             BackendChoice::System => "system",
             BackendChoice::Tectonic => "tectonic",
             BackendChoice::Auto if tools.is_available() => "system",
@@ -95,7 +156,8 @@ impl LatexPlugin {
                 }
             ],
             "default": default,
-            "default_engine": self.config.engine.program(),
+            "default_engine": config.engine.program(),
+            "settings": settings_json(&config),
         })
     }
 
@@ -117,11 +179,49 @@ impl LatexPlugin {
     }
 
     fn run(&self, args: &Value) -> Result<(String, Arc<Build>), LatexError> {
-        let spec = parse_spec(args, &self.config)?;
+        // A snapshot: a concurrent `latex.configure` affects the next compile.
+        let config = self.config();
+        let spec = parse_spec(args, &config)?;
         let main = spec.main.clone();
-        let build = compile_with(&self.config, &spec, self.tools())?;
+        let build = compile_with(&config, &spec, self.tools())?;
         Ok((main.clone(), self.remember(&main, build)))
     }
+}
+
+/// Setting ids declared in `manifest.toml`.
+const SETTING_BACKEND: &str = "latex.backend";
+const SETTING_ENGINE: &str = "latex.engine";
+const SETTING_LATEXMK: &str = "latex.latexmk";
+const SETTING_TIMEOUT: &str = "latex.timeout-seconds";
+/// Bounds of `latex.timeout-seconds`; keep in step with `manifest.toml`.
+const MIN_TIMEOUT_SECS: u64 = 5;
+const MAX_TIMEOUT_SECS: u64 = 3600;
+
+fn parse_backend(name: &str) -> Option<BackendChoice> {
+    match name {
+        "auto" => Some(BackendChoice::Auto),
+        "system" => Some(BackendChoice::System),
+        "tectonic" => Some(BackendChoice::Tectonic),
+        _ => None,
+    }
+}
+
+fn backend_name(backend: BackendChoice) -> &'static str {
+    match backend {
+        BackendChoice::Auto => "auto",
+        BackendChoice::System => "system",
+        BackendChoice::Tectonic => "tectonic",
+    }
+}
+
+/// The user-facing configuration, keyed by setting id.
+fn settings_json(config: &LatexConfig) -> Value {
+    json!({
+        SETTING_BACKEND: backend_name(config.backend),
+        SETTING_ENGINE: config.engine.program(),
+        SETTING_LATEXMK: config.latexmk,
+        SETTING_TIMEOUT: config.timeout.as_secs(),
+    })
 }
 
 fn parse_spec(args: &Value, config: &LatexConfig) -> Result<CompileSpec, LatexError> {
@@ -288,6 +388,10 @@ impl Plugin for LatexPlugin {
         };
         match command {
             "latex.status" => Ok(Payload::Json(self.status_json())),
+            "latex.configure" => self
+                .configure(&args)
+                .map(Payload::Json)
+                .map_err(|e| failed(&e)),
             "latex.compile" => {
                 ctx.require(&read_project)?;
                 let (_, build) = self.run(&args).map_err(|e| failed(&e))?;

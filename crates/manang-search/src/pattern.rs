@@ -95,16 +95,29 @@ impl PathFilter {
         exclude: &[String],
         limits: &Limits,
     ) -> Result<Self, SearchError> {
+        Self::with_configured(include, exclude, &[], limits)
+    }
+
+    /// As [`PathFilter::new`] plus `configured` excludes from the
+    /// `search.exclude` setting. Those were bounded when configured, so only
+    /// the request's own globs count against `max_globs`.
+    pub fn with_configured(
+        include: &[String],
+        exclude: &[String],
+        configured: &[String],
+        limits: &Limits,
+    ) -> Result<Self, SearchError> {
         let given = include.len() + exclude.len();
-        if given > limits.max_globs {
+        if given > limits.max_globs || configured.len() > limits.max_globs {
             return Err(SearchError::TooManyGlobs {
-                given,
+                given: given.max(configured.len()),
                 limit: limits.max_globs,
             });
         }
+        let exclude: Vec<String> = exclude.iter().chain(configured).cloned().collect();
         Ok(Self {
             include: build_set(include)?,
-            exclude: build_set(exclude)?,
+            exclude: build_set(&exclude)?,
         })
     }
 

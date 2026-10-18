@@ -32,3 +32,16 @@ title = "Extract citation keys from source text"
 [[contributes.commands]]
 id = "citations.verify"
 title = "Verify citation against authoritative registries"
+
+[[contributes.commands]]
+id = "citations.configure"
+title = "Apply citation settings"
+
+[[contributes.settings]]
+id = "citations.style"
+type = "enum"
+values = ["apa", "numeric"]
+default = "apa"
+scope = "project"
+title = "Citation style"
+description = "Style used to format a reference when none is requested: `apa` (author-year) or `numeric` (IEEE-like)."

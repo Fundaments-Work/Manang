@@ -21,6 +21,6 @@ pub mod words;
 
 pub use diag::{DiagSeverity, Diagnostic, MAX_DIAGNOSTICS};
 pub use error::WritingError;
-pub use plugin::{WritingPlugin, manifest, plugin};
+pub use plugin::{DEFAULT_FORMAT_WIDTH, WritingConfig, WritingPlugin, manifest, plugin};
 pub use syntax::Syntax;
 pub use text::{CharRange, TextIndex};

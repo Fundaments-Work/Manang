@@ -31,3 +31,23 @@ title = "Apply planned replace"
 [[contributes.commands]]
 id = "search.in-text"
 title = "Find in document text"
+
+[[contributes.commands]]
+id = "search.configure"
+title = "Apply search settings"
+
+[[contributes.settings]]
+id = "search.exclude"
+type = "list"
+item = { type = "string" }
+default = []
+scope = "project"
+title = "Exclude globs"
+description = "Glob patterns left out of project text search and replace, in addition to each search's own excludes and .gitignore (for example `build/` or `*.log`)."
+
+[[contributes.settings]]
+id = "search.include-hidden"
+type = "bool"
+default = false
+title = "Include hidden files"
+description = "Search dotfiles and dot folders when a search does not say otherwise. `.git` and `.manang` are always skipped."
