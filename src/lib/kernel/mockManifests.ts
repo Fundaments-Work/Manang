@@ -19,7 +19,7 @@ export interface MockManifest {
 export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
   agent: {
     description:
-      "AI agent: chat, rewrite, explain and fix with your own provider key. Writes are proposals you accept.",
+      "AI writing assistant: chat and slash commands with your own provider key. Every change is a proposal you accept.",
     permissions: {},
     settingsContexts: ["app", "project", "document"],
     settings: [
@@ -96,21 +96,42 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
         id: "agent.include-thinking",
         type: "bool",
         default: false,
-        title: "Show the model's reasoning",
+        title: "Developer: stream the model's reasoning",
         description:
-          "Shows the model's reasoning text dimmed in the Agent view when the provider streams it.",
+          "Off by default: the panel only says Thinking. On, the reasoning text is sent to the panel's event stream (for debugging prompts).",
         scope: "user",
         "requires-restart": false,
       },
       {
-        id: "agent.max-context-tokens",
+        id: "agent.context-window",
         type: "int",
-        min: 1000,
+        min: 8000,
         max: 1000000,
-        default: 32000,
-        title: "Context limit (tokens)",
+        default: 100000,
+        title: "Working window (tokens)",
         description:
-          "A request whose attached context is larger than this is refused before it is sent. About 3.5 characters per token.",
+          "How much conversation the assistant keeps before it clears old tool results (at 60%) and summarises the older part (at 85%). Models with larger windows are not filled on purpose: cost and quality fall first.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.reasoning-effort",
+        type: "enum",
+        values: ["auto", "low", "high"],
+        default: "auto",
+        title: "Reasoning effort",
+        description:
+          "For models that take it (DeepSeek). auto uses low for slash commands such as /rewrite and high for open chat. Fixed when a chat starts.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.use-agents-md",
+        type: "bool",
+        default: false,
+        title: "Use AGENTS.md as project instructions",
+        description:
+          "Read AGENTS.md or CLAUDE.md when the project has no MANANG.md. Off by default: in a research repository they are usually build notes for coding agents.",
         scope: "user",
         "requires-restart": false,
       },

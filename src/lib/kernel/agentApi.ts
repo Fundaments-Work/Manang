@@ -10,6 +10,7 @@ import type {
   ConnectionResult,
   RequestPreview,
   SessionMeta,
+  SlashCommand,
   StartArgs,
   TextEdit,
 } from "$lib/agent/types";
@@ -38,6 +39,11 @@ export function agentApi(kernel: Kernel) {
     /** The exact outbound request, without sending it. */
     previewRequest: (args: StartArgs) =>
       kernel.run<RequestPreview>("agent.preview-request", { ...args }),
+    /** The slash commands (built-ins, user files, project files). */
+    commands: (projectRoot?: string) =>
+      kernel.run<{ commands: SlashCommand[] }>("agent.commands", {
+        ...(projectRoot === undefined ? {} : { project_root: projectRoot }),
+      }),
     sessions: (projectRoot?: string) =>
       kernel.run<{ sessions: SessionMeta[] }>("agent.sessions", {
         ...(projectRoot === undefined ? {} : { project_root: projectRoot }),

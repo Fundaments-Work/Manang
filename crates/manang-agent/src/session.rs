@@ -134,7 +134,11 @@ pub async fn run(
         emit_usage(&shared, &session, &plan, &stats);
     }
     match end {
-        End::Done(reason) => shared.emit("agent.done", &sid, json!({ "stop_reason": reason })),
+        End::Done(reason) => shared.emit(
+            "agent.done",
+            &sid,
+            json!({ "stop_reason": reason, "steps": plan.max_iterations }),
+        ),
         End::Cancelled => shared.emit(
             "agent.done",
             &sid,
