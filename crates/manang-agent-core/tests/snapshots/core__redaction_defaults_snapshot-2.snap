@@ -1,0 +1,42 @@
+---
+source: crates/manang-agent-core/tests/core.rs
+expression: r.spans
+---
+[
+  {
+    "kind": "secret",
+    "start": 4,
+    "end": 39,
+    "replacement": "[REDACTED:secret]"
+  },
+  {
+    "kind": "secret",
+    "start": 44,
+    "end": 84,
+    "replacement": "[REDACTED:secret]"
+  },
+  {
+    "kind": "secret",
+    "start": 90,
+    "end": 110,
+    "replacement": "[REDACTED:secret]"
+  },
+  {
+    "kind": "secret",
+    "start": 127,
+    "end": 144,
+    "replacement": "[REDACTED:secret]"
+  },
+  {
+    "kind": "secret",
+    "start": 170,
+    "end": 202,
+    "replacement": "[REDACTED:secret]"
+  },
+  {
+    "kind": "private_key",
+    "start": 261,
+    "end": 331,
+    "replacement": "[REDACTED:private_key]"
+  }
+]

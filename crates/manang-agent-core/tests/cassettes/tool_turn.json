@@ -1,0 +1,18 @@
+{
+  "name": "tool_turn",
+  "turns": [
+    [
+      {"started": {"request_id": "req_01", "model": "claude-sonnet-5-5"}},
+      {"block": {"block": {"type": "thinking", "thinking": "plan", "signature": "EqQBCgIYAhIM=="}}},
+      {"text_delta": {"text": "Adding a "}},
+      {"text_delta": {"text": "circle."}},
+      {"tool_use": {"id": "toolu_1", "name": "figure__add_shape", "input": {"kind": "circle"}}},
+      {"usage": {"usage": {"input": 100, "output": 20, "cache_read": 0, "cache_write": 0}}},
+      {"done": {"stop_reason": "tool_use"}}
+    ],
+    [
+      {"text_delta": {"text": "Done."}},
+      {"done": {"stop_reason": "end_turn"}}
+    ]
+  ]
+}
