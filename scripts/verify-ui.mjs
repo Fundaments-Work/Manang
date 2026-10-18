@@ -297,6 +297,7 @@ const KEYS = {
   Delete: ["Delete", 46],
   F2: ["F2", 113],
   F5: ["F5", 116],
+  F10: ["F10", 121],
   "\\": ["Backslash", 220],
   ",": ["Comma", 188],
 };
@@ -2286,9 +2287,9 @@ async function main() {
     const headerFits = `(() => { const s = document.querySelector('section[aria-label="Preview"]'); const bar = s?.querySelector('[role="toolbar"]'); const close = bar?.querySelector('button[aria-label="Close preview"]'); if (!close) return false; const r = close.getBoundingClientRect(); return r.width > 0 && r.right <= s.getBoundingClientRect().right && bar.scrollWidth <= bar.clientWidth; })()`;
     const WINDOW_BUTTONS = '["Minimise", "Maximise", "Restore", "Close window"]';
     check(
-      "the workbench top bar has no buttons but Home and the window controls",
+      "the workbench top bar has no buttons but Home, the menus and the window controls",
       await page.evaluate(
-        `[...document.querySelectorAll("header button")].every((b) => b.getAttribute("aria-label") === "Home" || ${WINDOW_BUTTONS}.includes(b.getAttribute("aria-label")))`,
+        `[...document.querySelectorAll("header button")].every((b) => b.getAttribute("aria-label") === "Home" || b.closest("[data-menu-root]") !== null || ${WINDOW_BUTTONS}.includes(b.getAttribute("aria-label")))`,
       ),
     );
     check(
@@ -2436,6 +2437,245 @@ async function main() {
       (await exists(page, ".cm-editor")) &&
         (await exists(page, 'section[aria-label="Preview"]')),
     );
+
+    /* ------------------------------------------------------------------ */
+    section("Menu bar");
+    const menuOpen = (label) =>
+      page.evaluate(
+        `document.querySelector('header [role="menu"][aria-label="${label}"]') !== null`,
+      );
+    const anyMenuOpen = () =>
+      page.evaluate(`document.querySelector('header [role="menu"]') !== null`);
+    const panelOpen = () => exists(page, "#bottom-panel");
+    check(
+      "the top bar shows six menus: File, Edit, View, Go, Build, Help",
+      (await page.evaluate(
+        `[...document.querySelectorAll('header [role="menubar"] [data-menu-bar]')].map((b) => b.textContent.trim()).join()`,
+      )) === "File,Edit,View,Go,Build,Help",
+    );
+    check(
+      "the menus sit between the mark and the breadcrumb",
+      await page.evaluate(
+        `(() => { const home = document.querySelector('header button[aria-label="Home"]').getBoundingClientRect(); const bar = document.querySelector('header [role="menubar"]').getBoundingClientRect(); const crumbs = document.querySelector('header nav[aria-label="Breadcrumb"]').getBoundingClientRect(); return home.right <= bar.left && bar.right <= crumbs.left; })()`,
+      ),
+    );
+    check(
+      "menu buttons carry roles, popup state, Alt shortcuts and a roving tabindex",
+      await page.evaluate(
+        `(() => { const b = [...document.querySelectorAll('header [data-menu-bar]')]; return b.every((x) => x.getAttribute("role") === "menuitem" && x.getAttribute("aria-haspopup") === "menu" && x.getAttribute("aria-expanded") === "false" && /^Alt\\+[A-Z]$/.test(x.getAttribute("aria-keyshortcuts"))) && b.filter((x) => x.tabIndex === 0).length === 1; })()`,
+      ),
+    );
+    check(
+      "the bar's empty areas still drag the window; the menus do not",
+      await page.evaluate(
+        `(() => { const h = document.querySelector("header"); const crumbs = h.querySelector('nav[aria-label="Breadcrumb"]'); return h.hasAttribute("data-tauri-drag-region") && crumbs.hasAttribute("data-tauri-drag-region") && crumbs.getBoundingClientRect().width > 200 && [...h.querySelectorAll("[data-menu-root], [data-menu-root] *")].every((e) => !e.hasAttribute("data-tauri-drag-region")); })()`,
+      ),
+    );
+    await focusEditor(page);
+    await press(page, "f", { alt: true, wait: 300 });
+    check("Alt+F opens File", await menuOpen("File"));
+    check(
+      "the mnemonics are underlined while the menus are in keyboard use",
+      (await page.evaluate(
+        `[...document.querySelectorAll('header [data-menu-bar] .underline')].map((u) => u.textContent).join("")`,
+      )) === "FEVGBH",
+    );
+    check(
+      "File lists its groups with separators and shows shortcuts in DM Mono",
+      await page.evaluate(
+        `(() => { const m = document.querySelector('header [role="menu"][aria-label="File"]'); const save = m.querySelector('[data-command="file.save"]'); const key = save?.querySelector(".font-mono"); return m.querySelectorAll('[role="separator"]').length >= 4 && key?.textContent === "Ctrl+S" && save.getAttribute("aria-keyshortcuts") === "Control+S" && getComputedStyle(key).fontFamily.includes("DM Mono"); })()`,
+      ),
+    );
+    check(
+      "the first enabled item has focus, marked with the accent",
+      await page.evaluate(
+        `(() => { const a = document.activeElement; return a?.getAttribute("role") === "menuitem" && a.dataset.menuItem === "0" && a.querySelector(".bg-accent") !== null; })()`,
+      ),
+    );
+    check(
+      "the open menu is a flat panel: hairline border, no radius, no shadow",
+      await page.evaluate(
+        `(() => { const m = getComputedStyle(document.querySelector('header [role="menu"]')); return m.borderTopWidth === "1px" && m.borderTopLeftRadius === "0px" && m.boxShadow === "none"; })()`,
+      ),
+    );
+    await shoot(page, "18f-menu-file");
+    await press(page, "ArrowRight", { wait: 150 });
+    await press(page, "ArrowRight", { wait: 200 });
+    check("arrow keys move from File to View, which opens", await menuOpen("View"));
+    const itemBefore = await page.evaluate(`document.activeElement?.dataset.menuItem`);
+    await press(page, "ArrowDown", { wait: 200 });
+    check(
+      "ArrowDown moves down View's items",
+      await page.evaluate(
+        `(() => { const a = document.activeElement; return a?.closest('[role="menu"]')?.getAttribute("aria-label") === "View" && a.dataset.menuItem === String(Number(${JSON.stringify(itemBefore)}) + 1); })()`,
+      ),
+    );
+    await press(page, "Escape", { wait: 300 });
+    check(
+      "Escape closes the menu and gives focus back to the editor",
+      !(await anyMenuOpen()) &&
+        (await page.evaluate(`document.activeElement?.closest(".cm-editor") !== null`)),
+    );
+    await press(page, "F10", { wait: 200 });
+    check(
+      "F10 focuses the menu bar without opening a menu",
+      !(await anyMenuOpen()) &&
+        (await page.evaluate(`document.activeElement?.dataset.menuBar === "0"`)),
+    );
+    await press(page, "Escape", { wait: 200 });
+
+    const panelBefore = await panelOpen();
+    await click(page, 'header [data-menu="view"]');
+    check("clicking View opens it", await menuOpen("View"));
+    await mouse(
+      page,
+      "mouseMoved",
+      ...(await rect(page, 'header [data-menu="go"]').then((r) => [r.x, r.y])),
+    );
+    await sleep(150);
+    check("hovering Go while View is open switches to Go", await menuOpen("Go"));
+    await mouse(
+      page,
+      "mouseMoved",
+      ...(await rect(page, 'header [data-menu="view"]').then((r) => [r.x, r.y])),
+    );
+    await sleep(150);
+    await click(page, 'header [role="menu"] [data-command="view.toggle-panel"]');
+    check(
+      "View > Toggle panel runs its command and closes the menu",
+      (await panelOpen()) !== panelBefore && !(await anyMenuOpen()),
+    );
+    await press(page, "j", { ctrl: true, wait: 300 });
+    check("Ctrl+J, its shortcut, toggles it back", (await panelOpen()) === panelBefore);
+
+    await click(page, 'header [data-menu="file"]');
+    check(
+      "a disabled item is marked disabled (File > Quit in a browser)",
+      await page.evaluate(
+        `document.querySelector('header [data-command="app.quit"]')?.getAttribute("aria-disabled") === "true"`,
+      ),
+    );
+    await click(page, 'header [data-command="app.quit"]');
+    check(
+      "clicking a disabled item does nothing; the menu stays open",
+      await menuOpen("File"),
+    );
+    await mouse(page, "mousePressed", 700, 400);
+    await mouse(page, "mouseReleased", 700, 400);
+    await sleep(200);
+    check("a click outside closes the menu", !(await anyMenuOpen()));
+
+    await click(page, 'header [data-menu="edit"]');
+    check(
+      "Edit lists Undo, Redo, Cut, Copy, Paste, Select all, Find, Replace",
+      (await page.evaluate(
+        `[...document.querySelectorAll('header [role="menu"][aria-label="Edit"] [role="menuitem"]')].slice(0, 8).map((i) => i.querySelector("span.truncate").textContent).join()`,
+      )) === "Undo,Redo,Cut,Copy,Paste,Select all,Find,Replace",
+    );
+    await click(page, 'header [data-command="edit.find"]');
+    await expectEventually(
+      page,
+      "Edit > Find opens the editor's find panel (the focused surface)",
+      `document.querySelector(".cm-editor .cm-search") !== null`,
+      { timeout: 3000 },
+    );
+    await press(page, "Escape", { wait: 300 });
+    await noStrayEdits(page, "menu bar");
+
+    // A shortcut changed in Settings applies at once, here and in the menus.
+    await click(page, 'header [data-menu="help"]');
+    await click(page, 'header [data-command="help.keybindings"]');
+    await waitFor(
+      page,
+      `document.querySelector('button[aria-label="Change shortcut for view.toggle-panel"]') !== null`,
+      { timeout: 8000 },
+    );
+    await page.evaluate(
+      `document.querySelector('button[aria-label="Change shortcut for view.toggle-panel"]').scrollIntoView({ block: "center" })`,
+    );
+    await sleep(150);
+    await click(page, 'button[aria-label="Change shortcut for view.toggle-panel"]');
+    await press(page, "y", { ctrl: true, alt: true, wait: 200 });
+    await press(page, "Enter", { wait: 600 });
+    await shoot(page, "18g-keybinding-changed");
+    await press(page, "Escape", { wait: 400 });
+    const panelNow = await panelOpen();
+    // Synthetic: unbound, Ctrl+J would reach Chromium, which opens Downloads.
+    await press(page, "j", { ctrl: true, wait: 300, synthetic: true });
+    check(
+      "after rebinding, the old shortcut Ctrl+J does nothing",
+      (await panelOpen()) === panelNow,
+    );
+    await press(page, "y", { ctrl: true, alt: true, wait: 300 });
+    check(
+      "the shortcut changed in Settings > Keyboard shortcuts runs the command",
+      (await panelOpen()) !== panelNow,
+    );
+    await click(page, 'header [data-menu="view"]');
+    check(
+      "the menu shows the new shortcut",
+      (await page.evaluate(
+        `document.querySelector('header [data-command="view.toggle-panel"] .font-mono')?.textContent`,
+      )) === "Ctrl+Alt+Y",
+    );
+    await press(page, "Escape", { wait: 200 });
+    await press(page, "y", { ctrl: true, alt: true, wait: 300 });
+    // Put the default back for the sections that follow.
+    await click(page, 'header [data-menu="help"]');
+    await click(page, 'header [data-command="help.keybindings"]');
+    await waitFor(
+      page,
+      `document.querySelector('button[aria-label="Reset shortcut for view.toggle-panel"]') !== null`,
+    );
+    await page.evaluate(
+      `document.querySelector('button[aria-label="Reset shortcut for view.toggle-panel"]').scrollIntoView({ block: "center" })`,
+    );
+    await sleep(150);
+    await click(page, 'button[aria-label="Reset shortcut for view.toggle-panel"]');
+    await sleep(400);
+    await press(page, "Escape", { wait: 400 });
+    const panelReset = await panelOpen();
+    await press(page, "j", { ctrl: true, wait: 300 });
+    check("resetting it brings Ctrl+J back", (await panelOpen()) !== panelReset);
+    await press(page, "j", { ctrl: true, wait: 300 });
+
+    // Narrow: the six menus fold into one Menu button with the same model.
+    await resize(page, 860, 700);
+    await sleep(300);
+    if (await exists(page, "#side-panel")) await press(page, "Escape", { wait: 300 });
+    check(
+      "at 860px the menus fold into one Menu button",
+      (await exists(page, "header [data-menu-fold]")) &&
+        !(await exists(page, "header [data-menu-bar]")),
+    );
+    await click(page, "header [data-menu-fold]");
+    check(
+      "the Menu button lists the same six menus",
+      (await page.evaluate(
+        `[...document.querySelectorAll('header [data-menu-row]')].map((b) => b.textContent.replace("›", "").trim()).join()`,
+      )) === "File,Edit,View,Go,Build,Help",
+    );
+    await click(page, 'header [data-menu-row="2"]');
+    check("choosing View opens its items beside the list", await menuOpen("View"));
+    await shoot(page, "18h-menu-folded");
+    const foldedBefore = await panelOpen();
+    await click(page, 'header [role="menu"] [data-command="view.toggle-panel"]');
+    check(
+      "a folded menu item runs its command",
+      (await panelOpen()) !== foldedBefore && !(await anyMenuOpen()),
+    );
+    await press(page, "j", { ctrl: true, wait: 300 });
+    check(
+      "at 860px the top bar fits without overflow",
+      await page.evaluate(
+        `(() => { const bar = document.querySelector("header"); return document.documentElement.scrollWidth <= window.innerWidth && bar.scrollWidth <= bar.clientWidth; })()`,
+      ),
+    );
+    await resize(page, 1280, 820);
+    await sleep(300);
+    if (!(await exists(page, "#side-panel")))
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    await noStrayEdits(page, "menu bar, narrow");
 
     /* ------------------------------------------------------------------ */
     section("Persistence");
