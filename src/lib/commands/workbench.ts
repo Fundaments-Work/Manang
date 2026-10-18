@@ -435,7 +435,8 @@ export function workbenchCommands(
       title: `Go to tab ${i + 1}`,
       group: "Workbench",
       palette: false,
-      enabled: tabs.tabs.length > i,
+      // Go to tab 9 is the last tab, as in other editors.
+      enabled: i === 8 ? tabs.tabs.length > 0 : tabs.tabs.length > i,
       run: () => tabs.byShortcut(i + 1),
     })),
     {

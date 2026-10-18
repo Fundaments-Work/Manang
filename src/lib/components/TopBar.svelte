@@ -2,11 +2,14 @@
   import Icon from "$lib/components/ui/Icon.svelte";
   import Mark from "./Mark.svelte";
   import WindowControls from "./WindowControls.svelte";
+  import MenuBar from "./menu/MenuBar.svelte";
+  import NativeMenu from "./menu/NativeMenu.svelte";
   import { hasCustomTitleBar, osPlatform } from "$lib/kernel/native";
   import { formatShortcut } from "$lib/commands/shortcut";
   import { goHome, openFolder } from "$lib/state/actions";
   import { context } from "$lib/state/context.svelte";
   import { home } from "$lib/state/home.svelte";
+  import { layout } from "$lib/state/layout.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { palette } from "$lib/state/palette.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
@@ -17,6 +20,8 @@
    * Top bar, which is also the window's title bar: the mark (it goes Home), a
    * breadcrumb, a search field where there is something to search, the
    * surface's few actions, and the window controls.
+   *
+   * The menus (File ... Help) sit between the mark and the breadcrumb.
    *
    * There is one search and it searches what is on screen: projects on Home,
    * settings and plugins on the Settings page. In the editor the field is
@@ -42,7 +47,17 @@
   // carries the window controls, on the left on macOS as people expect there.
   const ownControls = hasCustomTitleBar();
   let controlsLeft = $state(false);
-  if (ownControls) void osPlatform().then((p) => (controlsLeft = p === "macos"));
+  // The menus: drawn in this bar on Windows, Linux and in a browser; on macOS
+  // they go to the native application menu (NativeMenu) instead. Nothing is
+  // drawn until the platform is known, so macOS never flashes a menu bar.
+  let platformKnown = $state(!ownControls);
+  if (ownControls)
+    void osPlatform()
+      .then((p) => (controlsLeft = p === "macos"))
+      .finally(() => (platformKnown = true));
+  const menusInBar = $derived(platformKnown && !controlsLeft);
+  /** Below 900 px the six menus fold into one Menu button. */
+  const foldMenus = $derived(layout.width < 900);
 
   function inlineQuery(): string {
     return surface === "settings" ? settingsPage.query : home.query;
@@ -115,10 +130,16 @@
   >
     <Mark class="text-text" />
     <span
-      class="hidden text-[15px] font-light min-[900px]:inline"
+      class="hidden text-[15px] font-light {menusInBar ? '' : 'min-[900px]:inline'}"
       style="letter-spacing: var(--tracking-headline)">Manang</span
     >
   </button>
+
+  {#if menusInBar}
+    <MenuBar folded={foldMenus} />
+  {:else if platformKnown && controlsLeft}
+    <NativeMenu />
+  {/if}
 
   <nav
     aria-label="Breadcrumb"
