@@ -78,6 +78,42 @@ pub fn wrap(text: &str, max_width: f64, size: f64, family: FontFamily) -> Vec<St
     lines
 }
 
+/// How far a label's font may shrink (as a fraction of its size) to keep
+/// a long word whole before the word is broken.
+pub const MIN_LABEL_SCALE: f64 = 0.7;
+
+/// Fits `label` in a `max_width` by `max_height` text box: breaks only at
+/// spaces and newlines; a single word wider than the box shrinks the font
+/// (down to [`MIN_LABEL_SCALE`], in 0.5 steps) before it is broken between
+/// characters; too many lines shrink it the same way. Returns the lines and
+/// the font size used. `src/lib/figure/text.ts` mirrors this.
+pub fn fit_label(
+    label: &str,
+    max_width: f64,
+    max_height: f64,
+    size: f64,
+    family: FontFamily,
+) -> (Vec<String>, f64) {
+    let floor = size * MIN_LABEL_SCALE;
+    let mut fitted = size;
+    let widest = label
+        .split([' ', '\n'])
+        .filter(|w| !w.is_empty())
+        .map(|w| measure(w, size, family))
+        .fold(0.0, f64::max);
+    if max_width > 0.0 && widest > max_width {
+        fitted = (size * max_width / widest * 2.0).floor() / 2.0;
+        fitted = fitted.clamp(floor, size);
+    }
+    loop {
+        let lines = wrap(label, max_width, fitted, family);
+        if lines.len() as f64 * fitted * LINE_HEIGHT <= max_height || fitted <= floor {
+            return (lines, fitted);
+        }
+        fitted = (fitted - 0.5).max(floor);
+    }
+}
+
 /// Width and height of `text` laid out without a width limit.
 pub fn natural_size(text: &str, size: f64, family: FontFamily) -> (f64, f64) {
     let lines: Vec<&str> = text.split('\n').collect();
@@ -104,6 +140,22 @@ mod tests {
         );
         assert_eq!(wrap("a\nb", 0.0, 16.0, FontFamily::Sans), vec!["a", "b"]);
         assert_eq!(wrap("", 100.0, 16.0, FontFamily::Sans), vec![""]);
+    }
+
+    #[test]
+    fn fit_label_keeps_words_whole_by_shrinking_first() {
+        // "Validate" is too wide for 60 at 16px, but fits at about 12px.
+        let (lines, size) = fit_label("Validate input", 50.0, 100.0, 16.0, FontFamily::Sans);
+        assert_eq!(lines, vec!["Validate", "input"]);
+        assert!((16.0 * MIN_LABEL_SCALE..16.0).contains(&size));
+        // Short words keep the full size.
+        let (lines, size) = fit_label("Is it ok", 80.0, 100.0, 16.0, FontFamily::Sans);
+        assert_eq!(size, 16.0);
+        assert!(lines.len() <= 2);
+        // Past the floor, the word is broken.
+        let (lines, size) = fit_label("Supercalifragilistic", 40.0, 100.0, 16.0, FontFamily::Sans);
+        assert_eq!(size, 16.0 * MIN_LABEL_SCALE);
+        assert!(lines.len() > 1);
     }
 
     #[test]

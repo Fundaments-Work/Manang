@@ -183,6 +183,14 @@ pub struct Style {
     /// Alignment. Default centre (left for text nodes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_align: Option<TextAlign>,
+    /// Label and text colour: a palette token or `#rrggbb`. Default: the
+    /// stroke colour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_color: Option<String>,
+    /// Fill opacity, 0 to 100, on top of the overall opacity. Default: the
+    /// palette tint for a hue token, 100 otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_opacity: Option<f64>,
 }
 
 /// Default stroke width.
@@ -199,6 +207,11 @@ impl Style {
     /// The stroke colour.
     pub fn stroke(&self) -> &str {
         self.stroke.as_deref().unwrap_or("ink")
+    }
+
+    /// The label colour: `label_color`, else the stroke colour.
+    pub fn label_colour(&self) -> &str {
+        self.label_color.as_deref().unwrap_or_else(|| self.stroke())
     }
 
     /// The fill colour.
@@ -236,6 +249,24 @@ impl Style {
         self.font_size.unwrap_or(DEFAULT_FONT_SIZE)
     }
 
+    /// Every colour field, as written.
+    pub fn colours(&self) -> impl Iterator<Item = &str> {
+        [&self.stroke, &self.fill, &self.label_color]
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+    }
+
+    /// Rewrites hex literals as lowercase `#rrggbb`.
+    pub fn normalise_colours(&mut self) {
+        for c in [&mut self.stroke, &mut self.fill, &mut self.label_color]
+            .into_iter()
+            .flatten()
+        {
+            *c = crate::palette::normalize_colour(c);
+        }
+    }
+
     /// Merge `other` over `self`: every field `other` sets wins.
     pub fn merged(&self, other: &Style) -> Style {
         Style {
@@ -248,6 +279,11 @@ impl Style {
             font_family: other.font_family.or(self.font_family),
             font_size: other.font_size.or(self.font_size),
             text_align: other.text_align.or(self.text_align),
+            label_color: other
+                .label_color
+                .clone()
+                .or_else(|| self.label_color.clone()),
+            fill_opacity: other.fill_opacity.or(self.fill_opacity),
         }
     }
 }
@@ -474,22 +510,70 @@ pub struct FreedrawNode {
     pub locked: bool,
 }
 
-/// A stamped formula, drawn as its source text until a math renderer is
-/// attached.
+/// The language a formula is written in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MathLanguage {
+    /// Typst math (`integral_0^1 x^2 dif x`), rendered by the Typst compiler.
+    #[default]
+    Typst,
+    /// LaTeX math (`\int_0^1 x^2\,dx`), rendered by RaTeX.
+    Latex,
+}
+
+impl MathLanguage {
+    fn is_typst(&self) -> bool {
+        *self == Self::Typst
+    }
+
+    /// The name as written in JSON.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Typst => "typst",
+            Self::Latex => "latex",
+        }
+    }
+}
+
+impl std::str::FromStr for MathLanguage {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "typst" => Ok(Self::Typst),
+            "latex" => Ok(Self::Latex),
+            other => Err(format!(
+                "unknown math language `{other}`; use typst or latex"
+            )),
+        }
+    }
+}
+
+/// A formula: source text in Typst or LaTeX math, rendered to vector paths
+/// (never text) by [`crate::math`]. The box is measured from the rendering
+/// and stored, so selection, alignment and arrow binding need no renderer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MathNode {
     /// Unique node id.
     pub id: String,
-    /// Baseline-left X.
+    /// Left edge.
     pub x: f64,
-    /// Baseline Y.
+    /// Top edge.
     pub y: f64,
-    /// TeX / Typst math source.
-    pub tex: String,
+    /// Formula source (the inside of `$ .. $` in Typst, of `$$ .. $$` in LaTeX).
+    pub source: String,
+    /// Source language; Typst when absent.
+    #[serde(default, skip_serializing_if = "MathLanguage::is_typst")]
+    pub language: MathLanguage,
     /// Font size in scene units.
     pub size: f64,
-    /// Style overrides (stroke colour = text colour; default `sage`).
+    /// Measured width of the rendering (0: not measured yet, estimated).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub width: f64,
+    /// Measured height of the rendering (0: not measured yet, estimated).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub height: f64,
+    /// Style overrides (stroke colour = formula colour; default `ink`).
     #[serde(default, skip_serializing_if = "Style::is_empty")]
     pub style: Style,
     /// Group ids, innermost first.
@@ -498,6 +582,48 @@ pub struct MathNode {
     /// Locked.
     #[serde(default, skip_serializing_if = "is_false")]
     pub locked: bool,
+}
+
+impl MathNode {
+    /// A formula with no measurement yet.
+    pub fn new(
+        id: impl Into<String>,
+        x: f64,
+        y: f64,
+        source: impl Into<String>,
+        language: MathLanguage,
+        size: f64,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            x,
+            y,
+            source: source.into(),
+            language,
+            size,
+            width: 0.0,
+            height: 0.0,
+            style: Style::default(),
+            groups: Vec::new(),
+            locked: false,
+        }
+    }
+
+    /// Width and height: the measured box, or an estimate from the source
+    /// until the formula has been rendered once.
+    pub fn box_size(&self) -> (f64, f64) {
+        let width = if self.width > 0.0 {
+            self.width
+        } else {
+            crate::text::measure(&self.source, self.size, FontFamily::Mono).max(self.size)
+        };
+        let height = if self.height > 0.0 {
+            self.height
+        } else {
+            self.size * 1.4
+        };
+        (width, height)
+    }
 }
 
 /// A scene node, tagged with `"kind"`.
@@ -617,6 +743,7 @@ impl FigureNode {
                 | Self::Frame(_)
                 | Self::Image(_)
                 | Self::Mermaid(_)
+                | Self::Math(_)
         )
     }
 
@@ -684,6 +811,11 @@ impl FigureNode {
         }
     }
 
+    /// Rewrites hex colour literals as lowercase `#rrggbb`.
+    pub fn normalise_colours(&mut self) {
+        self.style_mut().normalise_colours();
+    }
+
     /// Whether the node is locked.
     pub fn locked(&self) -> bool {
         match self {
@@ -713,7 +845,7 @@ impl FigureNode {
             | Self::Mermaid(s) => s.label.as_deref(),
             Self::Arrow(c) | Self::Line(c) => c.label.as_deref(),
             Self::Freedraw(_) => None,
-            Self::Math(m) => Some(&m.tex),
+            Self::Math(m) => Some(&m.source),
         }
     }
 
@@ -752,10 +884,15 @@ impl FigureNode {
     /// Every number in the node, for validation.
     fn numbers(&self) -> Vec<f64> {
         let style = self.style();
-        let mut out: Vec<f64> = [style.stroke_width, style.opacity, style.font_size]
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut out: Vec<f64> = [
+            style.stroke_width,
+            style.opacity,
+            style.font_size,
+            style.fill_opacity,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         match self {
             Self::Rect(s)
             | Self::Diamond(s)
@@ -776,7 +913,7 @@ impl FigureNode {
                 out.push(f.size);
                 out.extend(f.points.iter().flat_map(|p| [p.x, p.y, p.pressure]));
             }
-            Self::Math(m) => out.extend([m.x, m.y, m.size]),
+            Self::Math(m) => out.extend([m.x, m.y, m.size, m.width, m.height]),
         }
         out
     }
@@ -794,6 +931,18 @@ impl FigureNode {
         }
         if self.numbers().iter().any(|n| !n.is_finite()) {
             return bad("every number must be finite");
+        }
+        if let Some(c) = self
+            .style()
+            .colours()
+            .find(|c| crate::palette::is_malformed_hex(c))
+        {
+            return bad(&format!("`{c}` is not a valid #rrggbb colour"));
+        }
+        if let Self::Math(m) = self
+            && !(m.size.is_finite() && m.size > 0.0 && m.size <= 1024.0)
+        {
+            return bad("a formula's size must be between 0 and 1024");
         }
         match self {
             Self::Arrow(c) | Self::Line(c) if c.points.len() < 2 => {
@@ -818,6 +967,9 @@ pub struct FigureScene {
     pub width: f64,
     /// Page height.
     pub height: f64,
+    /// Page background: a palette token or `#rrggbb`. Absent: transparent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<String>,
     /// Nodes in paint order (first is bottom).
     pub nodes: Vec<FigureNode>,
 }
@@ -829,7 +981,19 @@ impl FigureScene {
             version: SCENE_VERSION,
             width,
             height,
+            background: None,
             nodes: Vec::new(),
+        }
+    }
+
+    /// Rewrites every hex colour literal as lowercase `#rrggbb`, so a file
+    /// written by hand and one written by the picker diff the same way.
+    pub fn normalise_colours(&mut self) {
+        if let Some(bg) = &mut self.background {
+            *bg = crate::palette::normalize_colour(bg);
+        }
+        for node in &mut self.nodes {
+            node.normalise_colours();
         }
     }
 
@@ -894,6 +1058,13 @@ impl FigureScene {
                 "the page size must be positive and finite".to_owned(),
             ));
         }
+        if let Some(bg) = &self.background
+            && !crate::palette::is_colour(bg)
+        {
+            return Err(FigureError::InvalidArgument(format!(
+                "the background `{bg}` is not a palette token or #rrggbb"
+            )));
+        }
         let mut seen = std::collections::HashSet::new();
         for node in &self.nodes {
             node.validate()?;
@@ -918,7 +1089,8 @@ impl FigureScene {
     /// [`FigureScene::from_json`] from an already parsed value.
     pub fn from_value(value: Value) -> Result<Self, FigureError> {
         let value = crate::migrate::to_current(value)?;
-        let scene: FigureScene = serde_json::from_value(value)?;
+        let mut scene: FigureScene = serde_json::from_value(value)?;
+        scene.normalise_colours();
         scene.validate()?;
         Ok(scene)
     }

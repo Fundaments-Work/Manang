@@ -5,9 +5,9 @@
 use std::collections::BTreeMap;
 
 use manang_figure::{
-    Binding, ConnectorNode, FigureNode, FigureScene, FreedrawNode, Head, Heads, MathNode, Routing,
-    ShapeNode, StrokeSample, StrokeStyle, Style, SvgExportOptions, Theme, Vec2, render_svg,
-    render_svg_with,
+    Binding, ConnectorNode, FigureNode, FigureScene, FreedrawNode, Head, Heads, MathLanguage,
+    MathNode, Routing, ShapeNode, StrokeSample, StrokeStyle, Style, SvgExportOptions, Theme, Vec2,
+    render_svg, render_svg_with,
 };
 
 fn shape(kind: &str, id: &str, x: f64, y: f64, label: Option<&str>, style: Style) -> FigureNode {
@@ -85,19 +85,14 @@ fn every_kind(roughness: u8) -> FigureScene {
             groups: Vec::new(),
             locked: false,
         }),
-        FigureNode::Math(MathNode {
-            id: "x".into(),
-            x: 620.0,
-            y: 240.0,
-            tex: "E = mc^2".into(),
-            size: 20.0,
-            style: Style {
+        {
+            let mut m = MathNode::new("x", 620.0, 220.0, "E = m c^2", MathLanguage::Typst, 20.0);
+            m.style = Style {
                 stroke: Some("sage".into()),
                 ..Style::default()
-            },
-            groups: Vec::new(),
-            locked: false,
-        }),
+            };
+            FigureNode::Math(m)
+        },
         {
             let mut c = ConnectorNode::new("a1", Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0));
             c.start = Some(Binding::to("r"));

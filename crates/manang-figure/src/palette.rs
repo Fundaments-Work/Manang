@@ -78,6 +78,42 @@ pub fn is_colour(value: &str) -> bool {
     value == "none" || is_token(value) || is_hex(value)
 }
 
+/// A colour as the scene stores it: a literal `#rgb` or `#rrggbb` becomes
+/// lowercase `#rrggbb`; `none`, tokens and everything else stay as given.
+pub fn normalize_colour(value: &str) -> String {
+    if !is_hex(value) {
+        return value.to_owned();
+    }
+    let digits = value[1..].to_ascii_lowercase();
+    if digits.len() == 3 {
+        let mut out = String::with_capacity(7);
+        out.push('#');
+        for c in digits.chars() {
+            out.push(c);
+            out.push(c);
+        }
+        out
+    } else {
+        format!("#{digits}")
+    }
+}
+
+/// The red, green and blue of a `#rgb` or `#rrggbb` literal.
+pub fn parse_rgb(value: &str) -> Option<(u8, u8, u8)> {
+    if !is_hex(value) {
+        return None;
+    }
+    let full = normalize_colour(value);
+    let byte = |i: usize| u8::from_str_radix(&full[i..i + 2], 16).ok();
+    Some((byte(1)?, byte(3)?, byte(5)?))
+}
+
+/// Whether `value` looks like a hex literal (starts with `#`) but is not a
+/// valid one: a typo worth an error rather than a silent fallback to `ink`.
+pub fn is_malformed_hex(value: &str) -> bool {
+    value.starts_with('#') && !is_hex(value)
+}
+
 /// A paint resolved for SVG: the colour and the opacity a fill gets.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Paint {
@@ -146,6 +182,19 @@ mod tests {
         for n in &p.neutral {
             assert!(p.tokens.contains_key(n), "{n}");
         }
+    }
+
+    #[test]
+    fn hex_literals_normalise_to_lowercase_six_digits() {
+        assert_eq!(normalize_colour("#ABC"), "#aabbcc");
+        assert_eq!(normalize_colour("#C6F135"), "#c6f135");
+        assert_eq!(normalize_colour("ink"), "ink");
+        assert_eq!(normalize_colour("none"), "none");
+        assert_eq!(parse_rgb("#c6f135"), Some((0xc6, 0xf1, 0x35)));
+        assert_eq!(parse_rgb("#fff"), Some((255, 255, 255)));
+        assert_eq!(parse_rgb("ink"), None);
+        assert!(is_malformed_hex("#12") && is_malformed_hex("#gggggg"));
+        assert!(!is_malformed_hex("#123456") && !is_malformed_hex("ink"));
     }
 
     #[test]

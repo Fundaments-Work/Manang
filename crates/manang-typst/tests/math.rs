@@ -42,6 +42,7 @@ fn a_formula_renders_to_outline_paths_in_the_requested_colour() {
     );
     assert!(svg.starts_with("<svg"), "{svg}");
     assert!(!svg.contains("<text"), "glyphs are outlines, not text");
+    assert!(!svg.contains("xlink"), "no namespace needed to nest it");
     assert!(svg.contains("currentColor") && !svg.contains("#010203"));
     let (w, h) = view_box(&svg);
     assert!(w > 40.0 && h > 15.0 && h < 80.0, "{w} x {h}");
