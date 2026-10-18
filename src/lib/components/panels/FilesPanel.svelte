@@ -126,6 +126,23 @@
 
   /* -- Tree interaction --------------------------------------------------- */
 
+  // A second, unhurried click on the file that was just clicked renames it, as
+  // in file managers. A quick second click (a double click) just opens it.
+  let lastClick = { path: "", at: 0 };
+
+  function onRowClick(row: TreeRow): void {
+    const now = performance.now();
+    const slow =
+      row.kind === "file" &&
+      lastClick.path === row.path &&
+      focused === row.path &&
+      now - lastClick.at > 600 &&
+      now - lastClick.at < 2000;
+    lastClick = { path: row.path, at: now };
+    if (slow) startRename(row.path);
+    else void activate(row);
+  }
+
   async function activate(row: TreeRow): Promise<void> {
     focused = row.path;
     if (row.kind === "dir") await workspace.toggle(row.path);
@@ -220,6 +237,11 @@
         { label: "Copy path", separated: true, onselect: () => void copy(row.path) },
       );
     }
+    items.push({
+      label: workspace.showHidden ? "Hide hidden files" : "Show hidden files",
+      separated: true,
+      onselect: () => (workspace.showHidden = !workspace.showHidden),
+    });
     menu = { x, y, items, label: row === null ? "Files" : basename(row.path) };
   }
 </script>
@@ -353,7 +375,7 @@
             : 'text-text-60 hover:text-text'}"
           style="padding-left: {8 + row.depth * 14}px"
           title={badge === undefined ? row.path : `${row.path} (${badge.label})`}
-          onclick={() => void activate(row)}
+          onclick={() => onRowClick(row)}
           oncontextmenu={(event) => {
             event.preventDefault();
             openMenu(row, event.clientX, event.clientY);
