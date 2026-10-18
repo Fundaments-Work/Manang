@@ -40,6 +40,26 @@ export interface PluginInfo {
 }
 
 /**
+ * A command a plugin declares for AI agents (ADR 0012): MCP's `Tool` shape
+ * plus the command it runs and the plugin that declared it.
+ */
+export interface AgentTool {
+  readonly plugin: string;
+  readonly name: string;
+  readonly title: string;
+  readonly description: string;
+  readonly input_schema: Record<string, unknown>;
+  readonly output_schema: Record<string, unknown>;
+  readonly command: string;
+}
+
+/** Every declared agent tool, and why any declaration was rejected. */
+export interface AgentToolList {
+  readonly tools: readonly AgentTool[];
+  readonly problems: readonly string[];
+}
+
+/**
  * An event published on the kernel bus and forwarded by the shell as the
  * `kernel://event` Tauri event, e.g. `project.changed`.
  */
@@ -80,6 +100,8 @@ export interface Kernel {
   commands(): Promise<KernelCommand[]>;
   /** Manifest summaries; optional because older shells and test kernels lack it. */
   plugins?(): Promise<PluginInfo[]>;
+  /** Agent tools (`kernel_agent_tools`); optional like `plugins`. */
+  agentTools?(): Promise<AgentToolList>;
   run<T = unknown>(command: string, args?: Args): Promise<T>;
   runBinary(command: string, args?: Args): Promise<Uint8Array>;
   /**
@@ -110,6 +132,10 @@ export const kernel: Kernel = {
 
   plugins(): Promise<PluginInfo[]> {
     return call<PluginInfo[]>("kernel_plugins", "kernel_plugins");
+  },
+
+  agentTools(): Promise<AgentToolList> {
+    return call<AgentToolList>("kernel_agent_tools", "kernel_agent_tools");
   },
 
   /** Run a command that returns structured data. */

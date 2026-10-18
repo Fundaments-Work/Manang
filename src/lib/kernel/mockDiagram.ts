@@ -21,6 +21,7 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["diagram.check", "Check a diagram source for errors"],
   ["diagram.key", "Cache key for a rendered diagram"],
   ["diagram.languages", "List supported diagram languages"],
+  ["diagram.layout", "Lay out a Mermaid diagram as shapes"],
   ["diagram.render", "Render a diagram to SVG"],
 ];
 
@@ -233,6 +234,132 @@ export function mockRender(
   return placeholderSvg(name, colours);
 }
 
+interface LaidOutNode {
+  id: string;
+  label: string;
+  shape: "rect" | "round" | "diamond" | "circle";
+}
+
+const SHAPED =
+  /^([A-Za-z_][\w-]*)\s*(?:\[([^\]]*)\]|\{([^}]*)\}|\(\(([^)]*)\)\)|\(([^)]*)\))?$/;
+
+/**
+ * `diagram.layout` for the mock's flowchart subset: `[box]`, `(round)`,
+ * `{diamond}`, `((circle))` nodes, `-->`/`-.->` links with `|labels|`, laid
+ * out in longest-path ranks. Same output shape as the Rust plugin; anything
+ * else is `[unsupported_layout]`.
+ */
+export function mockMermaidLayout(source: string): Record<string, unknown> {
+  const lines = source
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !l.startsWith("%%"));
+  const header = /^(?:flowchart|graph)\s+(TD|TB|LR)\s*$/.exec(lines[0] ?? "");
+  if (header === null) {
+    const kind = (lines[0] ?? "unknown").split(/\s/)[0] ?? "unknown";
+    throw new Error(
+      `[invalid_argument] [unsupported_layout] ${kind} diagrams have no shape layout; insert them as a Mermaid block`,
+    );
+  }
+  const nodes = new Map<string, LaidOutNode>();
+  const edges: { from: string; to: string; label: string | null; dashed: boolean }[] =
+    [];
+  const node = (part: string): string | null => {
+    const m = SHAPED.exec(part.trim());
+    if (m === null || m[1] === undefined) return null;
+    const id = m[1];
+    const label = m[2] ?? m[3] ?? m[4] ?? m[5];
+    const shape: LaidOutNode["shape"] =
+      m[3] !== undefined
+        ? "diamond"
+        : m[4] !== undefined
+          ? "circle"
+          : m[5] !== undefined
+            ? "round"
+            : "rect";
+    if (label !== undefined || !nodes.has(id)) {
+      nodes.set(id, { id, label: label ?? id, shape });
+    }
+    return id;
+  };
+  for (const line of lines.slice(1)) {
+    const parts = line.split(/\s*(-\.->|-->)\s*/);
+    let previous: string | null = null;
+    let dashed = false;
+    for (const part of parts) {
+      if (part === "-->" || part === "-.->") {
+        dashed = part === "-.->";
+        continue;
+      }
+      const labelled = /^\|([^|]*)\|\s*(.*)$/.exec(part);
+      const id = node(labelled === null ? part : (labelled[2] ?? ""));
+      if (id === null) break;
+      if (previous !== null) {
+        edges.push({ from: previous, to: id, label: labelled?.[1] ?? null, dashed });
+      }
+      previous = id;
+    }
+  }
+  const ids = [...nodes.keys()];
+  const rank = new Map(ids.map((id) => [id, 0]));
+  for (let round = 0; round < ids.length; round += 1) {
+    for (const e of edges) {
+      const next = (rank.get(e.from) ?? 0) + 1;
+      if (next > (rank.get(e.to) ?? 0) && next < ids.length) rank.set(e.to, next);
+    }
+  }
+  const slot = new Map<string, number>();
+  const perRank = new Map<number, number>();
+  for (const id of ids) {
+    const r = rank.get(id) ?? 0;
+    slot.set(id, perRank.get(r) ?? 0);
+    perRank.set(r, (perRank.get(r) ?? 0) + 1);
+  }
+  const lr = header[1] === "LR";
+  const size = (n: LaidOutNode): { w: number; h: number } =>
+    n.shape === "diamond"
+      ? { w: 120, h: 120 }
+      : n.shape === "circle"
+        ? { w: 90, h: 90 }
+        : { w: BOX_W, h: BOX_H };
+  const centre = (id: string): { x: number; y: number } => {
+    const along = (rank.get(id) ?? 0) * ((lr ? BOX_W : 120) + GAP);
+    const across = (slot.get(id) ?? 0) * ((lr ? 120 : BOX_W) + GAP);
+    return lr
+      ? { x: PAD + along + BOX_W / 2, y: PAD + across + 60 }
+      : { x: PAD + across + BOX_W / 2, y: PAD + along + 60 };
+  };
+  return {
+    family: "flowchart",
+    direction: lr ? "LR" : "TB",
+    nodes: ids.map((id) => {
+      const n = nodes.get(id) ?? { id, label: id, shape: "rect" as const };
+      const c = centre(id);
+      const { w, h } = size(n);
+      return {
+        id,
+        label: n.label,
+        shape: n.shape,
+        x: c.x - w / 2,
+        y: c.y - h / 2,
+        width: w,
+        height: h,
+      };
+    }),
+    edges: edges.map((e, i) => ({
+      id: `L_${e.from}_${e.to}_${i}`,
+      from: e.from,
+      to: e.to,
+      label: e.label,
+      points: [centre(e.from), centre(e.to)],
+      dashed: e.dashed,
+      start: "none",
+      end: "arrow",
+    })),
+    clusters: [],
+  };
+}
+
 export function mockKey(
   id: DiagramLanguageId,
   source: string,
@@ -257,6 +384,14 @@ export function diagramPlugin(): MockPluginFactory {
       "diagram.check": (args) => {
         language(args);
         return { diagnostics: mockCheck(text(args, "source")) };
+      },
+      "diagram.layout": (args) => {
+        if (args["language"] !== undefined && args["language"] !== "mermaid") {
+          throw new Error(
+            "[invalid_argument] [unsupported_layout] only Mermaid has a shape layout",
+          );
+        }
+        return mockMermaidLayout(text(args, "source"));
       },
       "diagram.key": (args) => ({
         key: mockKey(language(args), text(args, "source"), theme(args)),
