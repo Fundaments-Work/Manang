@@ -7,14 +7,7 @@
  */
 
 export type SideView =
-  | "files"
-  | "search"
-  | "source-control"
-  | "outline"
-  | "figures"
-  | "references"
-  | "plugins"
-  | "settings";
+  "files" | "search" | "source-control" | "outline" | "figures" | "references";
 export type PanelTab = "problems" | "output";
 export type PreviewMode = "split" | "editor" | "preview";
 export type Theme = "dark" | "light";
@@ -26,8 +19,6 @@ export const SIDE_VIEWS: readonly SideView[] = [
   "outline",
   "figures",
   "references",
-  "plugins",
-  "settings",
 ];
 
 export const SIDE_VIEW_ICONS: Record<SideView, string> = {
@@ -37,8 +28,6 @@ export const SIDE_VIEW_ICONS: Record<SideView, string> = {
   outline: "outline",
   figures: "figures",
   references: "references",
-  plugins: "plugins",
-  settings: "settings",
 };
 
 export interface LayoutModel {
@@ -127,13 +116,14 @@ export function cyclePreview(mode: PreviewMode): PreviewMode {
 
 /**
  * Whether the side panel for `view` can be shown. Panels that browse the
- * project need one open; Plugins and Settings work without.
+ * project need one open. Settings, with the plugin list, is a page rather
+ * than a side panel (see `state/settingsPage.svelte.ts`).
  */
 export function sidePanelVisible(
   view: SideView | null,
   hasProject: boolean,
 ): view is SideView {
-  return view !== null && (hasProject || view === "plugins" || view === "settings");
+  return view !== null && hasProject;
 }
 
 function isOneOf<T extends string>(value: unknown, options: readonly T[]): value is T {

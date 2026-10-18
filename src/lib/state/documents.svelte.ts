@@ -32,6 +32,7 @@ import {
   languageCompartment,
   languageFor,
   loadLanguage,
+  syncEditorPrefs,
   type EditorLanguage,
 } from "$lib/editor/view";
 import { kernel, errorMessage } from "$lib/kernel";
@@ -263,6 +264,11 @@ export class DocumentsStore {
     this.view = view;
   }
 
+  /** Re-apply the editor preferences to the shown document. */
+  refreshPrefs(): void {
+    if (this.view !== undefined) syncEditorPrefs(this.view);
+  }
+
   /** Release the view, keeping the shown session's state for next time. */
   detach(): void {
     if (this.view !== undefined && this.shown !== undefined) {
@@ -279,6 +285,7 @@ export class DocumentsStore {
     if (this.shown !== undefined) this.shown.state = view.state;
     this.shown = session;
     view.setState(session.state);
+    syncEditorPrefs(view);
     this.#updateCursor(view.state);
     this.#refreshStats();
     if (session.sync.docId !== null) {

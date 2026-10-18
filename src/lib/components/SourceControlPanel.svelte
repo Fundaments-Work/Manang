@@ -182,7 +182,9 @@
     try {
       await api.discard({ paths, confirm: true, root });
       confirmingDiscardPath = null;
-      notice.show(`Discarded changes in ${paths.length === 1 ? basename(paths[0]!) : `${paths.length} files`}.`);
+      notice.show(
+        `Discarded changes in ${paths.length === 1 ? basename(paths[0]!) : `${paths.length} files`}.`,
+      );
       await refresh();
     } catch (error) {
       const parsed = parseGitError(error);
@@ -302,9 +304,7 @@
 
 <div class="min-h-0 flex-1 overflow-y-auto">
   {#if projectRoot === ""}
-    <div class="p-4 text-xs text-text-muted">
-      Open a folder to use source control.
-    </div>
+    <div class="p-4 text-xs text-text-muted">Open a folder to use source control.</div>
   {:else if !isRepo}
     <!-- Not a repository state -->
     <div class="space-y-3 p-4 text-xs">
@@ -321,8 +321,10 @@
   {:else if activeDiff !== null}
     <!-- Read-only Diff View -->
     <div class="flex flex-col border-b border-line bg-surface-hi/40">
-      <div class="flex items-center justify-between border-b border-line px-3 py-1.5 text-xs">
-        <span class="truncate font-mono font-medium text-text">
+      <div
+        class="flex items-center justify-between border-b border-line px-3 py-1.5 text-xs"
+      >
+        <span class="truncate font-mono text-text">
           {basename(activeDiff.path)}
         </span>
         <button
@@ -338,7 +340,9 @@
 
       <div class="max-h-96 overflow-auto font-mono text-[11px] leading-relaxed">
         {#each activeDiff.hunks as hunk, hIdx (hIdx)}
-          <div class="border-y border-line/60 bg-surface px-2 py-0.5 text-[10px] text-text-muted">
+          <div
+            class="border-y border-line/60 bg-surface px-2 py-0.5 text-[10px] text-text-muted"
+          >
             {hunk.header}
           </div>
           {#each hunk.lines as line, lIdx (lIdx)}
@@ -346,13 +350,17 @@
               class="flex items-baseline px-2 py-0.5 {line.kind === 'add'
                 ? 'bg-math/20 text-text'
                 : line.kind === 'remove'
-                  ? 'bg-red-500/20 text-text'
+                  ? 'bg-text/20 text-text'
                   : 'text-text-60'}"
             >
-              <span class="w-7 shrink-0 select-none text-right font-mono text-[10px] text-text-muted">
+              <span
+                class="w-7 shrink-0 select-none text-right font-mono text-[10px] text-text-muted"
+              >
                 {line.old_line ?? ""}
               </span>
-              <span class="w-7 shrink-0 select-none text-right font-mono text-[10px] text-text-muted">
+              <span
+                class="w-7 shrink-0 select-none text-right font-mono text-[10px] text-text-muted"
+              >
                 {line.new_line ?? ""}
               </span>
               <span class="w-4 select-none text-center">
@@ -370,23 +378,31 @@
       <div class="flex items-center justify-between gap-1 text-xs">
         <button
           type="button"
-          class="flex items-center gap-1.5 text-left font-medium text-text hover:text-accent"
+          class="flex items-center gap-1.5 text-left text-text hover:text-text-60"
           onclick={() => (showBranchMenu = !showBranchMenu)}
           aria-expanded={showBranchMenu}
           title="Switch branch"
         >
-          <Icon name="branch" size={14} class="shrink-0 text-accent" />
+          <Icon name="branch" size={14} class="shrink-0 text-text-60" />
           <span class="truncate">{status?.branch ?? "HEAD"}</span>
-          <Icon name={showBranchMenu ? "chevron-down" : "chevron-right"} size={12} class="text-text-muted" />
+          <Icon
+            name={showBranchMenu ? "chevron-down" : "chevron-right"}
+            size={12}
+            class="text-text-muted"
+          />
         </button>
 
         {#if status?.upstream}
           <div class="flex items-center gap-2 text-[10px] font-mono text-text-muted">
             {#if status.upstream.ahead > 0}
-              <span title="{status.upstream.ahead} commits ahead">↑{status.upstream.ahead}</span>
+              <span title="{status.upstream.ahead} commits ahead"
+                >↑{status.upstream.ahead}</span
+              >
             {/if}
             {#if status.upstream.behind > 0}
-              <span title="{status.upstream.behind} commits behind">↓{status.upstream.behind}</span>
+              <span title="{status.upstream.behind} commits behind"
+                >↓{status.upstream.behind}</span
+              >
             {/if}
             <button
               type="button"
@@ -403,18 +419,20 @@
       <!-- Branch switch / create popover -->
       {#if showBranchMenu}
         <div class="border border-line bg-surface p-2 text-xs space-y-2">
-          <div class="text-[11px] font-medium text-text-60">Branches</div>
+          <div class="text-[11px] text-text-60">Branches</div>
           <ul class="m-0 max-h-36 list-none overflow-y-auto p-0 space-y-0.5">
             {#each branches as b (b.name)}
               <li>
                 <button
                   type="button"
-                  class="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-surface-hi {b.current ? 'font-medium text-accent' : 'text-text-60'}"
+                  class="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-surface-hi {b.current
+                    ? 'text-text'
+                    : 'text-text-60'}"
                   onclick={() => void handleCheckout(b.name)}
                 >
                   <span class="truncate">{b.name}</span>
                   {#if b.current}
-                    <span class="text-[10px] text-accent">current</span>
+                    <span class="text-[10px] text-text-60">current</span>
                   {/if}
                 </button>
               </li>
@@ -425,7 +443,7 @@
             {#if !creatingBranch}
               <button
                 type="button"
-                class="text-[11px] text-accent hover:underline"
+                class="text-[11px] text-text-60 underline hover:text-text"
                 onclick={() => (creatingBranch = true)}
               >
                 + Create new branch…
@@ -468,7 +486,9 @@
         ></textarea>
 
         <div class="flex items-center justify-between">
-          <label class="flex items-center gap-1.5 text-[11px] text-text-60 cursor-pointer">
+          <label
+            class="flex items-center gap-1.5 text-[11px] text-text-60 cursor-pointer"
+          >
             <input type="checkbox" bind:checked={amend} class="accent-accent" />
             <span>Amend</span>
           </label>
@@ -489,7 +509,7 @@
         {/if}
 
         {#if errorMessageText !== ""}
-          <p class="m-0 text-[11px] text-red-400">{errorMessageText}</p>
+          <p class="m-0 text-[11px] text-text">{errorMessageText}</p>
         {/if}
       </div>
     </div>
@@ -498,15 +518,22 @@
     <div class="divide-y divide-line text-xs">
       <!-- Staged Changes -->
       <div>
-        <div class="flex items-center justify-between px-3 py-1.5 text-text-60 hover:bg-surface-hi">
+        <div
+          class="flex items-center justify-between px-3 py-1.5 text-text-60 hover:bg-surface-hi"
+        >
           <button
             type="button"
-            class="flex items-center gap-1.5 text-[11px] font-medium"
+            class="flex items-center gap-1.5 text-[11px]"
             onclick={() => toggleSection("staged")}
           >
-            <Icon name={collapsed.has("staged") ? "chevron-right" : "chevron-down"} size={12} />
-            <span>STAGED CHANGES</span>
-            <span class="ml-1 font-mono text-[10px] text-text-muted">({stagedCount})</span>
+            <Icon
+              name={collapsed.has("staged") ? "chevron-right" : "chevron-down"}
+              size={12}
+            />
+            <span>Staged changes</span>
+            <span class="ml-1 font-mono text-[10px] text-text-muted"
+              >({stagedCount})</span
+            >
           </button>
           {#if stagedCount > 0}
             <button
@@ -525,16 +552,22 @@
           <ul class="m-0 list-none p-0">
             {#each groups.staged as f (f.path)}
               {@const badge = statusBadge(f.staged)}
-              <li class="flex items-center justify-between px-3 py-1 hover:bg-surface-hi">
+              <li
+                class="flex items-center justify-between px-3 py-1 hover:bg-surface-hi"
+              >
                 <button
                   type="button"
                   class="flex flex-1 items-center gap-2 truncate text-left text-xs"
                   onclick={() => void inspectDiff(f, true)}
                 >
-                  <span class="font-mono text-[10px] font-bold {badge.textClass}">{badge.label}</span>
+                  <span class="font-mono text-[10px] {badge.textClass}"
+                    >{badge.label}</span
+                  >
                   <span class="truncate text-text">{basename(f.path)}</span>
                   {#if dirname(f.path) !== ""}
-                    <span class="truncate text-[10px] text-text-muted">{dirname(f.path)}</span>
+                    <span class="truncate text-[10px] text-text-muted"
+                      >{dirname(f.path)}</span
+                    >
                   {/if}
                 </button>
                 <button
@@ -554,15 +587,22 @@
 
       <!-- Changes (Unstaged) -->
       <div>
-        <div class="flex items-center justify-between px-3 py-1.5 text-text-60 hover:bg-surface-hi">
+        <div
+          class="flex items-center justify-between px-3 py-1.5 text-text-60 hover:bg-surface-hi"
+        >
           <button
             type="button"
-            class="flex items-center gap-1.5 text-[11px] font-medium"
+            class="flex items-center gap-1.5 text-[11px]"
             onclick={() => toggleSection("changes")}
           >
-            <Icon name={collapsed.has("changes") ? "chevron-right" : "chevron-down"} size={12} />
-            <span>CHANGES</span>
-            <span class="ml-1 font-mono text-[10px] text-text-muted">({changesCount})</span>
+            <Icon
+              name={collapsed.has("changes") ? "chevron-right" : "chevron-down"}
+              size={12}
+            />
+            <span>Changes</span>
+            <span class="ml-1 font-mono text-[10px] text-text-muted"
+              >({changesCount})</span
+            >
           </button>
           {#if changesCount > 0}
             <div class="flex items-center gap-1">
@@ -590,12 +630,18 @@
 
         {#if confirmingDiscardPath === "*"}
           <div class="border-y border-line bg-surface p-2 text-xs space-y-1.5">
-            <p class="m-0 text-text-60">Discard all unstaged changes? This cannot be undone.</p>
+            <p class="m-0 text-text-60">
+              Discard all unstaged changes? This cannot be undone.
+            </p>
             <div class="flex justify-end gap-1.5">
-              <button type="button" class="mng-btn" onclick={() => (confirmingDiscardPath = null)}>Cancel</button>
               <button
                 type="button"
-                class="mng-btn border-red-500/60 text-red-400"
+                class="mng-btn"
+                onclick={() => (confirmingDiscardPath = null)}>Cancel</button
+              >
+              <button
+                type="button"
+                class="mng-btn border-text-60 text-text"
                 onclick={() => void handleDiscard(groups.changes.map((f) => f.path))}
               >
                 Discard all
@@ -608,16 +654,22 @@
           <ul class="m-0 list-none p-0">
             {#each groups.changes as f (f.path)}
               {@const badge = statusBadge(f.unstaged)}
-              <li class="flex items-center justify-between px-3 py-1 hover:bg-surface-hi">
+              <li
+                class="flex items-center justify-between px-3 py-1 hover:bg-surface-hi"
+              >
                 <button
                   type="button"
                   class="flex flex-1 items-center gap-2 truncate text-left text-xs"
                   onclick={() => void inspectDiff(f, false)}
                 >
-                  <span class="font-mono text-[10px] font-bold {badge.textClass}">{badge.label}</span>
+                  <span class="font-mono text-[10px] {badge.textClass}"
+                    >{badge.label}</span
+                  >
                   <span class="truncate text-text">{basename(f.path)}</span>
                   {#if dirname(f.path) !== ""}
-                    <span class="truncate text-[10px] text-text-muted">{dirname(f.path)}</span>
+                    <span class="truncate text-[10px] text-text-muted"
+                      >{dirname(f.path)}</span
+                    >
                   {/if}
                 </button>
                 <div class="flex items-center gap-0.5 ml-1 shrink-0">
@@ -643,13 +695,19 @@
               </li>
 
               {#if confirmingDiscardPath === f.path}
-                <div class="border-y border-line bg-surface px-3 py-2 text-xs space-y-1.5">
+                <div
+                  class="border-y border-line bg-surface px-3 py-2 text-xs space-y-1.5"
+                >
                   <p class="m-0 text-text-60">Discard changes in {basename(f.path)}?</p>
                   <div class="flex justify-end gap-1.5">
-                    <button type="button" class="mng-btn" onclick={() => (confirmingDiscardPath = null)}>Cancel</button>
                     <button
                       type="button"
-                      class="mng-btn border-red-500/60 text-red-400"
+                      class="mng-btn"
+                      onclick={() => (confirmingDiscardPath = null)}>Cancel</button
+                    >
+                    <button
+                      type="button"
+                      class="mng-btn border-text-60 text-text"
                       onclick={() => void handleDiscard([f.path])}
                     >
                       Discard
@@ -665,15 +723,22 @@
       <!-- Untracked Files -->
       {#if untrackedCount > 0}
         <div>
-          <div class="flex items-center justify-between px-3 py-1.5 text-text-60 hover:bg-surface-hi">
+          <div
+            class="flex items-center justify-between px-3 py-1.5 text-text-60 hover:bg-surface-hi"
+          >
             <button
               type="button"
-              class="flex items-center gap-1.5 text-[11px] font-medium"
+              class="flex items-center gap-1.5 text-[11px]"
               onclick={() => toggleSection("untracked")}
             >
-              <Icon name={collapsed.has("untracked") ? "chevron-right" : "chevron-down"} size={12} />
-              <span>UNTRACKED</span>
-              <span class="ml-1 font-mono text-[10px] text-text-muted">({untrackedCount})</span>
+              <Icon
+                name={collapsed.has("untracked") ? "chevron-right" : "chevron-down"}
+                size={12}
+              />
+              <span>Untracked</span>
+              <span class="ml-1 font-mono text-[10px] text-text-muted"
+                >({untrackedCount})</span
+              >
             </button>
             <button
               type="button"
@@ -689,12 +754,18 @@
           {#if !collapsed.has("untracked")}
             <ul class="m-0 list-none p-0">
               {#each groups.untracked as f (f.path)}
-                <li class="flex items-center justify-between px-3 py-1 hover:bg-surface-hi">
-                  <span class="flex flex-1 items-center gap-2 truncate text-left text-xs">
-                    <span class="font-mono text-[10px] font-bold text-text-60">U</span>
+                <li
+                  class="flex items-center justify-between px-3 py-1 hover:bg-surface-hi"
+                >
+                  <span
+                    class="flex flex-1 items-center gap-2 truncate text-left text-xs"
+                  >
+                    <span class="font-mono text-[10px] text-text-60">U</span>
                     <span class="truncate text-text">{basename(f.path)}</span>
                     {#if dirname(f.path) !== ""}
-                      <span class="truncate text-[10px] text-text-muted">{dirname(f.path)}</span>
+                      <span class="truncate text-[10px] text-text-muted"
+                        >{dirname(f.path)}</span
+                      >
                     {/if}
                   </span>
                   <div class="flex items-center gap-0.5 ml-1 shrink-0">
@@ -727,14 +798,16 @@
       <!-- Conflicted Files -->
       {#if conflictedCount > 0}
         <div>
-          <div class="flex items-center justify-between px-3 py-1.5 text-red-400 hover:bg-surface-hi">
-            <span class="text-[11px] font-medium">CONFLICTS ({conflictedCount})</span>
+          <div
+            class="flex items-center justify-between px-3 py-1.5 text-text hover:bg-surface-hi"
+          >
+            <span class="text-[11px]">CONFLICTS ({conflictedCount})</span>
           </div>
           <ul class="m-0 list-none p-0">
             {#each groups.conflicted as f (f.path)}
-              <li class="flex items-center justify-between px-3 py-1 text-red-400">
+              <li class="flex items-center justify-between px-3 py-1 text-text">
                 <span class="truncate">{f.path}</span>
-                <span class="font-mono text-[10px] font-bold">!</span>
+                <span class="font-mono text-[10px]">!</span>
               </li>
             {/each}
           </ul>
@@ -743,26 +816,34 @@
 
       <!-- Commit History Section -->
       <div>
-        <div class="flex items-center justify-between px-3 py-1.5 text-text-60 hover:bg-surface-hi">
+        <div
+          class="flex items-center justify-between px-3 py-1.5 text-text-60 hover:bg-surface-hi"
+        >
           <button
             type="button"
-            class="flex items-center gap-1.5 text-[11px] font-medium"
+            class="flex items-center gap-1.5 text-[11px]"
             onclick={() => (showHistory = !showHistory)}
           >
             <Icon name={showHistory ? "chevron-down" : "chevron-right"} size={12} />
-            <span>COMMIT HISTORY</span>
+            <span>History</span>
           </button>
         </div>
 
         {#if showHistory}
           <ul class="m-0 list-none p-0">
             {#each commits as commit (commit.hash)}
-              <li class="border-b border-line/40 px-3 py-1.5 text-xs hover:bg-surface-hi">
+              <li
+                class="border-b border-line/40 px-3 py-1.5 text-xs hover:bg-surface-hi"
+              >
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="truncate font-medium text-text">{commit.subject}</span>
-                  <span class="shrink-0 font-mono text-[10px] text-accent">{commit.short}</span>
+                  <span class="truncate text-text">{commit.subject}</span>
+                  <span class="shrink-0 font-mono text-[10px] text-text-60"
+                    >{commit.short}</span
+                  >
                 </div>
-                <div class="flex items-center justify-between text-[10px] text-text-muted">
+                <div
+                  class="flex items-center justify-between text-[10px] text-text-muted"
+                >
                   <span class="truncate">{commit.author_name}</span>
                   <span>{formatRelativeTime(commit.time)}</span>
                 </div>

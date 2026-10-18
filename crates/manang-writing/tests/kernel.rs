@@ -343,3 +343,122 @@ fn bad_arguments_are_errors_not_panics() {
     }
     assert!(k.invoke("writing.stats.count", Payload::Empty).is_err());
 }
+
+#[test]
+fn configure_drives_spelling_language_and_format_width() {
+    let (k, _dir) = kernel();
+    let m = manifest().expect("valid");
+    let defaults: serde_json::Map<String, Value> = m
+        .contributes
+        .settings
+        .iter()
+        .map(|s| (s.id.clone(), s.default.clone().unwrap_or(Value::Null)))
+        .collect();
+    // The manifest defaults are the built-in defaults.
+    let applied = ok(&k, "writing.configure", json!({ "values": defaults }));
+    assert_eq!(Value::Object(defaults), applied);
+    assert_eq!(
+        manang_writing::DEFAULT_FORMAT_WIDTH,
+        typstyle_core::Config::default().max_width
+    );
+
+    let check = |k: &Kernel| {
+        ok(
+            k,
+            "writing.spell.check",
+            json!({ "text": "The colour is teh best." }),
+        )
+    };
+    let us = check(&k);
+    assert_eq!(us["language"], "en_US");
+    assert_eq!(us["count"], 2, "{us}");
+
+    // The configured language applies when a request names none.
+    ok(
+        &k,
+        "writing.configure",
+        json!({ "values": { "writing.spell-language": "en_GB" } }),
+    );
+    let gb = check(&k);
+    assert_eq!(gb["language"], "en_GB");
+    assert_eq!(gb["count"], 1, "{gb}");
+    assert_eq!(
+        ok(&k, "writing.spell.languages", json!({}))["default"],
+        "en_GB"
+    );
+    // An explicit language still wins.
+    let explicit = ok(
+        &k,
+        "writing.spell.check",
+        json!({ "text": "The colour", "language": "en_US" }),
+    );
+    assert_eq!(explicit["count"], 1);
+
+    // Spell check off: nothing from check, no spelling in lint.
+    let lint = |k: &Kernel| {
+        ok(
+            k,
+            "writing.lint.prose",
+            json!({ "text": "Teh cat sat.", "spell": true }),
+        )["diagnostics"]
+            .as_array()
+            .map_or(0, Vec::len)
+    };
+    let with_spelling = lint(&k);
+    assert!(with_spelling > 0);
+    ok(
+        &k,
+        "writing.configure",
+        json!({ "values": { "writing.spellcheck": false } }),
+    );
+    let off = check(&k);
+    assert_eq!(
+        (off["count"].clone(), off["disabled"].clone()),
+        (json!(0), json!(true))
+    );
+    assert_eq!(lint(&k), with_spelling - 1);
+
+    // Format width: the configured width applies unless options set one.
+    let source = "#let f(alpha, beta, gamma, delta) = alpha + beta + gamma + delta\n";
+    let format = |k: &Kernel, options: Value| {
+        ok(
+            k,
+            "writing.format.document",
+            json!({ "source": source, "language": "typst", "options": options }),
+        )["formatted"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_default()
+    };
+    let wide = format(&k, Value::Null);
+    ok(
+        &k,
+        "writing.configure",
+        json!({ "values": { "writing.format-width": 20 } }),
+    );
+    let narrow = format(&k, Value::Null);
+    assert!(narrow.lines().count() > wide.lines().count(), "{narrow}");
+    assert_eq!(format(&k, json!({ "max_width": 80 })), wide);
+    // Markdown is unaffected by the Typst width.
+    let md = ok(
+        &k,
+        "writing.format.document",
+        json!({ "source": "# A\n", "language": "markdown" }),
+    );
+    assert_eq!(md["changed"], false);
+
+    // Bad values are rejected and change nothing.
+    for bad in [
+        json!({ "writing.spellcheck": "no" }),
+        json!({ "writing.spell-language": "xx_XX" }),
+        json!({ "writing.format-width": 5 }),
+        json!({ "writing.spellcheck": true, "writing.format-width": "wide" }),
+    ] {
+        assert!(
+            call(&k, "writing.configure", json!({ "values": bad })).is_err(),
+            "{bad}"
+        );
+    }
+    assert!(call(&k, "writing.configure", json!({})).is_err());
+    assert_eq!(check(&k)["disabled"], true);
+}

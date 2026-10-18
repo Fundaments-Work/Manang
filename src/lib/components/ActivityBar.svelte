@@ -1,8 +1,8 @@
 <script lang="ts">
   import Icon, { type IconName } from "$lib/components/ui/Icon.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
-  import { home } from "$lib/state/home.svelte";
   import { layout } from "$lib/state/layout.svelte";
+  import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { sidePanelVisible, type SideView } from "$lib/workbench/layout";
   import { detectPlatform } from "$lib/util/keyboard";
@@ -14,7 +14,8 @@
    */
 
   interface Item {
-    readonly view: SideView;
+    /** A side panel, or `settings` for the Settings page. */
+    readonly view: SideView | "settings";
     readonly label: string;
     readonly icon: IconName;
     readonly shortcut?: string;
@@ -38,12 +39,6 @@
     { view: "outline", label: "Outline", icon: "outline" },
     { view: "figures", label: "Figures", icon: "figures" },
     { view: "references", label: "References", icon: "references" },
-    {
-      view: "plugins",
-      label: "Plugins",
-      icon: "plugins",
-      shortcut: formatShortcut({ key: "x", mod: true, shift: true }, platform),
-    },
   ];
   const bottom: Item = {
     view: "settings",
@@ -53,10 +48,8 @@
   };
   const all = [...top, bottom];
 
-  let focused = $state<SideView>("files");
+  let focused = $state<SideView | "settings">("files");
   let bar: HTMLElement | undefined = $state();
-
-  const homeShortcut = formatShortcut({ key: "h", mod: true, shift: true }, platform);
 
   const changes = $derived(workspace.git?.changes.length ?? 0);
 
@@ -75,10 +68,15 @@
 
 {#snippet button(item: Item)}
   {@const open =
-    layout.sideView === item.view &&
-    sidePanelVisible(layout.sideView, workspace.project !== null)}
+    item.view === "settings"
+      ? settingsPage.open
+      : !settingsPage.open &&
+        layout.sideView === item.view &&
+        sidePanelVisible(layout.sideView, workspace.project !== null)}
   {@const needsProject =
-    workspace.project === null && !sidePanelVisible(item.view, false)}
+    item.view !== "settings" &&
+    workspace.project === null &&
+    !sidePanelVisible(item.view, false)}
   <button
     type="button"
     data-view={item.view}
@@ -91,7 +89,18 @@
     title={needsProject ? `${item.label}: open a folder first` : undefined}
     tabindex={focused === item.view ? 0 : -1}
     onfocus={() => (focused = item.view)}
-    onclick={() => !needsProject && layout.toggleSide(item.view)}
+    onclick={() => {
+      if (needsProject) return;
+      if (item.view === "settings") {
+        settingsPage.toggle();
+        return;
+      }
+      // A view button leaves the Settings page, showing its panel.
+      if (settingsPage.open) {
+        settingsPage.hide();
+        layout.showSide(item.view);
+      } else layout.toggleSide(item.view);
+    }}
   >
     {#if open}
       <span class="absolute inset-y-0 left-0 w-0.5 bg-accent" aria-hidden="true"></span>
@@ -99,7 +108,7 @@
     <Icon name={item.icon} size={20} />
     {#if item.view === "files" && changes > 0}
       <span
-        class="absolute right-1.5 bottom-1.5 flex h-3.5 min-w-3.5 items-center justify-center bg-surface-hi px-0.5 font-mono text-[9px] leading-none text-text"
+        class="absolute right-1.5 bottom-1.5 flex h-3.5 min-w-3.5 items-center justify-center bg-surface-hi px-0.5 font-mono text-[10px] leading-none text-text"
         title="{changes} changed {changes === 1 ? 'file' : 'files'}"
       >
         {changes > 99 ? "99+" : changes}
@@ -118,30 +127,9 @@
 
 <nav
   bind:this={bar}
-  class="flex w-12 shrink-0 flex-col border-r border-line bg-bg"
+  class="relative z-30 flex w-12 shrink-0 flex-col border-r border-line bg-bg"
   aria-label="Workbench views"
 >
-  <button
-    type="button"
-    class="group relative flex h-12 w-12 shrink-0 items-center justify-center border-b border-line inset-focus {home.showing
-      ? 'text-text'
-      : 'text-text-60 hover:text-text'}"
-    aria-label="Home"
-    aria-pressed={home.showing}
-    aria-keyshortcuts="Control+Shift+H"
-    onclick={() => (workspace.project === null ? home.show() : home.toggle())}
-  >
-    {#if home.showing}
-      <span class="absolute inset-y-0 left-0 w-0.5 bg-accent" aria-hidden="true"></span>
-    {/if}
-    <Icon name="home" size={20} />
-    <span
-      class="pointer-events-none absolute top-1/2 left-full z-30 ml-1 hidden -translate-y-1/2 items-center gap-2 border border-line bg-surface-hi px-2 py-1 text-xs whitespace-nowrap text-text group-hover:flex group-focus-visible:flex"
-      aria-hidden="true"
-    >
-      Home <span class="mng-kbd">{homeShortcut}</span>
-    </span>
-  </button>
   <div
     role="toolbar"
     aria-orientation="vertical"

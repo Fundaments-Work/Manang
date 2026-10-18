@@ -74,8 +74,10 @@
       <!-- Header -->
       <div class="flex items-center justify-between border-b border-line px-4 py-3">
         <div class="flex items-center gap-2">
-          <h2 class="m-0 text-sm font-medium text-text">Keyboard Shortcuts</h2>
-          <span class="font-mono text-[10px] text-text-muted bg-surface-hi px-1.5 py-0.5 border border-line">
+          <h2 class="m-0 text-sm text-text">Keyboard Shortcuts</h2>
+          <span
+            class="font-mono text-[10px] text-text-muted bg-surface-hi px-1.5 py-0.5 border border-line"
+          >
             {platform.isMac ? "⌘/" : "Ctrl+/"}
           </span>
         </div>
@@ -97,7 +99,7 @@
           type="search"
           placeholder="Search shortcuts..."
           aria-label="Search shortcuts"
-          class="mng-input w-full"
+          class="mng-field w-full"
         />
       </div>
 
@@ -110,19 +112,25 @@
         {:else}
           {#each filteredGroups as group (group.name)}
             <div>
-              <h3 class="m-0 mb-2 font-mono text-[11px] font-medium tracking-wide uppercase text-accent/90">
+              <h3 class="m-0 mb-2 font-mono text-[11px] text-text-60">
                 {group.name}
               </h3>
               <div class="divide-y divide-line/40 border border-line bg-surface-hi/40">
                 {#each group.entries as entry (entry.id)}
-                  <div class="flex items-center justify-between px-3 py-2 hover:bg-surface-hi/80 transition-colors">
+                  <div
+                    class="flex items-center justify-between px-3 py-2 hover:bg-surface-hi/80 transition-colors"
+                  >
                     <div class="pr-4">
                       <div class="text-text font-normal">{entry.title}</div>
                       {#if entry.description}
-                        <div class="text-[11px] text-text-muted mt-0.5">{entry.description}</div>
+                        <div class="text-[11px] text-text-muted mt-0.5">
+                          {entry.description}
+                        </div>
                       {/if}
                     </div>
-                    <kbd class="shrink-0 font-mono text-[11px] px-2 py-0.5 bg-surface border border-line text-text font-medium">
+                    <kbd
+                      class="shrink-0 font-mono text-[11px] px-2 py-0.5 bg-surface border border-line text-text"
+                    >
                       {entry.formatted}
                     </kbd>
                   </div>
@@ -134,7 +142,9 @@
       </div>
 
       <!-- Footer -->
-      <div class="flex items-center justify-between border-t border-line px-4 py-2.5 bg-surface text-[11px] text-text-muted">
+      <div
+        class="flex items-center justify-between border-t border-line px-4 py-2.5 bg-surface text-[11px] text-text-muted"
+      >
         <span>Customise keybindings in Settings → Keybindings</span>
         <button type="button" class="mng-btn px-2 py-1 text-xs" onclick={hide}>
           Close (Esc)

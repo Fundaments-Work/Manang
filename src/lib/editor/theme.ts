@@ -23,7 +23,8 @@ export const manangTheme = EditorView.theme({
     height: "100%",
     backgroundColor: "var(--mng-bg)",
     color: "var(--mng-text)",
-    fontSize: "13px",
+    // Set from the editor.font-size and editor.line-height settings.
+    fontSize: "var(--mng-editor-font-size, 14px)",
   },
 
   ".cm-content": {
@@ -31,7 +32,7 @@ export const manangTheme = EditorView.theme({
     fontWeight: "400",
     // Source code: `fi` and `ff` stay two letters, so columns and carets line up.
     fontVariantLigatures: "none",
-    lineHeight: "1.6",
+    lineHeight: "var(--mng-editor-line-height, 1.6)",
     caretColor: "var(--mng-accent)",
     padding: "12px 0",
   },
@@ -261,4 +262,3 @@ export const manangBibtexHighlight = HighlightStyle.define([
   { tag: [tags.bracket, tags.punctuation, tags.operator], color: "var(--mng-text-60)" },
   { tag: tags.variableName, color: "var(--mng-math)" },
 ]);
-
