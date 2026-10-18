@@ -30,8 +30,10 @@
     warning: "M8 2.5l6 11H2z M8 6.5v3.5 M8 11.5v.5",
     check: "M3 8.5l3.5 3.5L13 4.5",
     branch: "M4 2.5h2v2H4z M4 11.5h2v2H4z M10 5.5h2v2h-2z M5 4.5v7 M5 9h5V7.5",
-    "source-control": "M4 2.5h2v2H4z M4 11.5h2v2H4z M10 6.5h2v2h-2z M5 4.5v7 M5 9.5h4v-1",
-    outline: "M2.5 3.5h2v2h-2z M6.5 4.5h7 M4 7.5h2v2H4z M8 8.5h5.5 M5.5 11.5h2v2h-2z M9.5 12.5h4",
+    "source-control":
+      "M4 2.5h2v2H4z M4 11.5h2v2H4z M10 6.5h2v2h-2z M5 4.5v7 M5 9.5h4v-1",
+    outline:
+      "M2.5 3.5h2v2h-2z M6.5 4.5h7 M4 7.5h2v2H4z M8 8.5h5.5 M5.5 11.5h2v2h-2z M9.5 12.5h4",
     present: "M4 3l9 5-9 5z",
     slides: "M2 3h12v8H2z M6 14h4 M8 11v3",
     trash: "M3.5 4.5h9 M6 4.5V3h4v1.5 M4.5 4.5l.5 9h6l.5-9",
@@ -60,6 +62,11 @@
     archive: "M2.5 3.5h11v3h-11z M3.5 6.5v7h9v-7 M6.5 9h3",
     recent: "M2.5 2.5h11v11h-11z M8 5v3.5l2.5 1.5",
     templates: "M2.5 2.5h5v5h-5z M9 2.5h4.5v5H9z M2.5 9h11v4.5h-11z",
+    "window-minimize": "M3.5 8.5h9",
+    "window-maximize": "M3.5 3.5h9v9h-9z",
+    "window-restore": "M3.5 5.5h7v7h-7z M5.5 5.5v-2h7v7h-2",
+    "window-close": "M4 4l8 8 M12 4l-8 8",
+    external: "M9 2.5h4.5V7 M13.5 2.5L7.5 8.5 M11.5 9.5v4h-9v-9h4",
   } as const;
 
   export type IconName = keyof typeof PATHS;

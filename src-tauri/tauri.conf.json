@@ -5,13 +5,14 @@
   "identifier": "work.fundaments.manang",
   "build": {
     "beforeDevCommand": "pnpm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "pnpm run build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Manang",
         "width": 1280,
         "height": 820,
@@ -19,7 +20,9 @@
         "minHeight": 480,
         "resizable": true,
         "fullscreen": false,
-        "theme": "Dark"
+        "theme": "Dark",
+        "decorations": false,
+        "center": true
       }
     ],
     "security": {
