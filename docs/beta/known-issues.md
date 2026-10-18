@@ -101,13 +101,15 @@ Ed25519 plugin signature verification is scheduled for Wave 5.
 ## 6. Real-time Co-Editing & Remote Sharing
 
 ### What
-Real-time collaborative editing (multi-cursor live editing on a single file) and cloud sync are not yet exposed in the interface.
+Live co-editing (see [Edit together live](../user/edit-together-live.md)) works on **one text file per session** and needs a relay address. There is no hosted relay yet: someone has to run `manang-relay`, or you point Manang at one you were given. Figures, PDFs and several files at once are not shared. Cloud sync does not exist.
+
+While you are in a session, do not use **Get updates** on the live file (Manang does not block it yet). Joining with a copy that differs from the host's replaces your copy with the host's, after asking and after saving yours outside the project. Anyone holding the invite can edit and can use any name.
 
 ### How to Avoid
-Use standard asynchronous Git collaboration via the **Source Control** side panel (`Ctrl+Shift+G`), or store projects in shared network directories.
+Use standard asynchronous Git collaboration via the **Source Control** side panel (`Ctrl+Shift+G`) for everything else, or store projects in shared network directories.
 
 ### Status
-Active research spike in progress (`crates/manang-live` with CRDT text engines); scheduled for Beta 1 Wave 2b.
+Beta 1: text files only. Merging a differing copy with the host's instead of replacing it, figures, and a hosted relay are planned.
 
 ---
 

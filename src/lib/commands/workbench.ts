@@ -18,6 +18,7 @@ import { documents } from "$lib/state/documents.svelte";
 import { figures } from "$lib/state/figures.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
+import { live } from "$lib/state/live.svelte";
 import { scm } from "$lib/state/scm.svelte";
 import { settings } from "$lib/state/settings.svelte";
 import { settingsPage } from "$lib/state/settingsPage.svelte";
@@ -99,6 +100,10 @@ const WHEN: Readonly<Record<string, string>> = {
   "tab.close-others": "workbench",
   "file.save": "workbench",
   "file.save-all": "project",
+  "live.share": "workbench && document",
+  "live.join-session": "project",
+  "live.copy-invite": "workbench",
+  "live.leave-session": "workbench",
   "doc.export-pdf": "workbench && document",
   "doc.format": "workbench && document",
   "doc.show-in-preview": "workbench && document",
@@ -733,6 +738,44 @@ export function workbenchCommands(
       enabled: hasProject,
       menu: at("file", "3_save", 2),
       run: () => void saveVersion(),
+    },
+    {
+      id: "live.share",
+      title: "Share this file live",
+      menuTitle: "Share this file live…",
+      group: "Workbench",
+      keywords: "collaborate together real time co-edit invite session",
+      enabled: isDocument && active.view === "text" && !live.active && !live.busy,
+      menu: at("file", "4_live", 0),
+      run: () => void live.share(),
+    },
+    {
+      id: "live.join-session",
+      title: "Join a live session",
+      menuTitle: "Join a live session…",
+      group: "Workbench",
+      keywords: "collaborate together real time invite paste",
+      enabled: hasProject && !live.active && !live.busy,
+      menu: at("file", "4_live", 1),
+      run: () => void live.join(),
+    },
+    {
+      id: "live.copy-invite",
+      title: "Copy live invite",
+      group: "Workbench",
+      keywords: "share link session",
+      enabled: live.active,
+      menu: at("file", "4_live", 2),
+      run: () => void live.copyInvite(),
+    },
+    {
+      id: "live.leave-session",
+      title: "Leave live session",
+      group: "Workbench",
+      keywords: "stop end session collaborate",
+      enabled: live.active,
+      menu: at("file", "4_live", 3),
+      run: () => void live.leave(),
     },
     {
       id: "project.close",

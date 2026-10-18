@@ -178,6 +178,28 @@ impl Editor {
         Ok(doc.revision)
     }
 
+    /// Replace `from..to` with `text` without leaving an undo entry.
+    ///
+    /// For edits that are not the user's: a live-session peer's change, applied
+    /// to the shared copy. The web view owns undo (CodeMirror keeps it per
+    /// person), so this buffer's history is dropped instead of growing with
+    /// every remote keystroke. Returns the new revision.
+    pub fn replace_silent(
+        &self,
+        id: Option<DocId>,
+        from: usize,
+        to: usize,
+        text: &str,
+    ) -> Result<u64, EditorError> {
+        let mut state = self.state.lock();
+        let (_, doc) = state.doc_mut(id)?;
+        doc.edit_range(from, to)?;
+        doc.buffer.replace(from..to, text)?;
+        doc.buffer.clear_history();
+        doc.revision += 1;
+        Ok(doc.revision)
+    }
+
     /// Reverts the latest edit transaction. Returns the new revision.
     pub fn undo(&self, id: Option<DocId>) -> Result<u64, EditorError> {
         let mut state = self.state.lock();
@@ -345,6 +367,25 @@ mod tests {
         ed.write_active("new").expect("write");
         assert_eq!(ed.read_active().expect("read"), "new");
         assert_eq!(ed.info(None).expect("info").revision, 1);
+    }
+
+    #[test]
+    fn silent_replace_edits_without_an_undo_entry() {
+        let ed = Editor::new();
+        ed.create();
+        ed.insert(None, 0, "hello world").expect("insert");
+        ed.replace_silent(None, 0, 5, "howdy")
+            .expect("silent replace");
+        assert_eq!(ed.text(None).expect("text"), "howdy world");
+        assert_eq!(ed.info(None).expect("info").revision, 2);
+        // The history was dropped: undo has nothing of the remote edit (or the
+        // earlier local one) to revert.
+        ed.undo(None).expect("undo");
+        assert_eq!(ed.text(None).expect("text"), "howdy world");
+        assert!(matches!(
+            ed.replace_silent(None, 3, 99, "x"),
+            Err(EditorError::OutOfRange { .. })
+        ));
     }
 
     #[test]
