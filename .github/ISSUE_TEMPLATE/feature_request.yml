@@ -1,0 +1,41 @@
+name: Feature Request / Idea
+description: Propose an enhancement, missing workflow, or new scientific authoring capability.
+title: "[Idea]: "
+labels: ["enhancement", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping shape Manang's authoring suite.
+        Please check `docs/plans/2026-10-18-phase-2.md` and `docs/plans/2026-10-18-roadmap.md` to see what is already scheduled for upcoming waves.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Scientific Workflow Need
+      description: What challenge or limitation in your writing or illustration workflow does this address?
+      placeholder: "e.g. When writing multi-chapter books, I need a unified cross-file label search."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution or Desired Behavior
+      description: Describe your ideal interface, command, or shortcut behavior.
+      placeholder: "e.g. A command in the Command Palette that lists all @labels across all project .typ files with instant fuzzy filtering."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or Current Workarounds
+      description: How do you accomplish this today (e.g. VS Code, Overleaf, shell scripts)?
+      placeholder: "e.g. I currently grep through files from an external terminal."
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context or Examples
+      description: Links to specifications, sample snippets, or references.
+    validations:
+      required: false
