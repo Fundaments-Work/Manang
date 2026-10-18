@@ -143,3 +143,67 @@ fn pipeline_hook_chains_and_fanout_collects() {
             .is_empty()
     );
 }
+
+const RELAY: &str = r#"
+[plugin]
+name = "relay"
+version = "0.1.0"
+tier = "native"
+
+[[contributes.commands]]
+id = "relay.forward"
+title = "Forward to echo"
+
+[[contributes.commands]]
+id = "relay.loop"
+title = "Call itself"
+"#;
+
+/// Calls other plugins' commands through its context.
+struct Relay;
+
+impl Plugin for Relay {
+    fn invoke(
+        &self,
+        ctx: &Context<'_>,
+        command: &str,
+        input: Payload,
+    ) -> Result<Payload, PluginError> {
+        let call = |id: &str, input| {
+            ctx.invoke(id, input)
+                .map_err(|e| PluginError::Failed(e.to_string()))
+        };
+        match command {
+            "relay.forward" => {
+                if !ctx.has_command("echo.say") || ctx.has_command("echo.nothing") {
+                    return Err(PluginError::Failed("has_command is wrong".into()));
+                }
+                call("echo.say", input)
+            }
+            "relay.loop" => call("relay.loop", input),
+            other => Err(PluginError::UnknownCommand(other.to_owned())),
+        }
+    }
+}
+
+#[test]
+fn a_plugin_can_invoke_another_plugins_command() {
+    let k = kernel_with_echo();
+    k.register(manifest(RELAY), Arc::new(Relay))
+        .expect("registers");
+    let out = k
+        .invoke("relay.forward", Payload::Json(json!({ "x": 1 })))
+        .expect("forwarded");
+    assert_eq!(out, Payload::Json(json!({ "x": 1 })));
+}
+
+#[test]
+fn call_cycles_stop_at_the_depth_limit() {
+    let k = Kernel::new();
+    k.register(manifest(RELAY), Arc::new(Relay))
+        .expect("registers");
+    let err = k
+        .invoke("relay.loop", Payload::Empty)
+        .expect_err("a cycle must fail");
+    assert!(err.to_string().contains("too deeply"), "{err}");
+}

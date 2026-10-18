@@ -64,6 +64,8 @@ pub enum KernelError {
     UnknownCommand(String),
     #[error("no plugin named `{0}` is registered")]
     UnknownPlugin(String),
+    #[error("plugins called each other too deeply on the way to `{0}`")]
+    CallTooDeep(String),
     #[error(transparent)]
     Manifest(#[from] ManifestError),
     #[error(transparent)]
