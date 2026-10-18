@@ -18,7 +18,20 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["latex.compile", "Compile LaTeX"],
   ["latex.export-pdf", "Export PDF"],
   ["latex.synctex", "SyncTeX source/PDF lookup"],
+  ["latex.engine-status", "Built-in LaTeX engine status"],
+  ["latex.engine-install", "Download the built-in LaTeX engine"],
+  ["latex.engine-cancel", "Cancel the engine download"],
+  ["latex.engine-remove", "Remove the built-in LaTeX engine"],
 ];
+
+/** What the demo "downloads": made-up numbers in the shape of the real manifest. */
+const ENGINE_SIZE = 14_413_816;
+const ENGINE_SHA = "d15d3cb6391be939dd56dcd5cfb264207b3d927d8434e713a8fbf9bffd317f6e";
+const ENGINE_VERSION = "0.17.0";
+const ENGINE_DIR =
+  "/home/author/.local/share/work.fundaments.manang/engines/tectonic-0.17.0";
+/** How the demo download behaves; `dev.latex-engine-mode` switches it. */
+type EngineMode = "normal" | "slow" | "fail";
 
 const LINES_PER_PAGE = 42;
 /** Page height and text geometry of `makePdf`, in points. */
@@ -296,11 +309,53 @@ export function makePdf(lines: readonly string[]): {
 /** `tex: false` imitates a machine with no TeX installation and no built-in engine. */
 export function latexPlugin(
   host: MockProjectHost,
-  { tex = true }: { tex?: boolean } = {},
+  options: { tex?: boolean } = {},
 ): MockPluginFactory {
-  return (): MockPlugin => {
+  return (emit, kernel): MockPlugin => {
     const builds = new Map<string, Built>();
     let last: Built | undefined;
+    let tex = options.tex ?? true;
+    let installed = false;
+    let installing = false;
+    let cancelled = false;
+    let mode: EngineMode = "normal";
+    /** Every `latex.engine-install` call, with its `consent`, for the UI checks. */
+    const installCalls: boolean[] = [];
+
+    /** The Settings > LaTeX "engine" choice, read from the settings plugin. */
+    const choice = (): "auto" | "system" | "tectonic" => {
+      try {
+        const got = kernel.call("settings.get", { id: "latex.backend" }) as {
+          value?: unknown;
+        };
+        return got.value === "system" || got.value === "tectonic" ? got.value : "auto";
+      } catch {
+        return "auto";
+      }
+    };
+    /** Which backend would compile now: system TeX first in `auto`. */
+    const active = (): "system" | "tectonic" | null => {
+      const pick = choice();
+      if (pick === "system") return tex ? "system" : null;
+      if (pick === "tectonic") return installed ? "tectonic" : null;
+      return tex ? "system" : installed ? "tectonic" : null;
+    };
+    const builtin = () => ({
+      installed,
+      downloadable: true,
+      reason: null,
+      version: ENGINE_VERSION,
+      platform: "linux-x86_64",
+      size: ENGINE_SIZE,
+      sha256: ENGINE_SHA,
+      url_host: "engines.manang.example",
+      package_host: "relay.fullyjustified.net",
+      stored_in: ENGINE_DIR,
+      installing,
+    });
+    const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
+    const progress = (phase: string, received: number) =>
+      emit("latex.engine-progress", { phase, received, total: ENGINE_SIZE });
 
     return {
       name: "latex",
@@ -315,10 +370,13 @@ export function latexPlugin(
                 "[bad_argument] `main` is not a valid argument: must be a string",
             };
           }
-          if (!tex) {
+          const backend = active();
+          if (backend === null) {
             throw {
               message:
-                "[no_backend] no LaTeX backend: no TeX installation was found on PATH and the built-in engine is not installed",
+                choice() === "tectonic"
+                  ? "[worker_missing] the LaTeX worker `manang-latex-worker` was not found"
+                  : "[no_tex] no TeX installation was found: install TeX Live or MiKTeX (then restart Manang), or the optional built-in engine",
             };
           }
           const entry = main.startsWith(`${fs.root}/`)
@@ -348,12 +406,76 @@ export function latexPlugin(
             diagnostics: out.diagnostics,
             duration_ms: Math.round(380 + out.lines.length * 2),
             synctex: ok,
-            engine: "pdflatex",
-            backend: "system",
-            tex_version: "pdfTeX 3.141592653-2.6-1.40.27 (TeX Live 2025)",
+            engine: backend === "system" ? "pdflatex" : "xelatex",
+            backend,
+            tex_version:
+              backend === "system"
+                ? "pdfTeX 3.141592653-2.6-1.40.27 (TeX Live 2025)"
+                : `Tectonic ${ENGINE_VERSION}`,
           };
         },
+        "latex.engine-status": () => builtin(),
+        "latex.engine-install": async (args) => {
+          installCalls.push(args["consent"] === true);
+          if (args["consent"] !== true) {
+            throw {
+              message:
+                "[consent_required] downloading the built-in engine needs your consent",
+            };
+          }
+          if (installing)
+            throw {
+              message: "[engine_busy] another engine download is already running",
+            };
+          installing = true;
+          cancelled = false;
+          try {
+            const steps = mode === "slow" ? 40 : 8;
+            const pause = mode === "slow" ? 100 : 25;
+            for (let i = 1; i <= steps; i += 1) {
+              await sleep(pause);
+              if (cancelled)
+                throw { message: "[engine_cancelled] the download was cancelled" };
+              if (mode === "fail" && i === 4) {
+                throw {
+                  message:
+                    "[engine_network] could not reach engines.manang.example: connection refused",
+                };
+              }
+              progress("downloading", Math.round((ENGINE_SIZE * i) / steps));
+            }
+            progress("verifying", ENGINE_SIZE);
+            await sleep(pause);
+            progress("installing", ENGINE_SIZE);
+            await sleep(pause);
+            installed = true;
+            progress("done", ENGINE_SIZE);
+            return builtin();
+          } finally {
+            installing = false;
+          }
+        },
+        "latex.engine-cancel": () => {
+          cancelled = true;
+          return { ok: true };
+        },
+        "latex.engine-remove": () => {
+          installed = false;
+          return builtin();
+        },
+        // Demo-only switches for the UI checks (the real kernel has none).
+        "dev.latex-tex": (args) => {
+          tex = args["tex"] === true;
+          return { tex };
+        },
+        "dev.latex-engine-mode": (args) => {
+          const next = args["mode"];
+          mode = next === "slow" || next === "fail" ? next : "normal";
+          return { mode };
+        },
+        "dev.latex-engine-calls": () => ({ calls: [...installCalls], installed }),
         "latex.status": () => ({
+          builtin: builtin(),
           backends: [
             {
               id: "system",
@@ -366,15 +488,15 @@ export function latexPlugin(
             },
             {
               id: "tectonic",
-              available: false,
-              version: null,
+              available: installed,
+              version: installed ? `Tectonic ${ENGINE_VERSION}` : null,
               engines: ["xelatex"],
               latexmk: false,
-              bibtex: false,
+              bibtex: installed,
               biber: false,
             },
           ],
-          default: tex ? "system" : "none",
+          default: active() ?? "none",
           default_engine: "pdflatex",
           settings: {},
         }),

@@ -317,8 +317,13 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
         return Promise.reject(fail(`unknown command \`${command}\``));
       }
       try {
+        const out = handler(args);
+        // A handler may answer later (a download that reports progress).
         // Structured clone mimics the IPC boundary: callers never share state.
-        return Promise.resolve(structuredClone(handler(args)) as T);
+        if (out instanceof Promise) {
+          return out.then((value) => structuredClone(value) as T);
+        }
+        return Promise.resolve(structuredClone(out) as T);
       } catch (error) {
         return Promise.reject(error);
       }

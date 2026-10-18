@@ -57,7 +57,8 @@ Launch Manang. You will see the **Home** view displaying your project workspace:
 3. Toggle between **User** and **Project** scopes, or try switching between Dark and Light themes.
 4. Press `Ctrl+/` (`Cmd+/` on macOS) to open the **Keyboard Shortcuts** reference sheet.
 
-5. Try **Save a version** (File menu, or `Ctrl+Alt+S`; `Cmd+Option+S` on macOS): it saves a named snapshot of your project. Open **Versions** (View menu) to see the timeline, compare a version with your files, and restore a file or the whole project. Restore never deletes anything, and it saves your current changes first if you ask it to.
+5. **No TeX on your computer? (LaTeX testers)** Open a LaTeX project. The preview says "No TeX installation found" and offers **Download the built-in engine (about 14 MB)**. Please try it: read the window, press **Download**, watch the progress (try **Cancel** once too), and check that the document then compiles. Tell us how long the first compile took and whether any package was missing. Remove it again in Settings > **LaTeX** if you like.
+6. Try **Save a version** (File menu, or `Ctrl+Alt+S`; `Cmd+Option+S` on macOS): it saves a named snapshot of your project. Open **Versions** (View menu) to see the timeline, compare a version with your files, and restore a file or the whole project. Restore never deletes anything, and it saves your current changes first if you ask it to.
 
 6. Try **Share this file live** (File menu). It needs a relay address first (Settings, section Live). Send the invite to a second tester, who chooses **Join a live session**. See [Edit together live](../user/edit-together-live.md).
 
@@ -114,5 +115,5 @@ Logs automatically rotate when they reach 2 MB. An in-app diagnostics bundle gen
 ## 6. The Privacy Promise in Plain Words
 
 1. **Your documents stay on your machine:** Your manuscripts, drafts, notes, figures, and bibliographies are stored as standard UTF-8 files in folders you choose. Nothing is uploaded to remote servers.
-2. **Local compilation:** Typst and Markdown compilation runs 100% locally in-process. LaTeX compiles using your local TeX distribution or an isolated local worker.
+2. **Local compilation:** Typst and Markdown compilation runs 100% locally in-process. LaTeX compiles using your local TeX distribution or an isolated local worker. If you have no TeX installed, Manang can download its optional built-in LaTeX engine, but only after you press Download in a window that names the server, size and checksum. That engine then fetches LaTeX packages from `relay.fullyjustified.net` the first time a document uses them (you can turn that off in Settings > LaTeX). Manang never downloads the engine without your consent.
 3. **AI privacy when it lands:** When AI features arrive, they are strictly bring-your-own-key (BYOK). Manang will feature an explicit context tray displaying every single token that will be sent before any network request occurs, and keys are stored securely in your operating system keychain.

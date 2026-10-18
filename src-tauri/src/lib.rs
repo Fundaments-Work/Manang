@@ -136,6 +136,8 @@ enum BootError {
 struct Dirs<'a> {
     config: &'a std::path::Path,
     cache: &'a std::path::Path,
+    /// Per-user app data: holds the optional downloaded LaTeX engine.
+    data: &'a std::path::Path,
 }
 
 /// The default LaTeX backend is the system TeX installation. The optional
@@ -192,11 +194,19 @@ fn build_kernel_parts(
     )?;
     kernel.register(
         manang_latex::manifest()?,
-        Arc::new(manang_latex::plugin(manang_latex::LatexConfig {
-            worker: latex_worker(),
-            cache_dir: Some(dirs.cache.join("latex")),
-            ..manang_latex::LatexConfig::default()
-        })),
+        Arc::new(manang_latex::plugin_with_events(
+            manang_latex::LatexConfig {
+                worker: latex_worker(),
+                cache_dir: Some(dirs.cache.join("latex")),
+                // Where the consented engine download installs (never in the project).
+                engines_dir: Some(dirs.data.join("engines")),
+                // The user agrees to on-demand package fetches when they install
+                // the engine; `latex.fetch-packages` turns it off.
+                allow_network: true,
+                ..manang_latex::LatexConfig::default()
+            },
+            events.clone(),
+        )),
     )?;
     kernel.register(
         manang_project::manifest()?,
@@ -737,9 +747,11 @@ pub fn run() -> Result<(), tauri::Error> {
             }
             let config_dir = app.path().app_config_dir()?;
             let cache_dir = app.path().app_cache_dir()?;
+            let data_dir = app.path().app_data_dir()?;
             let dirs = Dirs {
                 config: &config_dir,
                 cache: &cache_dir,
+                data: &data_dir,
             };
             let events = EventBus::new();
             let editor = Arc::new(Editor::new());
@@ -887,6 +899,7 @@ mod tests {
         let dirs = Dirs {
             config: &tmp,
             cache: &tmp,
+            data: &tmp,
         };
         let kernel = build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
             .expect("first-party plugins register");
@@ -896,6 +909,9 @@ mod tests {
             "editor.new",
             "typst.compile",
             "latex.compile",
+            "latex.engine-status",
+            "latex.engine-install",
+            "latex.engine-remove",
             "project.open",
             "agent.start",
             "agent.key.set",
@@ -924,6 +940,7 @@ mod tests {
         let dirs = Dirs {
             config: &tmp,
             cache: &tmp,
+            data: &tmp,
         };
         let kernel = build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
             .expect("first-party plugins register");
@@ -975,6 +992,7 @@ mod tests {
         let dirs = Dirs {
             config: &tmp,
             cache: &tmp,
+            data: &tmp,
         };
         let kernel = build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
             .expect("first-party plugins register");
@@ -1009,6 +1027,7 @@ mod tests {
         let dirs = Dirs {
             config: &tmp,
             cache: &tmp,
+            data: &tmp,
         };
         let kernel = build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
             .expect("first-party plugins register");
@@ -1045,6 +1064,7 @@ mod tests {
         let dirs = Dirs {
             config: config.path(),
             cache: config.path(),
+            data: config.path(),
         };
         let kernel = Arc::new(
             build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
@@ -1094,6 +1114,7 @@ mod tests {
         let dirs = Dirs {
             config: config.path(),
             cache: cache.path(),
+            data: cache.path(),
         };
         let events = EventBus::new();
         let editor = Arc::new(Editor::new());

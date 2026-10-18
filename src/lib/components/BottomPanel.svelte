@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
 
+  import EngineOffer from "$lib/components/EngineOffer.svelte";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { goToProblem } from "$lib/state/actions";
   import { agent } from "$lib/state/agent.svelte";
@@ -203,7 +204,24 @@
   >
     {#if layout.panelTab === "problems"}
       {#if groups.length === 0}
-        {#if build.status === "failed"}
+        {#if build.status === "failed" && build.failure !== null}
+          <div
+            class="m-3 border border-line bg-surface p-3 text-xs text-text"
+            role="alert"
+            data-problems-failure={build.failure.code}
+          >
+            <div class="flex items-center gap-1.5 text-text">
+              <Icon name="error" size={13} />
+              <span>{build.failure.title}</span>
+            </div>
+            {#if build.failure.fix !== null}
+              <p class="mt-1 mb-2 leading-relaxed text-text-60">{build.failure.fix}</p>
+            {/if}
+            {#if build.failure.code === "no_tex"}
+              <EngineOffer />
+            {/if}
+          </div>
+        {:else if build.status === "failed"}
           <div
             class="m-3 border border-line bg-surface p-3 text-xs text-text"
             role="alert"
@@ -378,6 +396,11 @@
             {line.text}
           </div>
         {/each}
+        {#if build.failure?.code === "no_tex"}
+          <div class="py-2 font-sans" data-output-offer>
+            <EngineOffer />
+          </div>
+        {/if}
       </div>
     {/if}
   </div>

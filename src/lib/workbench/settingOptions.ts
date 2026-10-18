@@ -16,6 +16,11 @@ export interface SettingOption {
 /** Labels for values whose id is not a word, keyed by setting id. */
 const VALUE_LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "citations.style": { apa: "APA", numeric: "Numeric (IEEE)" },
+  "latex.backend": {
+    auto: "Automatic",
+    system: "System TeX",
+    tectonic: "Built-in engine",
+  },
 };
 
 let languageNames: Intl.DisplayNames | null | undefined;
