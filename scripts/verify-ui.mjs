@@ -1088,6 +1088,10 @@ async function main() {
         show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 300)`,
       },
     );
+    check(
+      "no source-comment text leaks onto the page while Settings are open",
+      await page.evaluate(`!/\\/\\*|\\*\\/|<!--/.test(document.body.innerText)`),
+    );
     await clickText(page, 'section[aria-label="Settings"] button', "About");
     await expectEventually(
       page,
@@ -2772,7 +2776,10 @@ async function main() {
     await sleep(400);
     const readingAt = await viewerTop();
     await goToFile("notes.md");
-    await waitFor(page, `!!document.querySelector('article[aria-label="Markdown preview"]')`);
+    await waitFor(
+      page,
+      `!!document.querySelector('article[aria-label="Markdown preview"]')`,
+    );
     await clickText(page, '[role="tab"]', "main.typ");
     await waitFor(page, `document.querySelector("${viewerSel} canvas") !== null`);
     await sleep(500);
