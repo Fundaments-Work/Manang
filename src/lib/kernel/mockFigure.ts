@@ -15,7 +15,11 @@ import { applyOp, type FigureOp } from "$lib/figure/ops";
 import { renderSceneSvg } from "$lib/figure/render";
 import { createScene, migrateScene, type FigureScene } from "$lib/figure/scene";
 
+import agentTools from "../../../crates/manang-figure/src/agent_tools.json";
+
 import type { MockPlugin, MockPluginFactory } from "./mock";
+import { mockMermaidLayout } from "./mockDiagram";
+import * as tools from "./mockFigureTools";
 import type { MockProjectFs, MockProjectHost } from "./mockProject";
 
 export { renderSceneSvg };
@@ -31,6 +35,16 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["figure.render-svg", "Render a scene to SVG"],
   ["figure.export-svg", "Export SVG"],
   ["figure.hit-test", "Hit test coordinates"],
+  ["figure.describe", "Describe a figure (agent tool)"],
+  ["figure.add-shapes", "Add shapes (agent tool)"],
+  ["figure.connect", "Connect shapes (agent tool)"],
+  ["figure.update", "Change shapes (agent tool)"],
+  ["figure.remove", "Remove shapes (agent tool)"],
+  ["figure.layout", "Lay out a figure"],
+  ["figure.from-mermaid", "Insert Mermaid as shapes"],
+  ["figure.to-mermaid", "Figure as Mermaid"],
+  ["figure.style", "Apply a style preset"],
+  ["figure.export", "Save and export a figure"],
 ];
 
 const MAX_HISTORY = 100;
@@ -252,14 +266,191 @@ export function figurePlugin(host: MockProjectHost): MockPluginFactory {
     };
 
     /* ------------------------------------------------------------------ */
-    /* TOOLS: the agent-tool commands (`figure.describe`, `figure.add-    */
-    /* shapes`, ...) go here, mirroring crates/manang-figure's tools.     */
+    /* TOOLS: the agent-tool commands, mirroring crates/manang-figure's   */
+    /* tools.rs (see mockFigureTools.ts for where the mock is simpler).   */
     /* ------------------------------------------------------------------ */
+
+    /** The figure a tool names: `figure` (an id), else `path`, else active. */
+    const target = (args: Record<string, unknown>): Doc => {
+      const figure = args["figure"];
+      if (typeof figure === "number") {
+        const doc = docs.get(figure);
+        if (doc === undefined)
+          throw tools.toolError("not_found", `no figure with id ${figure}`);
+        return doc;
+      }
+      if (typeof args["path"] === "string") {
+        const json = figurePaths(args["path"]).json;
+        const open = [...docs.values()].find((d) => d.path === json);
+        if (open !== undefined) return open;
+        const { fs, rel } = locate(json);
+        const text = fs.files.get(rel);
+        if (typeof text !== "string") {
+          throw tools.toolError(
+            "io",
+            `I/O error at \`${args["path"]}\`: file not found`,
+          );
+        }
+        return add(json, migrateScene(JSON.parse(text)));
+      }
+      if (active === null)
+        throw tools.toolError("not_found", "no figure is currently active");
+      const doc = docs.get(active);
+      if (doc === undefined)
+        throw tools.toolError("not_found", "no figure is currently active");
+      return doc;
+    };
+
+    const figureRef = (doc: Doc) => ({
+      id: doc.id,
+      path: doc.path,
+      revision: doc.revision,
+    });
+
+    /** Applies a tool's edit, announces it and answers with the ids. */
+    const commit = (doc: Doc, op: FigureOp, ids: string[]) => {
+      let outcome;
+      try {
+        outcome = apply(doc, op);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : (error as { message?: string }).message;
+        throw tools.toolError("invalid_argument", String(message));
+      }
+      if (outcome.applied)
+        emit("figure.changed", { id: doc.id, revision: doc.revision });
+      return { figure: figureRef(doc), ids };
+    };
+
+    const toolHandlers: Record<string, (args: Record<string, unknown>) => unknown> = {
+      "figure.describe": (args) => {
+        const doc = target(args);
+        return { figure: figureRef(doc), ...tools.describe(doc.scene) };
+      },
+      "figure.add-shapes": (args) => {
+        const doc = target(args);
+        const edit = tools.addShapes(doc.scene, args);
+        return {
+          ...commit(doc, edit.op, edit.ids),
+          shapes: edit.shapes.map(tools.shapeSummary),
+        };
+      },
+      "figure.connect": (args) => {
+        const doc = target(args);
+        const edit = tools.connect(doc.scene, args);
+        return commit(doc, edit.op, edit.ids);
+      },
+      "figure.update": (args) => {
+        const doc = target(args);
+        const edit = tools.update(doc.scene, args);
+        return commit(doc, edit.op, edit.ids);
+      },
+      "figure.remove": (args) => {
+        const doc = target(args);
+        const edit = tools.remove(doc.scene, args);
+        return commit(doc, edit.op, edit.ids);
+      },
+      "figure.layout": (args) => {
+        const doc = target(args);
+        const edit = tools.layout(doc.scene, args);
+        return commit(doc, edit.op, edit.ids);
+      },
+      "figure.style": (args) => {
+        const doc = target(args);
+        const edit = tools.style(doc.scene, args);
+        return commit(doc, edit.op, edit.ids);
+      },
+      "figure.to-mermaid": (args) => {
+        const doc = target(args);
+        return { figure: figureRef(doc), ...tools.toMermaid(doc.scene) };
+      },
+      "figure.from-mermaid": (args) => {
+        const doc = target(args);
+        const source = args["source"];
+        if (typeof source !== "string" || source.trim() === "") {
+          throw tools.toolError("invalid_argument", "`source` is empty");
+        }
+        const mode = typeof args["mode"] === "string" ? args["mode"] : "auto";
+        if (!["auto", "shapes", "block"].includes(mode)) {
+          throw tools.toolError(
+            "invalid_argument",
+            `unknown mode \`${mode}\`; use auto, shapes or block`,
+          );
+        }
+        const x = typeof args["x"] === "number" ? args["x"] : undefined;
+        const y = typeof args["y"] === "number" ? args["y"] : undefined;
+        const origin = tools.insertionPoint(doc.scene, x, y);
+        const counter = tools.highestCounter(doc.scene);
+        let fallback: string | null = null;
+        if (mode !== "block") {
+          try {
+            const layout = mockMermaidLayout(source);
+            const nodes = tools.nodesFromLayout(layout, origin, counter);
+            return {
+              ...commit(
+                doc,
+                { op: "add", nodes },
+                nodes.map((n) => n.id),
+              ),
+              mode: "shapes",
+              family: layout["family"],
+              fallback: null,
+            };
+          } catch (error) {
+            fallback = error instanceof Error ? error.message : String(error);
+          }
+          if (mode === "shapes") {
+            throw tools.toolError(
+              "unavailable",
+              `this Mermaid cannot become shapes: ${fallback}`,
+            );
+          }
+        }
+        const id = `n${(counter + 1).toString(36)}`;
+        const block = {
+          kind: "mermaid" as const,
+          id,
+          x: origin.x,
+          y: origin.y,
+          width: 360,
+          height: 240,
+          source,
+        };
+        return {
+          ...commit(doc, { op: "add", nodes: [block] }, [id]),
+          mode: "block",
+          family: null,
+          fallback,
+        };
+      },
+      "figure.export": (args) => {
+        const doc = target(args);
+        const format = typeof args["format"] === "string" ? args["format"] : "svg";
+        if (format !== "svg" && format !== "pdf") {
+          throw tools.toolError(
+            "invalid_argument",
+            `unknown format \`${format}\`; use svg or pdf`,
+          );
+        }
+        const saved = write(doc);
+        return {
+          figure: figureRef(doc),
+          json: saved.json,
+          svg: saved.svg,
+          pdf: saved.pdf,
+          frame_svg: null,
+        };
+      },
+    };
 
     return {
       name: "figure",
       commands: COMMANDS,
+      agentTools,
       handlers: {
+        ...toolHandlers,
         "figure.create": (args) => {
           const width =
             typeof args["width"] === "number" ? args["width"] : DEFAULT_WIDTH;

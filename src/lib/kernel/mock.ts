@@ -9,6 +9,8 @@
  */
 
 import type {
+  AgentTool,
+  AgentToolList,
   Args,
   Kernel,
   KernelCommand,
@@ -36,6 +38,8 @@ export interface MockPlugin {
   readonly version?: string;
   readonly description?: string;
   readonly permissions?: PluginPermissions;
+  /** Tools it answers the `register_agent_tool` hook with (ADR 0012). */
+  readonly agentTools?: readonly Omit<AgentTool, "plugin">[];
   /** `[[contributes.settings]]`, registered with the settings plugin at start. */
   readonly settings?: readonly Omit<SettingDef, "owner" | "category">[];
 }
@@ -109,6 +113,7 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
   };
   const pluginCommands: KernelCommand[] = [];
   const pluginInfo: PluginInfo[] = [];
+  const agentTools: AgentTool[] = [];
   const declared = new Map<string, readonly Omit<SettingDef, "owner" | "category">[]>();
   const pluginHandlers: Record<string, MockHandler> = {};
   const pluginBinary: Record<string, MockBinaryHandler> = {};
@@ -116,6 +121,9 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
     const plugin = factory(emit);
     Object.assign(pluginHandlers, plugin.handlers);
     Object.assign(pluginBinary, plugin.binaryHandlers ?? {});
+    for (const tool of plugin.agentTools ?? []) {
+      agentTools.push({ plugin: plugin.name, ...tool });
+    }
     for (const [id, title] of plugin.commands) {
       pluginCommands.push({ id, title, plugin: plugin.name });
     }
@@ -302,6 +310,11 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
       } catch (error) {
         return Promise.reject(error);
       }
+    },
+
+    agentTools(): Promise<AgentToolList> {
+      const tools = [...agentTools].sort((a, b) => a.name.localeCompare(b.name));
+      return Promise.resolve(structuredClone({ tools, problems: [] }));
     },
 
     onEvent(handler): Promise<Unlisten> {
