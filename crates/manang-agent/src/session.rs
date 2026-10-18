@@ -104,6 +104,13 @@ pub async fn run(
     let end = drive(&shared, &session, &plan, &cancel).await;
     // Anything still waiting for the user belongs to a session that is over.
     shared.approvals.lock().retain(|_, p| p.session_id != sid);
+    // The session is idle (and its meta on disk) before the UI hears that it is done.
+    {
+        let mut inner = session.inner.lock();
+        inner.running = false;
+        inner.cancel = None;
+    }
+    let meta_error = crate::plugin::write_meta(&session, "idle").err();
     match end {
         End::Done(reason) => shared.emit("agent.done", &sid, json!({ "stop_reason": reason })),
         End::Cancelled => {
@@ -125,12 +132,7 @@ pub async fn run(
             shared.emit("agent.done", &sid, json!({ "stop_reason": "error" }));
         }
     }
-    {
-        let mut inner = session.inner.lock();
-        inner.running = false;
-        inner.cancel = None;
-    }
-    if let Err(e) = crate::plugin::write_meta(&session, "idle") {
+    if let Some(e) = meta_error {
         shared.emit(
             "agent.error",
             &sid,
