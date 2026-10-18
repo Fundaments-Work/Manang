@@ -494,8 +494,7 @@ impl Walker<'_, '_> {
     fn markup(&mut self, node: &SyntaxNode, start: usize) {
         let mut at = start;
         let mut hash: Option<usize> = None;
-        let children: Vec<&SyntaxNode> = node.children().collect();
-        for child in &children {
+        for child in node.children() {
             let range = at..at + child.len();
             at = range.end;
             let pending = hash.take();
