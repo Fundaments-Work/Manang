@@ -23,6 +23,8 @@ thiserror = { workspace = true }
 toml = "1"
 
 [dev-dependencies]
+manang-diagram = { path = "../manang-diagram" }
+manang-typst = { path = "../manang-typst" }
 criterion = { version = "0.8", default-features = false }
 insta = "1"
 proptest = "1"

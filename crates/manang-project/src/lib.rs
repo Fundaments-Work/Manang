@@ -6,6 +6,7 @@
 
 mod config;
 mod error;
+pub mod export;
 pub mod fsops;
 pub mod git;
 mod paths;
