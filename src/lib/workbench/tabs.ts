@@ -2,14 +2,14 @@
  * Tab model. Pure and immutable: every function returns a new model, so the
  * runes store can assign the result and tests can compare plain data.
  *
- * A tab holds a text document, a figure, or (as a view of a `.typ` document) a
- * slide deck. There is at most one tab per file; opening a file again focuses
+ * A tab holds a text document, a figure, a read-only viewer (an image or a
+ * PDF), or (as a view of a `.typ` document) a slide deck. There is at most one tab per file; opening a file again focuses
  * its tab.
  */
 
-import { basename, dirname, fileKind, isUnder, moved } from "./paths";
+import { basename, dirname, fileKind, isUnder, moved, viewerKind } from "./paths";
 
-export type TabKind = "document" | "figure";
+export type TabKind = "document" | "figure" | "viewer";
 export type DocumentView = "text" | "slides";
 
 export interface Tab {
@@ -31,7 +31,8 @@ export const EMPTY_TABS: TabsModel = { tabs: [], active: null, history: [] };
 export const tabId = (path: string): string => path;
 
 export function kindForPath(path: string): TabKind {
-  return fileKind(path) === "figure" ? "figure" : "document";
+  if (fileKind(path) === "figure") return "figure";
+  return viewerKind(path) === null ? "document" : "viewer";
 }
 
 export function makeTab(path: string, view: DocumentView = "text"): Tab {

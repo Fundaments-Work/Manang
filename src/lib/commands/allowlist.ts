@@ -22,7 +22,7 @@ export type PaletteRun =
   | { readonly kind: "kernel" }
   | { readonly kind: "action"; readonly action: PaletteAction };
 
-export type PaletteAction = "format" | "spell" | "stats" | "export-pdf";
+export type PaletteAction = "format" | "spell" | "stats" | "export-pdf" | "new-figure";
 
 export interface PaletteEntry {
   readonly run: PaletteRun;
@@ -37,6 +37,12 @@ export const PALETTE_ALLOWLIST: Readonly<Record<string, PaletteEntry>> = {
   "writing.format.document": {
     run: { kind: "action", action: "format" },
     coveredBy: "doc.format",
+  },
+  // `figure.create` needs a path in the project; the shell picks a free name
+  // in `figures/`, creates it through the plugin and opens it.
+  "figure.create": {
+    run: { kind: "action", action: "new-figure" },
+    coveredBy: "file.new-figure",
   },
   "writing.spell.check": { run: { kind: "action", action: "spell" } },
   "writing.stats.count": { run: { kind: "action", action: "stats" } },
