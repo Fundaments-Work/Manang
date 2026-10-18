@@ -5729,11 +5729,14 @@ name = "manang-markdown"
 version = "0.1.0"
 dependencies = [
  "insta",
+ "manang-diagram",
  "manang-kernel",
+ "manang-project",
  "proptest",
  "pulldown-cmark",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "toml 0.8.2",
  "yaml-rust",
