@@ -1,0 +1,7 @@
+[project]
+engine = "typst"
+name = "Journal Article"
+main = "main.typ"
+
+[bibliography]
+paths = ["references.bib"]

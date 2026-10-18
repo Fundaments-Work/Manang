@@ -994,3 +994,41 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
   7. **New Page `menus-and-shortcuts.md`:** Exhaustive hierarchy of every menu item, group, command ID, and shortcut derived directly from `src/lib/commands/workbench.ts`, `menu.ts`, and `crates/manang-settings/src/keybindings.rs`.
   8. **Corrections & Invariants:** Corrected MSRV requirement from Rust 1.85 to Rust 1.95 in `getting-started.md` and `README.md`. Clarified that the title bar carries the logo mark and menus without unclickable breadcrumbs, while document identity appears in the OS window title (`<file> — <project>`). Preserved one-line "coming soon" notes for in-development features (plugin manager, Save a version, AI agent).
 
+---
+
+## Realistic Test Corpus (`antigravity/test-corpus`)
+
+- **Branch:** `antigravity/test-corpus`
+- **Scope:** 12 small but realistic offline projects under `testdata/corpus/` exercising compilation, preview, diagnostics, and export across Typst, LaTeX, and Markdown without external network downloads.
+- **Projects Created:**
+  1. `typst-article`: Academic journal article with title block, abstract, equations, table, embedded SVG figure, BibTeX bibliography (9 entries), and cross-references (3 pages).
+  2. `typst-thesis`: 40-page doctoral dissertation partitioned across five modular chapter includes (`01_introduction.typ` through `05_conclusion.typ`) with table of contents.
+  3. `typst-slides`: 6-slide presentation deck using `presentation-16-9` aspect ratio, large typography, tables, and equations.
+  4. `typst-poster`: Single-page A1 conference poster with multi-column layout, banner header, theoretical blocks, tables, and references.
+  5. `typst-letter`: 1-page formal academic letter of recommendation with sender/recipient blocks and signature.
+  6. `typst-heavy-math`: 3-page mathematical physics document with Christoffel symbols, functional path integrals, Grassmann algebra, and contour integrals.
+  7. `typst-cjk-accented`: 2-page multilingual typography document testing accented Latin European orthographies (French, German, Spanish, Portuguese, Czech, Polish, Nordic) and East Asian CJK ideographs (Chinese, Japanese, Korean) with embedded fonts.
+  8. `typst-broken`: Deliberately malformed document containing missing brace, unknown function call, and missing include to validate compiler error diagnostics without panics.
+  9. `latex-article`: Standard LaTeX article with BibTeX bibliography, math equations, and citations.
+  10. `latex-report`: Multi-file LaTeX technical report using `\input` chapters and report structure.
+  11. `latex-broken`: Deliberately broken LaTeX file with unclosed environments and undefined macros.
+  12. `markdown-notes`: Technical notes file featuring YAML frontmatter, inline and display math, summary tables, and a fenced Mermaid flowchart diagram.
+- **Test Harness (`crates/manang-typst/tests/corpus.rs`):**
+  - Custom zero-dependency line-based TOML parser for `expected.toml` and `manang.toml` to avoid modifying workspace or crate dependencies.
+  - Compiles every Typst project through `manang_typst::Compiler`, asserting compile success/failure, expected page counts, and diagnostic coordinates (line and column) on errors.
+  - Timing report enforcing the < 5.0 s compile SLA in the dev profile.
+  - Validation test confirming that all non-Typst projects (LaTeX and Markdown) exist, have valid `expected.toml` configurations, and that all referenced source files exist on disk.
+- **Measured Compilation Timings (Dev Profile):**
+  - `typst-article`: 3 pages, **104.41 ms**
+  - `typst-thesis`: 40 pages, **55.67 ms**
+  - `typst-slides`: 6 pages, **6.34 ms**
+  - `typst-poster`: 1 page, **11.50 ms**
+  - `typst-letter`: 1 page, **24.63 ms**
+  - `typst-heavy-math`: 3 pages, **10.51 ms**
+  - `typst-cjk-accented`: 2 pages, **8.87 ms**
+  - `typst-broken`: 0 pages (diagnostics verified at line 11), **0.33 ms**
+- **Quality Gates Passed:**
+  - `cargo fmt --all -- --check`: PASS
+  - `cargo clippy -p manang-typst --all-targets --locked -- -D warnings`: PASS (0 warnings)
+  - `cargo test -p manang-typst --locked`: PASS (40/40 tests passing across all test suites)
+

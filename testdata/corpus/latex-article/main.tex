@@ -1,0 +1,41 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\title{Thermodynamic Efficiency in Distributed Computing}
+\author{A. M. Wright \and E. R. Vance}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We examine the fundamental thermodynamic bounds governing distributed state consensus protocols. By combining stochastic Langevin dynamics with informational entropy production rates, we derive minimum energy dissipation limits for arbitrary networked topologies.
+\end{abstract}
+
+\section{Introduction}
+The fundamental relationship between physical entropy and logical information was pioneered by Shannon~\cite{shannon1948} and Landauer~\cite{landauer1961}. In decentralized computing, information reconciliation requires non-zero entropy production. Early investigations by Turing~\cite{turing1936} established computational bounds that motivate our current framework.
+
+\section{Theoretical Formulation}
+Consider a network of $N$ nodes connected via graph Laplacian $L$. The continuous state vector $\mathbf{x}(t)$ evolves according to:
+\begin{equation}
+  \frac{d\mathbf{x}}{dt} = -L \mathbf{x}(t) + \boldsymbol{\xi}(t)
+  \label{eq:langevin}
+\end{equation}
+where $\boldsymbol{\xi}(t)$ is Gaussian white noise satisfying $\langle \boldsymbol{\xi}(t) \boldsymbol{\xi}^T(t') \rangle = 2 D I_N \delta(t - t')$.
+
+The total entropy production rate evaluates to:
+\begin{equation}
+  \dot{S}_{\text{prod}} = \frac{\gamma}{T} \langle \dot{\mathbf{x}}^T \dot{\mathbf{x}} \rangle \ge 0
+  \label{eq:entropy_rate}
+\end{equation}
+
+\section{Conclusion}
+Our results confirm that respecting thermodynamic limits leads directly to more energy-efficient distributed consensus architectures.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

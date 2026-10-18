@@ -1,0 +1,7 @@
+[project]
+engine = "latex"
+name = "LaTeX Journal Article"
+main = "main.tex"
+
+[bibliography]
+paths = ["references.bib"]

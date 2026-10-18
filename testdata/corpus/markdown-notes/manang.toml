@@ -1,0 +1,4 @@
+[project]
+engine = "markdown"
+name = "Scientific Research Notes"
+main = "index.md"

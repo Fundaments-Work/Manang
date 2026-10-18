@@ -1,0 +1,4 @@
+[project]
+engine = "typst"
+name = "Doctoral Dissertation"
+main = "main.typ"

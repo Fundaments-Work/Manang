@@ -1,0 +1,4 @@
+[project]
+engine = "typst"
+name = "Multilingual CJK and Accented Latin Document"
+main = "main.typ"
