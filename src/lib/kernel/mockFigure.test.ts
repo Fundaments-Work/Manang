@@ -25,7 +25,7 @@ async function opened() {
 describe("browser figure plugin", () => {
   it("opens a project figure by absolute path and serves its scene", async () => {
     const { figure } = await opened();
-    const { id } = await figure.open(`${DEMO_ROOT}/figures/state_lattice.figure.json`);
+    const { id } = await figure.open(`${DEMO_ROOT}/figures/state_lattice.figure`);
     const scene = await figure.get(id);
     expect(scene.nodes.length).toBe(4);
     await expect(figure.open("/elsewhere/x.figure.json")).rejects.toMatchObject({
@@ -71,15 +71,13 @@ describe("browser figure plugin", () => {
 
   it("creates and saves the scene with its SVG next to it", async () => {
     const { figure, project } = await opened();
-    const path = `${DEMO_ROOT}/figures/new.figure.json`;
+    const path = `${DEMO_ROOT}/figures/new.figure`;
     const created = await figure.createAt(path, 320, 200);
     expect(created).toMatchObject({ json: path, svg: `${DEMO_ROOT}/figures/new.svg` });
-    expect(JSON.parse(await project.readFile("figures/new.figure.json"))).toMatchObject(
-      {
-        width: 320,
-        nodes: [],
-      },
-    );
+    expect(JSON.parse(await project.readFile("figures/new.figure"))).toMatchObject({
+      width: 320,
+      nodes: [],
+    });
     await expect(figure.createAt(path)).rejects.toMatchObject({
       message: expect.stringContaining("already exists"),
     });
@@ -119,7 +117,14 @@ describe("browser figure plugin", () => {
       json: "/p/figures/a.figure.json",
       svg: "/p/figures/a.svg",
     });
-    expect(figurePaths("/p/a.svg").json).toBe("/p/a.figure.json");
+    // A legacy name is kept; everything else is saved as `.figure`.
+    expect(figurePaths("/p/figures/a.figure")).toEqual({
+      json: "/p/figures/a.figure",
+      svg: "/p/figures/a.svg",
+    });
+    expect(figurePaths("/p/a.svg").json).toBe("/p/a.figure");
+    expect(figurePaths("/p/a.json").json).toBe("/p/a.figure");
+    expect(figurePaths("/p/a").json).toBe("/p/a.figure");
     expect(figurePaths("/p/a").svg).toBe("/p/a.svg");
   });
 });

@@ -55,12 +55,17 @@ const MAX_HISTORY = 100;
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 600;
 
-/** `x.figure.json`, `x.svg` or `x` → the scene path and its SVG. */
+/** `x.figure`, `x.figure.json` (kept as given), `x.svg` or `x` → the scene path and its SVG. */
 export function figurePaths(path: string): { json: string; svg: string } {
-  const stem = path.endsWith(".figure.json")
-    ? path.slice(0, -".figure.json".length)
+  // A legacy `.figure.json` keeps its own name (saving never creates a second
+  // file); everything else is saved as `.figure`.
+  if (path.endsWith(".figure.json")) {
+    return { json: path, svg: `${path.slice(0, -".figure.json".length)}.svg` };
+  }
+  const stem = path.endsWith(".figure")
+    ? path.slice(0, -".figure".length)
     : path.replace(/\.(svg|json)$/, "");
-  return { json: `${stem}.figure.json`, svg: `${stem}.svg` };
+  return { json: `${stem}.figure`, svg: `${stem}.svg` };
 }
 
 interface Doc {

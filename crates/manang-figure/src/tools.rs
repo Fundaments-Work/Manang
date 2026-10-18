@@ -150,7 +150,7 @@ pub fn resolve_ref(scene: &FigureScene, reference: &str) -> Result<String, ToolE
 pub struct Target {
     /// An open figure's id.
     pub figure: Option<u64>,
-    /// A `.figure.json` path (opened when needed).
+    /// A `.figure` path (or a legacy `.figure.json`), opened when needed.
     pub path: Option<String>,
 }
 

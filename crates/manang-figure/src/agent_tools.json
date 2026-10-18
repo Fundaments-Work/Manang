@@ -7,7 +7,7 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "path": { "type": "string", "description": "Absolute path of a .figure.json file; opened if it is not open. Omit to use the figure open in the editor." },
+        "path": { "type": "string", "description": "Absolute path of a .figure file (or a legacy .figure.json); opened if it is not open. Omit to use the figure open in the editor." },
         "figure": { "type": "integer", "minimum": 1, "description": "Id of an open figure (from figure.list)." }
       },
       "additionalProperties": false
@@ -299,7 +299,7 @@
   {
     "name": "figure_export",
     "title": "Save and export a figure",
-    "description": "Save the figure (<name>.figure.json) and write its SVG next to it; with format pdf also the PDF LaTeX documents include. With frame, also writes <name>-<frame id>.svg holding just that frame. The figure must have a path.",
+    "description": "Save the figure (<name>.figure) and write its SVG next to it; with format pdf also the PDF LaTeX documents include. With frame, also writes <name>-<frame id>.svg holding just that frame. The figure must have a path.",
     "command": "figure.export",
     "input_schema": {
       "type": "object",

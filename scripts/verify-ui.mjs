@@ -1469,18 +1469,18 @@ async function main() {
     );
     check(
       "the scope line names the figure",
-      (await scopeLine()).includes("state_lattice.figure.json · Figure"),
+      (await scopeLine()).includes("state_lattice.figure · Figure"),
       await scopeLine(),
     );
     await shoot(page, "07e-settings-figure");
     await closeSettings();
     check(
       "closing returns to the figure",
-      (await activeTab(page)) === "figures/state_lattice.figure.json",
+      (await activeTab(page)) === "figures/state_lattice.figure",
     );
     await click(
       page,
-      '[role="tab"][data-tab="figures/state_lattice.figure.json"]',
+      '[role="tab"][data-tab="figures/state_lattice.figure"]',
       "middle",
     );
 
@@ -2554,7 +2554,7 @@ async function main() {
     });
     check(
       "a figure opens inside a tab, not a takeover",
-      (await activeTab(page)) === "figures/state_lattice.figure.json" &&
+      (await activeTab(page)) === "figures/state_lattice.figure" &&
         (await exists(page, '[role="tablist"]')),
     );
     check(
@@ -2583,7 +2583,7 @@ async function main() {
         page.evaluate(`(async () => {
           const { kernel } = await import("/src/lib/kernel/index.ts");
           const list = await kernel.run("figure.list");
-          const fig = list.find((f) => (f.path ?? "").endsWith("state_lattice.figure.json"));
+          const fig = list.find((f) => (f.path ?? "").endsWith("state_lattice.figure"));
           ${body}
         })()`);
       const sceneNodes = () =>
@@ -2591,7 +2591,7 @@ async function main() {
       const sceneCountExpr = `(async () => {
         const { kernel } = await import("/src/lib/kernel/index.ts");
         const list = await kernel.run("figure.list");
-        const fig = list.find((f) => (f.path ?? "").endsWith("state_lattice.figure.json"));
+        const fig = list.find((f) => (f.path ?? "").endsWith("state_lattice.figure"));
         return (await kernel.run("figure.get", { id: fig.id })).nodes.length;
       })()`;
       const sceneCount = () => page.evaluate(sceneCountExpr);
@@ -2864,12 +2864,12 @@ async function main() {
 
       check(
         "drawing marks the tab dirty",
-        (await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
+        (await dirtyTabs(page)).includes("figures/state_lattice.figure"),
       );
       await press(page, "s", { ctrl: true, wait: 500 });
       check(
         "Ctrl+S saves the scene as JSON and its SVG",
-        !(await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
+        !(await dirtyTabs(page)).includes("figures/state_lattice.figure"),
       );
 
       /* ---------------------------------------------------------------- */
@@ -3522,7 +3522,7 @@ async function main() {
         await press(page, "s", { ctrl: true, wait: 500 });
         check(
           "Ctrl+S saves the figure with its formulas and colours",
-          !(await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
+          !(await dirtyTabs(page)).includes("figures/state_lattice.figure"),
         );
       }
     }

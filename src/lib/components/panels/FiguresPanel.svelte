@@ -7,7 +7,7 @@
   import { workspace } from "$lib/state/workspace.svelte";
   import { basename, dirname } from "$lib/workbench/paths";
 
-  /** Figures: every `.figure.json` in the project. Each opens in the figure editor, in a tab. */
+  /** Figures: every `.figure` (and legacy `.figure.json`) in the project. Each opens in the figure editor, in a tab. */
 
   onMount(() => void workspace.ensureAll());
 </script>
@@ -32,7 +32,7 @@
     <div class="px-4 text-xs leading-relaxed text-text-60">
       <p class="m-0">
         No figures yet. A figure is drawn in Manang and saved as a <span
-          class="font-mono text-[11px]">.figure.json</span
+          class="font-mono text-[11px]">.figure</span
         > file you can embed in any document.
       </p>
       <button type="button" class="mng-btn mt-3" onclick={() => void newFigure()}
