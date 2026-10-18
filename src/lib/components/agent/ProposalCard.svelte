@@ -34,7 +34,11 @@
   );
 </script>
 
-<div class="my-2 border border-line px-2.5 py-2" data-proposal data-proposal-state={state}>
+<div
+  class="my-2 border border-line px-2.5 py-2"
+  data-proposal
+  data-proposal-state={state}
+>
   <p class="m-0 flex items-baseline gap-2 text-xs text-text">
     <span
       class="min-w-0 flex-1 truncate"

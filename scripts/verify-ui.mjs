@@ -2878,7 +2878,9 @@ async function main() {
         "answering sends the choice as the next message",
         `/You answered: Yes, delete it/.test(document.querySelector("[data-agent-ask]").innerText)`,
       );
-      await waitFor(page, `!!document.querySelector("[data-agent-send]")`, { label: "idle" });
+      await waitFor(page, `!!document.querySelector("[data-agent-send]")`, {
+        label: "idle",
+      });
       // A network tool asks in one line that names the host.
       await page.evaluate(`document.querySelector("[data-agent-input]").focus()`);
       await insertText(page, "verify this reference");
@@ -2890,7 +2892,9 @@ async function main() {
         { timeout: 10000 },
       );
       await click(page, "[data-agent-allow]");
-      await waitFor(page, `!!document.querySelector("[data-agent-send]")`, { label: "idle" });
+      await waitFor(page, `!!document.querySelector("[data-agent-send]")`, {
+        label: "idle",
+      });
 
       // Fix with AI on a Problems entry.
       await click(page, ".cm-content");

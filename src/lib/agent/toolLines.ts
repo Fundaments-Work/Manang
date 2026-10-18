@@ -61,11 +61,13 @@ export function groupLine(rows: readonly ToolRow[]): string {
   const parts: string[] = [];
   if (reads.size === 1) parts.push(`read ${[...reads][0] ?? "a file"}`);
   else if (reads.size > 1) parts.push(`read ${reads.size} files`);
-  if (searches.length === 1) parts.push(`searched for ${quoted(arg(searches[0]!, "query"))}`);
+  if (searches.length === 1)
+    parts.push(`searched for ${quoted(arg(searches[0]!, "query"))}`);
   else if (searches.length > 1) parts.push(`searched ${searches.length} times`);
   const seen = new Set<string>();
   for (const r of rows) {
-    if (r.name === "read_file" || r.name === "search" || r.name === "edit_text") continue;
+    if (r.name === "read_file" || r.name === "search" || r.name === "edit_text")
+      continue;
     if (seen.has(r.name)) continue;
     seen.add(r.name);
     parts.push(rowLine({ ...r, status: "done" }).toLowerCase());
