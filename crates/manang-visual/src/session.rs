@@ -222,9 +222,25 @@ impl Session {
         let to = to.clamp(from, len16);
         let viewport = self.byte_of(from)..self.byte_of(to);
         let mut raw: Vec<RawSpan> = Vec::new();
-        self.inner.spans(viewport, &mut raw)?;
+        self.inner.spans(viewport.clone(), &mut raw)?;
+        // Inside an all-ASCII viewport a byte offset is a UTF-16 offset plus a
+        // constant, which spares two rope lookups per span (most of the cost
+        // of a table). Positions outside it, or in any other text, use the rope.
+        let base16 = self.utf16_of(viewport.start);
+        let ascii = self
+            .rope
+            .byte_slice(viewport.clone())
+            .chunks()
+            .all(str::is_ascii);
+        let convert = |b: usize| -> usize {
+            if ascii && b >= viewport.start && b <= viewport.end {
+                base16 + (b - viewport.start)
+            } else {
+                self.utf16_of(b)
+            }
+        };
         for s in &mut raw {
-            s.range = self.utf16_of(s.range.start)..self.utf16_of(s.range.end);
+            s.range = convert(s.range.start)..convert(s.range.end);
         }
         Ok(SpanTable::build(raw, len16, from, to, self.revision))
     }
