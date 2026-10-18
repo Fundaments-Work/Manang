@@ -12,7 +12,9 @@
     type GitStatusFile,
     type GitStatusReport,
   } from "$lib/kernel/api";
+  import VersionsPanel from "$lib/components/VersionsPanel.svelte";
   import { notice } from "$lib/state/notice.svelte";
+  import { scm } from "$lib/state/scm.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { basename, dirname } from "$lib/workbench/paths";
   import {
@@ -302,7 +304,33 @@
   </div>
 </div>
 
-<div class="min-h-0 flex-1 overflow-y-auto">
+<div
+  class="mx-4 mb-2 flex shrink-0 border border-line"
+  role="radiogroup"
+  aria-label="Source control mode"
+>
+  {#each [{ id: "changes", label: "Changes" }, { id: "versions", label: "Versions" }] as option, index (option.id)}
+    <button
+      type="button"
+      role="radio"
+      aria-checked={scm.mode === option.id}
+      class="inset-focus h-6 min-w-0 flex-1 text-xs {index > 0
+        ? 'border-l border-line'
+        : ''} {scm.mode === option.id
+        ? 'bg-surface-hi text-text'
+        : 'text-text-60 hover:text-text'}"
+      onclick={() => scm.show(option.id === "versions" ? "versions" : "changes")}
+    >
+      {option.label}
+    </button>
+  {/each}
+</div>
+
+{#if scm.mode === "versions"}
+  <VersionsPanel />
+{/if}
+
+<div class="min-h-0 flex-1 overflow-y-auto" hidden={scm.mode === "versions"}>
   {#if projectRoot === ""}
     <div class="p-4 text-xs text-text-muted">Open a folder to use source control.</div>
   {:else if !isRepo}

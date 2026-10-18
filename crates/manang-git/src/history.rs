@@ -32,7 +32,7 @@ fn short(hash: &str) -> String {
     hash.chars().take(SHORT).collect()
 }
 
-fn info(commit: &gix::Commit<'_>) -> Result<CommitInfo, GitError> {
+pub(crate) fn info(commit: &gix::Commit<'_>) -> Result<CommitInfo, GitError> {
     let hash = commit.id().to_string();
     let author = commit.author().map_err(GitError::backend)?;
     let time = author.time().map(|t| t.seconds).unwrap_or(0);

@@ -94,6 +94,23 @@
           />
         </label>
       {/if}
+      {#if request.extraInput !== undefined}
+        <label class="mb-5 flex flex-col gap-1.5 text-xs text-text-60">
+          {request.extraInput.label}
+          <input
+            bind:value={dialog.extra}
+            class="mng-field h-9 text-[13px]"
+            autocomplete="off"
+            spellcheck="false"
+            onkeydown={(event) => {
+              const first = request.actions[0];
+              if (event.key !== "Enter" || first === undefined) return;
+              event.preventDefault();
+              dialog.answer(first.id);
+            }}
+          />
+        </label>
+      {/if}
       {#if request.choice !== undefined}
         {@const choice = request.choice}
         <div class="mb-5 flex flex-col gap-1.5 text-xs text-text-60">
@@ -138,7 +155,9 @@
         {#each request.actions as action (action.id)}
           <button
             type="button"
-            class="mng-btn"
+            class="mng-btn {action.primary === true
+              ? 'border-accent bg-accent text-accent-ink'
+              : ''}"
             onclick={() => dialog.answer(action.id)}
           >
             {action.label}
