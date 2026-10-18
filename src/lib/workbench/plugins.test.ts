@@ -10,6 +10,7 @@ describe("plugins panel model", () => {
     const groups = groupPlugins(await createDevKernel().commands());
     expect(groups.map((g) => g.name)).toEqual([
       "citations",
+      "diagram",
       "editor",
       "figure",
       "git",
@@ -50,10 +51,10 @@ describe("plugins panel model", () => {
       "typst.jump-from-cursor",
       "typst.render",
     ]);
-    // citations 7, editor 8, figure 10, git 15, latex 4, markdown 3,
+    // citations 7, diagram 4, editor 8, figure 10, git 15, latex 4, markdown 3,
     // project 18, search 6, settings 14, typst 5, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      7 + 8 + 10 + 15 + 4 + 3 + 18 + 6 + 14 + 5 + 14,
+      7 + 4 + 8 + 10 + 15 + 4 + 3 + 18 + 6 + 14 + 5 + 14,
     );
   });
 

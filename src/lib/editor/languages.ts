@@ -6,6 +6,7 @@
  *   - LaTeX (.tex, .sty, .cls, .dtx, .ltx): via @codemirror/legacy-modes/mode/stex
  *   - BibTeX (.bib, .biblatex): via custom StreamLanguage
  *   - Markdown (.md, .markdown): via @codemirror/lang-markdown
+ *   - Mermaid (.mmd, .mermaid): via a light StreamLanguage (languagesMermaid.ts)
  *   - Plain text (default / fallback)
  */
 
@@ -31,6 +32,7 @@ export type EditorLanguage =
   | "latex"
   | "bibtex"
   | "markdown"
+  | "mermaid"
   | "plain";
 
 /**
@@ -53,6 +55,9 @@ export function languageFor(path: string): EditorLanguage {
     case "md":
     case "markdown":
       return "markdown";
+    case "mmd":
+    case "mermaid":
+      return "mermaid";
     default:
       return "plain";
   }
@@ -280,6 +285,11 @@ export async function loadLanguageExtension(
     }
     case "bibtex":
       return [bibtexLanguage, syntaxHighlighting(manangBibtexHighlight)];
+    case "mermaid": {
+      // Same token colours as BibTeX: keywords, names, strings, comments.
+      const { mermaidLanguage } = await import("./languagesMermaid");
+      return [mermaidLanguage, syntaxHighlighting(manangBibtexHighlight)];
+    }
     case "typst": {
       const { typst, typstHighlightTag } = await import("codemirror-lang-typst");
       return [typst(), syntaxHighlighting(manangTypstHighlight(typstHighlightTag))];

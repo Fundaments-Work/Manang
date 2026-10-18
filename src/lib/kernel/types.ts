@@ -203,3 +203,38 @@ export interface MarkdownRender {
   readonly headings: readonly MarkdownHeading[];
   readonly diagnostics: readonly MarkdownDiagnostic[];
 }
+
+/* -------------------------------------------------------------------------- */
+/* Diagrams (`crates/manang-diagram`)                                          */
+/* -------------------------------------------------------------------------- */
+
+export type DiagramLanguageId = "mermaid" | "pikchr" | "svgbob";
+
+/** Colours the plugin renders with: the app's two themes, or ink on white. */
+export type DiagramTheme = "dark" | "light" | "print";
+
+/** One entry of `diagram.languages`. */
+export interface DiagramLanguage {
+  readonly id: DiagramLanguageId;
+  readonly name: string;
+  /** With the leading dot, e.g. `.mmd`. */
+  readonly extensions: readonly string[];
+  /** Code-fence info strings, e.g. `mermaid`. */
+  readonly fences: readonly string[];
+  /** The renderer and its version, e.g. `merman 0.9.0`. */
+  readonly engine: string;
+}
+
+/**
+ * A `diagram.check` diagnostic. Lines and columns are 1-based, columns counted
+ * in Unicode scalars, as in Typst diagnostics.
+ */
+export interface DiagramDiagnostic {
+  readonly severity: "error" | "warning";
+  readonly message: string;
+  readonly line: number;
+  readonly column: number;
+  readonly endLine: number;
+  readonly endColumn: number;
+  readonly code?: string;
+}

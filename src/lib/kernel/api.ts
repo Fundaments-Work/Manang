@@ -14,6 +14,10 @@ import type {
   ChangeState,
   MarkdownDiagnostic,
   CompileReport,
+  DiagramDiagnostic,
+  DiagramLanguage,
+  DiagramLanguageId,
+  DiagramTheme,
   Engine,
   LatexReport,
   MarkdownRender,
@@ -344,6 +348,30 @@ export function markdownApi(kernel: Kernel) {
       kernel.run<MarkdownToTypst>("markdown.to-typst", { source }),
   };
 }
+
+/** `diagram.*`: Mermaid, Pikchr and ASCII (svgbob) diagrams rendered to SVG. */
+export function diagramApi(kernel: Kernel) {
+  return {
+    languages: () =>
+      kernel.run<{ languages: readonly DiagramLanguage[] }>("diagram.languages", {}),
+    check: (language: DiagramLanguageId, source: string) =>
+      kernel.run<{ diagnostics: readonly DiagramDiagnostic[] }>("diagram.check", {
+        language,
+        source,
+      }),
+    /**
+     * SVG bytes. A source that does not parse rejects with a message starting
+     * `[diagram_error] line L:C: ...`.
+     */
+    render: (language: DiagramLanguageId, source: string, theme: DiagramTheme) =>
+      kernel.runBinary("diagram.render", { language, source, theme }),
+    /** A cache key for the rendered SVG of these inputs. */
+    key: (language: DiagramLanguageId, source: string, theme: DiagramTheme) =>
+      kernel.run<{ key: string }>("diagram.key", { language, source, theme }),
+  };
+}
+
+export type DiagramApi = ReturnType<typeof diagramApi>;
 
 export interface MarkdownToTypst {
   readonly typst: string;

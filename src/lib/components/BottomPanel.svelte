@@ -4,6 +4,7 @@
   import Icon from "$lib/components/ui/Icon.svelte";
   import { goToProblem } from "$lib/state/actions";
   import { build } from "$lib/state/build.svelte";
+  import { diagram } from "$lib/state/diagram.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { writing } from "$lib/state/writing.svelte";
   import {
@@ -25,9 +26,11 @@
     { id: "output", label: "Output" },
   ];
 
-  // Compiler diagnostics and prose-lint findings share one list; they differ by
-  // `source`, never by being dropped.
-  const all = $derived(sortProblems([...build.problems, ...writing.problems]));
+  // Compiler diagnostics, diagram checks and prose-lint findings share one
+  // list; they differ by `source`, never by being dropped.
+  const all = $derived(
+    sortProblems([...build.problems, ...diagram.problems, ...writing.problems]),
+  );
   const groups = $derived(groupByFile(all));
   const total = $derived(all.length);
   const SEVERITY_LABEL: Record<Severity, string> = {
@@ -68,15 +71,17 @@
   }
 
   const emptyText = $derived(
-    build.status === "ok"
-      ? "No problems. The document compiled cleanly."
-      : build.status === "unsupported"
-        ? "Problems appear here for Typst, LaTeX and Markdown documents. This file has nothing to compile."
-        : build.status === "unavailable"
-          ? "No compiler is available, so there is nothing to check."
-          : build.status === "compiling"
-            ? "Compiling"
-            : "Nothing has been compiled yet. Open a document and problems appear here.",
+    diagram.active
+      ? "No problems. The diagram draws cleanly."
+      : build.status === "ok"
+        ? "No problems. The document compiled cleanly."
+        : build.status === "unsupported"
+          ? "Problems appear here for Typst, LaTeX and Markdown documents. This file has nothing to compile."
+          : build.status === "unavailable"
+            ? "No compiler is available, so there is nothing to check."
+            : build.status === "compiling"
+              ? "Compiling"
+              : "Nothing has been compiled yet. Open a document and problems appear here.",
   );
 </script>
 
