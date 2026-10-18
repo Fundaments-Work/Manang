@@ -55,12 +55,14 @@
   }
 
   function onSearchKey(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
-      if (inlineQuery() !== "") setInlineQuery("");
-      else field?.blur();
+    // Escape clears the query first; on an empty field it passes through, so
+    // the workbench closes the page (Settings, or Home over a project).
+    if (event.key !== "Escape") return;
+    if (inlineQuery() !== "") {
+      setInlineQuery("");
       event.preventDefault();
       event.stopPropagation();
-    }
+    } else field?.blur();
   }
 
   /** "/" focuses the search field, as on most sites and in many editors. */

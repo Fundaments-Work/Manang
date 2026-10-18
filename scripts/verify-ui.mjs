@@ -212,7 +212,13 @@ async function expectEventually(cdp, name, expression, options = {}) {
     check(name, true);
     return true;
   } catch {
-    check(name, false, options.detail ?? "condition never became true");
+    // `show` is an expression whose value explains a failure (what was there).
+    let detail = options.detail ?? "condition never became true";
+    if (options.show !== undefined) {
+      const seen = await cdp.evaluate(options.show).catch(String);
+      detail = `${detail}; saw ${JSON.stringify(seen)}`;
+    }
+    check(name, false, detail);
     return false;
   }
 }
@@ -798,7 +804,10 @@ async function main() {
     await expectEventually(
       page,
       "searching narrows settings and plugins together",
-      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.engine"; })()`,
+      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.backend,latex.engine"; })()`,
+      {
+        show: `[...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join()`,
+      },
     );
     await clickText(page, '[data-plugin="latex"] [role="radio"]', "XeLaTeX");
     await expectEventually(
@@ -1643,9 +1652,9 @@ async function main() {
       await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth`),
     );
     check(
-      "the top bar keeps the palette reachable at 640px",
+      "the top bar keeps Home reachable and fits at 640px",
       await page.evaluate(
-        `(() => { const b = document.querySelector('button[aria-label="Search files and commands"]'); const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= window.innerWidth; })()`,
+        `(() => { const bar = document.querySelector("header"); const b = bar?.querySelector('button[aria-label="Home"]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= window.innerWidth && bar.scrollWidth <= bar.clientWidth; })()`,
       ),
     );
     await resize(page, 1280, 820);
