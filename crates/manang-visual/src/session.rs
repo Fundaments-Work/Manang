@@ -763,6 +763,33 @@ mod tests {
         }
     }
 
+    proptest! {
+        // A viewport slice is exactly the whole-document table restricted to
+        // the spans that intersect it, on ASCII text (fast conversion path)
+        // and on text with multi-unit characters (rope conversion) alike.
+        #[test]
+        fn a_slice_is_the_full_table_restricted(
+            text in arb_text(),
+            a in 0usize..120,
+            b in 0usize..120,
+        ) {
+            let (host, id) = host(&text);
+            let full = host.with(id, |s| s.blocks(0, usize::MAX)).expect("full");
+            let len = full.doc_len as usize;
+            let (from, to) = (a.min(b).min(len), a.max(b).min(len));
+            let slice = host.with(id, |s| s.blocks(from, to)).expect("slice");
+            let (vf, vt) = if from == to { (from, from + 1) } else { (from, to) };
+            let want: Vec<_> = full
+                .spans
+                .iter()
+                .filter(|s| (s.start as usize) < vt && (s.end as usize) > vf)
+                .map(|s| (s.start, s.end, s.kind))
+                .collect();
+            let got: Vec<_> = slice.spans.iter().map(|s| (s.start, s.end, s.kind)).collect();
+            prop_assert_eq!(got, want);
+        }
+    }
+
     fn snap(units: &[u16], at: usize) -> usize {
         if at > 0 && at < units.len() && (0xDC00..0xE000).contains(&units[at]) {
             at - 1
