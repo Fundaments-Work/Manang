@@ -7,19 +7,25 @@
 //! The engine owns the CRDT document and nothing else. The editor's rope stays
 //! the buffer of record for display; [`crate::bridge`] keeps the two in step.
 //!
-//! All positions on this trait are UTF-16 code units, the unit CodeMirror
-//! uses. Engines that count differently internally convert at the edge.
+//! All positions on this trait are UTF-8 byte offsets. That is the unit the
+//! rope converts to and from in O(log n), and the only one in which yrs keeps
+//! its position lookup cheap (its UTF-16 mode scans the document on every
+//! edit; measured at ~260 us on 1 MB). Callers that speak chars (the editor
+//! plugin) or UTF-16 (CodeMirror) go through [`crate::bridge`].
 
 use crate::error::LiveError;
 
 /// What unit an engine's remote change report is expressed in.
 ///
-/// Loro reports Unicode scalar values; yrs reports UTF-16 code units. The
-/// bridge normalises both against the rope while applying them.
+/// Loro reports Unicode scalar values; yrs reports the unit it was configured
+/// with (bytes here). The bridge normalises every unit against the rope while
+/// applying the changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IndexUnit {
     /// Unicode scalar values (Rust `char`s, what ropey indexes).
     Chars,
+    /// UTF-8 bytes (what the engine trait takes).
+    Bytes,
     /// UTF-16 code units (what CodeMirror indexes).
     Utf16,
 }
@@ -75,13 +81,13 @@ pub trait TextCrdt: Sized {
     /// The full text.
     fn text(&self) -> String;
 
-    /// Length in UTF-16 code units.
-    fn len_utf16(&self) -> usize;
+    /// Length in UTF-8 bytes.
+    fn len_bytes(&self) -> usize;
 
-    /// Insert `text` at UTF-16 offset `at`.
+    /// Insert `text` at UTF-8 byte offset `at` (a character boundary).
     fn insert(&mut self, at: usize, text: &str) -> Result<(), LiveError>;
 
-    /// Delete `len` UTF-16 code units starting at `at`.
+    /// Delete `len` bytes starting at byte offset `at` (character boundaries).
     fn delete(&mut self, at: usize, len: usize) -> Result<(), LiveError>;
 
     /// Commit pending local edits and return the update blobs to broadcast,
@@ -101,21 +107,20 @@ pub trait TextCrdt: Sized {
     /// restored from this can no longer sync with peers that are behind it.
     fn export_trimmed(&self) -> Result<Vec<u8>, LiveError>;
 
+    /// Release in-memory bookkeeping that is not needed to keep editing
+    /// (change-store caches). Safe to call at any time; the default does
+    /// nothing.
+    fn compact_memory(&mut self) {}
+
     /// Import a remote update and report what changed in the text.
     fn apply_update(&mut self, bytes: &[u8]) -> Result<Applied, LiveError>;
 
-    /// A stable position at UTF-16 offset `at` that survives concurrent edits.
+    /// A stable position at byte offset `at` that survives concurrent edits.
     fn cursor_at(&self, at: usize) -> Option<Vec<u8>>;
 
-    /// Resolve a stable position back to a UTF-16 offset.
+    /// Resolve a stable position back to a byte offset.
     fn cursor_pos(&self, cursor: &[u8]) -> Option<usize>;
 }
 
 /// The well-known peer id used to author seed content.
 pub const SEED_PEER: u64 = 1;
-
-/// Convert a count of Unicode scalars at the start of `s` into UTF-16 units.
-#[must_use]
-pub fn utf16_len(s: &str) -> usize {
-    s.chars().map(char::len_utf16).sum()
-}

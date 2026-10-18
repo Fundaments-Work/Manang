@@ -27,6 +27,12 @@ pub trait TextTarget {
     fn len_chars(&self) -> usize;
     /// Length in UTF-16 code units.
     fn len_utf16(&self) -> usize;
+    /// Length in UTF-8 bytes.
+    fn len_bytes(&self) -> usize;
+    /// Byte offset of a character index (`char_idx <= len_chars`).
+    fn char_to_byte(&self, char_idx: usize) -> usize;
+    /// Character index containing a byte offset (`byte_idx <= len_bytes`).
+    fn byte_to_char(&self, byte_idx: usize) -> usize;
     /// UTF-16 offset of a character index (`char_idx <= len_chars`).
     fn char_to_utf16(&self, char_idx: usize) -> usize;
     /// Character index of a UTF-16 offset (`utf16_idx <= len_utf16`).
@@ -43,6 +49,15 @@ impl TextTarget for Rope {
     }
     fn len_utf16(&self) -> usize {
         self.len_utf16_cu()
+    }
+    fn len_bytes(&self) -> usize {
+        Rope::len_bytes(self)
+    }
+    fn char_to_byte(&self, char_idx: usize) -> usize {
+        Rope::char_to_byte(self, char_idx)
+    }
+    fn byte_to_char(&self, byte_idx: usize) -> usize {
+        Rope::byte_to_char(self, byte_idx)
     }
     fn char_to_utf16(&self, char_idx: usize) -> usize {
         self.char_to_utf16_cu(char_idx)
@@ -120,6 +135,25 @@ fn utf16_to_char_checked<T: TextTarget>(t: &T, idx: usize) -> Result<usize, Live
     Ok(c)
 }
 
+/// Byte offset to character index, refusing offsets inside a character.
+fn byte_to_char_checked<T: TextTarget>(t: &T, idx: usize) -> Result<usize, LiveError> {
+    let len = t.len_bytes();
+    if idx > len {
+        return Err(LiveError::OutOfRange {
+            from: idx,
+            to: idx,
+            len,
+        });
+    }
+    let c = t.byte_to_char(idx);
+    if t.char_to_byte(c) != idx {
+        return Err(LiveError::Engine(
+            "offset falls inside a character".to_owned(),
+        ));
+    }
+    Ok(c)
+}
+
 impl<E: TextCrdt> LiveDoc<E> {
     /// Wrap an engine (for example one restored from a snapshot).
     pub fn from_engine(engine: E) -> Self {
@@ -147,8 +181,8 @@ impl<E: TextCrdt> LiveDoc<E> {
     }
 
     /// Record a local edit that has *already* happened in the rope, given in
-    /// UTF-16 units (CodeMirror's). Does not touch the rope.
-    pub fn record_local_utf16(
+    /// UTF-8 byte offsets of the pre-edit text. Does not touch the rope.
+    pub fn record_local_bytes(
         &mut self,
         start: usize,
         delete: usize,
@@ -173,10 +207,10 @@ impl<E: TextCrdt> LiveDoc<E> {
         text: &str,
     ) -> Result<(), LiveError> {
         check_char_range(target, from, to)?;
-        let u_from = target.char_to_utf16(from);
-        let u_to = target.char_to_utf16(to);
+        let b_from = target.char_to_byte(from);
+        let b_to = target.char_to_byte(to);
         target.replace_chars(from, to, text);
-        self.record_local_utf16(u_from, u_to - u_from, text)
+        self.record_local_bytes(b_from, b_to - b_from, text)
     }
 
     /// Apply a local edit given as a UTF-16 range (CodeMirror's unit).
@@ -196,8 +230,10 @@ impl<E: TextCrdt> LiveDoc<E> {
                 len: target.len_utf16(),
             });
         }
+        let b_from = target.char_to_byte(c_from);
+        let b_to = target.char_to_byte(c_to);
         target.replace_chars(c_from, c_to, text);
-        self.record_local_utf16(start, end - start, text)
+        self.record_local_bytes(b_from, b_to - b_from, text)
     }
 
     /// Update blobs for local edits not yet sent.
@@ -225,6 +261,19 @@ impl<E: TextCrdt> LiveDoc<E> {
             changes: out,
             pending,
         })
+    }
+
+    /// A stable position for a UTF-16 offset in the current text.
+    pub fn cursor_at_utf16<T: TextTarget>(&self, target: &T, utf16: usize) -> Option<Vec<u8>> {
+        let c = utf16_to_char_checked(target, utf16).ok()?;
+        self.engine.cursor_at(target.char_to_byte(c))
+    }
+
+    /// Resolve a stable position to a UTF-16 offset in the current text.
+    pub fn cursor_pos_utf16<T: TextTarget>(&self, target: &T, cursor: &[u8]) -> Option<usize> {
+        let byte = self.engine.cursor_pos(cursor)?;
+        let c = byte_to_char_checked(target, byte).ok()?;
+        Some(target.char_to_utf16(c))
     }
 
     /// Make the rope equal the CRDT text with one minimal replacement. Used
@@ -256,6 +305,10 @@ fn apply_raw<T: TextTarget>(
 ) -> Result<AppliedChange, LiveError> {
     let (c_start, c_end) = match unit {
         IndexUnit::Chars => (change.start, change.start + change.delete),
+        IndexUnit::Bytes => (
+            byte_to_char_checked(target, change.start)?,
+            byte_to_char_checked(target, change.start + change.delete)?,
+        ),
         IndexUnit::Utf16 => (
             utf16_to_char_checked(target, change.start)?,
             utf16_to_char_checked(target, change.start + change.delete)?,

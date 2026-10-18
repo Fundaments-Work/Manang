@@ -230,11 +230,15 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     }
 
     /// Set (or clear) this peer's selection, as UTF-16 offsets, and announce it.
-    pub fn set_selection(&mut self, selection: Option<(usize, usize)>) -> Vec<Output> {
+    pub fn set_selection<T: TextTarget>(
+        &mut self,
+        target: &T,
+        selection: Option<(usize, usize)>,
+    ) -> Vec<Output> {
         self.local_selection = selection.and_then(|(anchor, head)| {
             Some(Selection {
-                anchor: self.doc.engine().cursor_at(anchor)?,
-                head: self.doc.engine().cursor_at(head)?,
+                anchor: self.doc.cursor_at_utf16(target, anchor)?,
+                head: self.doc.cursor_at_utf16(target, head)?,
             })
         });
         let mut out = Vec::new();
@@ -246,7 +250,7 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
 
     /// Remote carets resolved against the current text.
     #[must_use]
-    pub fn remote_selections(&self) -> Vec<RemoteSelection> {
+    pub fn remote_selections<T: TextTarget>(&self, target: &T) -> Vec<RemoteSelection> {
         self.presence
             .iter()
             .filter_map(|p| {
@@ -255,8 +259,8 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                     peer: p.peer,
                     name: p.name.clone(),
                     slot: p.slot,
-                    anchor: self.doc.engine().cursor_pos(&sel.anchor)?,
-                    head: self.doc.engine().cursor_pos(&sel.head)?,
+                    anchor: self.doc.cursor_pos_utf16(target, &sel.anchor)?,
+                    head: self.doc.cursor_pos_utf16(target, &sel.head)?,
                 })
             })
             .collect()
