@@ -5064,6 +5064,15 @@ async function main() {
       ]) {
         await resize(page, w, 820);
         await sleep(300);
+        // Under 800px the side panel overlays the editor, covering the toolbar's
+        // left end; close it as a person would before using the toolbar.
+        if (w < 800 && (await exists(page, 'aside[aria-label="Figures panel"]'))) {
+          await click(
+            page,
+            'nav[aria-label="Workbench views"] button[aria-label="Figures"]',
+          );
+          await sleep(300);
+        }
         check(
           `at ${w}px the toolbar and the page fit without sideways scrolling`,
           await page.evaluate(
