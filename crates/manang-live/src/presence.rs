@@ -18,6 +18,8 @@ use crate::error::LiveError;
 pub const PALETTE_SLOTS: u8 = 8;
 /// Longest accepted display name, in bytes.
 pub const MAX_NAME: usize = 64;
+/// Longest accepted email, in bytes (RFC 5321 path limit).
+pub const MAX_EMAIL: usize = 254;
 /// Longest accepted stable-position blob, in bytes.
 pub const MAX_CURSOR: usize = 256;
 
@@ -41,6 +43,9 @@ pub struct Presence {
     pub name: String,
     /// Colour slot in `0..PALETTE_SLOTS`.
     pub slot: u8,
+    /// Commit identity email, shared only if the person opted in. Used for
+    /// `Co-authored-by:` trailers; never shown in the UI.
+    pub email: Option<String>,
     /// Current selection, if the peer has a caret in this document.
     pub selection: Option<Selection>,
 }
@@ -61,6 +66,13 @@ impl Presence {
             self.name.truncate(cut);
         }
         self.slot %= PALETTE_SLOTS;
+        self.email = self.email.filter(|e| {
+            e.len() <= MAX_EMAIL
+                && e.matches('@').count() == 1
+                && !e
+                    .chars()
+                    .any(|c| c.is_whitespace() || c.is_control() || matches!(c, '<' | '>'))
+        });
         Some(self)
     }
 }
@@ -175,6 +187,7 @@ mod tests {
             seq,
             name: "Ada".into(),
             slot: 3,
+            email: None,
             selection: None,
         }
     }
