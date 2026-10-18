@@ -17,7 +17,7 @@
 >
   <!-- Thumbnail placeholder wireframe -->
   <div
-    class="relative mb-3 flex h-24 w-full items-center justify-center overflow-hidden border border-line bg-base"
+    class="relative mb-3 flex h-24 w-full items-center justify-center overflow-hidden border border-line bg-bg"
     aria-hidden="true"
   >
     {#if template.id.includes("slides")}
@@ -29,7 +29,7 @@
           width="111"
           height="62"
           stroke="currentColor"
-          fill="#18181b"
+          fill="var(--mng-bg)"
         />
         <line x1="8" y1="12" x2="50" y2="12" stroke="currentColor" stroke-width="2" />
         <line
@@ -61,7 +61,7 @@
           width="63"
           height="79"
           stroke="currentColor"
-          fill="#18181b"
+          fill="var(--mng-bg)"
         />
         <rect x="4" y="4" width="56" height="12" stroke="currentColor" />
         <rect
@@ -98,7 +98,7 @@
           width="63"
           height="79"
           stroke="currentColor"
-          fill="#18181b"
+          fill="var(--mng-bg)"
         />
         <line x1="6" y1="8" x2="24" y2="8" stroke="currentColor" />
         <line
@@ -153,7 +153,7 @@
           width="63"
           height="79"
           stroke="currentColor"
-          fill="#18181b"
+          fill="var(--mng-bg)"
         />
         <line x1="6" y1="8" x2="20" y2="8" stroke="currentColor" stroke-width="0.75" />
         <line x1="6" y1="14" x2="48" y2="14" stroke="currentColor" stroke-width="2" />
@@ -201,7 +201,7 @@
           width="63"
           height="79"
           stroke="currentColor"
-          fill="#18181b"
+          fill="var(--mng-bg)"
         />
         <line x1="6" y1="8" x2="38" y2="8" stroke="currentColor" stroke-width="1.5" />
         <line
@@ -236,7 +236,7 @@
           width="63"
           height="79"
           stroke="currentColor"
-          fill="#18181b"
+          fill="var(--mng-bg)"
         />
         <line x1="12" y1="8" x2="52" y2="8" stroke="currentColor" stroke-width="1.5" />
         <line
@@ -278,7 +278,7 @@
           width="63"
           height="79"
           stroke="currentColor"
-          fill="#18181b"
+          fill="var(--mng-bg)"
         />
         <line x1="12" y1="8" x2="52" y2="8" stroke="currentColor" stroke-width="1.5" />
         <line
@@ -333,7 +333,7 @@
           width="63"
           height="79"
           stroke="currentColor"
-          fill="#18181b"
+          fill="var(--mng-bg)"
         />
         <line x1="6" y1="8" x2="22" y2="8" stroke="currentColor" />
         <line
