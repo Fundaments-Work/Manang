@@ -20,17 +20,21 @@ export class DialogState {
   request = $state.raw<DialogRequest | null>(null);
   /** The text field's current text, while a prompt is open. */
   value = $state("");
+  /** The second text field's current text, while a prompt with two fields is open. */
+  extra = $state("");
   /** The selected choice's id, while a prompt with a choice is open. */
   choice = $state("");
   #resolve: ((id: string) => void) | undefined;
   #answered = "";
   #chosen = "";
+  #extra = "";
 
   ask(request: DialogRequest): Promise<string> {
     // A second request while one is open cancels the first.
     this.#resolve?.("cancel");
     this.request = request;
     this.value = request.input?.value ?? "";
+    this.extra = request.extraInput?.value ?? "";
     this.choice = request.choice?.value ?? "";
     return new Promise((resolve) => {
       this.#resolve = resolve;
@@ -39,7 +43,7 @@ export class DialogState {
 
   async prompt(request: DialogRequest): Promise<DialogAnswer> {
     const id = await this.ask(request);
-    return { id, value: this.#answered, choice: this.#chosen };
+    return { id, value: this.#answered, choice: this.#chosen, extra: this.#extra };
   }
 
   answer(id: string): void {
@@ -47,6 +51,7 @@ export class DialogState {
     this.#resolve = undefined;
     this.#answered = this.value;
     this.#chosen = this.choice;
+    this.#extra = this.extra;
     this.request = null;
     resolve?.(id);
   }

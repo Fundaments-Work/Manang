@@ -67,3 +67,31 @@ title = "Fetch, pull or push"
 [[contributes.commands]]
 id = "git.open"
 title = "Set the git project root"
+
+[[contributes.commands]]
+id = "git.restore"
+title = "Restore files from a version"
+
+[[contributes.commands]]
+id = "git.identity-get"
+title = "Read the author name and email"
+
+[[contributes.commands]]
+id = "git.identity-set"
+title = "Set the author name and email"
+
+[[contributes.commands]]
+id = "git.save-version"
+title = "Save a version"
+
+[[contributes.commands]]
+id = "git.versions"
+title = "Version timeline"
+
+[[contributes.commands]]
+id = "git.version-files"
+title = "Files changed by a version"
+
+[[contributes.commands]]
+id = "git.version-diff"
+title = "One file's diff for a version"

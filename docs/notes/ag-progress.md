@@ -835,11 +835,74 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - Headless visual verification harness (`verify-ui.mjs` on port 1431) passing all 122/122 checks.
    - Zero ports or processes left running.
 
+
 ---
 
-## Final UI Wiring Summary
+## Task: Recoverable Home Trash
 
-All tasks from Batches 1 and 2 have been completed, verified against the strict quality gates, and committed to `antigravity/ui-wiring`:
+- **Commits:**
+  - `f27d4f1`: `feat(project): support project trash, restore, purge and empty-trash in registry`
+  - `538018e`: `feat(home): add Home trash section, cards restore/delete, and purge confirmations`
+  - `0ea3e6d`: `test(verify-ui): add Home trash section and verify folder re-open`
+- **Branch:** `antigravity/home-trash`
+
+### 1. Engine & Registry (`crates/manang-project`)
+- **Metadata Extension & Backwards Compatibility:**
+  - Added `trashed_at: Option<String>` (RFC 3339 timestamp) to `ProjectEntry` with `#[serde(default, skip_serializing_if = "Option::is_none")]` ensuring full backwards compatibility with existing `projects.toml` files.
+  - Added `include_trashed: bool` (default `false`) to `ListQuery`.
+  - Updated `select()` to exclude trashed projects from normal listings unless explicitly requested, and updated section counts.
+- **Commands & Safety Invariants:**
+  - `project.trash { path }`: Sets `trashed_at` to the current UTC timestamp (RFC 3339).
+  - `project.restore { path }`: Clears `trashed_at` back to `None`.
+  - `project.purge { path, delete_files }`: Removes entry from the registry. If `delete_files` is `true`, moves the folder on disk to the OS trash using the `trash = "5.2"` crate (`trash::delete`). **Never calls `std::fs::remove_dir_all`**. Verified zero bundled C library linkage (`cargo tree -p manang | grep -iE "tectonic|harfbuzz"` is empty).
+  - `project.empty-trash { older_than_days? }`: Drops all (or older-than-$N$-days) trashed project registry entries.
+- **Unit & Integration Tests:**
+  - 82 passing tests in `crates/manang-project`: unit tests in `registry.rs` and kernel integration tests in `tests/registry.rs` covering trash, restore, purge, empty-trash, and query filtering.
+
+### 2. Browser Dev Kernel & Mock (`src/lib/kernel/`)
+- **Type Definitions (`types.ts`):** Added `trashed_at?: string | null` to `ProjectMeta` and `include_trashed?: boolean` to `ListProjectsOptions`.
+- **Typed API Wrappers (`api.ts`):** Exported `trashProject`, `restoreProject`, `purgeProject`, and `emptyTrash`. Preserved file-level `trash` method for workspace files.
+- **In-Memory Mock (`mockProject.ts`):** Added `trashedAt` to `SeedProject` and `Meta`, implemented host methods (`trash`, `restore`, `purge`, `emptyTrash`), and added command handlers for `project.trash`, `project.restore`, `project.purge`, and `project.empty-trash`.
+
+### 3. Pure Workbench Models & State (`src/lib/workbench/`, `src/lib/state/`)
+- **Workbench Model (`home.ts`):**
+  - Added `"trash"` to `HomeSection`.
+  - Updated `matchesQuery` and `selectProjects` so trashed projects appear only in the Trash section.
+  - Added section counts for `"trash"`.
+  - Added empty state definition for the Trash section ("Trash is empty. Trashed projects will appear here until permanently deleted.").
+- **Workbench Actions & State (`actions.ts`, `home.svelte.ts`):**
+  - Updated `closeProject()` in `actions.ts` to return `Promise<boolean>` for unsaved-changes confirmation handling before trashing an open project.
+  - Updated `HomeState.load()` to fetch with `{ include_archived: true, include_trashed: true }`.
+  - Added `trash`, `restoreProject`, `purge`, and `emptyTrash` methods using `SvelteDate` to meet Svelte 5 reactivity lint rules.
+
+### 4. Home UI Components (`src/lib/components/`)
+- **Sidebar & Sections (`Home.svelte`):**
+  - Positioned the Trash section at the bottom of the sidebar with an item count badge.
+  - Replaced "Remove from list" in project card context menus with "Move to trash" (permanent forgetting is only accessible from Trash).
+  - Trashing an active project prompts to close and save changes before trashing.
+  - Added "Empty trash" header button in the Trash section with a confirmation dialog.
+  - Added Purge confirmation dialog offering two distinct choices:
+    1. "Remove from Manang" (removes from list only; preserves files on disk).
+    2. "Move folder to system trash" (moves files to OS trash).
+- **Project Cards (`ProjectCard.svelte`):**
+  - In Trash view: displays relative deletion time (e.g., `Trashed 5 minutes ago`), disables direct opening of trashed projects, and shows explicit "Restore" and "Delete" action buttons.
+- **Design System Fidelity:**
+  - Strictly adheres to Fundaments.work specifications: `--radius: 0`, 1px hairlines (`#3d3d42`), DM Sans (300/400), DM Mono (400), dark base (`#141416`), no rounded corners, no shadows.
+
+### 5. Verification & Quality Gates
+- **Rust Quality Gates:**
+  - `cargo fmt --all -- --check`: PASS
+  - `cargo clippy -p manang-project --all-targets --locked -- -D warnings`: PASS (0 warnings)
+  - `cargo test -p manang-project --locked`: PASS (82 tests passing)
+- **Frontend Quality Gates:**
+  - `pnpm test`: PASS (63 test files, 486 unit/workbench tests passing)
+  - `pnpm run check`: PASS (0 errors, 0 warnings)
+  - `pnpm run lint`: PASS (0 errors, 0 warnings)
+- **Headless CDP In-Browser End-to-End Verification:**
+  - Added "Home trash" section to `scripts/verify-ui.mjs` testing sidebar trash section, moving card to trash, trashing open project with auto-close, trashed card UI, restore project, purge dialog ("Remove from Manang" vs "Move folder to system trash"), empty trash, and folder re-opening.
+  - Ran against headless dev server (port 1442, CDP 9352): **289/289 checks passed**, zero regressions across all 7 screens and brand invariants.
+- **Operational Hygiene:**
+  - Verified no stray processes or listening ports (`lsof -ti:1442 -sTCP:LISTEN` is empty).
 
 - **Batch 1:**
   - **Task A (`search.*` - Commit `d7263a7`):** Search panel with file-name and text content modes, regex/case/word options, include/exclude glob filters, match highlighting, and replace preview/apply.
@@ -850,3 +913,68 @@ All tasks from Batches 1 and 2 have been completed, verified against the strict 
 - **Batch 2:**
   - **Task F (Outline view - Commit `7df53d9`):** Pure TS outline parsers for Typst (`=` headings and `<labels>`), LaTeX (`\section`..`\subsubsection` and `\label`), and Markdown (via `markdown.outline` kernel call + fallback) with 300 ms debounced live updates and click-to-jump.
   - **Task G (App polish):** Read-only shortcut reference overlay (`Ctrl+/`), About view with app version, git commit, and SCOWL word-list license text.
+
+---
+
+## User Guide Task: Non-Developer Documentation in `docs/user/`
+
+- **Branch:** `antigravity/user-docs`
+- **Scope:** Complete 10-page user guide written in plain English, short sentences, active voice, and numbered step-by-step instructions. Keyboard shortcuts are formatted as `Ctrl+K` (`Cmd+K`).
+- **Files Created:**
+  1. `docs/user/index.md`: Overview of Manang, where to start, and complete site map linking all guide pages.
+  2. `docs/user/getting-started.md`: Running from source (Node 22+, Rust 1.85+, pnpm 10), Home view navigation, project creation, opening folders, and main window layout (Top bar, Activity bar, Sidebar, Editor, Preview, Bottom dock).
+  3. `docs/user/writing.md`: CodeMirror 6 text editor, Typst, LaTeX, and Markdown workflows, spell check with personal dictionaries, document formatting (`Shift+Alt+F`), snippets, math symbol search, and word counts.
+  4. `docs/user/preview-and-pdf.md`: Split/maximize/hide preview layouts (`Ctrl+Shift+V`), live recompile, bidirectional SyncTeX jumps (`Ctrl+Alt+J` forward, click backward), PDF export (`Ctrl+E`), and TeX Live setup on Linux, macOS, and Windows.
+  5. `docs/user/figures-and-diagrams.md`: Built-in vector figure editor, Mermaid, Pikchr, and ASCII (`svgbob`) text diagrams, Markdown diagram code fences, and include lines for Typst, LaTeX, and Markdown.
+  6. `docs/user/references.md`: Automatic indexing of BibTeX and CSL-JSON files, choosing preview and document citation styles (APA, IEEE), bibliography search, one-click citation insertion, and online registry verification against Crossref, OpenAlex, and arXiv.
+  7. `docs/user/projects-and-files.md`: Files tree view, opening code/figures/images/PDFs, "Open with system app", trash deletion behavior, and Source Control panel (staging, diff viewer, commits, branches, sync).
+  8. `docs/user/settings-and-shortcuts.md`: Settings panel, User vs Project scoping, configuration options, shortcut cheat sheet overlay (`Ctrl+/`), and custom keybinding recording.
+  9. `docs/user/plugins.md`: Built-in native vs sandboxed WebAssembly component plugins, manual installation under user config, capability-based permissions, and green/amber/red status indicators.
+  10. `docs/user/troubleshooting.md`: Log file paths on Linux, macOS, and Windows for identifier `work.fundaments.manang`, developer tools via `F12`, fixing "No TeX installation found", resolving Linux Wayland + NVIDIA stuttering (`WEBKIT_DISABLE_DMABUF_RENDERER`), and plugin debugging.
+- **README Update:** Linked `docs/user/index.md` and all 9 topic guides in a dedicated "User guide" section.
+
+---
+
+## Starter Templates & Offline Starters (`antigravity/templates`)
+
+- **Branch:** `antigravity/templates`
+- **Commits:**
+  - `5572534 feat(templates): add starter templates and manifests`
+  - `081cbcd feat(project): add template loading, project.templates command and validation tests`
+  - `3eaba08 feat(ui): add Templates section, TemplateCard and template selection in NewProject`
+  - `f9b5408 test(ui): add Templates section coverage to verify-ui script`
+  - `5fe628c test(ui): add data-template-card attributes and verify template creation flow`
+
+### Work Completed:
+1. **Templates Library (`templates/`):**
+   - 11 starter templates created with valid `template.toml` manifests:
+     - `blank-typst`, `blank-latex`, `blank-markdown`
+     - `article-typst`, `article-latex`, `notes-markdown`
+     - `thesis-chapter-typst`, `letter-typst`, `slides-typst`, `poster-typst`, `lab-report-latex`
+   - Every Typst template compiles offline through the Typst compiler with zero warnings.
+2. **Rust Engine (`crates/manang-project`):**
+   - Implemented embedded template loading (`template.rs`), returning metadata summaries (`list_templates()`, `find_template()`).
+   - Added `project.templates` command in `manifest.toml` and registered in `plugin.rs`.
+   - Updated project scaffolding (`scaffold::create`) to populate all files and directories from the chosen template with title interpolation.
+   - Added automated tests in `tests/templates.rs`:
+     - `every_template_manifest_is_valid`: validates all 11 `template.toml` files on disk.
+     - `built_in_templates_match_required_list`: verifies embedded summaries match 11 starters.
+     - `scaffold_populates_template_files_and_config`: tests end-to-end scaffolding from template.
+     - `every_typst_template_compiles_through_typst_compiler`: verifies offline compilation of all 6 Typst templates.
+3. **Browser Dev Kernel (`src/lib/kernel/mockTemplates.ts` & `mockProject.ts`):**
+   - Added `BUILTIN_TEMPLATES` and `listMockTemplates()` serving browser dev and UI tests without disk access.
+   - Handled `project.templates` and updated `project.create` to scaffold template files into the mock filesystem.
+4. **UI & State (`src/lib/`):**
+   - Added `selectTemplates()` in `src/lib/workbench/templates.ts` with 6 Vitest tests (`templates.test.ts`).
+   - Created `TemplateCard.svelte`: Fundaments-compliant card with tonal SVG wireframe layouts (portrait paper, slides, poster, letter, notebook), badges, descriptions, and tags.
+   - Updated `NewProject.svelte`: added template selector dropdown with description preview, language filtering, and template scaffolding.
+   - Updated `Home.svelte`: renders Templates section with language filter chips (All, Typst, LaTeX, Markdown) and search integration. "Use template" opens New Project with template pre-selected.
+5. **UI Verification & Quality Gates:**
+   - Updated `scripts/verify-ui.mjs` with dedicated "Templates" section.
+   - Headless CDP test: 286/286 checks passed on port 1443 (`02-templates.png`, `02b-template-created.png`).
+   - `cargo fmt --all -- --check` passed.
+   - `cargo clippy -p manang-project` passed with 0 warnings.
+   - `cargo test -p manang-project` passed all 77 unit/integration tests.
+   - `pnpm run check && pnpm run lint` passed with 0 errors and 0 warnings.
+   - `pnpm test` passed all 64 test suites (488 tests).
+

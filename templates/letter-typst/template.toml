@@ -1,0 +1,6 @@
+id = "letter-typst"
+name = "Letter (Typst)"
+engine = "typst"
+description = "Formal correspondence letter with sender header, recipient address, and signature."
+tags = ["letter", "formal", "typst"]
+main = "main.typ"

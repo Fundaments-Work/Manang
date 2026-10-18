@@ -15,7 +15,8 @@ import type {
   ProjectSort,
 } from "$lib/kernel/types";
 
-export type HomeSection = "projects" | "recent" | "pinned" | "archive" | "templates";
+export type HomeSection =
+  "projects" | "recent" | "pinned" | "archive" | "templates" | "trash";
 export type HomeView = "grid" | "list";
 
 export const SECTIONS: readonly { id: HomeSection; label: string }[] = [
@@ -24,6 +25,7 @@ export const SECTIONS: readonly { id: HomeSection; label: string }[] = [
   { id: "pinned", label: "Pinned" },
   { id: "archive", label: "Archive" },
   { id: "templates", label: "Templates" },
+  { id: "trash", label: "Trash" },
 ];
 
 export const SORTS: readonly { id: ProjectSort; label: string }[] = [
@@ -78,25 +80,30 @@ export function selectProjects(
 ): ProjectEntry[] {
   const found = entries.filter((e) => matchesQuery(e, query));
   switch (section) {
+    case "trash":
+      return sortBy(
+        found.filter((e) => Boolean(e.trashed_at)),
+        sort,
+      );
     case "archive":
       return sortBy(
-        found.filter((e) => e.archived),
+        found.filter((e) => e.archived && !e.trashed_at),
         sort,
       );
     case "pinned":
       return sortBy(
-        found.filter((e) => e.pinned && !e.archived),
+        found.filter((e) => e.pinned && !e.archived && !e.trashed_at),
         sort,
       );
     case "recent":
       return sortBy(
-        found.filter((e) => !e.archived && e.exists),
+        found.filter((e) => !e.archived && !e.trashed_at && e.exists),
         "modified",
       ).slice(0, RECENT_LIMIT);
     case "projects": {
       // Pinned projects lead; the chosen order applies within each group.
       const live = sortBy(
-        found.filter((e) => !e.archived),
+        found.filter((e) => !e.archived && !e.trashed_at),
         sort,
       );
       return [...live.filter((e) => e.pinned), ...live.filter((e) => !e.pinned)];
@@ -130,9 +137,10 @@ export function sectionCounts(
   entries: readonly ProjectEntry[],
 ): Record<string, number> {
   return {
-    projects: entries.filter((e) => !e.archived).length,
-    pinned: entries.filter((e) => e.pinned && !e.archived).length,
-    archive: entries.filter((e) => e.archived).length,
+    projects: entries.filter((e) => !e.archived && !e.trashed_at).length,
+    pinned: entries.filter((e) => e.pinned && !e.archived && !e.trashed_at).length,
+    archive: entries.filter((e) => e.archived && !e.trashed_at).length,
+    trash: entries.filter((e) => Boolean(e.trashed_at)).length,
   };
 }
 
@@ -217,6 +225,12 @@ export function emptyState(
         title: "Nothing opened recently",
         hint: "Open a folder to see it here.",
         action: "open",
+      };
+    case "trash":
+      return {
+        title: "Trash is empty",
+        hint: "Projects you delete appear here and can be restored.",
+        action: null,
       };
     default:
       return {

@@ -40,7 +40,17 @@ export interface ProjectConfig {
     readonly name?: string;
     readonly main?: string;
   };
+  readonly template?: { readonly id: string; readonly version?: string };
   readonly bibliography?: { readonly paths: readonly string[] };
+}
+
+export interface TemplateSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly engine: Engine;
+  readonly description: string;
+  readonly tags: readonly string[];
+  readonly main: string;
 }
 
 /** What `project.open` and `project.create` answer with. */
@@ -77,6 +87,7 @@ export interface ProjectEntry {
   /** False when the folder or its `manang.toml` has gone. */
   readonly exists: boolean;
   readonly has_thumbnail: boolean;
+  readonly trashed_at?: string | null;
 }
 
 export type ProjectSort = "modified" | "name" | "created";
@@ -85,6 +96,7 @@ export interface ProjectListQuery {
   readonly query?: string;
   readonly sort?: ProjectSort;
   readonly include_archived?: boolean;
+  readonly include_trashed?: boolean;
 }
 
 export interface ProjectPatch {

@@ -21,16 +21,32 @@
     onopen: () => void;
     onmenu: (x: number, y: number) => void;
     onpin: () => void;
+    onrestore?: () => void;
+    ondelete?: () => void;
   }
 
-  const { entry, view, current, now, onopen, onmenu, onpin }: Props = $props();
+  const {
+    entry,
+    view,
+    current,
+    now,
+    onopen,
+    onmenu,
+    onpin,
+    onrestore,
+    ondelete,
+  }: Props = $props();
 
   let root: HTMLElement | undefined = $state();
   let visible = $state(false);
   let url = $state<string | null>(null);
 
   const version = $derived(home.thumbVersions.get(entry.path) ?? 0);
-  const when = $derived(relativeTime(entry.last_opened, now));
+  const when = $derived(
+    entry.trashed_at
+      ? relativeTime(Date.parse(entry.trashed_at) / 1000, now)
+      : relativeTime(entry.last_opened, now),
+  );
 
   onMount(() => {
     if (root === undefined || typeof IntersectionObserver === "undefined") {
@@ -134,7 +150,7 @@
     <button
       type="button"
       class="inset-focus flex flex-col text-left disabled:cursor-default"
-      disabled={!entry.exists}
+      disabled={!entry.exists || Boolean(entry.trashed_at)}
       aria-current={current ? "true" : undefined}
       {onkeydown}
       {oncontextmenu}
@@ -160,7 +176,9 @@
         <span class="flex items-center gap-2 text-[11px] text-text-60">
           <span>{ENGINE_LABEL[entry.engine]}</span>
           <span aria-hidden="true" class="text-text-muted">/</span>
-          {#if entry.exists}
+          {#if entry.trashed_at}
+            <span class="truncate">Trashed {when}</span>
+          {:else if entry.exists}
             <span class="truncate">{current ? "Open now" : when}</span>
           {:else}
             <span class="truncate text-text-muted">Folder not found</span>
@@ -184,9 +202,36 @@
       </span>
     </button>
     <div
-      class="absolute top-1.5 right-1.5 flex group-focus-within:bg-surface group-hover:bg-surface"
+      class="absolute top-1.5 right-1.5 flex items-center gap-1 group-focus-within:bg-surface group-hover:bg-surface"
     >
-      {@render pinButton()}
+      {#if entry.trashed_at}
+        <button
+          type="button"
+          class="mng-btn px-2 py-0.5 text-xs inset-focus opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+          aria-label="Restore {entry.name}"
+          title="Restore"
+          onclick={(e) => {
+            e.stopPropagation();
+            onrestore?.();
+          }}
+        >
+          Restore
+        </button>
+        <button
+          type="button"
+          class="mng-btn px-2 py-0.5 text-xs inset-focus opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+          aria-label="Delete {entry.name}"
+          title="Delete…"
+          onclick={(e) => {
+            e.stopPropagation();
+            ondelete?.();
+          }}
+        >
+          Delete…
+        </button>
+      {:else}
+        {@render pinButton()}
+      {/if}
       {@render menuButton()}
     </div>
   </article>
@@ -199,7 +244,7 @@
     <button
       type="button"
       class="inset-focus flex min-w-0 flex-1 items-center gap-4 py-2 pr-2 pl-3 text-left disabled:cursor-default"
-      disabled={!entry.exists}
+      disabled={!entry.exists || Boolean(entry.trashed_at)}
       aria-current={current ? "true" : undefined}
       {onkeydown}
       {oncontextmenu}
@@ -237,11 +282,44 @@
       <span
         class="w-28 shrink-0 text-right text-[11px] text-text-60 max-[800px]:hidden"
       >
-        {#if entry.exists}{current ? "Open now" : when}{:else}Folder not found{/if}
+        {#if entry.trashed_at}
+          Trashed {when}
+        {:else if entry.exists}
+          {current ? "Open now" : when}
+        {:else}
+          Folder not found
+        {/if}
       </span>
     </button>
-    <div class="flex shrink-0 pr-1.5">
-      {@render pinButton()}
+    <div class="flex shrink-0 items-center gap-1 pr-1.5">
+      {#if entry.trashed_at}
+        <button
+          type="button"
+          class="mng-btn px-2 py-0.5 text-xs inset-focus"
+          aria-label="Restore {entry.name}"
+          title="Restore"
+          onclick={(e) => {
+            e.stopPropagation();
+            onrestore?.();
+          }}
+        >
+          Restore
+        </button>
+        <button
+          type="button"
+          class="mng-btn px-2 py-0.5 text-xs inset-focus"
+          aria-label="Delete {entry.name}"
+          title="Delete…"
+          onclick={(e) => {
+            e.stopPropagation();
+            ondelete?.();
+          }}
+        >
+          Delete…
+        </button>
+      {:else}
+        {@render pinButton()}
+      {/if}
       {@render menuButton()}
     </div>
   </div>

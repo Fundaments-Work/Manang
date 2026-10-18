@@ -17,12 +17,14 @@ import { documents } from "$lib/state/documents.svelte";
 import { figures } from "$lib/state/figures.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
+import { scm } from "$lib/state/scm.svelte";
 import { settings } from "$lib/state/settings.svelte";
 import { settingsPage } from "$lib/state/settingsPage.svelte";
 import { shortcutOverlay } from "$lib/state/shortcutOverlay.svelte";
 import { showInPreview } from "$lib/state/sourceJump";
 import { switcher } from "$lib/state/switcher.svelte";
 import { tabs } from "$lib/state/tabs.svelte";
+import { saveVersion } from "$lib/state/versionActions";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
 import { canOpenDevtools, inTauri, openDevtools } from "$lib/kernel/log";
@@ -57,6 +59,8 @@ const WHEN: Readonly<Record<string, string>> = {
   "view.files": "project",
   "view.search": "project",
   "view.source-control": "project",
+  "view.versions": "project",
+  "file.save-version": "project",
   "view.outline": "project",
   "view.figures": "project",
   "view.references": "project",
@@ -110,6 +114,8 @@ const BRINGS_WORKBENCH: ReadonlySet<string> = new Set([
   "view.files",
   "view.search",
   "view.source-control",
+  "view.versions",
+  "file.save-version",
   "view.outline",
   "view.figures",
   "view.references",
@@ -350,6 +356,19 @@ export function workbenchCommands(
       run: () => layout.showSide("source-control"),
     },
     {
+      id: "view.versions",
+      title: "Show versions",
+      menuTitle: "Versions",
+      group: "Workbench",
+      keywords: "history restore earlier saved timeline",
+      enabled: hasProject,
+      menu: at("view", "2_side", 2.5),
+      run: () => {
+        scm.show("versions");
+        layout.showSide("source-control");
+      },
+    },
+    {
       id: "view.outline",
       title: "Show outline",
       menuTitle: "Outline",
@@ -383,7 +402,15 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "extensions commands permissions",
       menu: at("view", "2_side", 6),
-      run: () => settingsPage.show("plugins"),
+      // A side view of the workbench; without a project there is no
+      // workbench, so the Settings page's plugin sections stand in.
+      run: () => {
+        if (workspace.project === null) settingsPage.show("plugins");
+        else {
+          toWorkbench();
+          layout.showSide("plugins");
+        }
+      },
     },
     {
       id: "view.settings",
@@ -630,6 +657,15 @@ export function workbenchCommands(
         tabs.tabs.some((t) => actions.isTabDirty(t.path)),
       menu: at("file", "3_save", 1),
       run: () => void actions.saveAll(),
+    },
+    {
+      id: "file.save-version",
+      title: "Save a version",
+      group: "Workbench",
+      keywords: "commit snapshot history keep name",
+      enabled: hasProject,
+      menu: at("file", "3_save", 2),
+      run: () => void saveVersion(),
     },
     {
       id: "project.close",

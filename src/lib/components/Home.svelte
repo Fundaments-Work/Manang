@@ -4,22 +4,17 @@
   import EditProject from "./home/EditProject.svelte";
   import NewProject from "./home/NewProject.svelte";
   import ProjectCard from "./home/ProjectCard.svelte";
+  import TemplateCard from "./home/TemplateCard.svelte";
   import ContextMenu, { type MenuItem } from "./ui/ContextMenu.svelte";
   import Icon, { type IconName } from "./ui/Icon.svelte";
-  import { openFolder, openProject } from "$lib/state/actions";
+  import { closeProject, openFolder, openProject } from "$lib/state/actions";
+  import { dialog } from "$lib/state/dialog.svelte";
   import { home } from "$lib/state/home.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { notice } from "$lib/state/notice.svelte";
   import type { ProjectEntry } from "$lib/kernel/types";
   import { workspace } from "$lib/state/workspace.svelte";
-  import {
-    ENGINE_LABEL,
-    SECTIONS,
-    SORTS,
-    STARTERS,
-    emptyState,
-    type HomeSection,
-  } from "$lib/workbench/home";
+  import { SECTIONS, SORTS, emptyState, type HomeSection } from "$lib/workbench/home";
 
   /**
    * Home: every project in one place. The surface when no project is open, and
@@ -34,6 +29,7 @@
     pinned: "pin",
     archive: "archive",
     templates: "templates",
+    trash: "trash",
   };
 
   let now = $state(Math.floor(Date.now() / 1000));
@@ -61,7 +57,14 @@
 
   // The typed-path form, opened by "Open folder" (top bar or empty state).
   $effect(() => {
-    if (home.typingPath) void tick().then(() => folderInput?.focus());
+    if (home.typingPath) {
+      folder = "";
+      workspace.error = "";
+      void tick().then(() => {
+        folderInput?.focus();
+        folderInput?.select();
+      });
+    }
   });
 
   async function submitFolder(event: SubmitEvent): Promise<void> {
@@ -75,7 +78,7 @@
   }
 
   async function open(entry: ProjectEntry): Promise<void> {
-    if (!entry.exists) return;
+    if (!entry.exists || entry.trashed_at) return;
     workspace.error = "";
     if (entry.path === currentRoot) {
       home.hide();
@@ -93,7 +96,69 @@
     }
   }
 
+  async function trashProject(entry: ProjectEntry): Promise<void> {
+    if (workspace.project?.root === entry.path) {
+      const closed = await closeProject();
+      if (!closed) return;
+      home.show();
+    }
+    const ok = await home.trash(entry.path);
+    if (ok) {
+      notice.show(`Moved ${entry.name} to trash.`);
+    }
+  }
+
+  async function restoreProject(entry: ProjectEntry): Promise<void> {
+    const ok = await home.restoreProject(entry.path);
+    if (ok) {
+      notice.show(`Restored ${entry.name}.`);
+    }
+  }
+
+  async function promptDelete(entry: ProjectEntry): Promise<void> {
+    const choice = await dialog.ask({
+      title: `Delete “${entry.name}”?`,
+      message:
+        "You can remove the project from Manang while keeping its folder, or move the folder to your system trash.",
+      actions: [
+        { id: "remove", label: "Remove from Manang" },
+        { id: "system-trash", label: "Move folder to system trash" },
+      ],
+    });
+    if (choice === "remove") {
+      const ok = await home.purge(entry.path, false);
+      if (ok) notice.show(`Removed ${entry.name} from Manang.`);
+    } else if (choice === "system-trash") {
+      const ok = await home.purge(entry.path, true);
+      if (ok) notice.show(`Moved ${entry.name} to system trash.`);
+    }
+  }
+
+  async function promptEmptyTrash(): Promise<void> {
+    const choice = await dialog.ask({
+      title: "Empty trash?",
+      message:
+        "Projects in trash will be removed from Manang. Their folders on your computer will stay where they are.",
+      actions: [{ id: "empty", label: "Empty trash" }],
+    });
+    if (choice === "empty") {
+      const ok = await home.emptyTrash();
+      if (ok) notice.show("Emptied trash.");
+    }
+  }
+
   function menuItems(entry: ProjectEntry): MenuItem[] {
+    if (entry.trashed_at) {
+      return [
+        { label: "Restore", onselect: () => void restoreProject(entry) },
+        { label: "Delete…", onselect: () => void promptDelete(entry) },
+        {
+          label: "Copy path",
+          separated: true,
+          onselect: () => void copyPath(entry.path),
+        },
+      ];
+    }
     return [
       { label: "Open", disabled: !entry.exists, onselect: () => void open(entry) },
       { label: "Rename", onselect: () => (editing = { mode: "name", entry }) },
@@ -112,11 +177,8 @@
         onselect: () => void copyPath(entry.path),
       },
       {
-        label: "Remove from list",
-        onselect: () => {
-          void home.forget(entry.path);
-          notice.show(`Removed ${entry.name} from the list. Its folder is untouched.`);
-        },
+        label: "Move to trash",
+        onselect: () => void trashProject(entry),
       },
     ];
   }
@@ -128,7 +190,7 @@
     aria-label="Home sections"
   >
     <ul class="m-0 flex list-none flex-col p-0 pt-3">
-      {#each SECTIONS as section (section.id)}
+      {#each SECTIONS.filter((s) => s.id !== "trash") as section (section.id)}
         {@const on = home.section === section.id}
         {@const count = home.counts[section.id]}
         <li>
@@ -154,6 +216,25 @@
       {/each}
     </ul>
     <div class="mt-auto flex flex-col border-t border-line">
+      <button
+        type="button"
+        class="inset-focus relative flex h-8 w-full items-center gap-3 px-3 text-left text-xs max-[800px]:justify-center max-[800px]:px-0 {home.section ===
+        'trash'
+          ? 'bg-surface-hi text-text'
+          : 'text-text-60 hover:bg-surface-hi hover:text-text'}"
+        aria-current={home.section === "trash" ? "page" : undefined}
+        aria-label="Trash"
+        title="Trash"
+        onclick={() => home.setSection("trash")}
+      >
+        <Icon name="trash" size={14} />
+        <span class="flex-1 max-[800px]:hidden">Trash</span>
+        {#if home.counts.trash !== undefined && home.counts.trash > 0}
+          <span class="font-mono text-[11px] text-text-muted max-[800px]:hidden"
+            >{home.counts.trash}</span
+          >
+        {/if}
+      </button>
       {#if workspace.project !== null}
         <button
           type="button"
@@ -208,7 +289,11 @@
           <button
             type="button"
             class="mng-btn"
-            onclick={() => (home.typingPath = false)}>Cancel</button
+            onclick={() => {
+              home.typingPath = false;
+              folder = "";
+              workspace.error = "";
+            }}>Cancel</button
           >
         </form>
       {/if}
@@ -236,6 +321,15 @@
               : ""}
           </span>
           <div class="ml-auto flex items-center gap-2">
+            {#if home.section === "trash" && home.shown.length > 0}
+              <button
+                type="button"
+                class="mng-btn text-xs"
+                onclick={() => void promptEmptyTrash()}
+              >
+                Empty trash
+              </button>
+            {/if}
             <label class="flex items-center max-[800px]:hidden">
               <select
                 class="mng-field w-auto"
@@ -278,31 +372,61 @@
       </div>
 
       {#if home.section === "templates"}
-        <p class="m-0 mb-4 max-w-[60ch] text-xs leading-relaxed text-text-60">
-          Starters set up a project with a main document and a references file. Pick
-          one, name it, and start writing.
-        </p>
-        <ul
-          class="m-0 grid list-none gap-px p-0"
-          style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))"
-        >
-          {#each STARTERS as starter (starter.engine)}
-            <li class="flex">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p class="m-0 max-w-[60ch] text-xs leading-relaxed text-text-60">
+            Starters configured for offline authoring and deterministic compilation.
+            Pick a template to start writing with publication-grade structure.
+          </p>
+          <div
+            class="flex items-center gap-1"
+            role="group"
+            aria-label="Filter templates by language"
+          >
+            {#each [{ id: "all", label: "All" }, { id: "typst", label: "Typst" }, { id: "latex", label: "LaTeX" }, { id: "markdown", label: "Markdown" }] as filter (filter.id)}
               <button
                 type="button"
-                class="inset-focus flex w-full flex-col gap-2 border border-line bg-surface p-4 text-left hover:bg-surface-hi"
-                onclick={() => home.openNew(starter.engine)}
+                class="mng-btn px-2.5 py-1 text-xs"
+                class:bg-surface-hi={home.templateFilter === filter.id}
+                aria-pressed={home.templateFilter === filter.id}
+                onclick={() =>
+                  (home.templateFilter = filter.id as typeof home.templateFilter)}
               >
-                <span class="font-mono text-[11px] text-text-muted"
-                  >{ENGINE_LABEL[starter.engine]}</span
-                >
-                <span class="text-[13px] text-text">{starter.title}</span>
-                <span class="text-[11px] leading-snug text-text-60">{starter.note}</span
-                >
+                {filter.label}
               </button>
-            </li>
-          {/each}
-        </ul>
+            {/each}
+          </div>
+        </div>
+
+        {#if home.shownTemplates.length === 0}
+          <div class="flex flex-col items-start gap-2 py-6 text-text-60" role="status">
+            <p class="m-0 text-[13px] text-text">No templates match your search</p>
+            <p class="m-0 text-xs">
+              Try a different keyword or reset the language filter.
+            </p>
+            <button
+              type="button"
+              class="mng-btn mt-1 text-xs"
+              onclick={() => {
+                home.query = "";
+                home.templateFilter = "all";
+              }}
+            >
+              Reset filters
+            </button>
+          </div>
+        {:else}
+          <ul
+            class="m-0 grid list-none gap-3 p-0"
+            style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr))"
+            aria-label="Starter templates"
+          >
+            {#each home.shownTemplates as template (template.id)}
+              <li class="flex">
+                <TemplateCard {template} onuse={(t) => home.openNew(t.engine, t.id)} />
+              </li>
+            {/each}
+          </ul>
+        {/if}
       {:else if home.shown.length === 0}
         {#if !home.loaded}
           <p class="m-0 text-xs text-text-60" role="status">Loading projects</p>
@@ -342,6 +466,8 @@
                 onopen={() => void open(entry)}
                 onmenu={(x, y) => (menu = { x, y, entry })}
                 onpin={() => void home.patch(entry.path, { pinned: !entry.pinned })}
+                onrestore={() => void restoreProject(entry)}
+                ondelete={() => void promptDelete(entry)}
               />
             </div>
           {/each}
@@ -358,6 +484,8 @@
                 onopen={() => void open(entry)}
                 onmenu={(x, y) => (menu = { x, y, entry })}
                 onpin={() => void home.patch(entry.path, { pinned: !entry.pinned })}
+                onrestore={() => void restoreProject(entry)}
+                ondelete={() => void promptDelete(entry)}
               />
             </div>
           {/each}
@@ -383,6 +511,10 @@
     />
   {/if}
   {#if home.creating !== null}
-    <NewProject engine={home.creating.engine} onclose={() => (home.creating = null)} />
+    <NewProject
+      engine={home.creating.engine}
+      template={home.creating.template}
+      onclose={() => (home.creating = null)}
+    />
   {/if}
 </section>

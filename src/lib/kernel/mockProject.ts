@@ -9,6 +9,11 @@
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
 import { mockKey, mockRender } from "./mockDiagram";
+import {
+  getMockTemplate,
+  listMockTemplates,
+  renderTemplateFiles,
+} from "./mockTemplates";
 import type {
   ChangeState,
   DiagramExport,
@@ -19,6 +24,7 @@ import type {
   GitStatus,
   ProjectConfig,
   ProjectEntry,
+  ProjectListQuery,
   ProjectPatch,
   ProjectSummary,
   RecentProject,
@@ -42,6 +48,7 @@ export interface SeedProject {
   /** Registry metadata, for the Home screen. */
   readonly pinned?: boolean;
   readonly archived?: boolean;
+  readonly trashedAt?: string | null;
   readonly tags?: readonly string[];
   readonly created?: number;
   /** A ready-made thumbnail (SVG text), so a card has one before any compile. */
@@ -64,6 +71,7 @@ interface Meta {
   openedAt: number;
   pinned: boolean;
   archived: boolean;
+  trashedAt: string | null;
   tags: string[];
   thumbnail: string | null;
 }
@@ -88,6 +96,7 @@ export class MockProjectHost {
         openedAt: seed.openedAt,
         pinned: seed.pinned ?? false,
         archived: seed.archived ?? false,
+        trashedAt: seed.trashedAt ?? null,
         tags: [...(seed.tags ?? [])],
         thumbnail: seed.thumbnail ?? null,
       });
@@ -100,6 +109,7 @@ export class MockProjectHost {
         openedAt: entry.openedAt,
         pinned: false,
         archived: false,
+        trashedAt: null,
         tags: [],
         thumbnail: null,
       });
@@ -125,15 +135,24 @@ export class MockProjectHost {
     return this.#current;
   }
 
-  create(path: string, name: string, engine: Engine): MockProjectFs {
+  create(path: string, name: string, engine: Engine, template?: string): MockProjectFs {
     if (this.#seeds.has(path)) throw { message: `${path} is already a Manang project` };
-    const main = MAIN_FILE[engine];
+    let main = MAIN_FILE[engine];
+    let files: Record<string, Bytes> = { [main]: starter(engine, name) };
+    if (template !== undefined) {
+      const tmpl = getMockTemplate(template);
+      if (tmpl !== undefined) {
+        engine = tmpl.engine;
+        main = tmpl.main;
+        files = renderTemplateFiles(template, name) ?? files;
+      }
+    }
     const seed: SeedProject = {
       root: path,
       name,
       engine,
       main,
-      files: { [main]: starter(engine, name) },
+      files,
       committed: [],
       openedAt: nowSeconds(),
     };
@@ -158,9 +177,11 @@ export class MockProjectHost {
       .sort((a, b) => b.opened_at - a.opened_at);
   }
 
-  /** `project.list`: everything; filtering and sorting happen in the caller. */
-  list(): ProjectEntry[] {
-    return [...this.#meta.keys()].map((path) => this.entry(path));
+  /** `project.list`: filtering out trashed unless `include_trashed` is true. */
+  list(query?: ProjectListQuery): ProjectEntry[] {
+    const entries = [...this.#meta.keys()].map((path) => this.entry(path));
+    if (query?.include_trashed) return entries;
+    return entries.filter((e) => !e.trashed_at);
   }
 
   entry(path: string): ProjectEntry {
@@ -174,10 +195,53 @@ export class MockProjectHost {
       last_opened: meta.openedAt,
       pinned: meta.pinned,
       archived: meta.archived,
+      trashed_at: meta.trashedAt,
       tags: [...meta.tags],
       exists: this.#seeds.has(path),
       has_thumbnail: meta.thumbnail !== null,
     };
+  }
+
+  trash(path: string): ProjectEntry {
+    const meta = this.#meta.get(path);
+    if (meta === undefined) throw unknownProject(path);
+    if (this.#current?.root === path) this.#current = null;
+    meta.trashedAt = new Date().toISOString();
+    return this.entry(path);
+  }
+
+  restore(path: string): ProjectEntry {
+    const meta = this.#meta.get(path);
+    if (meta === undefined) throw unknownProject(path);
+    meta.trashedAt = null;
+    return this.entry(path);
+  }
+
+  purge(
+    path: string,
+    deleteFiles = false,
+  ): { purged: boolean; deleted_files: boolean } {
+    if (!this.#meta.has(path)) throw unknownProject(path);
+    if (this.#current?.root === path) this.#current = null;
+    this.#meta.delete(path);
+    if (deleteFiles) {
+      this.#seeds.delete(path);
+    }
+    return { purged: true, deleted_files: deleteFiles };
+  }
+
+  emptyTrash(olderThanDays?: number): { count: number } {
+    const cutoff =
+      olderThanDays === undefined ? null : Date.now() - olderThanDays * 86_400_000;
+    let count = 0;
+    for (const [path, meta] of [...this.#meta.entries()]) {
+      if (meta.trashedAt === null) continue;
+      if (cutoff !== null && Date.parse(meta.trashedAt) > cutoff) continue;
+      if (this.#current?.root === path) this.#current = null;
+      this.#meta.delete(path);
+      count++;
+    }
+    return { count };
   }
 
   register(path: string): ProjectEntry {
@@ -234,6 +298,7 @@ export class MockProjectHost {
         openedAt: now,
         pinned: false,
         archived: false,
+        trashedAt: null,
         tags: [],
         thumbnail: null,
       });
@@ -434,6 +499,11 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["project.export-diagram", "Write a diagram's SVG (and PDF for LaTeX) next to it"],
   ["project.cache-diagram", "Render an inline diagram to the project cache"],
   ["project.export-pdf", "Write a PDF next to an SVG for LaTeX"],
+  ["project.trash", "Move project to trash"],
+  ["project.restore", "Restore project from trash"],
+  ["project.purge", "Purge project from trash"],
+  ["project.empty-trash", "Empty trash"],
+  ["project.templates", "List starter templates"],
 ];
 
 /** Mirrors `crates/manang-project/src/export.rs`. */
@@ -513,6 +583,8 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
         "project.create": (args) => {
           const engine = args["engine"];
           const name = args["name"];
+          const template =
+            typeof args["template"] === "string" ? args["template"] : undefined;
           if (engine !== "typst" && engine !== "latex" && engine !== "markdown") {
             throw {
               message: "bad arguments: `engine` must be typst, latex or markdown",
@@ -521,8 +593,9 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           if (typeof name !== "string" || name.trim() === "") {
             throw { message: "bad arguments: `name` must be a non-empty string" };
           }
-          return summary(host.create(confineRoot(args), name.trim(), engine));
+          return summary(host.create(confineRoot(args), name.trim(), engine, template));
         },
+        "project.templates": () => listMockTemplates(),
         "project.close": () => {
           host.close();
           return null;
@@ -592,7 +665,7 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
         },
         "project.recent": () => host.recent(),
         "project.git-status": () => gitStatus(host.require()),
-        "project.list": () => host.list(),
+        "project.list": (args) => host.list(args as ProjectListQuery),
         "project.register": (args) => host.register(confineRoot(args)),
         "project.update": (args) => {
           const patch: {
@@ -609,6 +682,16 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           return host.update(confineRoot(args), patch);
         },
         "project.forget": (args) => ({ removed: host.forget(confineRoot(args)) }),
+        "project.trash": (args) => host.trash(confineRoot(args)),
+        "project.restore": (args) => host.restore(confineRoot(args)),
+        "project.purge": (args) =>
+          host.purge(confineRoot(args), args["delete_files"] === true),
+        "project.empty-trash": (args) =>
+          host.emptyTrash(
+            typeof args["older_than_days"] === "number"
+              ? args["older_than_days"]
+              : undefined,
+          ),
         "project.thumbnail-set": (args) => {
           const svg = args["svg"];
           if (typeof svg !== "string" || !svg.trimStart().startsWith("<svg")) {

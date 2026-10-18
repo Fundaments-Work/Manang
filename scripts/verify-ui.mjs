@@ -514,9 +514,9 @@ async function main() {
     })()`),
     );
     check(
-      "home nav lists Projects, Recent, Pinned, Archive, Templates and Settings",
+      "home nav lists Projects, Recent, Pinned, Archive, Templates, Trash and Settings",
       await page.evaluate(
-        `[...document.querySelectorAll('nav[aria-label="Home sections"] button')].map((b) => b.getAttribute("aria-label")).join() === "Projects,Recent,Pinned,Archive,Templates,Settings"`,
+        `[...document.querySelectorAll('nav[aria-label="Home sections"] button')].map((b) => b.getAttribute("aria-label")).join() === "Projects,Recent,Pinned,Archive,Templates,Trash,Settings"`,
       ),
     );
     check(
@@ -563,11 +563,12 @@ async function main() {
       (await cards(page)).join() === "conference-poster",
     );
     await clickText(page, 'nav[aria-label="Home sections"] button', "Templates");
+    await sleep(150);
     check(
-      "Templates lists a starter per engine",
-      await page.evaluate(
-        `[...document.querySelectorAll("main button, section[aria-label='Home'] button")].filter((b) => /(Typst|LaTeX) article|Markdown notes/.test(b.textContent)).length === 3`,
-      ),
+      "Templates section renders starter templates",
+      (await page.evaluate(
+        `document.querySelectorAll('[data-template-card]').length`,
+      )) >= 11,
     );
     await shoot(page, "02-templates");
     await clickText(page, 'nav[aria-label="Home sections"] button', "Projects");
@@ -613,7 +614,7 @@ async function main() {
     check(
       "the context menu offers open, rename, pin, archive, copy path and remove",
       await page.evaluate(
-        `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((i) => i.textContent.trim()).join() === "Open,Rename,Edit tags,Pin,Archive,Copy path,Remove from list"`,
+        `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((i) => i.textContent.trim()).join() === "Open,Rename,Edit tags,Pin,Archive,Copy path,Move to trash"`,
       ),
     );
     await shoot(page, "04-card-menu");
@@ -659,6 +660,184 @@ async function main() {
       "Esc closes the new project dialog",
       !(await exists(page, '[role="dialog"]')),
     );
+
+    /* ------------------------------------------------------------------ */
+    section("Home trash");
+
+    // Move a project to trash via card context menu.
+    await page.evaluate(
+      `document.querySelector('[data-project$="lecture-notes"] button').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 300 }))`,
+    );
+    await sleep(200);
+    await clickText(page, '[role="menuitem"]', "Move to trash");
+    await sleep(200);
+    check(
+      "trashed project leaves Projects list",
+      !(await cards(page)).includes("lecture-notes"),
+    );
+    check(
+      "Trash nav shows count 1",
+      await page.evaluate(
+        `document.querySelector('nav[aria-label="Home sections"] button[aria-label="Trash"]')?.textContent.includes("1") ?? false`,
+      ),
+    );
+
+    // Navigate to Trash section.
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Trash");
+    await sleep(200);
+    check(
+      "Trash section lists the trashed project",
+      (await cards(page)).includes("lecture-notes"),
+    );
+    check(
+      "trashed card shows relative trash time and Restore/Delete buttons",
+      await page.evaluate(`(() => {
+        const card = document.querySelector('[data-project$="lecture-notes"]');
+        if (!card) return false;
+        const text = card.innerText;
+        const hasTime = text.includes("Trashed");
+        const hasRestore = !!card.querySelector('button[aria-label^="Restore"]');
+        const hasDelete = !!card.querySelector('button[aria-label^="Delete"]');
+        return hasTime && hasRestore && hasDelete;
+      })()`),
+    );
+    await shoot(page, "05b-home-trash");
+
+    // Restore brings it back to Projects.
+    await clickText(page, '[data-project$="lecture-notes"] button', "Restore");
+    await sleep(200);
+    check("after restore, Trash section is empty", (await cards(page)).length === 0);
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Projects");
+    await sleep(200);
+    check(
+      "restored project is back in Projects",
+      (await cards(page)).includes("lecture-notes"),
+    );
+
+    // Re-trash and purge ("Remove from Manang").
+    await page.evaluate(
+      `document.querySelector('[data-project$="lecture-notes"] button').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 300 }))`,
+    );
+    await sleep(200);
+    await clickText(page, '[role="menuitem"]', "Move to trash");
+    await sleep(200);
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Trash");
+    await sleep(200);
+
+    // Click Delete… on the card.
+    await clickText(page, '[data-project$="lecture-notes"] button', "Delete…");
+    await sleep(200);
+    check(
+      "delete dialog asks how to remove",
+      await page.evaluate(
+        `document.querySelector('[role="alertdialog"]')?.textContent.includes("Remove from Manang") ?? false`,
+      ),
+    );
+    // Choose "Remove from Manang".
+    await clickText(page, '[role="alertdialog"] button', "Remove from Manang");
+    await sleep(200);
+    check("purged project is gone from Trash", (await cards(page)).length === 0);
+
+    // Folder still exists in mock, so typing the path can find it.
+    await clickText(page, "button", "Open folder");
+    await sleep(250);
+    await click(page, 'input[placeholder*="my-paper"]');
+    await insertText(page, "/home/author/lecture-notes");
+    await press(page, "Enter", { wait: 500 });
+    check(
+      "folder still exists and can be re-opened",
+      await page.evaluate(`!document.querySelector('[role="alert"]')`),
+    );
+    await page.evaluate(`localStorage.removeItem("manang.session.v1")`);
+
+    /* ------------------------------------------------------------------ */
+    section("Templates");
+    // The sections before this one may have left a project open: start from Home.
+    if (!(await exists(page, 'section[aria-label="Home"]'))) {
+      await click(page, 'header button[aria-label="Home"]');
+      await waitFor(page, `!!document.querySelector('section[aria-label="Home"]')`, {
+        label: "Home shown",
+      });
+    }
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Templates");
+    await sleep(200);
+
+    const templateCards = await page.evaluate(
+      `document.querySelectorAll('[data-template-card]').length`,
+    );
+    check(
+      "templates section renders all starter templates",
+      templateCards >= 11,
+      `count: ${templateCards}`,
+    );
+
+    // Filter by LaTeX
+    await clickText(
+      page,
+      '[aria-label="Filter templates by language"] button',
+      "LaTeX",
+    );
+    await sleep(150);
+    const latexCount = await page.evaluate(
+      `document.querySelectorAll('[data-template-card]').length`,
+    );
+    const onlyLatex = await page.evaluate(
+      `[...document.querySelectorAll('[data-template-card]')].every((c) => c.innerText.includes("LaTeX"))`,
+    );
+    check(
+      "filtering by LaTeX shows only LaTeX templates",
+      onlyLatex && latexCount === 3,
+      `count: ${latexCount}`,
+    );
+
+    // Filter by All
+    await clickText(page, '[aria-label="Filter templates by language"] button', "All");
+    await sleep(150);
+    const allCount = await page.evaluate(
+      `document.querySelectorAll('[data-template-card]').length`,
+    );
+    check("resetting filter shows all templates", allCount >= 11, `count: ${allCount}`);
+
+    // Click "Use template" on Academic Article
+    const articleCardExists = await page.evaluate(
+      `!!document.querySelector('[data-template-card="article-typst"]')`,
+    );
+    check("article-typst card is present", articleCardExists);
+
+    await clickText(
+      page,
+      '[data-template-card="article-typst"] button',
+      "Use template",
+    );
+    await sleep(250);
+
+    check(
+      "clicking Use template opens New project dialog with template preselected",
+      await page.evaluate(`(() => {
+        const dialog = document.querySelector('[role="dialog"]');
+        if (!dialog) return false;
+        const select = dialog.querySelector('select[aria-label="Template"]');
+        return select && select.value === "article-typst";
+      })()`),
+    );
+
+    // Create a new project from this template
+    await click(page, 'input[placeholder="Entropy paper"]');
+    await insertText(page, "verify-template-paper");
+    await sleep(150);
+    await clickText(page, 'button[type="submit"]', "Create project");
+    await sleep(500);
+
+    await waitFor(
+      page,
+      `document.querySelector(".cm-content")?.textContent.includes("Introduction")`,
+      { label: "editor shows template content" },
+    );
+    check(
+      "new project from template opened in workbench with main.typ",
+      (await activeTab(page)) === "main.typ",
+    );
+    await shoot(page, "02b-template-created");
 
     /* ------------------------------------------------------------------ */
     section("Workbench");
@@ -1325,6 +1504,311 @@ async function main() {
       page,
       'nav[aria-label="Workbench views"] button[aria-label="References"]',
     );
+
+    /* ------------------------------------------------------------------ */
+    section("Plugins");
+    {
+      const bar = 'nav[aria-label="Workbench views"]';
+      const rows = () =>
+        page.evaluate(
+          `[...document.querySelectorAll('#side-panel [data-plugin]')].map((r) => r.dataset.plugin)`,
+        );
+      const row = (name) =>
+        page.evaluate(`(() => {
+          const r = document.querySelector('#side-panel [data-plugin="${name}"]');
+          if (!r) return null;
+          return { status: r.dataset.status, tier: r.dataset.tier, text: r.innerText,
+            hasSwitch: !!r.querySelector('button[role="switch"]'),
+            checked: r.querySelector('button[role="switch"]')?.getAttribute("aria-checked") ?? null,
+            error: r.querySelector("[data-plugin-error]")?.innerText ?? null };
+        })()`);
+      const rowsWhere = (selector) =>
+        page.evaluate(
+          `[...document.querySelectorAll('#side-panel [data-plugin]')].filter((r) => ${selector}).map((r) => r.dataset.plugin)`,
+        );
+      const chip = (id) => click(page, `#side-panel button[data-filter="${id}"]`);
+      const filterField = 'input[aria-label="Filter plugins"]';
+      const setFilter = async (text) => {
+        await page.evaluate(
+          `(() => { const f = document.querySelector('${filterField}'); f.value = ${JSON.stringify(text)}; f.dispatchEvent(new Event("input", { bubbles: true })); })()`,
+        );
+        await sleep(150);
+      };
+      /** Scroll the element into the panel's view, then click it for real. */
+      const tap = async (cdp, selector) => {
+        await cdp.evaluate(
+          `document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: "center" })`,
+        );
+        await sleep(120);
+        await click(cdp, selector);
+      };
+      const toast = () =>
+        page.evaluate(
+          `document.querySelector('footer[aria-label="Status"]')?.innerText ?? ""`,
+        );
+
+      await click(page, `${bar} button[aria-label="Plugins"]`);
+      await expectEventually(
+        page,
+        "the Plugins view lists built-in and sample plugins",
+        `document.querySelectorAll('#side-panel [data-plugin]').length >= 15`,
+        { show: `document.querySelector("#side-panel")?.innerText.slice(0, 200)` },
+      );
+      check(
+        "its panel is named Plugins and the activity icon is pressed",
+        (await exists(page, 'aside[aria-label="Plugins panel"]')) &&
+          (await page.evaluate(
+            `document.querySelector('${bar} button[aria-label="Plugins"]').getAttribute("aria-pressed") === "true"`,
+          )),
+      );
+      await shoot(page, "07f-plugins");
+
+      const editor = await row("editor");
+      const git = await row("git");
+      const counter = await row("word-count");
+      const lint = await row("latex-lint");
+      const fetcher = await row("citation-fetch");
+      const themes = await row("slide-themes");
+      check(
+        "built-in plugins say Built in and are enabled",
+        editor?.tier === "native" &&
+          /Built in/.test(editor.text) &&
+          /Enabled/.test(editor.text) &&
+          git?.tier === "native" &&
+          /Built in/.test(git.text),
+      );
+      check(
+        "installed plugins say Sandboxed",
+        /Sandboxed/.test(counter?.text ?? "") && /Sandboxed/.test(lint?.text ?? ""),
+      );
+      check(
+        "states read Enabled, Failed, Needs approval and Disabled",
+        counter?.status === "loaded" &&
+          /Enabled/.test(counter.text) &&
+          lint?.status === "failed" &&
+          /Failed/.test(lint.text) &&
+          fetcher?.status === "needs_approval" &&
+          /Needs approval/.test(fetcher.text) &&
+          themes?.status === "disabled" &&
+          /Disabled/.test(themes.text),
+      );
+      check(
+        "a failed plugin shows its error, without opening it",
+        /imports/.test(lint?.error ?? ""),
+        lint?.error ?? "",
+      );
+      check(
+        "the core plugin has no switch; a built-in that may be switched off has one",
+        editor?.hasSwitch === false &&
+          /Core/.test(editor.text) &&
+          git?.hasSwitch === true,
+      );
+      check(
+        "Install is the one lime action of the view",
+        await page.evaluate(`(() => {
+          const lime = (el) => getComputedStyle(el).backgroundColor === "rgb(198, 241, 53)";
+          const all = [...document.querySelectorAll("#side-panel *")].filter(lime);
+          return all.length === 1 && all[0].hasAttribute("data-install") && all[0].innerText.trim() === "Install";
+        })()`),
+      );
+
+      // Search and filter chips.
+      await setFilter("latex-li");
+      check(
+        "searching narrows the list (name, description, command)",
+        (await rows()).join() === "latex-lint",
+        (await rows()).join(),
+      );
+      await setFilter("count words");
+      check("a command title matches too", (await rows()).join() === "word-count");
+      await setFilter("zzzz");
+      check(
+        "no match says so",
+        (await rows()).length === 0 &&
+          (await page.evaluate(
+            `document.querySelector("#side-panel").innerText.includes("No plugin matches")`,
+          )),
+      );
+      await setFilter("");
+      await chip("attention");
+      check(
+        "Needs attention lists the failed and waiting ones only",
+        (await rows()).join() === "citation-fetch,latex-lint,plot-export",
+        (await rows()).join(),
+      );
+      await chip("builtin");
+      check(
+        "Built in lists first-party plugins only",
+        (await rows()).length > 5 &&
+          (await rowsWhere(`r.dataset.tier !== "native"`)).length === 0,
+      );
+      await chip("installed");
+      check(
+        "Installed lists sandboxed plugins only",
+        (await rows()).length === 5 &&
+          (await rowsWhere(`r.dataset.tier !== "wasm"`)).length === 0,
+        (await rows()).join(),
+      );
+      await chip("all");
+
+      // Enable and disable.
+      await tap(page, '#side-panel [data-plugin="word-count"] button[role="switch"]');
+      await expectEventually(
+        page,
+        "turning a plugin off updates its state",
+        `document.querySelector('#side-panel [data-plugin="word-count"]')?.dataset.status === "disabled"`,
+      );
+      check(
+        "and the switch follows",
+        (await row("word-count"))?.checked === "false",
+        JSON.stringify(await row("word-count")),
+      );
+      check("with a notice", /Disabled word-count/.test(await toast()), await toast());
+      await tap(page, '#side-panel [data-plugin="word-count"] button[role="switch"]');
+      await expectEventually(
+        page,
+        "turning it on again loads it",
+        `document.querySelector('#side-panel [data-plugin="word-count"]')?.dataset.status === "loaded"`,
+      );
+
+      // Details.
+      await tap(page, '#side-panel [data-plugin="word-count"] button[aria-expanded]');
+      await expectEventually(
+        page,
+        "opening a plugin shows what it can access and its commands",
+        `(() => { const d = document.querySelector('[data-details="word-count"]'); return !!d && /Reads the open document/.test(d.innerText) && /Count words/.test(d.innerText) && /word-count\\.count/.test(d.innerText); })()`,
+      );
+      check(
+        "an installed plugin can be reloaded and uninstalled",
+        (await exists(page, '[data-details="word-count"] [data-action="reload"]')) &&
+          (await exists(page, '[data-details="word-count"] [data-action="uninstall"]')),
+      );
+      await tap(page, '#side-panel [data-plugin="editor"] button[aria-expanded]');
+      await expectEventually(
+        page,
+        "a core plugin's details say it is required",
+        `/Required by Manang/.test(document.querySelector('[data-details="editor"]')?.innerText ?? "")`,
+      );
+      check(
+        "and offer no uninstall, disable or reload",
+        !(await exists(page, '[data-details="editor"] [data-action="uninstall"]')) &&
+          !(await exists(page, '[data-details="editor"] [data-action="toggle"]')) &&
+          !(await exists(page, '[data-details="editor"] [data-action="reload"]')),
+      );
+      await tap(page, '#side-panel [data-plugin="git"] button[aria-expanded]');
+      await expectEventually(
+        page,
+        "a built-in plugin can be switched off but not uninstalled",
+        `!!document.querySelector('[data-details="git"] [data-action="toggle"]') && !document.querySelector('[data-details="git"] [data-action="uninstall"]')`,
+      );
+      await shoot(page, "07g-plugin-details");
+
+      // An update that asks for more shows the new access.
+      await tap(page, '#side-panel [data-plugin="plot-export"] button[data-review]');
+      await expectEventually(
+        page,
+        "reviewing an update lists its access with the new line marked New",
+        `(() => { const d = document.querySelector('[data-consent="plot-export"]'); return !!d && d.querySelector("[data-consent-new]") !== null && /plots\\.example\\.org/.test(d.innerText); })()`,
+      );
+      await shoot(page, "07h-plugin-update-consent");
+      await press(page, "Escape");
+      check(
+        "Escape cancels without approving",
+        !(await exists(page, '[role="alertdialog"]')) &&
+          (await row("plot-export"))?.status === "needs_approval",
+      );
+
+      // Uninstall, with confirmation.
+      await tap(page, '#side-panel [data-plugin="slide-themes"] button[aria-expanded]');
+      await tap(page, '[data-details="slide-themes"] [data-action="uninstall"]');
+      await expectEventually(
+        page,
+        "uninstalling asks first",
+        `/Uninstall slide-themes\\?/.test(document.querySelector('[role="alertdialog"]')?.innerText ?? "")`,
+      );
+      await press(page, "Escape");
+      check("cancelling keeps the plugin", (await rows()).includes("slide-themes"));
+      await tap(page, '[data-details="slide-themes"] [data-action="uninstall"]');
+      await clickText(page, '[role="alertdialog"] button', "Uninstall");
+      await expectEventually(
+        page,
+        "confirming removes it from the list",
+        `!document.querySelector('#side-panel [data-plugin="slide-themes"]')`,
+      );
+
+      // The install flow: pick, read out the access, approve, load.
+      check("word-stats is not installed yet", !(await rows()).includes("word-stats"));
+      await tap(page, "#side-panel [data-install]");
+      await expectEventually(
+        page,
+        "Install shows what the plugin asks for before anything is installed",
+        `(() => { const d = document.querySelector('[data-consent="word-stats"]'); return !!d && /Reads the open document/.test(d.innerText) && /Install word-stats/.test(d.innerText); })()`,
+      );
+      await shoot(page, "07i-plugin-install-consent");
+      check(
+        "nothing was installed while the dialog is open",
+        !(await rows()).includes("word-stats"),
+      );
+      await press(page, "Escape");
+      check(
+        "cancelling installs nothing",
+        !(await rows()).includes("word-stats") &&
+          !(await exists(page, '[role="alertdialog"]')),
+      );
+      await tap(page, "#side-panel [data-install]");
+      await waitFor(page, `!!document.querySelector('[data-consent-approve]')`, {
+        label: "consent dialog",
+      });
+      await tap(page, "[data-consent-approve]");
+      await expectEventually(
+        page,
+        "approving installs the plugin and loads it",
+        `document.querySelector('#side-panel [data-plugin="word-stats"]')?.dataset.status === "loaded"`,
+      );
+      check(
+        "with a notice and its details open",
+        /Installed word-stats/.test(await toast()) &&
+          (await exists(page, '[data-details="word-stats"]')),
+        await toast(),
+      );
+
+      // Live: a change from elsewhere shows without reloading the page.
+      await page.evaluate(
+        `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("plugins.disable", { name: "search" }))`,
+      );
+      await expectEventually(
+        page,
+        "a plugin switched off elsewhere updates the list by itself",
+        `document.querySelector('#side-panel [data-plugin="search"]')?.dataset.status === "disabled"`,
+      );
+      await page.evaluate(
+        `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("plugins.enable", { name: "search" }))`,
+      );
+      await expectEventually(
+        page,
+        "and back",
+        `document.querySelector('#side-panel [data-plugin="search"]')?.dataset.status === "loaded"`,
+      );
+
+      // The shortcut and the command open this view.
+      await click(page, `${bar} button[aria-label="Plugins"]`);
+      check("the icon collapses the panel", !(await exists(page, "#side-panel")));
+      await press(page, "x", { ctrl: true, shift: true, wait: 400 });
+      check(
+        "Ctrl+Shift+X opens the Plugins view",
+        await exists(page, 'aside[aria-label="Plugins panel"]'),
+      );
+      check(
+        "and no Settings page is opened for it",
+        !(await exists(page, 'section[aria-label="Settings"]')),
+      );
+      check(
+        "the page does not scroll sideways",
+        await page.evaluate(
+          `document.documentElement.scrollWidth <= window.innerWidth`,
+        ),
+      );
+    }
 
     /* ------------------------------------------------------------------ */
     section("Files tree");
@@ -4396,6 +4880,350 @@ async function main() {
     if (!(await exists(page, "#side-panel")))
       await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
     await noStrayEdits(page, "menu bar, narrow");
+
+    /* ------------------------------------------------------------------ */
+    section("Versions");
+    const dialogTitle = () =>
+      page.evaluate(`document.querySelector("#dialog-title")?.textContent ?? null`);
+    const dialogText = () =>
+      page.evaluate(`document.querySelector('[role="alertdialog"]')?.innerText ?? ""`);
+    const dialogOpen = () => exists(page, '[role="alertdialog"]');
+    const versionRows = () =>
+      page.evaluate(
+        `[...document.querySelectorAll('#side-panel ul[aria-label="Versions"] > li')].map((li) => li.querySelector("button").innerText.replace(/\\s+/g, " ").trim())`,
+      );
+    const openMenuCommand = async (bar, command) => {
+      await clickText(page, "header [data-menu-bar]", bar);
+      await waitFor(
+        page,
+        `document.querySelector('header [role="menu"] [data-command="${command}"]') !== null`,
+      );
+      await click(page, `header [role="menu"] [data-command="${command}"]`);
+    };
+    /** Type at the top of the open document (the viewport stays on it). */
+    const typeAtEnd = async (text) => {
+      await focusEditor(page);
+      await press(page, "Home", { ctrl: true });
+      await insertText(page, text);
+    };
+    const pressDialogButton = async (label) => {
+      const ok = await page.evaluate(`(() => {
+        const b = [...document.querySelectorAll('[role="alertdialog"] button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)});
+        if (!b) return false;
+        b.click();
+        return true;
+      })()`);
+      if (!ok) throw new Error(`no dialog button "${label}"`);
+      await sleep(300);
+    };
+    const pressPrimary = async () => {
+      const ok = await page.evaluate(`(() => {
+        const b = [...document.querySelectorAll('[role="alertdialog"] button')].find((x) => getComputedStyle(x).backgroundColor === "rgb(198, 241, 53)");
+        if (!b) return false;
+        b.click();
+        return true;
+      })()`);
+      if (!ok) throw new Error("no lime dialog button");
+      await sleep(300);
+    };
+
+    await focusEditor(page);
+    await openMenuCommand("File", "file.save-version");
+    await expectEventually(
+      page,
+      "File > Save a version opens a one-field dialog",
+      `document.querySelector("#dialog-title")?.textContent === "Save a version"`,
+    );
+    check(
+      "the dialog shows how many files changed and asks only for an optional name",
+      (await dialogText()).includes("changed since the last version") ||
+        (await dialogText()).includes("Nothing has changed"),
+      await dialogText(),
+    );
+    await press(page, "Escape");
+
+    // The first edit and its version.
+    await typeAtEnd("\n// versions-check\n");
+    await press(page, "s", { ctrl: true, alt: true, wait: 500 });
+    await expectEventually(
+      page,
+      "Ctrl+Alt+S opens Save a version",
+      `document.querySelector("#dialog-title")?.textContent === "Save a version"`,
+    );
+    check(
+      "the field is labelled 'Name this version (optional)'",
+      await page.evaluate(
+        `document.querySelector('[role="alertdialog"] label')?.innerText.includes("Name this version (optional)")`,
+      ),
+    );
+    check(
+      "the dialog counts the changed files",
+      /\d+ files? (has|have) changed since the last version/.test(await dialogText()),
+      await dialogText(),
+    );
+    check(
+      "Save is the one lime action in the dialog",
+      await page.evaluate(`(() => {
+        const lime = "rgb(198, 241, 53)";
+        const bs = [...document.querySelectorAll('[role="alertdialog"] button')];
+        const limed = bs.filter((b) => getComputedStyle(b).backgroundColor === lime);
+        return limed.length === 1 && limed[0].textContent.trim() === "Save";
+      })()`),
+    );
+    await shoot(page, "30-save-a-version");
+    await insertText(page, "Draft one");
+    await pressDialogButton("Save");
+    await expectEventually(
+      page,
+      "saving shows a status message with the name",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes('Saved version "Draft one"')`,
+    );
+    check("the dialog closes after saving", !(await dialogOpen()));
+    check(
+      "unsaved edits were saved first, so no tab is left unsaved",
+      (await dirtyTabs(page)).length === 0,
+    );
+
+    // The second.
+    await typeAtEnd("// second-edit\n");
+    await openMenuCommand("File", "file.save-version");
+    await waitFor(
+      page,
+      `document.querySelector('[role="alertdialog"] input') !== null`,
+    );
+    await insertText(page, "Draft two");
+    await pressDialogButton("Save");
+    await expectEventually(
+      page,
+      "a second version is saved from the menu",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes('Saved version "Draft two"')`,
+    );
+
+    // The panel.
+    await openMenuCommand("View", "view.versions");
+    await expectEventually(
+      page,
+      "View > Versions opens the Source control view in Versions mode",
+      `document.querySelector('aside[aria-label="Source control panel"]') !== null && document.querySelector('[role="radiogroup"][aria-label="Source control mode"] [role="radio"][aria-checked="true"]')?.textContent.trim() === "Versions"`,
+    );
+    check(
+      "Versions adds no activity-bar entry",
+      !(await exists(
+        page,
+        'nav[aria-label="Workbench views"] button[aria-label="Versions"]',
+      )),
+    );
+    check(
+      "the header switch offers Changes and Versions",
+      (await page.evaluate(
+        `[...document.querySelectorAll('[role="radiogroup"][aria-label="Source control mode"] [role="radio"]')].map((r) => r.textContent.trim()).join()`,
+      )) === "Changes,Versions",
+    );
+    await expectEventually(
+      page,
+      "the timeline lists the saved versions newest first",
+      `document.querySelectorAll('#side-panel ul[aria-label="Versions"] > li').length >= 4`,
+    );
+    {
+      const rows = await versionRows();
+      check(
+        "the newest version is on top, marked as a Saved version",
+        rows[0]?.includes("Draft two") === true && rows[0]?.includes("Saved version"),
+        rows[0],
+      );
+      check(
+        "each row shows author, relative time and file count",
+        /· (just now|\d+m ago) · \d+ files?/.test(rows[0] ?? ""),
+        rows[0],
+      );
+      check(
+        "versions made outside Save a version carry no marker",
+        rows.some((r) => !r.includes("Saved version")),
+      );
+    }
+    await shoot(page, "31-versions-list");
+
+    // Select, diff.
+    await clickText(
+      page,
+      '#side-panel ul[aria-label="Versions"] > li > button',
+      "Draft one",
+    );
+    await expectEventually(
+      page,
+      "selecting a version lists its changed files",
+      `[...document.querySelectorAll('#side-panel ul[aria-label="Files in this version"] li')].some((li) => li.textContent.includes("main.typ"))`,
+    );
+    await expectEventually(
+      page,
+      "the file's diff shows the added line",
+      `document.querySelector('#side-panel [role="region"][aria-label^="Changes in"]')?.innerText.includes("versions-check")`,
+    );
+    await shoot(page, "32-version-diff");
+
+    // Restore a file (clean tree).
+    await clickText(page, "#side-panel button", "Restore this file");
+    await expectEventually(
+      page,
+      "Restore this file asks first",
+      `document.querySelector("#dialog-title")?.textContent === "Restore this file?"`,
+    );
+    check(
+      "the confirmation says plainly that nothing is deleted",
+      (await dialogText()).includes("Nothing is deleted"),
+      await dialogText(),
+    );
+    await pressDialogButton("Restore");
+    await expectEventually(
+      page,
+      "restoring brings the old content back into the open tab",
+      `(() => { const t = document.querySelector(".cm-content")?.innerText ?? ""; return t.includes("versions-check") && !t.includes("second-edit"); })()`,
+      { show: `document.querySelector(".cm-content")?.innerText.slice(0, 120)` },
+    );
+    check(
+      "a status message reports the restore",
+      (await statusText(page)).includes("Restored main.typ"),
+      await statusText(page),
+    );
+    check(
+      "the restored tab is not marked unsaved",
+      (await dirtyTabs(page)).length === 0,
+      (await dirtyTabs(page)).join(),
+    );
+
+    // Dirty tree: the safety save is offered.
+    await typeAtEnd("// unsaved-bit\n");
+    await clickText(page, "#side-panel button", "Restore this file");
+    await expectEventually(
+      page,
+      "restoring over unsaved work offers 'Save my changes first'",
+      `[...document.querySelectorAll('[role="alertdialog"] button')].some((b) => b.textContent.includes("Save my changes first"))`,
+    );
+    check(
+      "the confirmation names the safety version",
+      (await dialogText()).includes("saved first") &&
+        (await dialogText()).includes("Before restoring"),
+      await dialogText(),
+    );
+    await shoot(page, "33-restore-dirty");
+    await pressDialogButton("Save my changes first, then restore");
+    await expectEventually(
+      page,
+      "the old content is back and the unsaved text was kept in a version",
+      `(() => { const t = document.querySelector(".cm-content")?.innerText ?? ""; return !t.includes("unsaved-bit"); })()`,
+    );
+    await expectEventually(
+      page,
+      "a 'Before restoring' version is on top of the timeline",
+      `document.querySelector('#side-panel ul[aria-label="Versions"] > li > button')?.innerText.includes("Before restoring")`,
+    );
+
+    // Restore the whole project from the oldest demo version.
+    await clickText(
+      page,
+      '#side-panel ul[aria-label="Versions"] > li > button',
+      "feat(bounds)",
+    );
+    await expectEventually(
+      page,
+      "an earlier version lists its files",
+      `document.querySelectorAll('#side-panel ul[aria-label="Files in this version"] li').length >= 1`,
+    );
+    await clickText(page, "#side-panel button", "Restore whole project");
+    await expectEventually(
+      page,
+      "Restore whole project asks first",
+      `document.querySelector("#dialog-title")?.textContent === "Restore the whole project?"`,
+    );
+    await pressPrimary();
+    await expectEventually(
+      page,
+      "restoring the whole project returns main.typ to that version",
+      `(() => { const t = document.querySelector(".cm-content")?.innerText ?? ""; return t.includes("Landauer") && !t.includes("versions-check"); })()`,
+    );
+
+    // Filter by file.
+    await clickText(
+      page,
+      '#side-panel [role="radiogroup"][aria-label="Show versions of"] [role="radio"]',
+      "This file",
+    );
+    await expectEventually(
+      page,
+      "filtering to the current file keeps versions that changed it",
+      `document.querySelectorAll('#side-panel ul[aria-label="Versions"] > li').length >= 1 && document.querySelector('#side-panel [role="radio"][aria-checked="true"]') !== null`,
+    );
+    await clickText(
+      page,
+      '#side-panel [role="radiogroup"][aria-label="Show versions of"] [role="radio"]',
+      "All files",
+    );
+
+    // No identity yet: the prompt.
+    await typeAtEnd("// identity-check\n");
+    await page.evaluate(`localStorage.setItem("manang.mock.git-identity", "none")`);
+    await press(page, "s", { ctrl: true, alt: true, wait: 500 });
+    await expectEventually(
+      page,
+      "saving without an identity asks 'Your name and email' first",
+      `document.querySelector("#dialog-title")?.textContent === "Your name and email"`,
+    );
+    check(
+      "the prompt has name and email fields",
+      (await page.evaluate(
+        `document.querySelectorAll('[role="alertdialog"] input').length`,
+      )) === 2,
+    );
+    check(
+      "'Only for this project' is the default, 'Use for all projects' the alternative",
+      await page.evaluate(
+        `(() => { const r = [...document.querySelectorAll('[role="alertdialog"] [role="radio"]')]; return r.length === 2 && r[0].textContent.trim() === "Only for this project" && r[0].getAttribute("aria-checked") === "true" && r[1].textContent.trim() === "Use for all projects"; })()`,
+      ),
+    );
+    await shoot(page, "34-identity");
+    await insertText(page, "Ada Lovelace");
+    await click(page, '[role="alertdialog"] label:nth-of-type(2) input');
+    await insertText(page, "not an email");
+    await pressDialogButton("Continue");
+    check(
+      "a bad email is refused with a reason and the prompt stays",
+      (await dialogTitle()) === "Your name and email" &&
+        (await dialogText()).includes("does not look like an email"),
+      await dialogText(),
+    );
+    await page.evaluate(
+      `(() => { const i = document.querySelectorAll('[role="alertdialog"] input')[1]; i.focus(); i.select(); })()`,
+    );
+    await insertText(page, "ada@example.org");
+    await pressDialogButton("Continue");
+    await expectEventually(
+      page,
+      "after the identity it continues to Save a version",
+      `document.querySelector("#dialog-title")?.textContent === "Save a version"`,
+    );
+    await insertText(page, "By Ada");
+    await pressDialogButton("Save");
+    await expectEventually(
+      page,
+      "the version is saved under the new identity",
+      `document.querySelector('#side-panel ul[aria-label="Versions"] > li > button')?.innerText.includes("Ada Lovelace")`,
+    );
+    await page.evaluate(`localStorage.removeItem("manang.mock.git-identity")`);
+
+    check(
+      "no version control is left unfinished: no dialog open",
+      !(await dialogOpen()),
+    );
+    check(
+      "the Versions panel obeys the brand: hairline switch, no radius, no shadow",
+      await page.evaluate(
+        `(() => { const g = getComputedStyle(document.querySelector('#side-panel [role="radiogroup"]')); const b = getComputedStyle(document.querySelector('#side-panel [role="radio"]')); return g.borderTopWidth === "1px" && g.borderTopLeftRadius === "0px" && b.boxShadow === "none"; })()`,
+      ),
+    );
+    await noStrayEdits(page, "Versions");
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    if (!(await exists(page, 'aside[aria-label="Files panel"]')))
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
 
     /* ------------------------------------------------------------------ */
     section("Persistence");

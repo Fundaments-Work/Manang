@@ -95,3 +95,23 @@ title = "Render an inline diagram to the project cache"
 [[contributes.commands]]
 id = "project.export-pdf"
 title = "Write a PDF next to an SVG for LaTeX"
+
+[[contributes.commands]]
+id = "project.trash"
+title = "Move project to trash"
+
+[[contributes.commands]]
+id = "project.restore"
+title = "Restore project from trash"
+
+[[contributes.commands]]
+id = "project.purge"
+title = "Purge project from trash"
+
+[[contributes.commands]]
+id = "project.empty-trash"
+title = "Empty trash"
+
+[[contributes.commands]]
+id = "project.templates"
+title = "List starter templates"

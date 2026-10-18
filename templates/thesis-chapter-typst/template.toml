@@ -1,0 +1,6 @@
+id = "thesis-chapter-typst"
+name = "Thesis Chapter (Typst)"
+engine = "typst"
+description = "Structured thesis chapter with outline, numbered subheadings, and bibliography."
+tags = ["thesis", "chapter", "academic", "typst"]
+main = "main.typ"

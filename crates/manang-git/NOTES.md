@@ -16,7 +16,7 @@
    already-a-repo, bad-path, bad-arguments, confirm-required, missing-identity,
    nothing-to-commit, empty-message, amend-published, amend-unborn, dirty-tree,
    bad-branch-name, git-missing, timeout, too-large, command-failed,
-   rev-not-found, path-not-in-rev, backend, io.
+   rev-not-found, path-not-in-rev, nothing-to-save, backend, io.
 7. `git.show` returns `Payload::Binary` for non-UTF-8 content and JSON
    `{rev, path, text}` otherwise.
 8. Permissions: manifest declares `filesystem = ["write:project"]` only. The
@@ -38,8 +38,15 @@
 | git.show | `{rev, path}` | JSON `{rev,path,text}` or Binary |
 | git.stage / git.unstage | `{paths}` (`"."` = whole project) | `{staged}` / `{unstaged}` |
 | git.discard | `{paths, confirm: true}` | `{discarded, trash}` |
-| git.commit | `{message, amend?, hooks?}` | `{hash,short,subject,amended}` |
+| git.commit | `{message, amend?, hooks?, trailers?: ["Key: value"], all?}` (`all` stages every non-ignored change first) | `{hash,short,subject,amended}` |
 | git.checkout-branch | `{name, create?}` | `{branch, created}` |
+| git.restore | `{rev, paths?, whole?, save_first?}` | `{restored, untouched_new, safety_version, trash}`; never deletes or rewrites history; error `dirty-tree` carries `paths` unless `save_first` |
+| git.identity-get | `{}` | `{name, email, source: repo\|global\|none}` |
+| git.identity-set | `{name, email, global?}` | `{ok}` (repo-local by default) |
+| git.save-version | `{name?, message?}` | `{sha, short, subject, files_changed}`; errors `nothing-to-save`, `missing-identity`; commit carries trailer `Manang-Version: 1` |
+| git.versions | `{path?, limit?, cursor?}` | `{versions:[{hash,short,subject,author_name,time,files_changed,labelled}], next_cursor}` |
+| git.version-files | `{rev}` | `{rev, files:[FileDiff without hunks]}` |
+| git.version-diff | `{rev, path}` | one `FileDiff` (against the first parent) |
 | git.init | `{}` | status |
 | git.sync | `{action: fetch\|pull\|push, remote?, timeout_secs?, hooks?}` | `{action, remote, output}` |
 

@@ -16,6 +16,8 @@ use crate::runner::{MAX_SYNC_TIMEOUT, Runner, SYNC_TIMEOUT};
 use crate::status;
 
 pub const MAX_PATHS: usize = 10_000;
+const MAX_TRAILERS: usize = 20;
+const MAX_TRAILER_BYTES: usize = 500;
 pub const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 /// Most bytes saved to the discard trash in one call.
 pub const MAX_TRASH_BYTES: u64 = 256 * 1024 * 1024;
@@ -100,7 +102,7 @@ fn in_scope(path: &str, scope: &str) -> bool {
             .is_some_and(|rest| rest.starts_with('/'))
 }
 
-fn unique_trash_dir(git_dir: &Path) -> Result<PathBuf, GitError> {
+pub(crate) fn unique_trash_dir(git_dir: &Path) -> Result<PathBuf, GitError> {
     let base = git_dir.join("manang-trash");
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -118,6 +120,33 @@ fn unique_trash_dir(git_dir: &Path) -> Result<PathBuf, GitError> {
     Err(GitError::Backend(
         "could not allocate a trash directory".to_owned(),
     ))
+}
+
+/// Copy `(source, project-relative name)` pairs into a fresh
+/// `<git-dir>/manang-trash/<stamp>/`. Returns the directory, `None` when
+/// there was nothing to copy. A failure aborts before anything is destroyed.
+pub(crate) fn trash_copy(
+    ctx: &Ctx,
+    copies: &[(PathBuf, PathBuf)],
+) -> Result<Option<String>, GitError> {
+    if copies.is_empty() {
+        return Ok(None);
+    }
+    let dir = unique_trash_dir(&ctx.git_dir())?;
+    for (src, rel) in copies {
+        let dest = dir.join(rel);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|e| GitError::io("saving to trash", e))?;
+        }
+        if fs::symlink_metadata(src).is_ok_and(|m| m.file_type().is_symlink()) {
+            let target = fs::read_link(src).map_err(|e| GitError::io("saving to trash", e))?;
+            fs::write(&dest, target.to_string_lossy().as_bytes())
+                .map_err(|e| GitError::io("saving to trash", e))?;
+        } else {
+            fs::copy(src, &dest).map_err(|e| GitError::io("saving to trash", e))?;
+        }
+    }
+    Ok(Some(dir.display().to_string()))
 }
 
 /// Throw away work-tree changes (and untracked files) under `paths`. Every
@@ -160,24 +189,7 @@ pub fn discard(ctx: &Ctx, paths: &[String], confirm: bool) -> Result<Discarded, 
         }
         staged_copies.push((src, PathBuf::from(&t.path)));
     }
-    let mut trash = None;
-    if !staged_copies.is_empty() {
-        let dir = unique_trash_dir(&ctx.git_dir())?;
-        for (src, rel) in &staged_copies {
-            let dest = dir.join(rel);
-            if let Some(parent) = dest.parent() {
-                fs::create_dir_all(parent).map_err(|e| GitError::io("saving to trash", e))?;
-            }
-            if fs::symlink_metadata(src).is_ok_and(|m| m.file_type().is_symlink()) {
-                let target = fs::read_link(src).map_err(|e| GitError::io("saving to trash", e))?;
-                fs::write(&dest, target.to_string_lossy().as_bytes())
-                    .map_err(|e| GitError::io("saving to trash", e))?;
-            } else {
-                fs::copy(src, &dest).map_err(|e| GitError::io("saving to trash", e))?;
-            }
-        }
-        trash = Some(dir.display().to_string());
-    }
+    let trash = trash_copy(ctx, &staged_copies)?;
 
     // 2. Destroy: untracked files first, then restore tracked ones.
     let run = runner(ctx, false);
@@ -197,7 +209,7 @@ pub fn discard(ctx: &Ctx, paths: &[String], confirm: bool) -> Result<Discarded, 
     })
 }
 
-fn config_value(ctx: &Ctx, key: &str) -> Option<String> {
+pub(crate) fn config_value(ctx: &Ctx, key: &str) -> Option<String> {
     ctx.repo
         .config_snapshot()
         .string(key)
@@ -222,14 +234,88 @@ pub struct Committed {
     pub amended: bool,
 }
 
+/// Everything `git.commit` can be asked to do.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CommitRequest<'a> {
+    pub message: &'a str,
+    pub amend: bool,
+    pub hooks: bool,
+    /// `Key: value` lines appended to the message as a trailer block.
+    pub trailers: &'a [String],
+    /// Stage every non-ignored change (tracked and new files) first.
+    pub all: bool,
+}
+
+/// Validate one trailer line: `Key: value`, a single line without control
+/// characters, a token key (letters, digits, `-`).
+pub fn validate_trailer(line: &str) -> Result<(), GitError> {
+    let bad = || {
+        GitError::BadArgs(format!(
+            "invalid trailer `{}`",
+            line.chars().take(60).collect::<String>()
+        ))
+    };
+    let Some((key, value)) = line.split_once(": ") else {
+        return Err(bad());
+    };
+    let key_ok = key.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    if !key_ok
+        || value.trim().is_empty()
+        || line.len() > MAX_TRAILER_BYTES
+        || line.chars().any(char::is_control)
+    {
+        return Err(bad());
+    }
+    Ok(())
+}
+
+/// The message plus its trailer block.
+fn assemble_message(message: &str, trailers: &[String]) -> Result<String, GitError> {
+    if trailers.len() > MAX_TRAILERS {
+        return Err(GitError::BadArgs("too many trailers".to_owned()));
+    }
+    for t in trailers {
+        validate_trailer(t)?;
+    }
+    if trailers.is_empty() {
+        return Ok(message.to_owned());
+    }
+    Ok(format!("{}\n\n{}", message.trim_end(), trailers.join("\n")))
+}
+
 pub fn commit(ctx: &Ctx, message: &str, amend: bool, hooks: bool) -> Result<Committed, GitError> {
+    commit_request(
+        ctx,
+        &CommitRequest {
+            message,
+            amend,
+            hooks,
+            ..CommitRequest::default()
+        },
+    )
+}
+
+pub fn commit_request(ctx: &Ctx, req: &CommitRequest<'_>) -> Result<Committed, GitError> {
+    let CommitRequest {
+        message,
+        amend,
+        hooks,
+        trailers,
+        all,
+    } = *req;
     if message.trim().is_empty() {
         return Err(GitError::EmptyMessage);
     }
     if message.len() > MAX_MESSAGE_BYTES || message.contains('\0') {
         return Err(GitError::BadArgs("invalid commit message".to_owned()));
     }
+    let full_message = assemble_message(message, trailers)?;
+    let message = full_message.as_str();
     require_identity(ctx)?;
+    if all {
+        stage(ctx, &[".".to_owned()])?;
+    }
     let run = runner(ctx, hooks);
     let has_head = ctx.repo.head_id().is_ok();
     if amend {
