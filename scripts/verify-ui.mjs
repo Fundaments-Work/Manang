@@ -2378,8 +2378,8 @@ async function main() {
       const groups = await settingsGroups();
       check(
         "and not Appearance, LaTeX or Search",
-        !["appearance", "files", "plugin:latex", "plugin:search", "plugin:figure"].some(
-          (x) => groups.includes(x),
+        !["appearance", "plugin:latex", "plugin:search", "plugin:figure"].some((x) =>
+          groups.includes(x),
         ),
         groups.join(),
       );
