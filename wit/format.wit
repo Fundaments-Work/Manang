@@ -1,0 +1,64 @@
+// manang:format - the source-text format adapter interface (ADR 0015).
+//
+// Offsets are UTF-8 byte offsets into the document, the host converts to and
+// from the UTF-16 units the editor uses. Adapters get no capabilities: they
+// receive text, and return spans and TEXT EDITS only. The host applies edits.
+package manang:format@0.1.0;
+
+interface types {
+    record range { start: u32, end: u32 }
+
+    /// `kind` ids follow the first-party vocabulary (0-255) or are adapter
+    /// defined (1024+). `attr` indexes `span-table.attrs`, or is 0xFFFFFFFF.
+    record span { kind: u16, aux: u8, range: range, attr: u32 }
+
+    record span-table {
+        spans: list<span>,
+        attrs: list<string>,
+    }
+
+    record text-edit { range: range, replacement: string }
+
+    /// Edits in pre-edit coordinates, ascending and non-overlapping.
+    record edit-plan { edits: list<text-edit>, selection: option<range> }
+
+    record outline-entry { level: u8, title: string, range: range }
+
+    record command-state { command: string, enabled: bool, active: bool }
+
+    record kind-info { id: u16, name: string }
+
+    enum failure-kind { invalid-argument, unsupported, internal }
+    record failure { kind: failure-kind, message: string }
+}
+
+interface adapter {
+    use types.{range, span-table, text-edit, edit-plan, outline-entry, command-state, kind-info, failure};
+
+    /// Long-lived per open document (ADR 0003 addendum). The host keeps the
+    /// instance alive between calls and rebuilds it from its rope after a trap.
+    resource session {
+        constructor(text: string);
+        /// Apply edits sequentially (each in the coordinates left by the
+        /// previous). Returns the byte range, in the new text, whose spans
+        /// may have changed.
+        edit: func(edits: list<text-edit>) -> result<range, failure>;
+        /// Spans intersecting `viewport`, whole, in any order; the host
+        /// normalises them into the frozen span-table layout.
+        spans: func(viewport: range) -> result<span-table, failure>;
+        outline: func() -> list<outline-entry>;
+        command-state: func(selection: range) -> list<command-state>;
+        /// Returns TEXT EDITS only; the host applies them.
+        run-command: func(command: string, selection: range, args: string)
+            -> result<edit-plan, failure>;
+    }
+
+    kinds: func() -> list<kind-info>;
+
+    /// Stateless fallback for adapters that do not export `session`.
+    spans-in-slice: func(text: string, viewport: range) -> result<span-table, failure>;
+}
+
+world format-adapter {
+    export adapter;
+}
