@@ -582,6 +582,17 @@ async function liveSection(browser) {
   await palette("Share this file live");
   // The palette opens late on a page that has just loaded in a long run.
   await sleep(1200);
+  // If it swallowed the command, close it and ask again (up to three times).
+  for (
+    let i = 0;
+    i < 3 && !(await exists(page, '[data-testid="live-setup"]'));
+    i += 1
+  ) {
+    await press(page, "Escape", { wait: 300 });
+    await focusEditor(page);
+    await palette("Share this file live");
+    await sleep(1200);
+  }
   await expectEventually(
     page,
     "sharing without a relay says so and offers the Settings",
@@ -601,12 +612,72 @@ async function liveSection(browser) {
       show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 200)`,
     },
   );
+  check(
+    "Settings has a Collaboration group with the relay, the name and what the relay sees",
+    await page.evaluate(
+      `(() => { const g = document.querySelector('[data-testid="settings-collaboration"]'); const t = g?.innerText ?? ""; return !!g && t.includes("Collaboration") && t.includes("Relay address") && t.includes("Name shown to collaborators") && t.includes("encrypted data only") && t.includes("never your text"); })()`,
+    ),
+  );
+  await sleep(400);
+  check(
+    "the page scrolled to the Collaboration group",
+    await page.evaluate(
+      `(() => { const g = document.querySelector('[data-testid="settings-collaboration"]'); const r = g.getBoundingClientRect(); return r.top < window.innerHeight / 2; })()`,
+    ),
+  );
+  await shoot(page, "settings-collaboration");
   await press(page, "Escape");
   await press(page, "Escape");
+  // -- The Share button and popover, before any relay is set. ------------
+  const popover = `document.querySelector('[data-testid="share-popover"]')`;
+  const openShare = () => click(page, '[data-testid="share-button"]');
+  await openShare();
+  await expectEventually(
+    page,
+    "the Share popover says what live editing needs and where to get it",
+    `(() => { const p = ${popover}; return !!p && p.innerText.includes("Edit together live") && p.innerText.includes("Ask whoever runs your team's relay for its address") && !!p.querySelector('[data-testid="share-open-settings"]') && !p.querySelector('[data-testid="share-start"]'); })()`,
+    { show: `${popover}?.innerText` },
+  );
+  check(
+    "the Share button is a labelled, expandable control with its shortcut in the tooltip",
+    await page.evaluate(
+      `(() => { const b = document.querySelector('[data-testid="share-button"]'); return b.getAttribute("aria-expanded") === "true" && /Share \\(.*Alt\\+L\\)/.test(b.title); })()`,
+    ),
+  );
+  await shoot(page, "live-0-share-setup");
+  await press(page, "Escape");
+  check(
+    "Escape closes the popover and focus returns to the Share button",
+    (await page.evaluate(`${popover} === null`)) &&
+      (await page.evaluate(
+        `document.activeElement === document.querySelector('[data-testid="share-button"]')`,
+      )),
+  );
+  await press(page, "l", { ctrl: true, alt: true, wait: 300 });
+  check(
+    "Ctrl+Alt+L opens the Share popover",
+    await page.evaluate(`${popover} !== null`),
+  );
+  await press(page, "Escape");
+  check(
+    "no live chip while there is no session",
+    !(await exists(page, '[data-testid="live-chip"]')),
+  );
   await run("settings.set", { id: "live.relay-url", value: "wss://relay.example.org" });
 
   // -- Share. ----------------------------------------------------------------
-  await palette("Share this file live");
+  await openShare();
+  await expectEventually(
+    page,
+    "with a relay set, the popover offers to share the open file",
+    `!!${popover}?.querySelector('[data-testid="share-start"]:not(:disabled)') && ${popover}.innerText.includes("main.typ")`,
+    { show: `${popover}?.innerText` },
+  );
+  await click(page, '[data-testid="share-start"]');
+  check(
+    "starting a session closes the popover",
+    await page.evaluate(`${popover} === null`),
+  );
   await expectEventually(page, "the session bar appears", `${bar} !== null`, {
     show: `document.querySelector("footer")?.innerText`,
   });
@@ -644,7 +715,28 @@ async function liveSection(browser) {
       `[...${bar}.querySelectorAll("button")].every((b) => getComputedStyle(b).backgroundColor !== "rgb(198, 241, 53)")`,
     ),
   );
+  check(
+    "the status bar chip says Live: just you, and opens the popover",
+    await page.evaluate(
+      `document.querySelector('[data-testid="live-chip"]')?.innerText.trim() === "Live: just you"`,
+    ),
+  );
   await shoot(page, "live-2-bar");
+  await click(page, '[data-testid="live-chip"]');
+  await expectEventually(
+    page,
+    "the chip opens the popover with the invite and Leave while live",
+    `(() => { const p = ${popover}; return !!p && !!p.querySelector('[data-testid="share-copy"]') && !!p.querySelector('[data-testid="share-leave"]') && p.innerText.includes("Invite link"); })()`,
+    { show: `${popover}?.innerText` },
+  );
+  await click(page, '[data-testid="share-copy"]');
+  await expectEventually(
+    page,
+    "Copy invite link in the popover confirms",
+    `${popover}?.querySelector('[data-testid="share-copy"]')?.innerText.trim() === "Copied" || (document.querySelector('footer[aria-label="Status"]')?.innerText.includes("Invite copied") ?? false)`,
+  );
+  await shoot(page, "live-2b-popover");
+  await press(page, "Escape");
 
   // -- A collaborator arrives, types and moves a caret. -------------------
   const ada = await run("dev.live-peer-join", { name: "Ada Lovelace", slot: 3 });
@@ -653,6 +745,12 @@ async function liveSection(browser) {
     "the bar lists Ada with her caret's stroke",
     `(() => { const li = ${bar}?.querySelector('li[data-peer]'); return !!li && li.innerText.includes("Ada Lovelace") && li.querySelector("span")?.style.borderLeftStyle === "dashed"; })()`,
     { show: `${bar}?.innerText` },
+  );
+  await expectEventually(
+    page,
+    "the tab strip shows Ada as initials with her name in the tooltip, and the chip counts two people",
+    `(() => { const li = document.querySelector('[data-testid="presence"] li[data-peer]'); return !!li && li.innerText.trim() === "AL" && li.title === "Ada Lovelace" && li.getAttribute("aria-label") === "Ada Lovelace" && document.querySelector('[data-testid="live-chip"]')?.innerText.trim() === "Live: 2 people"; })()`,
+    { show: `document.querySelector('[data-testid="presence"]')?.outerHTML` },
   );
   await run("dev.live-peer-type", { at: 0, text: "// Ada was here\n" });
   await expectEventually(
@@ -790,7 +888,8 @@ async function liveSection(browser) {
   const beforeJoin = await docText();
   const hostText = `${afterLeave}\nHOST LINE\n`;
   const made = await run("dev.live-make-invite", { text: hostText, file: "main.typ" });
-  await palette("Join a live session");
+  await openShare();
+  await click(page, '[data-testid="share-join"]');
   await expectEventually(
     page,
     "Join asks for the invite in a dialog",
@@ -881,6 +980,37 @@ async function liveSection(browser) {
     ),
   );
   await shoot(page, "live-7-narrow");
+  // Under 800 px the side panel floats over the editor; put it away first.
+  if (await exists(page, "#side-panel, aside"))
+    await press(page, "b", { ctrl: true, wait: 400 });
+  await shoot(page, "live-7a-narrow-strip");
+  await openShare();
+  check(
+    "at 420 px the Share button is icon-only with its name kept for screen readers, and the popover fits the window",
+    await page.evaluate(
+      `(() => { const b = document.querySelector('[data-testid="share-button"]'); const label = b.querySelector("span"); const p = document.querySelector('[data-testid="share-popover"]').getBoundingClientRect(); return label.getBoundingClientRect().width <= 1 && p.left >= 0 && p.right <= window.innerWidth && document.documentElement.scrollWidth <= window.innerWidth; })()`,
+    ),
+  );
+  await shoot(page, "live-7b-narrow-popover");
+  await press(page, "Escape");
+  await resize(page, 640, 800);
+  check(
+    "at 640 px the tab strip keeps the Share button and the presence marks inside the window",
+    await page.evaluate(
+      `(() => { const b = document.querySelector('[data-testid="share-button"]').getBoundingClientRect(); const pr = document.querySelector('[data-testid="presence"]').getBoundingClientRect(); return b.right <= window.innerWidth && pr.right <= window.innerWidth && document.documentElement.scrollWidth <= window.innerWidth; })()`,
+    ),
+  );
+  await page.evaluate(`document.documentElement.classList.add("theme-light")`);
+  await openShare();
+  await shoot(page, "live-8-light");
+  check(
+    "in the light theme the popover is on paper tones with a readable hairline",
+    await page.evaluate(
+      `(() => { const p = getComputedStyle(document.querySelector('[data-testid="share-popover"]')); return p.backgroundColor !== "rgb(20, 20, 22)" && p.borderTopWidth === "1px" && p.boxShadow === "none"; })()`,
+    ),
+  );
+  await press(page, "Escape");
+  await page.evaluate(`document.documentElement.classList.remove("theme-light")`);
   await resize(page, 1280, 820);
   check(
     "the bar uses square corners, no shadows and only weights 300 and 400",
@@ -888,8 +1018,17 @@ async function liveSection(browser) {
       `(() => { for (const el of [${bar}, ...${bar}.querySelectorAll("*")]) { const s = getComputedStyle(el); if (s.borderTopLeftRadius !== "0px" || s.boxShadow !== "none" || !["300", "400"].includes(s.fontWeight)) return el.outerHTML.slice(0, 80); } return true; })()`,
     ),
   );
-  await click(page, '[data-testid="live-leave"]');
-  await expectEventually(page, "the last session ends cleanly", `${bar} === null`);
+  await openShare();
+  await click(page, '[data-testid="share-leave"]');
+  await expectEventually(
+    page,
+    "Leave in the popover ends the session cleanly",
+    `${bar} === null`,
+  );
+  check(
+    "the chip is gone after leaving",
+    !(await exists(page, '[data-testid="live-chip"]')),
+  );
   check(
     "no page errors were thrown during live editing",
     page.errors.length === 0,
@@ -5593,9 +5732,9 @@ async function main() {
         (await exists(page, ".cm-editor")),
     );
     check(
-      "Show preview appears at the end of the tab strip once the preview is closed",
+      "Show preview appears in the tab strip, before Share, once the preview is closed",
       await page.evaluate(
-        `(() => { const b = document.querySelector('button[aria-label="Show preview"]'); const strip = document.querySelector('[role="tablist"]')?.parentElement; if (!b || !strip) return false; return strip.contains(b) && Math.abs(b.getBoundingClientRect().right - strip.getBoundingClientRect().right) < 12; })()`,
+        `(() => { const b = document.querySelector('button[aria-label="Show preview"]'); const strip = document.querySelector('[role="tablist"]')?.parentElement; if (!b || !strip) return false; const share = document.querySelector('[data-testid="share-button"]'); return strip.contains(b) && !!share && b.getBoundingClientRect().right <= share.getBoundingClientRect().left && Math.abs(share.getBoundingClientRect().right - strip.getBoundingClientRect().right) < 12; })()`,
       ),
     );
     await shoot(page, "18c-preview-closed");
@@ -6434,6 +6573,60 @@ async function main() {
     await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
     if (!(await exists(page, 'aside[aria-label="Files panel"]')))
       await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+
+    // The same sharing from the Share popover.
+    const POP = '[data-testid="share-popover"]';
+    const PSHARE = `${POP} section[aria-label="Share versions"]`;
+    await shareFlag("diverged");
+    await click(page, '[data-testid="share-button"]');
+    // Others have shared first: Share is refused, which also teaches the status.
+    await clickText(page, `${PSHARE} button`, "Share");
+    await expectEventually(
+      page,
+      "Share from the popover says to get updates first",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes("get updates first")`,
+    );
+    await expectEventually(
+      page,
+      "the Share popover has a Share versions row with the same status line",
+      `document.querySelector('${PSHARE} [data-testid="share-status"]')?.innerText.includes("Updates available")`,
+      { show: `document.querySelector('${POP}')?.innerText` },
+    );
+    check(
+      "in the popover Get updates is the one lime action",
+      (
+        await page.evaluate(
+          `[...document.querySelectorAll('${POP} button')].filter((b) => b.className.includes("bg-accent")).map((b) => b.textContent.trim())`,
+        )
+      ).join() === "Get updates",
+    );
+    await shoot(page, "share-popover-versions");
+    await press(page, "Escape");
+    check(
+      "with updates waiting the Share button itself becomes the lime action",
+      await page.evaluate(
+        `(() => { const b = document.querySelector('[data-testid="share-button"]'); return b.dataset.pending === "true" && b.className.includes("bg-accent"); })()`,
+      ),
+    );
+    await click(page, '[data-testid="share-button"]');
+    await clickText(page, `${PSHARE} button`, "Get updates");
+    await expectEventually(
+      page,
+      "Get updates from the popover reports what arrived",
+      `document.querySelector('footer[aria-label="Status"]').innerText.includes("Got 2 updates")`,
+    );
+    await press(page, "Escape");
+    await expectEventually(
+      page,
+      "afterwards the Share button is an ordinary button again",
+      `document.querySelector('[data-testid="share-button"]')?.dataset.pending === "false"`,
+    );
+    await shareFlag(null);
+    // The refusal above was provoked on purpose and logged by reportError.
+    for (let i = page.errors.length - 1; i >= 0; i -= 1) {
+      if (/sharing versions|getting updates/.test(page.errors[i]))
+        page.errors.splice(i, 1);
+    }
 
     /* ------------------------------------------------------------------ */
     section("Persistence");
