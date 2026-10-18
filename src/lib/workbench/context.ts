@@ -31,7 +31,9 @@ export function contextKeys(context: UiContext): ReadonlySet<ContextKey> {
   const keys = new Set<ContextKey>([context.surface]);
   if (context.project) keys.add("project");
   if (context.zen) keys.add("zen");
-  if (context.surface === "workbench") {
+  // Settings keeps the context it was opened over (a Typst document's
+  // settings still see `document` and `typst`); Home has none.
+  if (context.surface !== "home") {
     if (context.editor !== null) keys.add(context.editor);
     if (context.engine !== null) keys.add(context.engine);
   }

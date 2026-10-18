@@ -7,6 +7,7 @@
  */
 
 import { build } from "$lib/state/build.svelte";
+import { context } from "$lib/state/context.svelte";
 import { convertToTypst } from "$lib/state/convert";
 import { copyIncludeLine, diagramIsActive, newDiagram } from "$lib/state/diagramFiles";
 import { documents } from "$lib/state/documents.svelte";
@@ -19,6 +20,7 @@ import { tabs } from "$lib/state/tabs.svelte";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
 import { engineOf } from "$lib/workbench/paths";
+import { settingsOriginFor } from "$lib/workbench/settings";
 
 import type { Command } from "./registry";
 import type { Shortcut } from "./shortcut";
@@ -164,7 +166,26 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "theme preferences",
       shortcuts: [mod(",")],
+      // Scoped to where you are: a document's settings over a document tab.
+      run: () => settingsPage.show(null, context.settingsOrigin),
+    },
+    {
+      id: "settings.all",
+      title: "Open all settings",
+      group: "Workbench",
+      keywords: "theme preferences application",
       run: () => settingsPage.show(),
+    },
+    {
+      id: "settings.document",
+      title: "Document settings",
+      group: "Workbench",
+      keywords: "preferences editor preview compile engine",
+      enabled: isDocument,
+      run: () => {
+        if (active !== undefined)
+          settingsPage.show(null, settingsOriginFor(active, false));
+      },
     },
     {
       id: "view.toggle-side",
