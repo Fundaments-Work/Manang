@@ -44,7 +44,7 @@ impl AdapterRegistry {
         let ext = path.rsplit_once('.')?.1.to_ascii_lowercase();
         self.adapters
             .iter()
-            .find(|a| a.info().extensions.iter().any(|e| *e == ext))
+            .find(|a| a.info().extensions.contains(&ext))
             .cloned()
     }
 
