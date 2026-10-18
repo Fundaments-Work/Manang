@@ -9,7 +9,7 @@
  * bundle never loads it.
  */
 
-import { inTauri } from "./index";
+import { inTauri, reportWarning } from "./index";
 
 /** Whether native dialogs exist (the desktop app, not `pnpm dev`). */
 export function hasNativeDialogs(): boolean {
@@ -145,4 +145,19 @@ export async function relaunchApp(): Promise<boolean> {
   const { relaunch } = await import("@tauri-apps/plugin-process");
   await relaunch();
   return true;
+}
+
+/**
+ * Set the window title: the document title (the browser tab in `pnpm dev`) and,
+ * in the desktop app, the native window's. Never throws; a title is cosmetic.
+ */
+export async function setWindowTitle(title: string): Promise<void> {
+  document.title = title;
+  if (!inTauri()) return;
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().setTitle(title);
+  } catch (error) {
+    reportWarning("the window title could not be set", error);
+  }
 }
