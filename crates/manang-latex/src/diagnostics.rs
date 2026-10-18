@@ -5,6 +5,7 @@
 //! than on API callbacks so the same code handles Tectonic's XeTeX logs and
 //! the pdfTeX-style logs users paste from elsewhere.
 
+use manang_heal::latex::tables::{package_for, package_for_environment};
 use serde::{Deserialize, Serialize};
 
 /// TeX wraps log lines at this many characters.
@@ -307,59 +308,6 @@ fn error_hint(message: &str, token: Option<&str>) -> Option<String> {
         return Some("an environment is closed with the wrong `\\end{...}`".to_owned());
     }
     None
-}
-
-/// The package that defines a commonly used command, for the "undefined
-/// control sequence" hint. Only unambiguous, widely used ones.
-fn package_for(command: &str) -> Option<&'static str> {
-    Some(match command {
-        "\\includegraphics" | "\\graphicspath" | "\\rotatebox" | "\\scalebox" | "\\resizebox" => {
-            "graphicx"
-        }
-        "\\textcolor" | "\\color" | "\\definecolor" | "\\colorbox" | "\\fcolorbox" => "xcolor",
-        "\\url" | "\\href" | "\\hyperref" | "\\autoref" | "\\nameref" => "hyperref",
-        "\\mathbb" | "\\mathfrak" | "\\checkmark" | "\\leqslant" | "\\geqslant" => "amssymb",
-        "\\text" | "\\tag" | "\\eqref" | "\\dfrac" | "\\tfrac" | "\\binom" | "\\boldsymbol"
-        | "\\substack" | "\\intertext" | "\\operatorname" => "amsmath",
-        "\\toprule" | "\\midrule" | "\\bottomrule" | "\\cmidrule" => "booktabs",
-        "\\multirow" => "multirow",
-        "\\SI" | "\\si" | "\\num" | "\\qty" | "\\unit" => "siunitx",
-        "\\lstinline" | "\\lstlisting" | "\\lstset" => "listings",
-        "\\subfloat" | "\\subcaption" | "\\captionof" => "subcaption",
-        "\\cref" | "\\Cref" | "\\crefrange" => "cleveref",
-        "\\citep" | "\\citet" | "\\citeauthor" | "\\citeyear" | "\\citealp" => "natbib",
-        "\\bm" => "bm",
-        "\\tikz" | "\\draw" | "\\node" | "\\fill" | "\\path" => "tikz",
-        "\\includepdf" => "pdfpages",
-        "\\FloatBarrier" => "placeins",
-        "\\xspace" => "xspace",
-        "\\cancel" | "\\bcancel" => "cancel",
-        "\\hl" => "soul",
-        "\\mathscr" => "mathrsfs",
-        "\\mathbbm" => "bbm",
-        "\\csvreader" => "csvsimple",
-        "\\textbackslash" | "\\textless" => return None,
-        _ => return None,
-    })
-}
-
-fn package_for_environment(name: &str) -> Option<&'static str> {
-    Some(
-        match name.trim_matches(|c| c == '`' || c == '\'' || c == ' ') {
-            "align" | "align*" | "equation*" | "gather" | "gather*" | "multline" | "multline*"
-            | "split" | "cases" | "aligned" | "alignat" | "flalign" | "matrix" | "pmatrix"
-            | "bmatrix" | "vmatrix" => "amsmath",
-            "tikzpicture" => "tikz",
-            "lstlisting" => "listings",
-            "subfigure" | "subtable" => "subcaption",
-            "algorithm" | "algorithmic" => "algorithm2e",
-            "tabularx" => "tabularx",
-            "longtable" => "longtable",
-            "multicols" => "multicol",
-            "theorem" | "lemma" | "proof" => "amsthm",
-            _ => return None,
-        },
-    )
 }
 
 fn is_warning_start(line: &str) -> bool {

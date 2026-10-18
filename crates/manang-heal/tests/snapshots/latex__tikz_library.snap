@@ -1,0 +1,35 @@
+---
+source: crates/manang-heal/tests/latex.rs
+expression: "show(Engine::Latex, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "latex.tikzlibrary:arrows.meta,positioning",
+        "label": "Add \\usetikzlibrary{arrows.meta,positioning}",
+        "why": "This document uses TikZ features from the `arrows.meta`, `positioning` libraries, which are not loaded.",
+        "edits": [
+          {
+            "from": 41,
+            "to": 41,
+            "insert": "\n\\usetikzlibrary{arrows.meta,positioning}"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "latex.tikz-library",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "latex.tikzlibrary:arrows.meta,positioning",
+      "after": "\\documentclass{article}\n\\usepackage{tikz}\n\\usetikzlibrary{arrows.meta,positioning}\n\\begin{document}\n\\begin{tikzpicture}\n\\node (a) {A};\n\\node[right=of a] (b) {B};\n\\draw[-{Stealth}] (a)--(b);\n\\end{tikzpicture}\n\\end{document}\n"
+    }
+  ],
+  "fix_all": null
+}

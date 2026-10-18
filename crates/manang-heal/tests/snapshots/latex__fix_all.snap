@@ -1,0 +1,76 @@
+---
+source: crates/manang-heal/tests/latex.rs
+expression: "show(Engine::Latex, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "latex.package:graphicx",
+        "label": "Add \\usepackage{graphicx}",
+        "why": "`\\includegraphics` is defined by the `graphicx` package, which this document does not load.",
+        "edits": [
+          {
+            "from": 44,
+            "to": 44,
+            "insert": "\n\\usepackage{graphicx}"
+          }
+        ],
+        "confidence": "certain",
+        "rule": "latex.missing-package",
+        "diagnostics": [
+          0,
+          2
+        ]
+      },
+      {
+        "id": "latex.package:booktabs",
+        "label": "Add \\usepackage{booktabs}",
+        "why": "`\\toprule` is defined by the `booktabs` package, which this document does not load.",
+        "edits": [
+          {
+            "from": 44,
+            "to": 44,
+            "insert": "\n\\usepackage{booktabs}"
+          }
+        ],
+        "confidence": "certain",
+        "rule": "latex.missing-package",
+        "diagnostics": [
+          1
+        ]
+      }
+    ],
+    "fix_all": {
+      "label": "Fix all (2)",
+      "fixes": [
+        "latex.package:graphicx",
+        "latex.package:booktabs"
+      ],
+      "edits": [
+        {
+          "from": 44,
+          "to": 44,
+          "insert": "\n\\usepackage{graphicx}"
+        },
+        {
+          "from": 44,
+          "to": 44,
+          "insert": "\n\\usepackage{booktabs}"
+        }
+      ]
+    },
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "latex.package:graphicx",
+      "after": "\\documentclass{article}\n\\usepackage{amsmath}\n\\usepackage{graphicx}\n\\begin{document}\n\\includegraphics{a}\n\\toprule\n\\includegraphics{b}\n\\end{document}\n"
+    },
+    {
+      "id": "latex.package:booktabs",
+      "after": "\\documentclass{article}\n\\usepackage{amsmath}\n\\usepackage{booktabs}\n\\begin{document}\n\\includegraphics{a}\n\\toprule\n\\includegraphics{b}\n\\end{document}\n"
+    }
+  ],
+  "fix_all": "\\documentclass{article}\n\\usepackage{amsmath}\n\\usepackage{graphicx}\n\\usepackage{booktabs}\n\\begin{document}\n\\includegraphics{a}\n\\toprule\n\\includegraphics{b}\n\\end{document}\n"
+}
