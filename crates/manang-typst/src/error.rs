@@ -20,6 +20,8 @@ pub enum TypstError {
     Pool(String),
     #[error("PDF export failed: {0}")]
     Pdf(String),
+    #[error("[invalid_svg] the SVG could not be placed: {0}")]
+    Svg(String),
     #[error("compile worker panicked")]
     WorkerPanicked,
 }

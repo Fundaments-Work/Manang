@@ -39,6 +39,7 @@ fn manifest_is_native_and_namespaced() {
         "typst.export-pdf",
         "typst.jump-from-click",
         "typst.jump-from-cursor",
+        "typst.svg-to-pdf",
     ] {
         assert!(ids.contains(&id.to_owned()), "{id}");
     }
