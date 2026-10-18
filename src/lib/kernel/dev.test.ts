@@ -55,6 +55,7 @@ describe("dev kernel: project plugin", () => {
     const figures = await project.tree({ path: "figures" });
     expect(figures.entries.map((e) => e.path)).toEqual([
       "figures/dissipation_curve.figure.json",
+      "figures/flow.mmd",
       "figures/state_lattice.figure.json",
       "figures/state_lattice.svg",
     ]);
@@ -94,7 +95,7 @@ describe("dev kernel: project plugin", () => {
     await project.rename("notes.md", "scratch.md");
     await expect(project.readFile("notes.md")).rejects.toBeDefined();
     await project.rename("figures", "plots");
-    expect((await project.tree({ path: "plots" })).entries).toHaveLength(3);
+    expect((await project.tree({ path: "plots" })).entries).toHaveLength(4);
     await expect(project.rename("scratch.md", "main.typ")).rejects.toMatchObject({
       message: "main.typ: already exists",
     });
