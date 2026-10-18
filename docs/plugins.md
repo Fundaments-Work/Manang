@@ -246,6 +246,36 @@ or `custom`; `priority` is `optional` or `default`) and
 `[[contributes.toolbars]]` (items whose `command` your manifest declares) are
 how the Visual editor and its toolbar register.
 
+### What the web view does with your adapter
+
+The shell side (`src/lib/editor/visual/`) is a client of the contract above and
+adds nothing format-specific, so a new adapter needs no web code:
+
+* It opens one session per visual document (`visual.open` with the editor text),
+  mirrors **every** CodeMirror transaction (typed, remote or undone) with
+  `visual.edit`, batched to one message per animation frame, and asks
+  `visual.blocks` for the viewport plus a margin when the returned `dirty`
+  range meets it. Tables older than the local document are dropped; the old
+  decorations are kept and mapped through changes until the new table arrives.
+* It decodes the span table defensively (magic, version, exact length, bounds,
+  order, laminar nesting). A malformed table or any failed call degrades to
+  plain source, never to an error in the view. `visual.desync` and
+  `visual.no-session` make it rebuild the session (`visual.reset`, then
+  `visual.open`).
+* Rendering is by `kind`: `heading` (aux = level), `strong`, `emph`, `strike`,
+  `code`, `code-block`, `list-item` (aux = bullet, ordered, task open, task
+  done), `link`, `image` (aux 1 = figure, attr = source path), `quote`, `math`
+  (aux 1 = display, attr = `latex` or `typst`), `frontmatter`, `rule`; `opaque`,
+  `comment`, `ref`, `label`, `table` and your own kinds (1024+) are styled
+  source. `marker` children are hidden unless the selection touches the
+  construct (or, for headings, list items and quotes, the marker's line).
+* Toolbar buttons are offered for the commands in `visual.command-state`; an
+  adapter that does not list `strike` simply has no Strikethrough button.
+  Typst-like formats that implement `figure` get "Insert figure" in place of
+  "Insert image". Every button calls `visual.run-command` and dispatches the
+  plan unchanged as one transaction, so a plan must fit the document the
+  session holds (the web view refuses one that does not).
+
 ## The WIT world
 
 Plugins speak the `manang:plugin@0.2.0` WIT package
