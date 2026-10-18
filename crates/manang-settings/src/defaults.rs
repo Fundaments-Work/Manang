@@ -132,6 +132,15 @@ pub fn definitions() -> Vec<SettingDef> {
             "Use Vim-style modal editing. Off keeps the editor modeless.",
         ),
         def(
+            "editor.visual-default",
+            SettingType::List {
+                item: Box::new(SettingType::String),
+            },
+            json!([]),
+            User,
+            "File types that open in the Visual editor: `markdown`, `typst`. Empty opens every file as source.",
+        ),
+        def(
             "preview.auto-compile",
             SettingType::Bool,
             json!(true),
