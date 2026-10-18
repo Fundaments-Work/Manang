@@ -39,6 +39,14 @@ export default ts.config(
     },
   },
   {
-    ignores: [".claude/", "dist/", "node_modules/", "src-tauri/", "target/", "artifacts/"],
+    ignores: [
+      ".claude/",
+      "relay/worker/",
+      "dist/",
+      "node_modules/",
+      "src-tauri/",
+      "target/",
+      "artifacts/",
+    ],
   },
 );
