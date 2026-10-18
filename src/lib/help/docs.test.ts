@@ -1,11 +1,16 @@
+import { readdirSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { ALL_DOCS, DOCS_BY_SLUG, getDoc, searchDocs } from "./docs";
 
 describe("help docs", () => {
-  it("bundles all 15 markdown files from docs/user/*.md", () => {
-    expect(ALL_DOCS.length).toBe(15);
-    expect(DOCS_BY_SLUG.size).toBe(15);
+  it("bundles every markdown file from docs/user/*.md", () => {
+    const onDisk = readdirSync(new URL("../../../docs/user", import.meta.url)).filter(
+      (name) => name.endsWith(".md"),
+    ).length;
+    expect(ALL_DOCS.length).toBe(onDisk);
+    expect(DOCS_BY_SLUG.size).toBe(onDisk);
     expect(ALL_DOCS[0]?.slug).toBe("index");
     expect(ALL_DOCS[0]?.title).toContain("User Guide");
   });
