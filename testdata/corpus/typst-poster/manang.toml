@@ -1,0 +1,4 @@
+[project]
+engine = "typst"
+name = "Scientific Conference Poster"
+main = "main.typ"

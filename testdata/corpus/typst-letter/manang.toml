@@ -1,0 +1,4 @@
+[project]
+engine = "typst"
+name = "Academic Recommendation Letter"
+main = "main.typ"
