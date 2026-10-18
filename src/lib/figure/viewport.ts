@@ -61,7 +61,7 @@ export function stepZoom(zoom: number, direction: 1 | -1): number {
 
 /** A wheel delta (pixels) as a zoom factor; trackpad pinches send small deltas. */
 export function wheelZoomFactor(deltaY: number): number {
-  return Math.exp(-Math.max(Math.min(deltaY, 100), -100) * 0.0025 * 4);
+  return Math.exp(-Math.max(Math.min(deltaY, 100), -100) * 0.0025);
 }
 
 /**

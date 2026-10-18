@@ -507,6 +507,14 @@ export function nodeVisual(
   }
 }
 
+/** The clean outline of a box kind (the canvas's drawing preview). */
+export function sketchFor(kind: string, r: Rect): string {
+  const rng = Rng.forId("preview");
+  if (kind === "diamond") return polygon(diamondPoints(r), 0, rng);
+  if (kind === "ellipse") return ellipse(r, 0, rng);
+  return polygon(rectPoints(r), 0, rng);
+}
+
 /** The export region: a frame, else the page grown to hold everything. */
 export function exportRegion(scene: FigureScene, frame?: string): Rect {
   const f = frame === undefined ? undefined : scene.nodes.find((n) => n.id === frame);
