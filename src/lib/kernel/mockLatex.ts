@@ -75,7 +75,17 @@ function bibKeys(fs: MockProjectFs): Set<string> {
 interface Expansion {
   readonly lines: Row[];
   readonly diagnostics: LatexDiagnostic[];
+  /** Packages named by `\\usepackage` so far (the preamble comes first). */
+  readonly loaded?: Set<string>;
 }
+
+/** The few commands whose package the demo can tell is missing (see `crates/manang-heal`). */
+const NEEDS_PACKAGE: readonly (readonly [RegExp, string])[] = [
+  [/\\(includegraphics|rotatebox|scalebox|resizebox)\b/, "graphicx"],
+  [/\\(textcolor|colorbox)\b/, "xcolor"],
+  [/\\(toprule|midrule|bottomrule)\b/, "booktabs"],
+  [/\\(multirow)\b/, "multirow"],
+];
 
 /** Flatten `\input` / `\include`; diagnostics name files relative to `baseDir`. */
 function expand(
@@ -95,6 +105,22 @@ function expand(
   source.split("\n").forEach((raw, index) => {
     const line = raw.replace(/(^|[^\\])%.*$/, "$1");
     const lineNo = index + 1;
+    for (const m of line.matchAll(/\\usepackage\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)) {
+      for (const name of (m[1] ?? "").split(",")) out.loaded?.add(name.trim());
+    }
+    if (out.loaded !== undefined) {
+      for (const [pattern, pkg] of NEEDS_PACKAGE) {
+        const found = pattern.exec(line);
+        if (found === null || out.loaded.has(pkg)) continue;
+        out.diagnostics.push({
+          severity: "error",
+          message: `Undefined control sequence: \\${found[1] ?? ""}`,
+          file: shown,
+          line: lineNo,
+          hint: `\`\\${found[1] ?? ""}\` comes from the \`${pkg}\` package: add \`\\usepackage{${pkg}}\` to the preamble`,
+        });
+      }
+    }
     for (const m of line.matchAll(/\\(?:input|include)\s*\{([^}]+)\}/g)) {
       const name = (m[1] ?? "").trim();
       const file = name.endsWith(".tex") ? name : `${name}.tex`;
@@ -299,7 +325,7 @@ export function latexPlugin(
             throw { message: `[io] ${main}: No such file or directory (os error 2)` };
           }
           const base = dirOf(entry);
-          const out: Expansion = { lines: [], diagnostics: [] };
+          const out: Expansion = { lines: [], diagnostics: [], loaded: new Set() };
           expand(fs, entry, base, bibKeys(fs), out, 0);
           const ok = out.diagnostics.every((d) => d.severity !== "error");
           let pages: number | null = null;

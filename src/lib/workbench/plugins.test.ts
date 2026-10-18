@@ -15,6 +15,7 @@ describe("plugins panel model", () => {
       "editor",
       "figure",
       "git",
+      "heal",
       "latex",
       "live",
       "markdown",
@@ -40,6 +41,10 @@ describe("plugins panel model", () => {
     expect(groups.find((g) => g.name === "git")?.commands.length).toBe(27);
     expect(groups.find((g) => g.name === "settings")?.commands.length).toBe(14);
     expect(groups.find((g) => g.name === "writing")?.commands.length).toBe(14);
+    expect(groups.find((g) => g.name === "heal")?.commands.map((c) => c.id)).toEqual([
+      "heal.configure",
+      "heal.suggest",
+    ]);
     expect(groups.find((g) => g.name === "search")?.commands.map((c) => c.id)).toEqual([
       "search.cancel",
       "search.files",
@@ -57,11 +62,11 @@ describe("plugins panel model", () => {
       "typst.render",
       "typst.svg-to-pdf",
     ]);
-    // agent 21, citations 7, diagram 5, editor 8, figure 21, git 27, latex 4, live 11,
-    // markdown 4, plugins 10, project 30, recovery 4, search 6, settings 14, typst 7,
-    // writing 14.
+    // agent 21, citations 7, diagram 5, editor 8, figure 21, git 27, heal 2, latex 4,
+    // live 11, markdown 4, plugins 10, project 30, recovery 4, search 6, settings 14,
+    // typst 7, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      21 + 7 + 5 + 8 + 21 + 27 + 4 + 11 + 4 + 10 + 30 + 4 + 6 + 14 + 7 + 14,
+      21 + 7 + 5 + 8 + 21 + 27 + 2 + 4 + 11 + 4 + 10 + 30 + 4 + 6 + 14 + 7 + 14,
     );
   });
 

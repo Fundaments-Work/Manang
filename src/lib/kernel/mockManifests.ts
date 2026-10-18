@@ -189,6 +189,34 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     description: "Git status, diffs, history and safe write operations",
     permissions: { filesystem: ["write:project"] },
   },
+  heal: {
+    description:
+      "Self-healing: deterministic one-click fixes for small compile errors (a missing package, an unclosed delimiter)",
+    permissions: {},
+    settingsContexts: ["document"],
+    settings: [
+      {
+        id: "heal.enabled",
+        type: "bool",
+        default: true,
+        title: "Offer one-click fixes",
+        description:
+          "Show a Fix button on errors that have a mechanical fix: a missing package, an unclosed delimiter.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "heal.auto-apply",
+        type: "bool",
+        default: false,
+        title: "Apply certain fixes on save",
+        description:
+          "When you save, apply the fixes that have exactly one reading (such as a missing \\usepackage) and say so. Off by default.",
+        scope: "user",
+        "requires-restart": false,
+      },
+    ],
+  },
   latex: {
     description:
       "LaTeX compilation with the system TeX (optional Tectonic), structured diagnostics and SyncTeX",
