@@ -5565,6 +5565,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "manang-citations",
+ "manang-diagram",
  "manang-editor",
  "manang-figure",
  "manang-git",
