@@ -31,6 +31,7 @@ export const DEFAULT_BINDINGS: readonly DefaultBinding[] = [
   { command: "view.files", key: "Mod+Shift+E" },
   { command: "view.search", key: "Mod+Shift+F" },
   { command: "view.plugins", key: "Mod+Shift+X" },
+  { command: "agent.toggle", key: "Mod+Shift+A" },
   { command: "view.settings", key: "Mod+," },
   { command: "view.toggle-side", key: "Mod+B" },
   { command: "view.toggle-panel", key: "Mod+J" },

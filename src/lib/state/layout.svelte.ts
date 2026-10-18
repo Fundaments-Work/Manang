@@ -8,6 +8,8 @@
 
 import {
   DEFAULT_LAYOUT,
+  agentOverlays,
+  clampAgent,
   clampPanel,
   clampSide,
   clampSplit,
@@ -49,6 +51,12 @@ export class LayoutState {
   get panelTab(): PanelTab {
     return this.#model.panelTab;
   }
+  get agentOpen(): boolean {
+    return this.#model.agentOpen;
+  }
+  get agentWidth(): number {
+    return this.#model.agentWidth;
+  }
   get preview(): PreviewMode {
     return this.#model.preview;
   }
@@ -63,6 +71,8 @@ export class LayoutState {
   readonly effectivePreview: PreviewMode = $derived(
     effectivePreview(this.#model.preview, this.width),
   );
+  /** Under 900px the Agent column floats over the editor. */
+  readonly agentOverlay: boolean = $derived(agentOverlays(this.width));
   readonly narrow: boolean = $derived(isNarrow(this.width));
 
   /** Restore the persisted layout. Call once at start-up. */
@@ -87,6 +97,18 @@ export class LayoutState {
   }
   setSideWidth(width: number): void {
     this.#set({ ...this.#model, sideWidth: clampSide(width) });
+  }
+  toggleAgent(): void {
+    this.#set({ ...this.#model, agentOpen: !this.#model.agentOpen });
+  }
+  showAgent(): void {
+    if (!this.#model.agentOpen) this.#set({ ...this.#model, agentOpen: true });
+  }
+  closeAgent(): void {
+    this.#set({ ...this.#model, agentOpen: false });
+  }
+  setAgentWidth(width: number): void {
+    this.#set({ ...this.#model, agentWidth: clampAgent(width) });
   }
   togglePanel(): void {
     this.#set({ ...this.#model, panelOpen: !this.#model.panelOpen });

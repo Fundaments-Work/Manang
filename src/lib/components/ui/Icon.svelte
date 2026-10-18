@@ -11,6 +11,7 @@
     figures: "M3 13l1-4 7-7 3 3-7 7z M9.5 3.5l3 3",
     references: "M6 2.5H3.5v11H6 M10 2.5h2.5v11H10 M6.5 6h3 M6.5 8.5h3 M6.5 11h3",
     plugins: "M2.5 9h5v5h-5z M8.5 9h5v5h-5z M5.5 2h5v5h-5z",
+    agent: "M2.5 2.5h11v8h-5.5l-3 3v-3h-2.5z M5.5 5.5h5 M5.5 7.5h3",
     settings: "M2 5h12 M2 11h12 M10 3v4 M5 9v4",
     close: "M3.5 3.5l9 9 M12.5 3.5l-9 9",
     plus: "M8 3v10 M3 8h10",
