@@ -2,12 +2,15 @@
   import { untrack } from "svelte";
 
   import Icon from "$lib/components/ui/Icon.svelte";
+  import { formatShortcut } from "$lib/commands/shortcut";
   import { exportPdf } from "$lib/state/actions";
   import { build, formatMs } from "$lib/state/build.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { preview } from "$lib/state/preview.svelte";
+  import { jumpToSource } from "$lib/state/sourceJump";
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
+  import { detectPlatform } from "$lib/util/keyboard";
   import { countLabel } from "$lib/workbench/problems";
 
   /**
@@ -68,22 +71,60 @@
   const exportable = $derived(
     kind !== "html" && (build.status === "ok" || build.status === "failed"),
   );
+  const exportHint = formatShortcut({ key: "e", mod: true }, detectPlatform());
   const pages = $derived(preview.pageCount);
   const banner = $derived(
     build.failure !== null ? build.failure.title : countLabel(build.counts),
   );
+
+  /* Source and preview (the rendered page area). */
+
+  let markEl: HTMLDivElement | undefined = $state();
+
+  /** The mark on the shown SVG page, as percentages of the page box. */
+  const pageMark = $derived.by(() => {
+    const mark = preview.mark;
+    const size = preview.pageSize;
+    if (mark === null || size === null || mark.page !== preview.page) return null;
+    return {
+      id: mark.id,
+      left: (mark.x / size.w) * 100,
+      top: (mark.y / size.h) * 100,
+      width: (mark.width / size.w) * 100,
+      height: (mark.height / size.h) * 100,
+    };
+  });
+
+  $effect(() => {
+    const el = markEl;
+    if (el !== undefined && pageMark !== null) el.scrollIntoView({ block: "center" });
+  });
+
+  /** Ctrl+click (Cmd+click) on an SVG page: map the point to page points. */
+  function onPageClick(event: MouseEvent): void {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const size = preview.pageSize;
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    if (size === null || rect.width === 0 || rect.height === 0) return;
+    event.preventDefault();
+    void jumpToSource(
+      preview.page,
+      ((event.clientX - rect.left) / rect.width) * size.w,
+      ((event.clientY - rect.top) / rect.height) * size.h,
+    );
+  }
 </script>
 
 <section class="flex h-full min-h-0 min-w-0 flex-col bg-bg" aria-label="Preview">
   <div
-    class="flex h-9 shrink-0 items-center gap-0.5 border-b border-line px-2"
+    class="@container flex h-9 shrink-0 items-center gap-0.5 border-b border-line px-2"
     role="toolbar"
     aria-label="Preview controls"
   >
     {#if paged}
       <button
         type="button"
-        class="mng-icon-btn"
+        class="mng-icon-btn @max-[240px]:hidden"
         aria-label="Previous page"
         disabled={preview.page <= 0 || pages === 0}
         onclick={() => preview.go(preview.page - 1)}
@@ -92,49 +133,59 @@
       </button>
       <button
         type="button"
-        class="mng-icon-btn"
+        class="mng-icon-btn @max-[240px]:hidden"
         aria-label="Next page"
         disabled={preview.page >= pages - 1}
         onclick={() => preview.go(preview.page + 1)}
       >
         <Icon name="arrowDown" size={14} />
       </button>
-      <span class="px-1.5 font-mono text-[11px] text-text-60" aria-live="polite">
+      <span
+        class="px-1.5 font-mono text-[11px] whitespace-nowrap text-text-60 @max-[280px]:hidden"
+        aria-live="polite"
+      >
         {#if pages > 0}Page {preview.page + 1} of {pages}{:else}No pages{/if}
       </span>
 
-      <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
+      <!-- Zoom gives way first in a narrow pane, so the layout buttons at the
+           end always stay on screen; Maximise gives the room back. -->
+      <div class="flex shrink-0 items-center gap-0.5 @max-[400px]:hidden">
+        <span class="mx-1.5 h-4 w-px bg-line" aria-hidden="true"></span>
 
-      <button
-        type="button"
-        class="mng-icon-btn"
-        aria-label="Zoom out"
-        disabled={(preview.zoom ?? 1) <= 0.5}
-        onclick={() => preview.zoomOut()}
-      >
-        <Icon name="clear" size={14} />
-      </button>
-      <button
-        type="button"
-        class="mng-btn h-6 min-w-12 justify-center border-transparent bg-transparent px-1.5 font-mono text-[11px] text-text-60"
-        aria-label={preview.zoom === null
-          ? "Zoom: fit width. Select to reset"
-          : `Zoom ${Math.round(preview.zoom * 100)} percent. Select to fit width`}
-        onclick={() => preview.fit()}
-      >
-        {preview.zoom === null ? "Fit" : `${Math.round(preview.zoom * 100)}%`}
-      </button>
-      <button
-        type="button"
-        class="mng-icon-btn"
-        aria-label="Zoom in"
-        disabled={(preview.zoom ?? 1) >= 2}
-        onclick={() => preview.zoomIn()}
-      >
-        <Icon name="plus" size={14} />
-      </button>
+        <button
+          type="button"
+          class="mng-icon-btn"
+          aria-label="Zoom out"
+          disabled={(preview.zoom ?? 1) <= 0.5}
+          onclick={() => preview.zoomOut()}
+        >
+          <Icon name="clear" size={14} />
+        </button>
+        <button
+          type="button"
+          class="mng-btn h-6 min-w-12 justify-center border-transparent bg-transparent px-1.5 font-mono text-[11px] text-text-60"
+          aria-label={preview.zoom === null
+            ? "Zoom: fit width. Select to reset"
+            : `Zoom ${Math.round(preview.zoom * 100)} percent. Select to fit width`}
+          onclick={() => preview.fit()}
+        >
+          {preview.zoom === null ? "Fit" : `${Math.round(preview.zoom * 100)}%`}
+        </button>
+        <button
+          type="button"
+          class="mng-icon-btn"
+          aria-label="Zoom in"
+          disabled={(preview.zoom ?? 1) >= 2}
+          onclick={() => preview.zoomIn()}
+        >
+          <Icon name="plus" size={14} />
+        </button>
+      </div>
     {:else if kind === "html"}
-      <span class="px-1.5 font-mono text-[11px] text-text-60">Markdown preview</span>
+      <span
+        class="min-w-0 truncate px-1.5 font-mono text-[11px] text-text-60 @max-[240px]:hidden"
+        >Markdown preview</span
+      >
     {/if}
 
     {#if build.viaMain && build.target !== ""}
@@ -159,7 +210,7 @@
 
     <button
       type="button"
-      class="mng-icon-btn"
+      class="mng-icon-btn @max-[180px]:hidden"
       aria-label="Refresh preview"
       title="Compile now"
       disabled={build.status === "unsupported" || build.status === "unavailable"}
@@ -171,11 +222,36 @@
       type="button"
       class="mng-icon-btn"
       aria-label="Export PDF"
-      title="Export PDF"
+      title="Export PDF ({exportHint})"
+      aria-keyshortcuts="Control+E"
       disabled={!exportable || preview.exporting}
       onclick={() => exportPdf()}
     >
       <Icon name="export" size={14} />
+    </button>
+
+    <span class="mx-1.5 h-4 w-px shrink-0 bg-line" aria-hidden="true"></span>
+
+    {#if !layout.narrow}
+      {@const maximised = layout.effectivePreview === "preview"}
+      <button
+        type="button"
+        class="mng-icon-btn"
+        aria-label={maximised ? "Restore split" : "Maximise preview"}
+        title={maximised ? "Restore split" : "Maximise preview"}
+        onclick={() => layout.toggleMaximisedPreview()}
+      >
+        <Icon name={maximised ? "split" : "maximise"} size={14} />
+      </button>
+    {/if}
+    <button
+      type="button"
+      class="mng-icon-btn"
+      aria-label="Close preview"
+      title="Close preview"
+      onclick={() => layout.closePreview()}
+    >
+      <Icon name="close" size={14} />
     </button>
   </div>
 
@@ -198,6 +274,9 @@
           onpage={(page: number) => (preview.page = page)}
           onpages={(count: number) => (preview.pdfPages = count)}
           onerror={(message: string) => (preview.error = message)}
+          mark={preview.mark}
+          onsourceclick={(page: number, x: number, y: number) =>
+            void jumpToSource(page, x, y)}
         />
       {:catch}
         <p class="m-0 px-6 pt-16 text-center text-xs text-text-60" role="alert">
@@ -219,12 +298,31 @@
       </div>
     {:else if shown}
       <div class="flex min-h-full justify-center px-6 py-6">
-        <img
-          class="block h-auto self-start border border-line bg-paper"
+        <!-- Ctrl+click (Cmd+click) opens the source; plain clicks do nothing. -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <div
+          class="relative self-start"
           style={widthStyle}
-          src={preview.url}
-          alt="Page {preview.page + 1} of {build.pages}"
-        />
+          title="Ctrl+click to open the source here"
+          onclick={onPageClick}
+        >
+          <img
+            class="block h-auto w-full border border-line bg-paper"
+            src={preview.url}
+            alt="Page {preview.page + 1} of {build.pages}"
+          />
+          {#if pageMark !== null}
+            {#key pageMark.id}
+              <div
+                bind:this={markEl}
+                class="mng-preview-mark pointer-events-none absolute"
+                style="left: {pageMark.left}%; top: {pageMark.top}%; width: {pageMark.width}%; height: {pageMark.height}%"
+                data-preview-mark
+                aria-hidden="true"
+              ></div>
+            {/key}
+          {/if}
+        </div>
       </div>
     {:else if build.failure !== null}
       <div class="mx-auto max-w-sm px-6 pt-16 text-xs leading-relaxed text-text-60">
@@ -304,6 +402,26 @@
 </section>
 
 <style>
+  /* "Show in preview": a 1px acid-lime outline that fades. Square, flat. */
+  :global(.mng-preview-mark) {
+    border: var(--hairline, 1px) solid var(--mng-accent);
+    animation: mng-preview-mark 1600ms ease-in forwards;
+  }
+  @keyframes mng-preview-mark {
+    0%,
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.mng-preview-mark) {
+      animation: none;
+    }
+  }
+
   /* Typography for the Markdown page: DM Sans 400 for text, DM Mono for code,
      size and colour (never weight) carry the hierarchy. Tokens only. */
   .mng-paper-prose {

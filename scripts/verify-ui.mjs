@@ -801,10 +801,13 @@ async function main() {
     );
     await click(page, 'header input[aria-label="Search settings and plugins"]');
     await insertText(page, "engine");
+    // `compile.engine` and `latex.engine` match by name; the LaTeX plugin also
+    // matches as a whole (its `latex.status` command is "LaTeX engines
+    // available"), so all of its settings stay listed.
     await expectEventually(
       page,
       "searching narrows settings and plugins together",
-      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.backend,latex.engine"; })()`,
+      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.backend,latex.engine,latex.latexmk,latex.timeout-seconds"; })()`,
       {
         show: `[...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join()`,
       },
@@ -829,6 +832,179 @@ async function main() {
       page,
       "Escape clears the search, then closes settings",
       `!document.querySelector('section[aria-label="Settings"]')`,
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Writing and citation settings");
+    // A word for the personal dictionary, added the usual way in notes.md.
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    await page.evaluate(
+      `document.querySelector('[role="treeitem"][data-path="notes.md"]').click()`,
+    );
+    await waitFor(
+      page,
+      `document.querySelector(".cm-content")?.textContent.includes("Notes")`,
+      {
+        label: "notes.md open",
+      },
+    );
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(page, "\nrecieve");
+    const recieveFlagged = `[...document.querySelectorAll(".cm-spell")].some((e) => e.textContent === "recieve")`;
+    await waitFor(page, recieveFlagged, { label: "recieve flagged", timeout: 8000 });
+    await press(page, ".", { ctrl: true, wait: 400 });
+    await click(page, '.cm-spell-item[data-action="add-word"]');
+    await waitFor(page, `!${recieveFlagged}`, {
+      label: "recieve added",
+      timeout: 8000,
+    });
+
+    // The References output in the default style, before changing it.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="References"]',
+    );
+    const expandReference = () =>
+      page.evaluate(`(() => {
+        const b = document.querySelector('#side-panel ul[aria-label="References"] button[aria-label="Expand details"]');
+        b?.click();
+        return b !== null;
+      })()`);
+    await waitFor(
+      page,
+      `document.querySelectorAll('#side-panel ul[aria-label="References"] li').length >= 1`,
+      { label: "references listed" },
+    );
+    await expandReference();
+    await expectEventually(
+      page,
+      "References formats an entry in the configured style (APA by default)",
+      `(() => { const t = document.querySelector("[data-formatted-citation]")?.textContent ?? ""; return t.includes("(1961)") && !t.includes("[1]"); })()`,
+      { show: `document.querySelector("[data-formatted-citation]")?.textContent` },
+    );
+    check(
+      "the panel names the style instead of offering its own switch",
+      await page.evaluate(
+        `document.querySelector('[data-citation-style]')?.textContent.trim() === "APA" && ![...document.querySelectorAll("#side-panel button")].some((b) => b.textContent.trim() === "IEEE")`,
+      ),
+    );
+
+    // Settings: the dictionary list, with the word in it.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
+    );
+    await expectEventually(
+      page,
+      "the Writing section lists the personal dictionary",
+      `!!document.querySelector('[data-plugin="writing"] [data-dictionary] [data-word="recieve"]')`,
+    );
+    check(
+      "the spelling language offers the dictionaries the plugin reports, by name",
+      await page.evaluate(
+        `(() => { const o = [...document.querySelectorAll('[data-setting="writing.spell-language"] option')].map((x) => x.textContent.trim()); return o.includes("American English") && o.includes("British English"); })()`,
+      ),
+    );
+    await page.evaluate(
+      `document.querySelector('[data-setting="writing.spell-language"]').scrollIntoView({ block: "start" })`,
+    );
+    await shoot(page, "07b-settings-dictionary");
+    await page.evaluate(`(() => {
+      const b = document.querySelector('[data-word="recieve"] button[aria-label^="Remove"]');
+      b.scrollIntoView({ block: "center" });
+      b.click();
+    })()`);
+    await expectEventually(
+      page,
+      "removing a word empties the list and shows the empty state",
+      `!document.querySelector('[data-word="recieve"]') && !!document.querySelector("[data-dictionary-empty]")`,
+    );
+    await clickText(page, '[data-plugin="citations"] [role="radio"]', "Numeric (IEEE)");
+    await expectEventually(
+      page,
+      "choosing a citation style in Settings saves it",
+      `document.querySelector('[data-setting="citations.style"]').innerText.includes("Changed")`,
+    );
+    await press(page, "Escape");
+    if (await exists(page, 'section[aria-label="Settings"]'))
+      await press(page, "Escape");
+    await waitFor(page, `!document.querySelector('section[aria-label="Settings"]')`, {
+      label: "settings closed",
+    });
+
+    await expectEventually(
+      page,
+      "the removed word is flagged again in the editor",
+      recieveFlagged,
+      { timeout: 8000 },
+    );
+    if (!(await exists(page, "[data-formatted-citation]"))) await expandReference();
+    await expectEventually(
+      page,
+      "References re-formats in the new style",
+      `(() => { const t = document.querySelector("[data-formatted-citation]")?.textContent ?? ""; return t.includes("[1]") && document.querySelector("[data-citation-style]")?.dataset.citationStyle === "numeric"; })()`,
+      { show: `document.querySelector("[data-formatted-citation]")?.textContent` },
+    );
+
+    // Convert to Typst from the palette.
+    await click(page, '[role="tab"][data-tab="notes.md"]');
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "convert to typst");
+    check(
+      "the palette offers Convert to Typst for a Markdown tab",
+      await page.evaluate(
+        `document.querySelector('[role="option"][aria-selected="true"]')?.textContent.includes("Convert to Typst")`,
+      ),
+    );
+    await press(page, "Enter", { wait: 400 });
+    await expectEventually(
+      page,
+      "converting writes notes.typ and opens it",
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "notes.typ" && document.querySelector(".cm-content")?.textContent.includes("= Notes")`,
+    );
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    await expectEventually(
+      page,
+      "the Typst file appears in the tree next to the Markdown one",
+      `!!document.querySelector('[role="treeitem"][data-path="notes.typ"]')`,
+    );
+    await click(page, '[role="tab"][data-tab="notes.md"]');
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "convert to typst");
+    await press(page, "Enter", { wait: 400 });
+    await expectEventually(
+      page,
+      "converting again asks before replacing notes.typ",
+      `document.querySelector('[role="alertdialog"]')?.innerText.includes("Replace notes.typ")`,
+    );
+    await clickText(page, '[role="alertdialog"] button', "Replace");
+    await expectEventually(
+      page,
+      "replacing opens the new notes.typ",
+      `!document.querySelector('[role="alertdialog"]') && document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "notes.typ"`,
+    );
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "convert to typst");
+    check(
+      "Convert to Typst is not offered for a Typst tab",
+      !(await page.evaluate(
+        `[...document.querySelectorAll('[role="dialog"] [role="option"]')].some((o) => o.textContent.includes("Convert to Typst"))`,
+      )),
+    );
+    await press(page, "Escape");
+
+    // Leave notes.md as it was, and close what this section opened.
+    await click(page, '[role="tab"][data-tab="notes.md"]');
+    await focusEditor(page);
+    await press(page, "z", { ctrl: true });
+    await click(page, '[role="tab"][data-tab="notes.typ"]', "middle");
+    await click(page, '[role="tab"][data-tab="notes.md"]', "middle");
+    await noStrayEdits(page, "after converting");
+    // The side panel shows References again, as before this section.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="References"]',
     );
 
     /* ------------------------------------------------------------------ */
@@ -1177,19 +1353,34 @@ async function main() {
       ),
     );
     await click(page, 'button[aria-label="Refresh preview"]');
-    // Layout switch.
-    await click(page, '[role="radio"][data-mode="editor"]');
-    check(
-      "Editor layout hides the preview",
-      !(await exists(page, 'section[aria-label="Preview"]')),
+    // Layout switch, from the preview's own header.
+    await click(
+      page,
+      'section[aria-label="Preview"] button[aria-label="Close preview"]',
     );
-    await click(page, '[role="radio"][data-mode="preview"]');
     check(
-      "Preview layout hides the editor",
+      "Close preview leaves the editor alone",
+      !(await exists(page, 'section[aria-label="Preview"]')) &&
+        (await exists(page, ".cm-editor")),
+    );
+    await click(page, '[role="tablist"] ~ * button[aria-label="Show preview"]');
+    await waitFor(
+      page,
+      `document.querySelector('section[aria-label="Preview"]') !== null`,
+    );
+    await click(
+      page,
+      'section[aria-label="Preview"] button[aria-label="Maximise preview"]',
+    );
+    check(
+      "Maximise preview hides the editor",
       !(await exists(page, ".cm-editor")) &&
         (await exists(page, 'section[aria-label="Preview"]')),
     );
-    await click(page, '[role="radio"][data-mode="split"]');
+    await click(
+      page,
+      'section[aria-label="Preview"] button[aria-label="Restore split"]',
+    );
     await waitFor(page, `document.querySelector(".cm-editor") !== null`);
 
     // Resize divider by keyboard.
@@ -1258,6 +1449,26 @@ async function main() {
       "export is listed once",
       await page.evaluate(
         `[...document.querySelectorAll('[role="dialog"] [role="option"]')].filter((o) => o.textContent.includes("Export PDF")).length === 1`,
+      ),
+    );
+    await press(page, "Escape");
+
+    // The layout and zen live in the palette now that the top bar has no buttons.
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "preview");
+    check(
+      "the palette offers split, editor only and preview only",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('[role="dialog"]').innerText; return t.includes("editor and preview side by side") && t.includes("Preview: editor only") && t.includes("Preview: preview only"); })()`,
+      ),
+    );
+    await press(page, "Escape");
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "zen");
+    check(
+      "the palette offers zen with its shortcut",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('[role="dialog"]').innerText; return t.includes("Enter zen mode") && /(Ctrl|⌘)\\+?\\\\/.test(t); })()`,
       ),
     );
     await press(page, "Escape");
@@ -1716,6 +1927,83 @@ async function main() {
     await noStrayEdits(page, "after opening any file");
 
     /* ------------------------------------------------------------------ */
+    section("Source and preview");
+    await clickText(page, '[role="tab"]', "main.typ");
+    await waitFor(page, `document.querySelector('img[alt^="Page 1"]') !== null`, {
+      label: "the Typst page",
+    });
+    const caretLine = () =>
+      page.evaluate(
+        `Number(document.querySelector('footer[aria-label="Status"]').innerText.match(/Ln (\\d+)/)?.[1] ?? 0)`,
+      );
+    // Caret a few lines into main.typ (past the `#set` line), then "Show in preview".
+    await focusEditor(page);
+    await press(page, "Home", { ctrl: true });
+    for (let i = 0; i < 10; i += 1) await press(page, "ArrowDown", { wait: 30 });
+    const sourceLine = await caretLine();
+    await page.evaluate(
+      `document.querySelector('[role="region"][aria-label="Rendered page"]').scrollTop = 1e6`,
+    );
+    await press(page, "j", { ctrl: true, alt: true, wait: 500 });
+    const markRect = await rect(page, "[data-preview-mark]");
+    const region = await rect(page, '[role="region"][aria-label="Rendered page"]');
+    check(
+      '"Show in preview" (Ctrl+Alt+J) outlines the caret\'s text on the page',
+      markRect !== null && sourceLine > 2,
+      `line ${sourceLine}`,
+    );
+    check(
+      "the preview scrolls the mark into view",
+      markRect !== null &&
+        region !== null &&
+        markRect.top >= region.top &&
+        markRect.bottom <= region.bottom,
+      JSON.stringify({ markRect, region }),
+    );
+    check(
+      "the mark is a 1px acid-lime outline, square, without a shadow",
+      await page.evaluate(
+        `(() => { const s = getComputedStyle(document.querySelector("[data-preview-mark]")); return s.borderTopWidth === "1px" && s.borderTopColor === "rgb(198, 241, 53)" && s.borderRadius === "0px" && s.boxShadow === "none"; })()`,
+      ),
+    );
+    await shoot(page, "18-show-in-preview");
+
+    // Move the caret away, then a plain click on the page leaves it there.
+    await press(page, "Home", { ctrl: true });
+    const target = markRect ?? { x: 0, y: 0 };
+    await mouse(page, "mouseMoved", target.x, target.y);
+    await mouse(page, "mousePressed", target.x, target.y);
+    await mouse(page, "mouseReleased", target.x, target.y);
+    await sleep(300);
+    check("a plain click on the page keeps the caret", (await caretLine()) === 1);
+
+    // Ctrl+click on the same spot opens the source line there.
+    for (const type of ["mousePressed", "mouseReleased"]) {
+      await page.send("Input.dispatchMouseEvent", {
+        type,
+        x: target.x,
+        y: target.y,
+        button: "left",
+        buttons: 1,
+        clickCount: 1,
+        modifiers: 2,
+      });
+    }
+    await expectEventually(
+      page,
+      "Ctrl+click on the rendered page moves the caret to the source line",
+      `/Ln ${sourceLine},/.test(document.querySelector('footer[aria-label="Status"]').innerText) && document.querySelector(".cm-line[data-source-flash]") !== null`,
+      { timeout: 4000 },
+    );
+    check(
+      "the line it lands on is highlighted briefly",
+      await page.evaluate(
+        `document.querySelector(".cm-line[data-source-flash]")?.innerText.trim().length > 0`,
+      ),
+    );
+    await shoot(page, "18-source-jump");
+
+    /* ------------------------------------------------------------------ */
     section("Zen mode");
     await clickText(page, '[role="tab"]', "main.typ");
     await sleep(500);
@@ -1738,6 +2026,164 @@ async function main() {
       "Esc brings the workbench back",
       (await exists(page, "header")) &&
         (await exists(page, 'footer[aria-label="Status"]')),
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Editor chrome");
+    // main.typ is active and in split, so the preview header is on screen.
+    // Its last button must stay inside the pane at every width.
+    const headerFits = `(() => { const s = document.querySelector('section[aria-label="Preview"]'); const bar = s?.querySelector('[role="toolbar"]'); const close = bar?.querySelector('button[aria-label="Close preview"]'); if (!close) return false; const r = close.getBoundingClientRect(); return r.width > 0 && r.right <= s.getBoundingClientRect().right && bar.scrollWidth <= bar.clientWidth; })()`;
+    const WINDOW_BUTTONS = '["Minimise", "Maximise", "Restore", "Close window"]';
+    check(
+      "the workbench top bar has no buttons but Home and the window controls",
+      await page.evaluate(
+        `[...document.querySelectorAll("header button")].every((b) => b.getAttribute("aria-label") === "Home" || ${WINDOW_BUTTONS}.includes(b.getAttribute("aria-label")))`,
+      ),
+    );
+    check(
+      "the top bar has no layout, Export PDF or Zen controls",
+      await page.evaluate(
+        `!document.querySelector('header [role="radiogroup"]') && !/Export PDF|Zen|Split/.test(document.querySelector("header").innerText)`,
+      ),
+    );
+    check(
+      "the top bar is still the window's drag region at its height",
+      await page.evaluate(
+        `(() => { const h = document.querySelector("header"); return h.hasAttribute("data-tauri-drag-region") && Math.round(h.getBoundingClientRect().height) === 40; })()`,
+      ),
+    );
+    check(
+      "Export PDF appears once on screen, in the preview header",
+      await page.evaluate(
+        `document.querySelectorAll('button[aria-label="Export PDF"]').length === 1 && !!document.querySelector('section[aria-label="Preview"] [role="toolbar"] button[aria-label="Export PDF"]')`,
+      ),
+    );
+    check(
+      "Show preview is absent while the preview is visible",
+      !(await exists(page, 'button[aria-label="Show preview"]')),
+    );
+    check(
+      "the preview header ends with Maximise and Close",
+      await page.evaluate(
+        `(() => { const b = [...document.querySelectorAll('section[aria-label="Preview"] [role="toolbar"] button')].map((x) => x.getAttribute("aria-label")); return b.slice(-2).join() === "Maximise preview,Close preview"; })()`,
+      ),
+    );
+    check(
+      "at 1280px with the side panel open the header fits and keeps zoom",
+      (await page.evaluate(headerFits)) &&
+        (await page.evaluate(
+          `(() => { const b = document.querySelector('section[aria-label="Preview"] button[aria-label="Zoom in"]'); return !!b && b.getBoundingClientRect().width > 0; })()`,
+        )),
+    );
+    await shoot(page, "18b-preview-header");
+    await click(page, 'button[aria-label="Maximise preview"]');
+    check(
+      "Maximise shows the preview alone and offers Restore split",
+      !(await exists(page, ".cm-editor")) &&
+        (await exists(page, 'button[aria-label="Restore split"]')),
+    );
+    await click(page, 'button[aria-label="Restore split"]');
+    await waitFor(page, `document.querySelector(".cm-editor") !== null`);
+    check(
+      "Restore split brings the editor back beside the preview",
+      await exists(page, 'section[aria-label="Preview"]'),
+    );
+    await click(page, 'button[aria-label="Close preview"]');
+    check(
+      "Close preview shows the editor alone",
+      !(await exists(page, 'section[aria-label="Preview"]')) &&
+        (await exists(page, ".cm-editor")),
+    );
+    check(
+      "Show preview appears at the end of the tab strip once the preview is closed",
+      await page.evaluate(
+        `(() => { const b = document.querySelector('button[aria-label="Show preview"]'); const strip = document.querySelector('[role="tablist"]')?.parentElement; if (!b || !strip) return false; return strip.contains(b) && Math.abs(b.getBoundingClientRect().right - strip.getBoundingClientRect().right) < 12; })()`,
+      ),
+    );
+    await shoot(page, "18c-preview-closed");
+    await click(page, 'button[aria-label="Show preview"]');
+    await waitFor(
+      page,
+      `document.querySelector('section[aria-label="Preview"]') !== null`,
+    );
+    check(
+      "Show preview brings back the split",
+      (await exists(page, ".cm-editor")) &&
+        !(await exists(page, 'button[aria-label="Show preview"]')),
+    );
+    await press(page, "p", { ctrl: true, wait: 300 });
+    await insertText(page, "references.bib");
+    await press(page, "Enter", { wait: 600 });
+    await waitFor(
+      page,
+      `document.querySelector('button[aria-label="Close preview"]') !== null`,
+      {
+        timeout: 8000,
+      },
+    );
+    await click(page, 'button[aria-label="Close preview"]');
+    check(
+      "a file previewed through the main file can show its preview again",
+      await exists(page, 'button[aria-label="Show preview"]'),
+    );
+    await click(page, 'button[aria-label="Show preview"]');
+    await clickText(page, '[role="tab"]', "main.typ");
+    await sleep(300);
+
+    // Narrow: split cannot fit, so Show preview opens the preview alone and
+    // its Close returns to the editor.
+    await resize(page, 640, 600);
+    await sleep(300);
+    // The side panel overlays the editor here; dismiss it first.
+    if (await exists(page, "#side-panel")) await press(page, "Escape", { wait: 300 });
+    check(
+      "at 640px split falls back to the editor and Show preview is offered",
+      !(await exists(page, 'section[aria-label="Preview"]')) &&
+        (await exists(page, 'button[aria-label="Show preview"]')),
+    );
+    await click(page, 'button[aria-label="Show preview"]');
+    await waitFor(
+      page,
+      `document.querySelector('section[aria-label="Preview"]') !== null`,
+    );
+    check(
+      "in a narrow window Show preview shows the preview alone, without Maximise",
+      !(await exists(page, ".cm-editor")) &&
+        !(await exists(page, 'button[aria-label="Maximise preview"]')) &&
+        !(await exists(page, 'button[aria-label="Restore split"]')),
+    );
+    check(
+      "at 640px the preview header and the page fit without overflow",
+      await page.evaluate(
+        `(() => { const bar = document.querySelector('section[aria-label="Preview"] [role="toolbar"]'); const close = bar?.querySelector('button[aria-label="Close preview"]'); if (!close) return false; const r = close.getBoundingClientRect(); return document.documentElement.scrollWidth <= window.innerWidth && bar.scrollWidth <= bar.clientWidth && r.right <= window.innerWidth && r.width > 0; })()`,
+      ),
+    );
+    await shoot(page, "18d-640-preview");
+    await click(page, 'button[aria-label="Close preview"]');
+    check(
+      "Close returns to the editor in a narrow window",
+      (await exists(page, ".cm-editor")) &&
+        !(await exists(page, 'section[aria-label="Preview"]')),
+    );
+    check(
+      "at 640px the tab strip and the top bar fit",
+      await page.evaluate(
+        `(() => { const strip = document.querySelector('[role="tablist"]').parentElement; const bar = document.querySelector("header"); return document.documentElement.scrollWidth <= window.innerWidth && strip.scrollWidth <= strip.clientWidth && bar.scrollWidth <= bar.clientWidth && document.querySelector('button[aria-label="Show preview"]').getBoundingClientRect().right <= window.innerWidth; })()`,
+      ),
+    );
+    await shoot(page, "18e-640-editor");
+    await resize(page, 1280, 820);
+    await sleep(300);
+    // Back to split, with the side panel open, for the sections that follow.
+    if (!(await exists(page, "#side-panel")))
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "side by side");
+    await press(page, "Enter", { wait: 300 });
+    check(
+      "the palette's split command restores the split",
+      (await exists(page, ".cm-editor")) &&
+        (await exists(page, 'section[aria-label="Preview"]')),
     );
 
     /* ------------------------------------------------------------------ */
@@ -1771,6 +2217,25 @@ async function main() {
       await page.evaluate(
         `getComputedStyle(document.querySelector("#side-panel")).position !== "absolute" && document.querySelectorAll('section[aria-label="Preview"]').length === 1`,
       ),
+    );
+    check(
+      "at 1024px the preview header keeps Close preview inside the pane",
+      await page.evaluate(headerFits),
+    );
+    // The narrowest preview: 800px wide, side panel inline, divider at its limit.
+    await resize(page, 800, 700);
+    await sleep(300);
+    await page.evaluate(
+      `document.querySelector('[role="separator"][aria-label="Resize editor and preview"]').focus()`,
+    );
+    await press(page, "End", { wait: 300 });
+    check(
+      "with the narrowest split the preview header still fits",
+      await page.evaluate(headerFits),
+    );
+    await shoot(page, "19b-narrowest-preview");
+    await page.evaluate(
+      `document.querySelector('[role="separator"][aria-label="Resize editor and preview"]').dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`,
     );
     await resize(page, 760, 700);
     await sleep(300);
@@ -1973,6 +2438,37 @@ async function main() {
       doc,
       "a chapter is compiled through main.tex",
       `document.querySelector('section[aria-label="Preview"]').innerText.includes("via main.tex")`,
+    );
+
+    // SyncTeX both ways: line 2 of the chapter to the PDF and back.
+    await focusEditor(doc);
+    await press(doc, "Home", { ctrl: true });
+    await press(doc, "ArrowDown");
+    await press(doc, "j", { ctrl: true, alt: true, wait: 600 });
+    const pdfMark = await rect(doc, "[data-pdf-viewer] [data-preview-mark]");
+    check(
+      '"Show in preview" outlines the chapter line in the PDF (SyncTeX forward)',
+      pdfMark !== null,
+    );
+    await press(doc, "Home", { ctrl: true });
+    if (pdfMark !== null) {
+      for (const type of ["mousePressed", "mouseReleased"]) {
+        await doc.send("Input.dispatchMouseEvent", {
+          type,
+          x: pdfMark.x,
+          y: pdfMark.y,
+          button: "left",
+          buttons: 1,
+          clickCount: 1,
+          modifiers: 2,
+        });
+      }
+    }
+    await expectEventually(
+      doc,
+      "Ctrl+click on the PDF opens the chapter at that line (SyncTeX reverse)",
+      `/Ln 2,/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
+      { timeout: 4000 },
     );
 
     // Saving a broken chapter reaches Problems and keeps the last good PDF.

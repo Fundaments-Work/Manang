@@ -4,7 +4,8 @@
  * A small CommonMark subset (headings, paragraphs, lists, code, emphasis, links,
  * block quotes, rules) that escapes everything else, so the Markdown preview can
  * be exercised without Rust. Result shapes mirror `crates/manang-markdown`
- * (`plugin.rs` `markdown.render-html` and `markdown.outline`, `outline.rs`).
+ * (`plugin.rs` `markdown.render-html`, `markdown.outline` and
+ * `markdown.to-typst`, `outline.rs`, `typst.rs`).
  * The real renderer sanitises raw HTML; this one never emits any.
  */
 
@@ -14,6 +15,7 @@ import type { MarkdownDiagnostic, MarkdownHeading, MarkdownRender } from "./type
 const COMMANDS: readonly (readonly [string, string])[] = [
   ["markdown.render-html", "Render Markdown to sanitized HTML"],
   ["markdown.outline", "Extract Markdown document outline"],
+  ["markdown.to-typst", "Convert Markdown to Typst markup"],
 ];
 
 function escape(text: string): string {
@@ -156,6 +158,84 @@ export function render(source: string): MarkdownRender {
   return { html: html.join("\n"), frontmatter, headings, diagnostics };
 }
 
+/** Typst text escapes, as `typst.rs` `escape_typst_text`. */
+function escapeTypst(text: string): string {
+  return text.replace(/[#$@[\]]/g, (c) => `\\${c}`);
+}
+
+/** Inline Markdown to Typst: code, strong, emphasis and links. */
+function inlineTypst(text: string): string {
+  const parts = text.split(/(`[^`]+`)/);
+  return parts
+    .map((part) => {
+      if (/^`[^`]+`$/.test(part)) return part;
+      return escapeTypst(part)
+        .replace(/\\\[([^\]]+?)\\\]\(([^)\s]+)\)/g, '#link("$2")[$1]')
+        .replace(/\*\*([^*]+)\*\*/g, "\uE000$1\uE000")
+        .replace(/\*([^*]+)\*/g, "_$1_")
+        .replace(/\uE000/g, "*");
+    })
+    .join("");
+}
+
+/**
+ * Markdown to Typst markup, for the block subset `render` knows. Frontmatter
+ * is dropped with an info diagnostic, like the real converter.
+ */
+export function toTypst(source: string): {
+  typst: string;
+  diagnostics: MarkdownDiagnostic[];
+} {
+  const { body, frontmatter } = split(source);
+  const diagnostics: MarkdownDiagnostic[] = [];
+  if (frontmatter !== null) {
+    diagnostics.push({
+      severity: "info",
+      message: "YAML frontmatter was extracted and omitted from Typst body",
+      line: 1,
+    });
+  }
+  const out: string[] = [];
+  let fence = false;
+  for (const raw of body.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (line.startsWith("```")) {
+      out.push(line);
+      fence = !fence;
+      continue;
+    }
+    if (fence) {
+      out.push(line);
+      continue;
+    }
+    const heading = /^(#{1,6})\s+(.*?)\s*#*$/.exec(line);
+    if (heading !== null) {
+      out.push(
+        `${"=".repeat((heading[1] ?? "#").length)} ${inlineTypst(heading[2] ?? "")}`,
+      );
+      continue;
+    }
+    const item = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(line);
+    if (item !== null) {
+      const marker = /\d/.test(item[2] ?? "") ? "+" : "-";
+      out.push(`${item[1] ?? ""}${marker} ${inlineTypst(item[3] ?? "")}`);
+      continue;
+    }
+    if (/^\s*([-*_])\1\1+\s*$/.test(line)) {
+      out.push("#line(length: 100%)");
+      continue;
+    }
+    const quote = /^>\s?(.*)$/.exec(line);
+    if (quote !== null) {
+      out.push(`#quote(block: true)[${inlineTypst(quote[1] ?? "")}]`);
+      continue;
+    }
+    out.push(inlineTypst(line));
+  }
+  const typst = `${out.join("\n").trim()}\n`;
+  return { typst, diagnostics };
+}
+
 export function markdownPlugin(): MockPluginFactory {
   return (): MockPlugin => ({
     name: "markdown",
@@ -170,6 +250,11 @@ export function markdownPlugin(): MockPluginFactory {
         const source = args["source"];
         if (typeof source !== "string") throw { message: "`source` must be a string" };
         return { headings: render(source).headings };
+      },
+      "markdown.to-typst": (args) => {
+        const source = args["source"];
+        if (typeof source !== "string") throw { message: "`source` must be a string" };
+        return toTypst(source);
       },
     },
   });

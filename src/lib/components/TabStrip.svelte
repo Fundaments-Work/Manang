@@ -10,6 +10,8 @@
     isTabDirty,
     toggleSlides,
   } from "$lib/state/actions";
+  import { build } from "$lib/state/build.svelte";
+  import { layout } from "$lib/state/layout.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
   import { engineOf } from "$lib/workbench/paths";
   import { tabLabels, type Tab } from "$lib/workbench/tabs";
@@ -30,6 +32,15 @@
   const labels = $derived(tabLabels(tabs.tabs));
   const activeTypst = $derived(
     tabs.active?.kind === "document" && engineOf(tabs.active.path) === "typst",
+  );
+  // The way back to a closed preview: only for a document that has one (its
+  // own, or the project main it belongs to), shown as text, while the editor
+  // stands alone. The preview target is the one the preview pane would show.
+  const previewClosed = $derived(
+    tabs.active?.kind === "document" &&
+      tabs.active.view === "text" &&
+      layout.effectivePreview === "editor" &&
+      build.previewTarget() !== null,
   );
 
   // Keep the active tab visible when it changes, including after a keyboard jump.
@@ -286,6 +297,20 @@
         class="mng-btn h-6 px-2"
         onclick={() => !slidesOn && toggleSlides()}>Slides</button
       >
+    </div>
+  {/if}
+
+  {#if previewClosed}
+    <div class="flex shrink-0 items-center border-l border-line px-1">
+      <button
+        type="button"
+        class="mng-icon-btn"
+        aria-label="Show preview"
+        title="Show preview"
+        onclick={() => layout.showPreview()}
+      >
+        <Icon name={layout.narrow ? "preview" : "split"} size={14} />
+      </button>
     </div>
   {/if}
 </div>

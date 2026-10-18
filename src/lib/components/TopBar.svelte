@@ -1,22 +1,17 @@
 <script lang="ts">
-  import Icon, { type IconName } from "$lib/components/ui/Icon.svelte";
+  import Icon from "$lib/components/ui/Icon.svelte";
   import Mark from "./Mark.svelte";
   import WindowControls from "./WindowControls.svelte";
   import { hasCustomTitleBar, osPlatform } from "$lib/kernel/native";
   import { formatShortcut } from "$lib/commands/shortcut";
-  import { exportPdf, goHome, openFolder } from "$lib/state/actions";
+  import { goHome, openFolder } from "$lib/state/actions";
   import { context } from "$lib/state/context.svelte";
-  import { build } from "$lib/state/build.svelte";
   import { home } from "$lib/state/home.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
-  import { layout } from "$lib/state/layout.svelte";
   import { palette } from "$lib/state/palette.svelte";
-  import { preview } from "$lib/state/preview.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { detectPlatform } from "$lib/util/keyboard";
-  import type { PreviewMode } from "$lib/workbench/layout";
-  import { engineOf } from "$lib/workbench/paths";
 
   /**
    * Top bar, which is also the window's title bar: the mark (it goes Home), a
@@ -27,6 +22,10 @@
    * settings and plugins on the Settings page. In the editor the field is
    * gone to keep the screen quiet; Ctrl+K (commands), Ctrl+P (files) and
    * Ctrl+F (in the document) are always there.
+   *
+   * In the editor the bar carries no buttons: the preview's controls live in
+   * the preview's own header, "Show preview" at the end of the tab strip, and
+   * zen mode on its shortcut and in the command palette.
    */
 
   type Surface = typeof context.surface;
@@ -89,35 +88,6 @@
     const parts = active === undefined ? [] : active.path.split("/");
     return [project.name, ...parts];
   });
-
-  const isDocument = $derived(
-    tabs.active?.kind === "document" && tabs.active.view === "text",
-  );
-  const canExport = $derived(
-    tabs.active !== undefined &&
-      (engineOf(tabs.active.path) === "typst" ||
-        engineOf(tabs.active.path) === "latex") &&
-      (build.status === "ok" || build.status === "failed"),
-  );
-
-  const modes: readonly { mode: PreviewMode; label: string; icon: IconName }[] = [
-    { mode: "split", label: "Split", icon: "split" },
-    { mode: "editor", label: "Editor", icon: "editor" },
-    { mode: "preview", label: "Preview", icon: "preview" },
-  ];
-
-  function onModeKey(event: KeyboardEvent): void {
-    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-    if (step === 0) return;
-    event.preventDefault();
-    const at = modes.findIndex((m) => m.mode === layout.preview);
-    const next = modes[(at + step + modes.length) % modes.length];
-    if (next === undefined) return;
-    layout.setPreview(next.mode);
-    (event.currentTarget as HTMLElement)
-      .querySelector<HTMLElement>(`[data-mode="${next.mode}"]`)
-      ?.focus();
-  }
 </script>
 
 <svelte:window onkeydown={onWindowKey} />
@@ -208,84 +178,33 @@
         >/</span
       >
     </label>
-  {/if}
 
-  <div
-    class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2"
-    data-tauri-drag-region
-  >
-    {#if surface === "home"}
-      <button
-        type="button"
-        class="mng-btn shrink-0 px-2 max-[1100px]:px-1.5"
-        title="New project"
-        onclick={() => home.openNew()}
-      >
-        <Icon name="plus" size={14} />
-        <span class="max-[1100px]:sr-only">New project</span>
-      </button>
-      <button
-        type="button"
-        class="mng-btn shrink-0 px-2 max-[1100px]:px-1.5"
-        title="Open folder"
-        onclick={() => void openFolder()}
-      >
-        <Icon name="folder-open" size={14} />
-        <span class="max-[1100px]:sr-only">Open folder</span>
-      </button>
-    {:else if surface === "workbench" && workspace.project !== null}
-      {#if isDocument}
-        <div
-          role="radiogroup"
-          aria-label="Preview layout"
-          class="flex shrink-0 gap-px"
-          onkeydown={onModeKey}
-          tabindex="-1"
+    <div
+      class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2"
+      data-tauri-drag-region
+    >
+      {#if surface === "home"}
+        <button
+          type="button"
+          class="mng-btn shrink-0 px-2 max-[1100px]:px-1.5"
+          title="New project"
+          onclick={() => home.openNew()}
         >
-          {#each modes as item (item.mode)}
-            {@const on = layout.effectivePreview === item.mode}
-            {@const tooWide = item.mode === "split" && layout.narrow}
-            <button
-              type="button"
-              role="radio"
-              data-mode={item.mode}
-              aria-checked={on}
-              aria-disabled={tooWide}
-              tabindex={on ? 0 : -1}
-              title={tooWide ? "Split needs a wider window" : item.label}
-              class="mng-btn px-2 max-[1100px]:px-1.5 {tooWide ? 'opacity-50' : ''}"
-              onclick={() => !tooWide && layout.setPreview(item.mode)}
-            >
-              <Icon name={item.icon} size={14} />
-              <span class="max-[1100px]:sr-only">{item.label}</span>
-            </button>
-          {/each}
-        </div>
+          <Icon name="plus" size={14} />
+          <span class="max-[1100px]:sr-only">New project</span>
+        </button>
+        <button
+          type="button"
+          class="mng-btn shrink-0 px-2 max-[1100px]:px-1.5"
+          title="Open folder"
+          onclick={() => void openFolder()}
+        >
+          <Icon name="folder-open" size={14} />
+          <span class="max-[1100px]:sr-only">Open folder</span>
+        </button>
       {/if}
-
-      <button
-        type="button"
-        class="mng-btn shrink-0 px-2 max-[1100px]:px-1.5"
-        disabled={!canExport || preview.exporting}
-        title="Export PDF"
-        onclick={() => exportPdf()}
-      >
-        <Icon name="export" size={14} />
-        <span class="max-[1100px]:sr-only">Export PDF</span>
-      </button>
-
-      <button
-        type="button"
-        class="mng-btn shrink-0 px-2 max-[1100px]:px-1.5"
-        disabled={!isDocument}
-        title="Zen mode ({formatShortcut({ key: '\\', mod: true }, platform)})"
-        onclick={() => layout.toggleZen()}
-      >
-        <Icon name="zen" size={14} />
-        <span class="max-[1100px]:sr-only">Zen</span>
-      </button>
-    {/if}
-  </div>
+    </div>
+  {/if}
   {#if ownControls && !controlsLeft}
     <div class="h-full w-px shrink-0 bg-line" aria-hidden="true"></div>
     <WindowControls />

@@ -7,11 +7,13 @@
  */
 
 import { build } from "$lib/state/build.svelte";
+import { convertToTypst } from "$lib/state/convert";
 import { documents } from "$lib/state/documents.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
 import { settings } from "$lib/state/settings.svelte";
 import { settingsPage } from "$lib/state/settingsPage.svelte";
+import { showInPreview } from "$lib/state/sourceJump";
 import { tabs } from "$lib/state/tabs.svelte";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
@@ -64,7 +66,9 @@ const WHEN: Readonly<Record<string, string>> = {
   "file.save-all": "project",
   "doc.export-pdf": "workbench && document",
   "doc.format": "workbench && document",
+  "doc.show-in-preview": "workbench && document",
   "doc.slides": "workbench && typst",
+  "doc.convert-typst": "workbench && markdown",
   "project.close": "project",
 };
 
@@ -97,7 +101,11 @@ export function workbenchCommands(
   const hasProject = workspace.project !== null;
   const active = tabs.active;
   const isDocument = active?.kind === "document";
-  const isTypst = isDocument && engineOf(active.path) === "typst";
+  const engine = isDocument ? engineOf(active.path) : null;
+  const isTypst = engine === "typst";
+  const isMarkdown = engine === "markdown";
+  // A PDF comes from Typst or LaTeX; a Markdown preview has no PDF to export.
+  const isPaged = engine === "typst" || engine === "latex";
   const list: Command[] = [
     {
       id: "goto.file",
@@ -328,7 +336,7 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "publish print download",
       shortcuts: [mod("e")],
-      enabled: isTypst,
+      enabled: isPaged,
       run: () => actions.exportPdf(),
     },
     {
@@ -342,6 +350,15 @@ export function workbenchCommands(
       run: () => actions.formatDocument(),
     },
     {
+      id: "doc.show-in-preview",
+      title: "Show in preview",
+      group: "Workbench",
+      keywords: "jump sync synctex forward search locate caret cursor",
+      shortcuts: [mod("j", { alt: true })],
+      enabled: isPaged && active?.kind === "document" && active.view === "text",
+      run: () => void showInPreview(),
+    },
+    {
       id: "doc.slides",
       title:
         active?.kind === "document" && active.view === "slides"
@@ -351,6 +368,16 @@ export function workbenchCommands(
       keywords: "deck presentation",
       enabled: isTypst,
       run: () => actions.toggleSlides(),
+    },
+    {
+      id: "doc.convert-typst",
+      title: "Convert to Typst",
+      group: "Workbench",
+      keywords: "markdown export typ markdown.to-typst",
+      enabled: isMarkdown,
+      run: () => {
+        if (active !== undefined) void convertToTypst(active.path);
+      },
     },
     {
       id: "home.show",

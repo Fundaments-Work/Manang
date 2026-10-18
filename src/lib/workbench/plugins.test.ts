@@ -24,6 +24,7 @@ describe("plugins panel model", () => {
     expect(
       groups.find((g) => g.name === "citations")?.commands.map((c) => c.id),
     ).toEqual([
+      "citations.configure",
       "citations.extract-keys",
       "citations.format",
       "citations.get",
@@ -45,12 +46,14 @@ describe("plugins panel model", () => {
     expect(groups.find((g) => g.name === "typst")?.commands.map((c) => c.id)).toEqual([
       "typst.compile",
       "typst.export-pdf",
+      "typst.jump-from-click",
+      "typst.jump-from-cursor",
       "typst.render",
     ]);
-    // citations 6, editor 8, figure 10, git 15, latex 3, markdown 2,
-    // project 18, search 6, settings 14, typst 3, writing 14.
+    // citations 7, editor 8, figure 10, git 15, latex 4, markdown 3,
+    // project 18, search 6, settings 14, typst 5, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      6 + 8 + 10 + 15 + 3 + 2 + 18 + 6 + 14 + 3 + 14,
+      7 + 8 + 10 + 15 + 4 + 3 + 18 + 6 + 14 + 5 + 14,
     );
   });
 

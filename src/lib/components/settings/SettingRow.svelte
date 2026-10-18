@@ -1,8 +1,8 @@
 <script lang="ts">
   import Icon from "$lib/components/ui/Icon.svelte";
   import type { SettingDef } from "$lib/kernel/api";
+  import { choicesFor } from "$lib/state/settingOptions.svelte";
   import {
-    formatCategoryLabel,
     isSettingModified,
     settingTitle,
     validateSettingValue,
@@ -34,11 +34,12 @@
   const modified = $derived(isSettingModified(value, def.default, source));
   const control = $derived(`setting-${def.id}`);
   const disabled = $derived(disabledReason !== undefined);
+  const choices = $derived(def.type === "enum" ? choicesFor(def) : []);
   /** Short option lists read better as a segmented control than a menu. */
   const segmented = $derived(
     def.type === "enum" &&
-      (def.values?.length ?? 0) <= 4 &&
-      (def.values ?? []).join("").length <= 28,
+      choices.length <= 4 &&
+      choices.map((c) => c.label).join("").length <= 28,
   );
 
   async function commit(next: unknown): Promise<void> {
@@ -150,19 +151,19 @@
         aria-label={title}
         class="flex border border-line"
       >
-        {#each def.values ?? [] as option (option)}
+        {#each choices as option (option.value)}
           <button
             type="button"
             role="radio"
-            aria-checked={value === option}
+            aria-checked={value === option.value}
             {disabled}
             class="inset-focus h-7 px-3 text-xs not-last:border-r not-last:border-line disabled:opacity-40 {value ===
-            option
+            option.value
               ? 'bg-surface-hi text-text'
               : 'bg-bg text-text-60 hover:text-text'}"
-            onclick={() => void commit(option)}
+            onclick={() => void commit(option.value)}
           >
-            {formatCategoryLabel(option)}
+            {option.label}
           </button>
         {/each}
       </div>
@@ -174,8 +175,8 @@
         {disabled}
         onchange={(e) => void commit(e.currentTarget.value)}
       >
-        {#each def.values ?? [] as option (option)}
-          <option value={option}>{formatCategoryLabel(option)}</option>
+        {#each choices as option (option.value)}
+          <option value={option.value}>{option.label}</option>
         {/each}
       </select>
     {:else if def.type === "list"}

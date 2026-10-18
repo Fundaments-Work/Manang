@@ -107,6 +107,23 @@ export function showPanel(model: LayoutModel, tab: PanelTab): LayoutModel {
   return { ...model, panelOpen: true, panelTab: tab };
 }
 
+/**
+ * The preview header's "Maximise preview" / "Restore split": preview only from
+ * split, split from preview only. The button is hidden in a narrow window,
+ * where split cannot be shown.
+ */
+export function toggleMaximisedPreview(effective: PreviewMode): PreviewMode {
+  return effective === "preview" ? "split" : "preview";
+}
+
+/**
+ * The layout "Show preview" brings back: split, or the preview alone when the
+ * window is too narrow for two columns.
+ */
+export function revealPreview(viewportWidth: number): PreviewMode {
+  return isNarrow(viewportWidth) ? "preview" : "split";
+}
+
 const PREVIEW_CYCLE: readonly PreviewMode[] = ["split", "editor", "preview"];
 
 export function cyclePreview(mode: PreviewMode): PreviewMode {
