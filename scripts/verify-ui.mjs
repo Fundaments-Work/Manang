@@ -1049,8 +1049,6 @@ const kernelRun = (command, args) =>
     `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
   );
 const editorText = () => hp.evaluate(`document.querySelector(".cm-content").innerText`);
-const panelText = () =>
-  hp.evaluate(`document.querySelector("#bottom-panel")?.innerText ?? ""`);
 const fixButtons = `document.querySelectorAll("#bottom-panel [data-fix]")`;
 const clickFixOf = (pkg) =>
   hp.evaluate(
