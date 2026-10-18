@@ -97,7 +97,10 @@ export function workbenchCommands(
   const hasProject = workspace.project !== null;
   const active = tabs.active;
   const isDocument = active?.kind === "document";
-  const isTypst = isDocument && engineOf(active.path) === "typst";
+  const engine = isDocument ? engineOf(active.path) : null;
+  const isTypst = engine === "typst";
+  // A PDF comes from Typst or LaTeX; a Markdown preview has no PDF to export.
+  const isPaged = engine === "typst" || engine === "latex";
   const list: Command[] = [
     {
       id: "goto.file",
@@ -328,7 +331,7 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "publish print download",
       shortcuts: [mod("e")],
-      enabled: isTypst,
+      enabled: isPaged,
       run: () => actions.exportPdf(),
     },
     {
