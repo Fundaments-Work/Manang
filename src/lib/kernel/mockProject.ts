@@ -9,6 +9,11 @@
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
 import { mockKey, mockRender } from "./mockDiagram";
+import {
+  getMockTemplate,
+  listMockTemplates,
+  renderTemplateFiles,
+} from "./mockTemplates";
 import type {
   ChangeState,
   DiagramExport,
@@ -125,15 +130,24 @@ export class MockProjectHost {
     return this.#current;
   }
 
-  create(path: string, name: string, engine: Engine): MockProjectFs {
+  create(path: string, name: string, engine: Engine, template?: string): MockProjectFs {
     if (this.#seeds.has(path)) throw { message: `${path} is already a Manang project` };
-    const main = MAIN_FILE[engine];
+    let main = MAIN_FILE[engine];
+    let files: Record<string, Bytes> = { [main]: starter(engine, name) };
+    if (template !== undefined) {
+      const tmpl = getMockTemplate(template);
+      if (tmpl !== undefined) {
+        engine = tmpl.engine;
+        main = tmpl.main;
+        files = renderTemplateFiles(template, name) ?? files;
+      }
+    }
     const seed: SeedProject = {
       root: path,
       name,
       engine,
       main,
-      files: { [main]: starter(engine, name) },
+      files,
       committed: [],
       openedAt: nowSeconds(),
     };
@@ -434,6 +448,7 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["project.export-diagram", "Write a diagram's SVG (and PDF for LaTeX) next to it"],
   ["project.cache-diagram", "Render an inline diagram to the project cache"],
   ["project.export-pdf", "Write a PDF next to an SVG for LaTeX"],
+  ["project.templates", "List starter templates"],
 ];
 
 /** Mirrors `crates/manang-project/src/export.rs`. */
@@ -513,6 +528,8 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
         "project.create": (args) => {
           const engine = args["engine"];
           const name = args["name"];
+          const template =
+            typeof args["template"] === "string" ? args["template"] : undefined;
           if (engine !== "typst" && engine !== "latex" && engine !== "markdown") {
             throw {
               message: "bad arguments: `engine` must be typst, latex or markdown",
@@ -521,8 +538,9 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           if (typeof name !== "string" || name.trim() === "") {
             throw { message: "bad arguments: `name` must be a non-empty string" };
           }
-          return summary(host.create(confineRoot(args), name.trim(), engine));
+          return summary(host.create(confineRoot(args), name.trim(), engine, template));
         },
+        "project.templates": () => listMockTemplates(),
         "project.close": () => {
           host.close();
           return null;

@@ -317,8 +317,9 @@ export function createProject(
   path: string,
   name: string,
   engine: Engine,
+  template?: string,
 ): Promise<boolean> {
-  return startProject(() => workspace.create(path, name, engine));
+  return startProject(() => workspace.create(path, name, engine, template));
 }
 
 /** Show Home over the open project without closing it. */

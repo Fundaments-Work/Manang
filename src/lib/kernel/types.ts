@@ -40,7 +40,17 @@ export interface ProjectConfig {
     readonly name?: string;
     readonly main?: string;
   };
+  readonly template?: { readonly id: string; readonly version?: string };
   readonly bibliography?: { readonly paths: readonly string[] };
+}
+
+export interface TemplateSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly engine: Engine;
+  readonly description: string;
+  readonly tags: readonly string[];
+  readonly main: string;
 }
 
 /** What `project.open` and `project.create` answer with. */
