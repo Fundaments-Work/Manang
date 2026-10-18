@@ -242,6 +242,7 @@ pub const CORE_DEFAULTS: &[(&str, &str, &str)] = &[
     ("doc.export-pdf", "Mod+E", ""),
     ("doc.format", "Alt+Shift+F", ""),
     ("doc.show-in-preview", "Mod+Alt+J", ""),
+    ("share.open", "Mod+Alt+L", ""),
     ("doc.present", "F5", ""),
     ("help.shortcuts", "Mod+/", ""),
     ("dev.inspect", "F12", ""),

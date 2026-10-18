@@ -4,9 +4,32 @@ import {
   canShareLive,
   connectionDetail,
   connectionLabel,
+  initials,
   inviteFileLabel,
+  liveChipText,
   participantSummary,
+  peopleCount,
 } from "./live";
+
+describe("presence wording", () => {
+  const ada = { peer: "a", name: "Ada Lovelace", slot: 1 } as never;
+  it("counts people with you", () => {
+    expect(peopleCount([])).toBe(1);
+    expect(peopleCount([ada])).toBe(2);
+  });
+  it("words the status chip", () => {
+    expect(liveChipText("connected", [ada])).toBe("Live: 2 people");
+    expect(liveChipText("connected", [])).toBe("Live: just you");
+    expect(liveChipText("reconnecting", [])).toBe("Live: reconnecting");
+    expect(liveChipText("error", [])).toBe("Live: stopped");
+  });
+  it("makes initials", () => {
+    expect(initials("Ada Lovelace")).toBe("AL");
+    expect(initials("grace brewster murray hopper")).toBe("GH");
+    expect(initials("Plato")).toBe("P");
+    expect(initials("  ")).toBe("?");
+  });
+});
 
 describe("live session wording", () => {
   it("says what each state means", () => {

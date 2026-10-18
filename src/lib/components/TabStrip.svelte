@@ -1,7 +1,12 @@
 <script lang="ts">
   import { tick } from "svelte";
 
+  import { keymap } from "$lib/commands/keymap.svelte";
+  import { formatShortcut } from "$lib/commands/shortcut";
+  import SharePopover from "$lib/components/SharePopover.svelte";
   import ContextMenu, { type MenuItem } from "$lib/components/ui/ContextMenu.svelte";
+  import { sharePopover } from "$lib/state/sharePopover.svelte";
+  import { detectPlatform } from "$lib/util/keyboard";
   import Icon from "$lib/components/ui/Icon.svelte";
   import {
     closeOtherTabs,
@@ -28,6 +33,12 @@
   let menu = $state<{ x: number; y: number; tab: Tab } | null>(null);
   let dragId = $state<string | null>(null);
   let dropAt = $state<number | null>(null);
+  let shareButton: HTMLButtonElement | undefined = $state();
+  const platform = detectPlatform();
+  const shareKey = $derived.by(() => {
+    const first = keymap.shortcuts("share.open")[0];
+    return first === undefined ? "" : formatShortcut(first, platform);
+  });
 
   const labels = $derived(tabLabels(tabs.tabs));
   const activeTypst = $derived(
@@ -325,6 +336,27 @@
       </button>
     </div>
   {/if}
+
+  <div class="relative flex shrink-0 items-center border-l border-line px-1">
+    <button
+      bind:this={shareButton}
+      type="button"
+      class="mng-lime-hover inset-focus inline-flex h-7 items-center gap-1.5 px-2 text-xs {sharePopover.open
+        ? 'bg-surface-hi text-text'
+        : 'text-text-60'}"
+      data-testid="share-button"
+      aria-haspopup="true"
+      aria-expanded={sharePopover.open}
+      aria-controls="share-popover"
+      aria-keyshortcuts={shareKey}
+      title={shareKey === "" ? "Share" : `Share (${shareKey})`}
+      onclick={() => sharePopover.toggle()}
+    >
+      <Icon name="share" size={14} />
+      <span class="max-md:sr-only">Share</span>
+    </button>
+    <SharePopover anchor={shareButton} />
+  </div>
 </div>
 
 {#if menu !== null}
