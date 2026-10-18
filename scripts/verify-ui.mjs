@@ -921,6 +921,17 @@ async function main() {
         `[...document.querySelectorAll('nav[aria-label="Home sections"] button')].map((b) => b.getAttribute("aria-label")).join() === "Projects,Recent,Pinned,Archive,Templates,Trash,Settings"`,
       ),
     );
+    // Settings from Home: no project is open, so there is no "This project" choice.
+    await click(page, 'nav[aria-label="Home sections"] button[aria-label="Settings"]');
+    await sleep(400);
+    check(
+      "Settings opened from Home offers no project scope",
+      (await exists(page, 'section[aria-label="Settings"]')) &&
+        !(await exists(page, '[role="radiogroup"][aria-label="Apply settings to"]')),
+    );
+    await press(page, "Escape", { wait: 300 });
+    await click(page, 'nav[aria-label="Home sections"] button[aria-label="Projects"]');
+    await sleep(200);
     check(
       "projects shows live projects, pinned first, missing folder flagged",
       await page.evaluate(`(() => {
