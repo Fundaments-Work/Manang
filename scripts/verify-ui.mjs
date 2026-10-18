@@ -2119,6 +2119,11 @@ async function main() {
       await closeSettingsPage();
       check("the key never appeared anywhere on the page", !(await pageText()).includes(SECRET_KEY));
       check("no document is left edited by the AI tests", (await dirtyTabs(page)).length === 0);
+      // The Agent view made the panel taller; a double click on the resizer restores its size.
+      await page.evaluate(
+        `document.querySelector('[aria-label="Resize bottom panel"]')?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))`,
+      );
+      await sleep(200);
       await click(page, "#bottom-panel button[aria-label='Close panel']");
     }
 
