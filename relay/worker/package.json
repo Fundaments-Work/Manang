@@ -1,0 +1,35 @@
+{
+  "name": "manang-relay-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hosted Manang live-editing relay: a Cloudflare Worker and one Durable Object per room. Ciphertext only.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.18.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "format:check": "prettier --check .",
+    "deploy": "wrangler deploy"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.4",
+    "@cloudflare/workers-types": "5.20261018.1",
+    "@types/ws": "8.18.2",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.151.1",
+    "ws": "8.22.0"
+  }
+}
