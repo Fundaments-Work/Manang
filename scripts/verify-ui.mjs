@@ -455,7 +455,6 @@ async function caretToEnd(cdp) {
 
 /* -------------------------------------------------------------------------- */
 
-
 /* -------------------------------------------------------------------------- */
 /* Live co-editing                                                             */
 /* -------------------------------------------------------------------------- */
@@ -612,7 +611,10 @@ async function liveSection(browser) {
   await focusEditor(page);
   await caretToEnd(page);
   await insertText(page, "LOCAL-EDIT");
-  check("a local edit reaches the session and the shared copy", await reached("LOCAL-EDIT"));
+  check(
+    "a local edit reaches the session and the shared copy",
+    await reached("LOCAL-EDIT"),
+  );
   check(
     "the editor, the session and the kernel copy agree",
     (await docText()) === (await run("dev.live-text")) &&
