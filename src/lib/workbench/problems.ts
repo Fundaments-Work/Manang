@@ -248,9 +248,6 @@ export interface EngineFailure {
   readonly fix: string | null;
 }
 
-export const WORKER_BUILD_COMMAND =
-  "cargo build -p manang-latex --features engine --bin manang-latex-worker";
-
 const NO_TEX =
   /no tex (installation|distribution)|tex installation|latexmk.*not found|pdflatex.*not found|no latex (engine|backend)/i;
 
@@ -272,7 +269,7 @@ export function explainLatexFailure(message: string): EngineFailure {
       return {
         code: "no_tex",
         title: "No TeX installation found",
-        fix: `Install TeX Live or MiKTeX, or build the optional built-in engine with \`${WORKER_BUILD_COMMAND}\`, then compile again.`,
+        fix: "Install TeX Live or MiKTeX, or download Manang's built-in engine, then compile again.",
       };
     case "bundle_unavailable":
       return {

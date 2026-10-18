@@ -454,7 +454,44 @@ export interface LatexStatus {
   readonly backends: readonly LatexBackendStatus[];
   readonly default: "system" | "tectonic" | "none";
   readonly default_engine: string;
+  /** The optional downloadable engine; absent on older plugins. */
+  readonly builtin?: BuiltinEngineStatus;
 }
+
+/**
+ * `latex.engine-status`: the optional built-in engine (a Tectonic worker the
+ * user downloads once). `downloadable` is false when this build cannot offer
+ * it (not published yet, or no build for this platform); `reason` says why.
+ */
+export interface BuiltinEngineStatus {
+  readonly installed: boolean;
+  readonly downloadable: boolean;
+  /** `engine_not_published`, `engine_platform_unsupported`, ... when not downloadable. */
+  readonly reason?: string | null;
+  readonly version?: string;
+  readonly platform?: string;
+  /** Bytes of the download. */
+  readonly size?: number;
+  readonly sha256?: string;
+  /** Host the engine file comes from. */
+  readonly url_host?: string;
+  /** Host the LaTeX packages come from on first use. */
+  readonly package_host?: string;
+  /** Folder the engine is saved in. */
+  readonly stored_in?: string | null;
+  readonly installing: boolean;
+}
+
+export type EngineProgressPhase = "downloading" | "verifying" | "installing" | "done";
+
+/** `latex.engine-progress` events while the engine downloads. */
+export interface EngineProgress {
+  readonly phase: EngineProgressPhase;
+  readonly received: number;
+  readonly total: number;
+}
+
+export const ENGINE_PROGRESS_TOPIC = "latex.engine-progress";
 
 /** A box in the PDF from SyncTeX: 1-based page, points from the top-left corner. */
 export interface SynctexBox {
@@ -473,6 +510,25 @@ export function latexApi(kernel: Kernel) {
     exportPdf: (main: string) => kernel.runBinary("latex.export-pdf", { main }),
     /** Which TeX backends this machine has. */
     status: () => kernel.run<LatexStatus>("latex.status"),
+    /** The optional built-in engine: what it is, and whether it is installed. */
+    engineStatus: () => kernel.run<BuiltinEngineStatus>("latex.engine-status"),
+    /**
+     * Download and install the built-in engine. Resolves when it is done; the
+     * kernel refuses unless `consent` is exactly `true`. Progress arrives as
+     * `latex.engine-progress` events (see `onEngineProgress`).
+     */
+    engineInstall: (consent: boolean) =>
+      kernel.run<BuiltinEngineStatus>("latex.engine-install", { consent }),
+    /** Stop a running download; `engineInstall` then fails with `engine_cancelled`. */
+    engineCancel: () => kernel.run<{ readonly ok: boolean }>("latex.engine-cancel"),
+    /** Delete the downloaded engine. */
+    engineRemove: () => kernel.run<BuiltinEngineStatus>("latex.engine-remove"),
+    /** Progress of a running download. */
+    onEngineProgress: (handler: (progress: EngineProgress) => void) =>
+      kernel.onEvent((event) => {
+        if (event.topic === ENGINE_PROGRESS_TOPIC)
+          handler(event.payload as EngineProgress);
+      }),
     /**
      * Source line behind a point on 1-based `page` of the latest build of `main`
      * (absolute). `file` is relative to the main file's directory, unless it lies
@@ -863,7 +919,8 @@ export interface GitRemoteInfo {
   readonly url: string | null;
 }
 
-export type GitShareState = "no-remote" | "up-to-date" | "ahead" | "behind" | "diverged";
+export type GitShareState =
+  "no-remote" | "up-to-date" | "ahead" | "behind" | "diverged";
 
 export interface GitSyncStatus {
   readonly state: GitShareState;
@@ -885,11 +942,7 @@ export interface GitShared {
 }
 
 export type GitUpdateResult =
-  | "up-to-date"
-  | "fast-forwarded"
-  | "merged"
-  | "diverged"
-  | "conflicts";
+  "up-to-date" | "fast-forwarded" | "merged" | "diverged" | "conflicts";
 
 export interface GitUpdated {
   readonly result: GitUpdateResult;
