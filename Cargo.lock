@@ -5662,6 +5662,8 @@ version = "0.1.0"
 dependencies = [
  "insta",
  "manang-kernel",
+ "manang-project",
+ "manang-typst",
  "parking_lot",
  "perfect_freehand",
  "proptest",
