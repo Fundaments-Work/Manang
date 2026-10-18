@@ -7,3 +7,20 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+
+[[bin]]
+name = "manang-relay"
+path = "src/main.rs"
+
+[dependencies]
+manang-live = { path = "../manang-live" }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "signal", "io-util"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+parking_lot = "0.12"
+thiserror = { workspace = true }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
+
+[dev-dependencies]
+ropey = "1.6"
