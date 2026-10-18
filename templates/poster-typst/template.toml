@@ -1,0 +1,6 @@
+id = "poster-typst"
+name = "Poster (Typst)"
+engine = "typst"
+description = "Conference poster with title header, multi-column layout, and bibliography."
+tags = ["poster", "conference", "academic", "typst"]
+main = "main.typ"

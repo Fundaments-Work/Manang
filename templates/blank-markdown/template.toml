@@ -1,0 +1,6 @@
+id = "blank-markdown"
+name = "Blank Markdown"
+engine = "markdown"
+description = "A minimal Markdown starter with clean structure."
+tags = ["blank", "minimal", "markdown"]
+main = "index.md"

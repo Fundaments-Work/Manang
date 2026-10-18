@@ -1,0 +1,6 @@
+id = "blank-latex"
+name = "Blank LaTeX"
+engine = "latex"
+description = "A minimal LaTeX starter with standard article class."
+tags = ["blank", "minimal", "latex"]
+main = "main.tex"

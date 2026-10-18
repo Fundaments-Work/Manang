@@ -30,6 +30,7 @@ import type {
   ProjectPatch,
   ProjectSummary,
   RecentProject,
+  TemplateSummary,
   TreePage,
   TreeQuery,
 } from "./types";
@@ -45,8 +46,14 @@ export interface CompileRequest {
 export function projectApi(kernel: Kernel) {
   return {
     open: (path: string) => kernel.run<ProjectSummary>("project.open", { path }),
-    create: (path: string, name: string, engine: Engine) =>
-      kernel.run<ProjectSummary>("project.create", { path, name, engine }),
+    create: (path: string, name: string, engine: Engine, template?: string) =>
+      kernel.run<ProjectSummary>("project.create", {
+        path,
+        name,
+        engine,
+        ...(template !== undefined ? { template } : {}),
+      }),
+    templates: () => kernel.run<TemplateSummary[]>("project.templates"),
     close: () => kernel.run<null>("project.close"),
     tree: (query: TreeQuery = {}) => kernel.run<TreePage>("project.tree", { ...query }),
     readFile: (path: string) => kernel.run<string>("project.read-file", { path }),

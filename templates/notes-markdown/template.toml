@@ -1,0 +1,6 @@
+id = "notes-markdown"
+name = "Notes (Markdown)"
+engine = "markdown"
+description = "Structured research notes with an inline Mermaid workflow diagram."
+tags = ["notes", "markdown", "diagram"]
+main = "index.md"
