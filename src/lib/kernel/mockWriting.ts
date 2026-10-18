@@ -647,9 +647,14 @@ export function writingPlugin(): MockPluginFactory {
           return { removed, count: user.size };
         },
         "writing.spell.words": () => ({ words: [...user].sort() }),
+        // The bundled dictionaries, as `spell/dictionary.rs` lists them.
         "writing.spell.languages": () => ({
           default: language,
-          languages: [{ code: language, name: "English (US)", source: "bundled" }],
+          spellcheck: true,
+          languages: [
+            { code: "en_GB", source: "bundled" },
+            { code: "en_US", source: "bundled" },
+          ],
         }),
         "writing.lint.prose": (args) => {
           const text = optStr(args, "text") ?? str(args, "source");

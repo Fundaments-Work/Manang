@@ -12,6 +12,7 @@ import type { FigureNode, FigureScene } from "$lib/figure/scene";
 import type { Kernel } from "./client";
 import type {
   ChangeState,
+  MarkdownDiagnostic,
   CompileReport,
   Engine,
   LatexReport,
@@ -68,6 +69,28 @@ export function projectApi(kernel: Kernel) {
   };
 }
 
+/** A point on a rendered page: 0-based page, points from the top-left corner. */
+export interface PagePoint {
+  readonly page: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * Where a click on a Typst page leads (`crates/manang-typst` `SourceJump`).
+ * `path` is project-relative, or `@ns/name:version/path` inside a package;
+ * line and column are 1-based, the column counted in characters.
+ */
+export type TypstJump =
+  | {
+      readonly kind: "file";
+      readonly path: string;
+      readonly line: number;
+      readonly column: number;
+    }
+  | { readonly kind: "url"; readonly url: string }
+  | ({ readonly kind: "position" } & PagePoint);
+
 export function typstApi(kernel: Kernel) {
   return {
     compile: (request: CompileRequest) =>
@@ -75,6 +98,12 @@ export function typstApi(kernel: Kernel) {
     /** One page as SVG bytes. */
     render: (page: number) => kernel.runBinary("typst.render", { page }),
     exportPdf: () => kernel.runBinary("typst.export-pdf"),
+    /** What produced the point `(x, y)` (pt) on 0-based `page`; null for blank space. */
+    jumpFromClick: (page: number, x: number, y: number) =>
+      kernel.run<TypstJump | null>("typst.jump-from-click", { page, x, y }),
+    /** Where the text at a 1-based line and column landed on the pages. */
+    jumpFromCursor: (path: string, line: number, column: number) =>
+      kernel.run<PagePoint[]>("typst.jump-from-cursor", { path, line, column }),
   };
 }
 
@@ -180,6 +209,21 @@ export interface TextStats {
   readonly speaking_time_seconds: number;
 }
 
+/** One spelling dictionary the writing plugin can check with. */
+export interface SpellLanguage {
+  /** Normalised code such as `en_US`. */
+  readonly code: string;
+  /** Shipped with the app, or a Hunspell pair in the config folder. */
+  readonly source: "bundled" | "user";
+}
+
+export interface SpellLanguages {
+  /** The configured language (`writing.spell-language`). */
+  readonly default: string;
+  readonly spellcheck?: boolean;
+  readonly languages: readonly SpellLanguage[];
+}
+
 export function writingApi(kernel: Kernel) {
   return {
     spellCheck: (text: string, syntax: WritingSyntax) =>
@@ -195,6 +239,13 @@ export function writingApi(kernel: Kernel) {
       ),
     addWord: (word: string) =>
       kernel.run<{ added: boolean; count: number }>("writing.spell.add-word", { word }),
+    removeWord: (word: string) =>
+      kernel.run<{ removed: boolean; count: number }>("writing.spell.remove-word", {
+        word,
+      }),
+    /** The personal dictionary, sorted. */
+    words: () => kernel.run<{ words: string[] }>("writing.spell.words"),
+    languages: () => kernel.run<SpellLanguages>("writing.spell.languages"),
     lint: (text: string, syntax: WritingSyntax) =>
       kernel.run<ProseLintResult>("writing.lint.prose", { text, syntax }),
     format: (source: string, language: "typst" | "latex" | "markdown") =>
@@ -226,12 +277,57 @@ export interface LatexCompileRequest {
   readonly allow_network?: boolean;
 }
 
+/** One backend in `latex.status`. */
+export interface LatexBackendStatus {
+  readonly id: "system" | "tectonic";
+  readonly available: boolean;
+  readonly version: string | null;
+  readonly engines: readonly string[];
+}
+
+/** What `latex.status` answers with; `default` is `none` when nothing can compile. */
+export interface LatexStatus {
+  readonly backends: readonly LatexBackendStatus[];
+  readonly default: "system" | "tectonic" | "none";
+  readonly default_engine: string;
+}
+
+/** A box in the PDF from SyncTeX: 1-based page, points from the top-left corner. */
+export interface SynctexBox {
+  readonly page: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export function latexApi(kernel: Kernel) {
   return {
     compile: (request: LatexCompileRequest) =>
       kernel.run<LatexReport>("latex.compile", { ...request }),
     /** The PDF of the latest build of `main`, as raw bytes. */
     exportPdf: (main: string) => kernel.runBinary("latex.export-pdf", { main }),
+    /** Which TeX backends this machine has. */
+    status: () => kernel.run<LatexStatus>("latex.status"),
+    /**
+     * Source line behind a point on 1-based `page` of the latest build of `main`
+     * (absolute). `file` is relative to the main file's directory, unless it lies
+     * outside it.
+     */
+    synctexReverse: (main: string, page: number, x: number, y: number) =>
+      kernel.run<{ readonly file: string; readonly line: number }>("latex.synctex", {
+        main,
+        page,
+        x,
+        y,
+      }),
+    /** Where a 1-based line of `file` (relative to the main file's directory) landed. */
+    synctexForward: (main: string, file: string, line: number) =>
+      kernel.run<{ readonly positions: readonly SynctexBox[] }>("latex.synctex", {
+        main,
+        file,
+        line,
+      }),
   };
 }
 
@@ -243,7 +339,16 @@ export function markdownApi(kernel: Kernel) {
       kernel.run<{ headings: readonly MarkdownHeading[] }>("markdown.outline", {
         source,
       }),
+    /** Typst markup for a Markdown source; frontmatter is dropped. */
+    toTypst: (source: string) =>
+      kernel.run<MarkdownToTypst>("markdown.to-typst", { source }),
   };
+}
+
+export interface MarkdownToTypst {
+  readonly typst: string;
+  /** Frontmatter that was dropped, constructs Typst has no equivalent for. */
+  readonly diagnostics: readonly MarkdownDiagnostic[];
 }
 
 export type LatexApi = ReturnType<typeof latexApi>;
@@ -834,6 +939,9 @@ export interface CitationExtractKeysResponse {
   readonly keys: readonly string[];
 }
 
+/** Styles `citations.format` accepts (`ieee` is an alias of `numeric`). */
+export type CitationStyle = "apa" | "numeric" | "ieee";
+
 export function citationsApi(kernel: Kernel) {
   return {
     load: (req: { paths: readonly string[] } | { path: string }) =>
@@ -841,8 +949,12 @@ export function citationsApi(kernel: Kernel) {
     search: (req: { query: string; limit?: number | undefined }) =>
       kernel.run<CitationSearchResponse>("citations.search", { ...req }),
     get: (key: string) => kernel.run<CitationEntry>("citations.get", { key }),
-    format: (key: string, style: "apa" | "numeric" | "ieee" = "apa") =>
-      kernel.run<CitationFormatResponse>("citations.format", { key, style }),
+    /** Without `style`, the plugin uses the configured `citations.style`. */
+    format: (key: string, style?: CitationStyle) =>
+      kernel.run<CitationFormatResponse>(
+        "citations.format",
+        style === undefined ? { key } : { key, style },
+      ),
     extractKeys: (source: string, syntax: "typst" | "latex" | "markdown") =>
       kernel.run<CitationExtractKeysResponse>("citations.extract-keys", {
         source,

@@ -16,6 +16,7 @@ use parking_lot::{Mutex, RwLock};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use serde::Serialize;
 use typst::Library;
+use typst::syntax::FileId;
 use typst::utils::LazyHash;
 use typst_kit::files::FileStore;
 use typst_kit::fonts::FontStore;
@@ -24,6 +25,7 @@ use typst_svg::SvgOptions;
 
 use crate::diagnostics::{self, Diagnostic};
 use crate::error::TypstError;
+use crate::jump::{self, PagePoint, SourceJump, SourceSnapshot};
 use crate::world::{
     Environment, Loader, ProjectWorld, default_library, font_store, package_roots, project_file_id,
 };
@@ -78,6 +80,10 @@ pub struct CompileReport {
 struct Artifact {
     generation: u64,
     document: PagedDocument,
+    /// The sources this document was compiled from, for jumps.
+    sources: SourceSnapshot,
+    /// Project root of the compile, to resolve paths in jump requests.
+    root: PathBuf,
     svgs: Mutex<BTreeMap<usize, Arc<[u8]>>>,
     pdf: Mutex<Option<Arc<[u8]>>>,
 }
@@ -202,6 +208,15 @@ impl Compiler {
         };
         *self.diagnostics.write() = diagnostics.clone();
 
+        let sources = if document.is_some() {
+            snapshot_sources(&mut session.files, main)
+        } else {
+            SourceSnapshot {
+                main,
+                sources: std::collections::HashMap::new(),
+            }
+        };
+
         let mut report = CompileReport {
             ok,
             pages: 0,
@@ -225,6 +240,8 @@ impl Compiler {
             *self.latest.write() = Some(Arc::new(Artifact {
                 generation: session.generation,
                 document,
+                sources,
+                root,
                 svgs: Mutex::new(BTreeMap::new()),
                 pdf: Mutex::new(None),
             }));
@@ -262,6 +279,65 @@ impl Compiler {
         Ok(bytes)
     }
 
+    /// Where a click at `(x, y)` points on the 0-based `page` of the newest
+    /// document leads: a source position, a URL or another place in the
+    /// document. `None` when nothing there maps back (margins, blank space).
+    pub fn jump_from_click(
+        &self,
+        page: usize,
+        x: f64,
+        y: f64,
+    ) -> Result<Option<SourceJump>, TypstError> {
+        let artifact = self.latest()?;
+        let pages = artifact.document.pages().len();
+        if page >= pages {
+            return Err(TypstError::PageOutOfRange { page, pages });
+        }
+        let Some(number) = std::num::NonZeroUsize::new(page + 1) else {
+            return Err(TypstError::PageOutOfRange { page, pages });
+        };
+        if !x.is_finite() || !y.is_finite() {
+            return Ok(None);
+        }
+        let jumped = self.pool.install(|| {
+            catch_unwind(AssertUnwindSafe(|| {
+                jump::from_click(
+                    &self.library,
+                    &self.fonts,
+                    &artifact.sources,
+                    &artifact.document,
+                    number,
+                    x,
+                    y,
+                )
+            }))
+        });
+        jumped.map_err(|_| TypstError::WorkerPanicked)
+    }
+
+    /// Where the text at the 1-based `line` and character `column` of `path`
+    /// (absolute inside the root, or relative to it) appears in the newest
+    /// document. Empty when the file was not part of that compile or the
+    /// cursor is not on text that reached the pages.
+    pub fn jump_from_cursor(
+        &self,
+        path: &str,
+        line: usize,
+        column: usize,
+    ) -> Result<Vec<PagePoint>, TypstError> {
+        let artifact = self.latest()?;
+        let id = project_file_id(&artifact.root, path)?;
+        let Some(source) = artifact.sources.sources.get(&id) else {
+            return Ok(Vec::new());
+        };
+        let found = self.pool.install(|| {
+            catch_unwind(AssertUnwindSafe(|| {
+                jump::from_cursor(&artifact.document, source, line, column)
+            }))
+        });
+        found.map_err(|_| TypstError::WorkerPanicked)
+    }
+
     /// PDF of the newest successfully compiled document.
     pub fn export_pdf(&self) -> Result<Arc<[u8]>, TypstError> {
         let artifact = self.latest()?;
@@ -285,4 +361,19 @@ impl Compiler {
         *artifact.pdf.lock() = Some(Arc::clone(&bytes));
         Ok(bytes)
     }
+}
+
+/// The Typst sources a compile read, kept with its document. Cheap: a
+/// `Source` is reference counted, and the store edits its own copy in place on
+/// the next compile, leaving this one untouched.
+fn snapshot_sources(files: &mut FileStore<Loader>, main: FileId) -> SourceSnapshot {
+    let (_, ids) = files.dependencies();
+    let ids: Vec<FileId> = ids
+        .filter(|id| id.vpath().extension() == Some("typ"))
+        .collect();
+    let sources = ids
+        .into_iter()
+        .filter_map(|id| files.source(id).ok().map(|source| (id, source)))
+        .collect();
+    SourceSnapshot { main, sources }
 }

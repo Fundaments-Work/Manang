@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
+const ROOT = fileURLToPath(new URL(".", import.meta.url)).replace(/\/$/, "");
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
@@ -44,17 +45,20 @@ export default defineConfig(() => ({
       //    build, `.claude/worktrees` holds whole copies of the repo. Walking
       //    them delayed the server's start by minutes ("Waiting for your
       //    frontend dev server") and kept a core busy on cargo's writes.
+      //    Anchored at this checkout's root: an agent worktree lives under
+      //    `.claude/worktrees/`, and an unanchored `**/.claude/**` would match
+      //    its whole frontend, so edits there were never seen.
       ignored: [
-        "**/src-tauri/**",
-        "**/target/**",
-        "**/crates/**",
-        "**/.claude/**",
-        "**/artifacts/**",
-        "**/docs/**",
-        "**/testdata/**",
-        "**/fuzz/**",
-        "**/.git/**",
-      ],
+        "src-tauri",
+        "target",
+        "crates",
+        ".claude",
+        "artifacts",
+        "docs",
+        "testdata",
+        "fuzz",
+        ".git",
+      ].map((dir) => `${ROOT}/${dir}/**`),
     },
   },
 

@@ -9,8 +9,10 @@ import {
   cyclePreview,
   effectivePreview,
   isNarrow,
+  revealPreview,
   sanitizeLayout,
   showPanel,
+  toggleMaximisedPreview,
   toggleSide,
 } from "./layout";
 
@@ -41,6 +43,20 @@ describe("layout model", () => {
     expect(effectivePreview("split", 700)).toBe("editor");
     expect(effectivePreview("split", 1000)).toBe("split");
     expect(effectivePreview("preview", 700)).toBe("preview");
+  });
+
+  it("maximises the preview from split and restores split from preview only", () => {
+    expect(toggleMaximisedPreview("split")).toBe("preview");
+    expect(toggleMaximisedPreview("preview")).toBe("split");
+  });
+
+  it("shows the preview again in split, or alone when split cannot fit", () => {
+    expect(revealPreview(1280)).toBe("split");
+    expect(revealPreview(800)).toBe("split");
+    expect(revealPreview(640)).toBe("preview");
+    // What comes back is visible: the narrow rule never hides it again.
+    expect(effectivePreview(revealPreview(640), 640)).toBe("preview");
+    expect(effectivePreview(revealPreview(1280), 1280)).toBe("split");
   });
 });
 

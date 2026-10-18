@@ -143,9 +143,36 @@ describe("mockCitations plugin", () => {
     expect(num.formatted).toContain("R. Landauer");
   });
 
+  it("formats in the configured style when none is asked for", async () => {
+    const { api, kernel } = createTestContext();
+    await api.load({ path: "references.bib" });
+
+    expect((await api.format("landauer1961")).style).toBe("apa");
+    expect(
+      await kernel.run("citations.configure", {
+        values: { "citations.style": "numeric", "other.setting": 1 },
+      }),
+    ).toEqual({ "citations.style": "numeric" });
+    const configured = await api.format("landauer1961");
+    expect(configured.style).toBe("numeric");
+    expect(configured.formatted).toContain("[1]");
+    // An explicit style still wins.
+    expect((await api.format("landauer1961", "apa")).style).toBe("apa");
+
+    await expect(
+      kernel.run("citations.configure", { values: { "citations.style": "chicago" } }),
+    ).rejects.toMatchObject({
+      message: "`citations.style`: unsupported citation style `chicago`",
+    });
+    expect((await api.format("landauer1961")).style).toBe("numeric");
+  });
+
   it("extracts keys from Typst, LaTeX, and Markdown texts", () => {
     const typst = "As proved in @landauer1961 and @berut2012, not user@domain.com";
-    expect(extractKeysFromSource(typst, "typst")).toEqual(["landauer1961", "berut2012"]);
+    expect(extractKeysFromSource(typst, "typst")).toEqual([
+      "landauer1961",
+      "berut2012",
+    ]);
 
     const latex = "See \\cite{landauer1961, berut2012} and \\citep{shannon1948}.";
     expect(extractKeysFromSource(latex, "latex")).toEqual([

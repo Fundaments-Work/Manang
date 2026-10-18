@@ -13,7 +13,7 @@
  *  - A compile whose inputs equal the last good one is skipped.
  */
 
-import { kernel, errorMessage } from "$lib/kernel";
+import { kernel, errorMessage, reportError } from "$lib/kernel";
 import { latexApi, markdownApi, typstApi } from "$lib/kernel/api";
 import type { Engine } from "$lib/kernel/types";
 import { join } from "$lib/workbench/paths";
@@ -203,6 +203,23 @@ export class BuildState {
     return known;
   }
 
+  /**
+   * `[no_tex] ...` when `latex.status` says nothing on this machine can compile
+   * LaTeX, else null. A status that cannot be read lets the compile decide.
+   */
+  async #texMissing(): Promise<string | null> {
+    if (!(await this.#hasCommand("latex.status"))) return null;
+    try {
+      const status = await latex.status();
+      return status.default === "none"
+        ? "[no_tex] no TeX installation or built-in engine is available"
+        : null;
+    } catch (error) {
+      reportError("build.latex-status", error);
+      return null;
+    }
+  }
+
   /** Compile now. `force` skips the "inputs unchanged" shortcut. */
   async compile(force = false): Promise<void> {
     this.#scheduler.cancel();
@@ -274,6 +291,10 @@ export class BuildState {
   }
 
   async #latex(run: number, main: string, root: string): Promise<void> {
+    // No TeX at all: say so plainly instead of running a compile that fails.
+    const missing = await this.#texMissing();
+    if (run !== this.#run) return;
+    if (missing !== null) throw new Error(missing);
     const report = await latex.compile({
       main: join(root, main),
       ...(this.#network ? { allow_network: true } : {}),
