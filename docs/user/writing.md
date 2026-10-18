@@ -22,7 +22,7 @@ Manang includes a lightweight, responsive text editor built with CodeMirror 6.
 4. Focus completely on your text with **Zen mode**:
    - Press `Ctrl+\` (`Cmd+\`) or choose **View > Zen mode**. The Activity bar, sidebar, and panels disappear, centering your document in a comfortable reading column.
    - Press `Escape` or `Ctrl+\` (`Cmd+\`) to return to the full workspace layout.
-5. *Version snapshots and "Save a version" are coming soon.*
+5. Create snapshot checkpoints with **Save a version** (`Ctrl+Alt+S` (`Cmd+Option+S`)) to inspect changes and restore prior drafts. See [Version History and Restore](version-history.md).
 6. *An integrated AI authoring assistant is coming soon.*
 
 ## 2. Work with document engines

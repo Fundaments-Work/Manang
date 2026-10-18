@@ -6,12 +6,15 @@ You can view installed plugins, understand security sandboxing and permissions, 
 
 In Manang, features are modular plugins that contribute commands, settings, hooks, and tools to the application.
 
-1. To view installed plugins:
-   - Open Settings by pressing `Ctrl+,` (`Cmd+,`).
-   - Scroll down the **Settings** tab.
-   - Below the core settings, each plugin displays a dedicated section showing its name, version, execution tier, human-readable description, and requested permissions.
-2. Click the **commands** dropdown button on any plugin card to view the exact command titles and command IDs contributed to the command palette (`Ctrl+K` (`Cmd+K`)).
-3. *A dedicated visual plugin manager with one-click installation and toggles is coming soon.*
+1. To view and manage installed plugins:
+   - Press `Ctrl+Shift+X` (`Cmd+Shift+X`) or click the **Plugins** icon in the Activity bar to open the Plugins sidebar view.
+   - Or open Settings (`Ctrl+,` (`Cmd+,`)) and scroll down to the Plugins section.
+2. The Plugins sidebar lets you filter by category:
+   - **All:** View all registered plugins.
+   - **Installed:** Inspect third-party plugins installed in your configuration directory.
+   - **Built-in:** View native core plugins.
+   - **Attention:** Highlights any plugin reporting load errors or requiring configuration.
+3. Click any plugin entry to view its version, execution tier, description, contributed commands, and requested permissions. Use the toggle switch to enable or disable individual sandboxed plugins.
 
 ## 2. Built-in versus Sandboxed plugins
 

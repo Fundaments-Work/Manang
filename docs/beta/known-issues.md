@@ -49,7 +49,7 @@ Investigating self-contained WebAssembly and standalone sidecar TeX distribution
 Mermaid flowcharts (`.mmd` files or Markdown diagram fences) support alphanumeric text and standard symbols in node labels, but complex LaTeX or Typst mathematical formulas (such as integrals or fractions) are not rendered within Mermaid nodes.
 
 ### How to Avoid
-For diagrams requiring publication-grade mathematical notation, use the **Vector Figure Studio** (`.figure.json` / `/draw`), which features dedicated Math nodes (`M` key) evaluated directly through the Typst and LaTeX formula engines.
+For diagrams requiring publication-grade mathematical notation, use the **Vector Figure Studio** (`.figure` / `/draw`), which features dedicated Math nodes (`M` key) evaluated directly through the Typst and LaTeX formula engines.
 
 ### Status
 Math formula editor is fully operational in Figure Studio; inline LaTeX/Typst formula support in Mermaid labels is planned for a future update.
