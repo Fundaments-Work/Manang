@@ -1,0 +1,16 @@
+\documentclass{article}
+\usepackage{amsmath}
+
+\begin{document}
+
+\section{Broken Equation Block}
+
+% Error on line 9: undefined command and unclosed environment
+\begin{equation}
+  \frac{1}{2} + \undefinedcommandxyz{42}
+% Missing \end{equation}
+
+\section{Another Section}
+This document contains deliberate syntax errors for compiler diagnostic validation.
+
+\end{document}
