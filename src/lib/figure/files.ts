@@ -6,6 +6,8 @@
  * figure goes through here so the two suffixes are handled in one place.
  */
 
+import type { DialogRequest } from "$lib/workbench/dialogRequest";
+
 export const FIGURE_EXTENSION = ".figure";
 export const LEGACY_FIGURE_SUFFIX = ".figure.json";
 
@@ -26,3 +28,23 @@ export function figureStem(name: string): string {
 
 /** The name a new figure starts with. */
 export const NEW_FIGURE_NAME = `untitled${FIGURE_EXTENSION}`;
+
+/** Why a typed figure name cannot be used, or null when it can. */
+export function figureNameProblem(name: string): string | null {
+  const stem = name.trim();
+  if (stem === "") return "Give the figure a name.";
+  if (/[\\/]/.test(stem)) return "A name cannot contain a slash.";
+  if (stem.startsWith(".")) return "A name cannot start with a dot.";
+  return null;
+}
+
+/** The New figure dialog: just a name, one Create. */
+export function newFigureRequest(name: string): DialogRequest {
+  return {
+    title: "New figure",
+    message:
+      "The figure is saved in figures/ as a .figure file, with its picture (.svg) next to it for your documents.",
+    input: { label: "Name", value: name },
+    actions: [{ id: "create", label: "Create" }],
+  };
+}
