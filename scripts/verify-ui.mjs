@@ -1749,80 +1749,294 @@ async function main() {
         (await exists(page, '[role="tablist"]')),
     );
     check(
-      "the scene loads from the project file",
+      "a version 1 scene loads (migrated) from the project file",
       await page.evaluate(`document.body.innerText.includes("4 nodes")`),
     );
-    await clickText(page, "button[aria-pressed]", "Rectangle");
-    const svg = await rect(page, 'svg[role="application"]');
-    // Dragged up and to the left: a negative size used to draw nothing.
-    const solidRects = () =>
+
+    const CANVAS = 'svg[role="application"]';
+    const FIG_TOOLS = '[role="toolbar"][aria-label="Figure tools"]';
+    const nodeIds = (kind) =>
       page.evaluate(
-        `[...document.querySelectorAll('svg[role="application"] rect:not([stroke-dasharray])')].filter((r) => Number(r.getAttribute("width")) > 8 && Number(r.getAttribute("height")) > 8).length`,
+        `[...document.querySelectorAll('${CANVAS} g[data-node-id]${kind === undefined ? "" : `[data-kind="${kind}"]`}')].map((g) => g.dataset.nodeId)`,
       );
-    const rectsBefore = await solidRects();
-    await mouse(page, "mouseMoved", svg.left + 320, svg.top + 450);
-    await mouse(page, "mousePressed", svg.left + 320, svg.top + 450);
-    await mouse(page, "mouseMoved", svg.left + 200, svg.top + 380);
-    check(
-      "the rectangle tool previews a box while dragging, not a line",
-      await page.evaluate(
-        `(() => { const svg = document.querySelector('svg[role="application"]'); const box = svg.querySelector('rect[stroke-dasharray="4 4"]'); return box !== null && Number(box.getAttribute("width")) > 100 && svg.querySelector('line[stroke-dasharray="4 4"]') === null; })()`,
-      ),
-    );
-    await mouse(page, "mouseReleased", svg.left + 200, svg.top + 380);
-    await sleep(300);
-    check(
-      "a rectangle dragged up and left is drawn with a positive size",
-      (await solidRects()) === rectsBefore + 1,
-    );
-    check(
-      "drawing adds a node and marks the tab dirty",
-      (await page.evaluate(`document.body.innerText.includes("5 nodes")`)) &&
-        (await page.evaluate(
-          `document.querySelector('[role="tab"][aria-selected="true"]').getAttribute("aria-label").includes("unsaved")`,
-        )),
-    );
+    const nodeBox = (id) =>
+      page.evaluate(`(() => {
+        const g = document.querySelector('${CANVAS} g[data-node-id="${id}"]');
+        if (!g) return null;
+        const r = g.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2, bottom: r.bottom, right: r.right };
+      })()`);
+    const nodeTotal = async () => (await nodeIds()).length;
+    async function pickTool(name) {
+      await click(page, `${FIG_TOOLS} button[aria-label="${name}"]`);
+    }
+    async function drag(x1, y1, x2, y2, { button = "left", steps = 4 } = {}) {
+      await mouse(page, "mouseMoved", x1, y1);
+      await mouse(page, "mousePressed", x1, y1, button);
+      for (let i = 1; i <= steps; i += 1) {
+        await mouse(
+          page,
+          "mouseMoved",
+          x1 + ((x2 - x1) * i) / steps,
+          y1 + ((y2 - y1) * i) / steps,
+          button,
+        );
+      }
+      await mouse(page, "mouseReleased", x2, y2, button);
+      await sleep(250);
+    }
+    async function tap(x, y, { shift = false } = {}) {
+      await mouse(page, "mouseMoved", x, y);
+      await cdpMouse("mousePressed", x, y, shift);
+      await cdpMouse("mouseReleased", x, y, shift);
+      await sleep(200);
+    }
+    async function cdpMouse(type, x, y, shift) {
+      await page.send("Input.dispatchMouseEvent", {
+        type,
+        x,
+        y,
+        button: "left",
+        buttons: type === "mousePressed" ? 1 : 0,
+        clickCount: 1,
+        modifiers: shift ? 8 : 0,
+      });
+    }
+
+    // Start from a known view: everything in sight.
+    await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
+    const svg = await rect(page, CANVAS);
+    const at = (fx, fy) => ({ x: svg.left + svg.w * fx, y: svg.top + svg.h * fy });
+
+    // Every drawing tool draws its shape. Each lands in an empty strip at
+    // the bottom of the view, so the scene's own nodes are not in the way.
+    const drawn = {};
+    for (const [name, kind, fx] of [
+      ["Rectangle", "rect", 0.08],
+      ["Diamond", "diamond", 0.3],
+      ["Ellipse", "ellipse", 0.52],
+      ["Frame", "frame", 0.74],
+    ]) {
+      const before = await nodeIds(kind);
+      await pickTool(name);
+      const a = at(fx, 0.8);
+      await drag(a.x, a.y, a.x + svg.w * 0.14, a.y + svg.h * 0.12);
+      const after = await nodeIds(kind);
+      const added = after.filter((id) => !before.includes(id));
+      drawn[kind] = added[0];
+      check(
+        `the ${name} tool draws a ${kind}`,
+        added.length === 1,
+        `${before} -> ${after}`,
+      );
+    }
+    {
+      const before = await nodeIds("line");
+      await pickTool("Line");
+      const a = at(0.08, 0.95);
+      await drag(a.x, a.y, a.x + svg.w * 0.12, a.y);
+      check(
+        "the Line tool draws a line",
+        (await nodeIds("line")).length === before.length + 1,
+      );
+    }
+    {
+      const before = await nodeIds("freedraw");
+      await pickTool("Draw");
+      const a = at(0.3, 0.95);
+      await mouse(page, "mouseMoved", a.x, a.y);
+      await mouse(page, "mousePressed", a.x, a.y);
+      for (let i = 1; i <= 12; i += 1) {
+        await mouse(page, "mouseMoved", a.x + i * 8, a.y - Math.sin(i / 2) * 10);
+      }
+      await mouse(page, "mouseReleased", a.x + 96, a.y);
+      await sleep(250);
+      check(
+        "the Draw tool draws a freehand stroke",
+        (await nodeIds("freedraw")).length === before.length + 1,
+      );
+    }
+    {
+      const before = await nodeIds("text");
+      await pickTool("Text");
+      const a = at(0.52, 0.95);
+      await tap(a.x, a.y);
+      await waitFor(page, `document.querySelector("[data-label-editor]") !== null`, {
+        label: "text editor",
+        timeout: 4000,
+      }).catch(() => undefined);
+      await insertText(page, "A note");
+      await press(page, "Enter", { ctrl: true, wait: 300 });
+      const after = await nodeIds("text");
+      check(
+        "the Text tool places text typed in place",
+        after.length === before.length + 1 &&
+          (await page.evaluate(
+            `document.querySelector('${CANVAS}').textContent.includes("A note")`,
+          )),
+      );
+    }
+
+    // An arrow from the rectangle to the diamond binds both ends.
+    const rectBox = await nodeBox(drawn.rect);
+    const diamondBox = await nodeBox(drawn.diamond);
+    const arrowsBefore = await nodeIds("arrow");
+    await pickTool("Arrow");
+    await drag(rectBox.cx, rectBox.cy, diamondBox.cx, diamondBox.cy);
+    const arrowId = (await nodeIds("arrow")).find((id) => !arrowsBefore.includes(id));
+    check("the Arrow tool draws an arrow between two shapes", arrowId !== undefined);
     await shoot(page, "17-figure");
-    await press(page, "s", { ctrl: true, wait: 400 });
+    const arrowPath = () =>
+      page.evaluate(
+        `document.querySelector('${CANVAS} g[data-node-id="${arrowId}"] path')?.getAttribute("d") ?? ""`,
+      );
+    const pathBefore = await arrowPath();
+    await pickTool("Select");
+    const moveFrom = await nodeBox(drawn.diamond);
+    await drag(moveFrom.cx, moveFrom.cy, moveFrom.cx + 40, moveFrom.cy - 90, {
+      steps: 6,
+    });
+    const moved = await nodeBox(drawn.diamond);
     check(
-      "Ctrl+S saves the scene as JSON and its SVG",
-      await page.evaluate(
-        `!document.querySelector('[role="tab"][aria-selected="true"]').getAttribute("aria-label").includes("unsaved")`,
-      ),
+      "dragging a shape moves it (one plugin edit on release)",
+      moved !== null && Math.abs(moved.cy - moveFrom.cy) > 40,
+      JSON.stringify({ moveFrom, moved }),
+    );
+    check(
+      "the bound arrow follows the shape it is attached to",
+      pathBefore !== "" && (await arrowPath()) !== pathBefore,
     );
 
-    // Move the rectangle just drawn: select it and drag it.
-    const shapeXs = () =>
-      page.evaluate(
-        `[...document.querySelectorAll('svg[role="application"] rect')].map((r) => r.getAttribute("x")).join()`,
-      );
-    await clickText(page, "button[aria-pressed]", "Select");
-    const beforeMove = await shapeXs();
-    await mouse(page, "mouseMoved", svg.left + 260, svg.top + 415);
-    await mouse(page, "mousePressed", svg.left + 260, svg.top + 415);
-    await sleep(150);
-    await mouse(page, "mouseMoved", svg.left + 300, svg.top + 425);
-    await mouse(page, "mouseMoved", svg.left + 340, svg.top + 435);
-    await mouse(page, "mouseReleased", svg.left + 340, svg.top + 435);
-    await sleep(300);
-    const afterMove = await shapeXs();
+    // Multi-select with Shift, then align their tops from the properties panel.
+    // Escape first: the properties panel of the moved shape covers the left.
+    await press(page, "Escape", { wait: 250 });
+    const r1 = await nodeBox(drawn.rect);
+    const e1 = await nodeBox(drawn.ellipse);
+    await tap(r1.cx, r1.cy);
+    await tap(e1.cx, e1.cy, { shift: true });
     check(
-      "dragging a selected shape moves it (one plugin edit on release)",
-      beforeMove !== afterMove &&
-        (await page.evaluate(`document.body.innerText.includes("5 nodes")`)) &&
-        (await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
-      `${beforeMove} -> ${afterMove}`,
+      "properties appear only for a selection",
+      await exists(page, 'aside[aria-label="Shape properties"]'),
     );
+    await click(
+      page,
+      'aside[aria-label="Shape properties"] button[aria-label="Align top"]',
+    );
+    await sleep(300);
+    const r2 = await nodeBox(drawn.rect);
+    const e2 = await nodeBox(drawn.ellipse);
+    check(
+      "Align top lines up the selected shapes",
+      Math.abs(r2.y - e2.y) < 2.5,
+      `${r2.y} vs ${e2.y}`,
+    );
+    await shoot(page, "17b-figure-properties");
+
+    // Group: clicking one member selects the group, so Delete removes both.
+    await click(
+      page,
+      'aside[aria-label="Shape properties"] button[aria-label="Group"]',
+    );
+    await sleep(300);
+    const empty = at(0.97, 0.05);
+    await tap(empty.x, empty.y);
+    check(
+      "properties disappear when nothing is selected",
+      !(await exists(page, 'aside[aria-label="Shape properties"]')),
+    );
+    const total = await nodeTotal();
+    await tap(r2.cx, r2.cy);
     await press(page, "Delete", { wait: 300 });
-    const deleted = await page.evaluate(`document.body.innerText.includes("4 nodes")`);
+    check(
+      "a grouped shape is picked with its group",
+      (await nodeTotal()) === total - 2,
+    );
+    await press(page, "z", { ctrl: true, wait: 400 });
+    check("undo brings the group back", (await nodeTotal()) === total);
+    await tap(r2.cx, r2.cy);
+    await press(page, "g", { ctrl: true, shift: true, wait: 300 });
+    await tap(empty.x, empty.y);
+    await tap(r2.cx, r2.cy);
+    await press(page, "Delete", { wait: 300 });
+    check(
+      "after ungrouping a shape is picked alone",
+      (await nodeTotal()) === total - 1,
+    );
+    await press(page, "z", { ctrl: true, wait: 400 });
+
+    // Zoom with Ctrl+wheel and pan with the middle button.
+    const zoomText = () =>
+      page.evaluate(`document.querySelector("[data-zoom]")?.textContent?.trim() ?? ""`);
+    const zoomBefore = await zoomText();
+    const centre = at(0.5, 0.5);
+    await page.send("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: centre.x,
+      y: centre.y,
+      deltaX: 0,
+      deltaY: -240,
+      modifiers: 2,
+    });
+    await sleep(300);
+    check(
+      "Ctrl+wheel zooms the canvas",
+      (await zoomText()) !== zoomBefore,
+      `${zoomBefore} -> ${await zoomText()}`,
+    );
+    const panBefore = await nodeBox(drawn.rect);
+    await drag(centre.x, centre.y, centre.x + 120, centre.y + 60, { button: "middle" });
+    const panAfter = await nodeBox(drawn.rect);
+    check(
+      "dragging with the middle button pans",
+      Math.abs(panAfter.x - panBefore.x - 120) < 3 &&
+        Math.abs(panAfter.y - panBefore.y - 60) < 3,
+      JSON.stringify({ panBefore, panAfter }),
+    );
+    await click(page, `${FIG_TOOLS} button[aria-label="Zoom to fit"]`);
+
+    // Pasting Mermaid offers to turn it into shapes.
+    const countBeforeMermaid = await nodeTotal();
+    await page.evaluate(`(() => {
+      const target = document.querySelector('${CANVAS}');
+      target.focus();
+      const data = new DataTransfer();
+      data.setData("text/plain", "flowchart TD\\n  A[Collect] --> B{Enough?}\\n  B -->|yes| C[Analyse]\\n");
+      target.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    })()`);
+    await expectEventually(
+      page,
+      "pasting Mermaid text offers to insert it as shapes",
+      `document.querySelector("[data-mermaid-prompt]") !== null`,
+    );
+    await clickText(page, "[data-mermaid-prompt] button", "Insert as shapes");
+    await expectEventually(
+      page,
+      "Insert as shapes adds native shapes and bound arrows",
+      `document.querySelectorAll('${CANVAS} g[data-node-id]').length === ${countBeforeMermaid + 5}`,
+      { show: `document.querySelectorAll('${CANVAS} g[data-node-id]').length` },
+    );
+    check(
+      "the Mermaid labels are on the canvas",
+      await page.evaluate(
+        `document.querySelector('${CANVAS}').textContent.includes("Enough?")`,
+      ),
+    );
+    await shoot(page, "17c-figure-mermaid");
     await press(page, "z", { ctrl: true, wait: 400 });
     check(
-      "Delete removes the selection and Ctrl+Z brings it back through the plugin",
-      deleted && (await page.evaluate(`document.body.innerText.includes("5 nodes")`)),
+      "undo takes the whole Mermaid insert back",
+      (await nodeTotal()) === countBeforeMermaid,
     );
-    await press(page, "s", { ctrl: true, wait: 400 });
+    await press(page, "z", { ctrl: true, shift: true, wait: 400 });
+    check("redo restores it", (await nodeTotal()) === countBeforeMermaid + 5);
+
     check(
-      "saving after the move clears the unsaved mark",
+      "drawing marks the tab dirty",
+      (await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
+    );
+    await press(page, "s", { ctrl: true, wait: 500 });
+    check(
+      "Ctrl+S saves the scene as JSON and its SVG",
       !(await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
     );
 
