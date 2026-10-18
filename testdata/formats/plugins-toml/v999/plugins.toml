@@ -1,0 +1,13 @@
+version = 999
+
+[plugins.word-count]
+enabled = true
+approved_version = "0.3.0"
+installed_at = 1760000000
+trust = "high"
+
+[plugins.word-count.granted]
+network = ["api.example.org"]
+
+[telemetry]
+never = true

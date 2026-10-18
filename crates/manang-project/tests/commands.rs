@@ -71,7 +71,7 @@ impl Harness {
 fn manifest_matches_the_commands_the_plugin_handles() {
     let h = harness();
     let ids: Vec<String> = h.kernel.commands().into_iter().map(|c| c.id).collect();
-    assert_eq!(ids.len(), 27);
+    assert_eq!(ids.len(), 30);
     // Every declared command is routed (an unknown one would error with UnknownCommand).
     for id in ids {
         if let Err(err) = h.call(&id, json!({ "bogus": 1 })) {
@@ -187,13 +187,12 @@ fn open_warns_when_the_main_file_is_missing() {
 fn file_commands_round_trip() {
     let h = harness();
     h.create("typst");
-    assert_eq!(
-        h.ok(
-            "project.write-file",
-            json!({ "path": "chapters/one.typ", "content": "= One\n" })
-        ),
-        json!({ "bytes": 6 })
+    let wrote = h.ok(
+        "project.write-file",
+        json!({ "path": "chapters/one.typ", "content": "= One\n" }),
     );
+    assert_eq!(wrote["bytes"], 6);
+    assert!(wrote["hash"].as_str().is_some_and(|h| h.starts_with("b3:")));
     assert_eq!(
         h.ok("project.read-file", json!({ "path": "chapters/one.typ" })),
         json!("= One\n")

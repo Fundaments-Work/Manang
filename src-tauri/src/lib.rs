@@ -636,6 +636,13 @@ pub fn run() -> Result<(), tauri::Error> {
             let events = EventBus::new();
             let editor = Arc::new(Editor::new());
             let kernel = Arc::new(build_kernel(&dirs, &events, &editor)?);
+            // Crash-recovery snapshots live in the app data dir, not the config dir.
+            kernel.register(
+                manang_recovery::manifest().map_err(BootError::from)?,
+                Arc::new(manang_recovery::plugin(
+                    app.path().app_data_dir()?.join("recovery"),
+                )),
+            )?;
             let project_root = Arc::new(ProjectRoot::new(None));
             let settings = start_settings_sync(&kernel, &events)?;
             let (plugins, watch) =

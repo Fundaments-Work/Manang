@@ -18,6 +18,48 @@ use toml_edit::{Array, DocumentMut, Item, Table};
 
 use crate::error::SettingsError;
 
+/// The top-level key holding a file's format version.
+pub const VERSION_KEY: &str = "version";
+/// The format version of `settings.toml`, the project settings file and
+/// `keybindings.toml` (`docs/formats.md`). No older version exists yet; a
+/// future one adds steps to [`migrate`].
+pub const FORMAT_VERSION: u32 = 1;
+
+/// The `version` of a parsed document: `Ok(None)` when absent (a v1 file).
+pub fn doc_version(doc: &DocumentMut) -> Result<Option<u32>, String> {
+    match doc.get(VERSION_KEY) {
+        None => Ok(None),
+        Some(item) => item
+            .as_integer()
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|v| *v >= 1)
+            .map(Some)
+            .ok_or_else(|| format!("`{VERSION_KEY}` must be a positive whole number")),
+    }
+}
+
+/// Bring `doc`, written as `from`, up to [`FORMAT_VERSION`]. There is nothing
+/// older than v1, so this is the place future steps are chained.
+fn migrate(doc: DocumentMut, from: u32) -> Result<DocumentMut, SettingsError> {
+    let steps: [manang_formats::Step<DocumentMut>; 0] = [];
+    Ok(manang_formats::migrate_chain(
+        "settings file",
+        doc,
+        from,
+        FORMAT_VERSION,
+        &steps,
+    )?)
+}
+
+/// Add `version = N` to a document that has none, so later releases know what
+/// shape it is.
+fn stamp_version(doc: &mut DocumentMut) {
+    if doc.get(VERSION_KEY).is_none() {
+        doc.as_table_mut()
+            .insert(VERSION_KEY, toml_edit::value(i64::from(FORMAT_VERSION)));
+    }
+}
+
 /// Largest settings file read.
 pub const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -140,6 +182,8 @@ pub struct LayerFile {
     pub values: BTreeMap<String, Value>,
     /// Why the file could not be used, if it could not.
     pub error: Option<String>,
+    /// Written by a newer Manang (this format version): read, never written.
+    pub newer: Option<u32>,
 }
 
 /// Load a settings layer. Never fails: problems become [`LayerFile::error`]
@@ -148,18 +192,33 @@ pub fn read_layer(path: &Path) -> LayerFile {
     match read_text(path) {
         Ok(None) => LayerFile::default(),
         Ok(Some(text)) => match text.parse::<DocumentMut>() {
-            Ok(doc) => LayerFile {
-                values: flatten(&doc_to_json(&doc)),
-                error: None,
-            },
+            Ok(doc) => {
+                let mut values = flatten(&doc_to_json(&doc));
+                // The version is the file's, not a setting.
+                values.remove(VERSION_KEY);
+                let (error, newer) = match doc_version(&doc) {
+                    Err(message) => (Some(message), None),
+                    Ok(version) => match manang_formats::compat(version, FORMAT_VERSION) {
+                        manang_formats::Compat::Newer(found) => (None, Some(found)),
+                        _ => (None, None),
+                    },
+                };
+                LayerFile {
+                    values,
+                    error,
+                    newer,
+                }
+            }
             Err(e) => LayerFile {
                 values: BTreeMap::new(),
                 error: Some(format!("not valid TOML: {e}")),
+                newer: None,
             },
         },
         Err(e) => LayerFile {
             values: BTreeMap::new(),
             error: Some(e.to_string()),
+            newer: None,
         },
     }
 }
@@ -197,7 +256,10 @@ pub fn to_toml_value(path: &str, value: &Value) -> Result<toml_edit::Value, Sett
 /// Load `path` fresh, apply `change`, and write it back atomically.
 ///
 /// A missing file starts empty. An unparsable file aborts with
-/// [`SettingsError::FileInvalid`] and is left untouched.
+/// [`SettingsError::FileInvalid`] and is left untouched, and so is a file
+/// written by a newer Manang (a [`SettingsError::Format`] `Newer` error): a
+/// downgrade must not destroy what a later release stored. A file without a
+/// `version` gets `version = 1` with the first change.
 pub fn edit_file(
     path: &Path,
     change: impl FnOnce(&mut DocumentMut) -> Result<bool, SettingsError>,
@@ -209,7 +271,28 @@ pub fn edit_file(
             path: path.display().to_string(),
             message: e.to_string(),
         })?;
-    if change(&mut doc)? {
+    let version = doc_version(&doc).map_err(|message| SettingsError::FileInvalid {
+        path: path.display().to_string(),
+        message,
+    })?;
+    let from = match manang_formats::compat(version, FORMAT_VERSION) {
+        manang_formats::Compat::Newer(found) => {
+            return Err(manang_formats::refuse_newer(
+                &path.display().to_string(),
+                found,
+                FORMAT_VERSION,
+            )
+            .into());
+        }
+        manang_formats::Compat::Older(from) => Some(from),
+        manang_formats::Compat::Current => None,
+    };
+    if let Some(from) = from {
+        doc = migrate(doc, from)?;
+        manang_formats::backup_once(path, from)?;
+    }
+    if change(&mut doc)? || from.is_some() {
+        stamp_version(&mut doc);
         atomic_write(path, doc.to_string().as_bytes())?;
     }
     Ok(())

@@ -114,6 +114,10 @@ pub struct FigureDocument {
     pub revision: u64,
     /// Revision on disk.
     pub saved_revision: u64,
+    /// The format version of the file this figure was read from, when that was
+    /// older than the current one: the first save keeps the old file as
+    /// `<name>.bak-v<N>` (`docs/formats.md`).
+    pub migrated_from: Option<u32>,
     undo: VecDeque<Delta>,
     redo: VecDeque<Delta>,
     max_history: usize,
@@ -133,6 +137,7 @@ impl FigureDocument {
             scene,
             revision: 0,
             saved_revision: 0,
+            migrated_from: None,
             undo: VecDeque::new(),
             redo: VecDeque::new(),
             max_history: DEFAULT_MAX_HISTORY,
@@ -250,14 +255,27 @@ fn write_doc(
         })?;
     }
     let json_text = doc.scene.to_file_json()?;
-    fs::write(&json_path, json_text).map_err(|source| FigureError::Io {
-        path: json_path.display().to_string(),
-        source,
+    // A file written in an older format is kept once before it is replaced.
+    if let Some(from) = doc.migrated_from
+        && json_path.exists()
+    {
+        manang_formats::backup_once(&json_path, from).map_err(|e| FigureError::Io {
+            path: json_path.display().to_string(),
+            source: std::io::Error::other(e.to_string()),
+        })?;
+    }
+    // Atomic (temp file and rename): a crash mid-save never leaves a torn scene.
+    manang_formats::write_atomic(&json_path, json_text.as_bytes()).map_err(|e| {
+        FigureError::Io {
+            path: json_path.display().to_string(),
+            source: std::io::Error::other(e.to_string()),
+        }
     })?;
+    doc.migrated_from = None;
     let svg_text = render_svg_with(&doc.scene, &SvgExportOptions::default(), embeds);
-    fs::write(&svg_path, svg_text).map_err(|source| FigureError::Io {
+    manang_formats::write_atomic(&svg_path, svg_text.as_bytes()).map_err(|e| FigureError::Io {
         path: svg_path.display().to_string(),
-        source,
+        source: std::io::Error::other(e.to_string()),
     })?;
     doc.saved_revision = doc.revision;
     Ok(SavedPaths {
@@ -378,8 +396,20 @@ impl FigureStore {
             source,
         })?;
         let scene = FigureScene::from_json(&text)?;
+        // Which version the file was: an older one is backed up on first save.
+        let found = serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|v| manang_formats::json_version(&v, "version").ok().flatten())
+            .unwrap_or(manang_formats::UNVERSIONED);
         let (canonical, _) = resolve_figure_paths(&target);
-        Ok(self.state.lock().add(Some(canonical), scene))
+        let mut state = self.state.lock();
+        let id = state.add(Some(canonical), scene);
+        if found < crate::scene::SCENE_VERSION
+            && let Some(doc) = state.figures.get_mut(&id)
+        {
+            doc.migrated_from = Some(found);
+        }
+        Ok(id)
     }
 
     /// The figure at `path`, opening it when it is not open yet.

@@ -1,0 +1,38 @@
+---
+source: crates/manang-plugins/tests/formats.rs
+expression: text
+---
+# Manang plugin registry: your decisions about installed plugins.
+# Edit with care; the Plugins view keeps it up to date.
+
+version = 1
+
+[plugins.slide-themes]
+enabled = false
+installed_at = 1760100000
+
+[plugins.slide-themes.granted]
+filesystem = []
+network = []
+buffer = []
+
+[plugins.slide-themes.reviewed]
+filesystem = []
+network = []
+buffer = []
+
+[plugins.word-count]
+enabled = false
+approved_version = "0.2.0"
+installed_at = 1760000000
+source = "/home/ada/plugins/word-count"
+
+[plugins.word-count.granted]
+filesystem = []
+network = ["api.example.org"]
+buffer = []
+
+[plugins.word-count.reviewed]
+filesystem = []
+network = ["api.example.org"]
+buffer = []

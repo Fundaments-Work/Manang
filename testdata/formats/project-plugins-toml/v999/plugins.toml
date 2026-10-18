@@ -1,0 +1,3 @@
+version = 999
+disabled = ["git"]
+allow-only = ["writing"]

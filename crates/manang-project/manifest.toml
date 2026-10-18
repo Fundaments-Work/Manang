@@ -41,6 +41,18 @@ id = "project.write-file"
 title = "Write text file"
 
 [[contributes.commands]]
+id = "project.read-text"
+title = "Read text file with its fingerprint"
+
+[[contributes.commands]]
+id = "project.diff-text"
+title = "Line diff of a file on disk against given text"
+
+[[contributes.commands]]
+id = "project.backup"
+title = "Copy a file to the project trash before changing it"
+
+[[contributes.commands]]
 id = "project.rename"
 title = "Rename or move file"
 

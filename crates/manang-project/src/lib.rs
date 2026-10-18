@@ -5,6 +5,7 @@
 //! git status. See [`plugin`] for the command surface.
 
 mod config;
+pub mod diff;
 mod error;
 pub mod export;
 pub mod fsops;
@@ -16,6 +17,7 @@ pub mod registry;
 pub mod scaffold;
 pub mod template;
 pub mod tree;
+mod versioned;
 pub mod watch;
 
 pub use config::{

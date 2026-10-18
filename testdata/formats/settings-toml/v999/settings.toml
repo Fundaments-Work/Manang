@@ -1,0 +1,8 @@
+version = 999
+
+[editor]
+font-size = 17
+ligatures = "fancy"
+
+[brand-new-section]
+x = 1

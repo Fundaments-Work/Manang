@@ -13,7 +13,7 @@ import { recheckWriting, runFormat } from "$lib/editor/writing";
 import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
 import { kernel, errorMessage, inTauri, reportError } from "$lib/kernel";
 import type { KernelEvent } from "$lib/kernel";
-import { projectApi, writingApi } from "$lib/kernel/api";
+import { isConflictError, projectApi, writingApi } from "$lib/kernel/api";
 import type { Engine, ProjectChanged } from "$lib/kernel/types";
 import type { Problem } from "$lib/workbench/problems";
 import {
@@ -61,6 +61,8 @@ import { layout } from "./layout.svelte";
 import { notice } from "./notice.svelte";
 import { applyPreferences } from "./preferences.svelte";
 import { preview } from "./preview.svelte";
+import { recovery } from "./recovery.svelte";
+import { offerRecovery } from "./recoveryActions";
 import { settings } from "./settings.svelte";
 import { settingsPage } from "./settingsPage.svelte";
 import { slides } from "./slides.svelte";
@@ -206,6 +208,8 @@ export async function closeTab(id: string): Promise<boolean> {
     });
     if (choice === "cancel") return false;
     if (choice === "save" && !(await save(tab.path))) return false;
+    // "Don't save" is an explicit discard: the crash snapshot goes too.
+    if (choice === "discard") recovery.forget(tab.path);
   }
   tabs.close(id);
   documents.drop(tab.path);
@@ -237,6 +241,8 @@ export function closeActiveTab(): void {
 async function confirmDiscard(): Promise<boolean> {
   const dirty = tabs.tabs.filter((t) => isTabDirty(t.path));
   if (dirty.length === 0) return true;
+  // Keep a snapshot while the question is open, so a force-quit loses nothing.
+  await recovery.flushAll();
   const choice = await dialog.ask({
     title: `Save changes to ${dirty.length} ${dirty.length === 1 ? "file" : "files"}?`,
     message: "Your changes will be lost if you leave without saving.",
@@ -247,6 +253,7 @@ async function confirmDiscard(): Promise<boolean> {
   });
   if (choice === "cancel") return false;
   if (choice === "save") await saveAll();
+  else recovery.forgetAll(dirty.map((t) => t.path));
   return true;
 }
 
@@ -257,6 +264,7 @@ function resetEditors(): void {
     viewers.drop(tab.path);
   }
   tabs.clear();
+  recovery.cancelAll();
   preview.release();
 }
 
@@ -310,6 +318,7 @@ async function startProject(
   await restoreSession(project);
   build.schedule("switch");
   void home.load();
+  void offerRecovery(openFile);
   return true;
 }
 
@@ -455,15 +464,63 @@ export async function renameEntry(
   }
   tabs.renamed(path, to);
   documents.renamed(path, to);
+  recovery.renamed(path, to);
   figures.renamed(path, to);
   viewers.renamed(path, to);
   return null;
+}
+
+/**
+ * Save an open document under a new path. Used when its file was deleted or
+ * moved on disk: the text is kept, and this writes it somewhere that is free.
+ * Never replaces an existing file.
+ */
+export async function saveAs(path: string): Promise<boolean> {
+  const session = documents.get(path);
+  if (session === undefined) return false;
+  const answer = await dialog.prompt({
+    title: "Save as",
+    message: "Where should this document be saved? The path is inside the project.",
+    input: { label: "Path", value: path },
+    actions: [{ id: "save", label: "Save", primary: true }],
+  });
+  const to = answer.value.trim().replace(/^\/+/, "");
+  if (answer.id !== "save" || to === "") return false;
+  let hash: string;
+  try {
+    // "absent": an existing file is never replaced.
+    hash = (await workspace.writeFile(to, session.text(), "absent")).hash;
+  } catch (error) {
+    if (isConflictError(error)) {
+      notice.error(`${to} already exists. Choose another name.`);
+    } else {
+      reportError("actions.saveAs", error);
+      notice.error(`Could not save ${to}: ${errorMessage(error)}`);
+    }
+    return false;
+  }
+  if (to !== path) {
+    tabs.renamed(path, to);
+    documents.renamed(path, to);
+    recovery.renamed(path, to);
+  }
+  const moved = documents.get(to);
+  if (moved !== undefined) {
+    moved.diskHash = hash;
+    moved.markSaved(moved.doc);
+  }
+  recovery.forget(to);
+  workspace.scheduleRefresh();
+  notice.show(`Saved as ${to}.`);
+  return true;
 }
 
 export async function trashEntry(path: string): Promise<void> {
   const lost = tabs.tabs.filter(
     (t) => (t.path === path || t.path.startsWith(`${path}/`)) && isTabDirty(t.path),
   );
+  // Unsaved edits go into the file first, so the trashed copy is the latest text.
+  for (const tab of lost) await save(tab.path);
   try {
     await workspace.trash(path);
   } catch (error) {
@@ -472,13 +529,14 @@ export async function trashEntry(path: string): Promise<void> {
     );
     return;
   }
+  recovery.forgetAll(lost.map((t) => t.path));
   tabs.removed(path);
   documents.dropUnder(path);
   figures.dropUnder(path);
   viewers.dropUnder(path);
   notice.show(
     lost.length > 0
-      ? `Moved ${basename(path)} to the trash. Unsaved changes in it were discarded.`
+      ? `Moved ${basename(path)} to the trash, with its latest edits.`
       : `Moved ${basename(path)} to the trash.`,
   );
   build.noteDiskChange();
@@ -720,7 +778,8 @@ function onKernelEvent(event: KernelEvent): void {
   const touched = payload.changes
     .filter((c) => c.kind === "modified" || c.kind === "created")
     .map((c) => c.path);
-  void documents.externalChange(touched);
+  void documents.externalChanges(payload.changes);
+  void figures.externalChanges(payload.changes);
   void viewers.externalChange(touched);
   build.noteDiskChange();
 }
@@ -773,6 +832,8 @@ export async function boot(): Promise<void> {
   void guardWindowClose();
   routeExternalLinks();
   documents.onEdit(() => build.schedule("edit"));
+  recovery.start();
+  window.addEventListener("pagehide", () => void recovery.flushAll());
   diagram.start();
   exportDiagramsOnSave();
   void kernel.onEvent(onKernelEvent);
@@ -793,4 +854,5 @@ export async function boot(): Promise<void> {
   else if (tabs.tabs.length === 0)
     await openFile(workspace.project?.main ?? "", { focus: false });
   build.schedule("switch");
+  void offerRecovery(openFile);
 }

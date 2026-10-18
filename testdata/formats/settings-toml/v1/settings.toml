@@ -1,0 +1,11 @@
+# My settings, edited by hand.
+[editor]
+# the font size I like
+font-size = 15 # px
+tab-size = 4
+
+[files]
+autosave = "off"
+
+[zzz]
+unknown-here = true

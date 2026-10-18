@@ -1,0 +1,7 @@
+version = 999
+
+[[projects]]
+path = "/home/ada/papers/thesis"
+name = "Thesis"
+opened_at = 1760600000
+pinned_here = true

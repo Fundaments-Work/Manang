@@ -1,0 +1,33 @@
+---
+source: crates/manang-project/tests/formats.rs
+expression: before
+---
+[
+    ProjectEntry {
+        path: "/home/ada/papers/thesis",
+        name: "Thesis",
+        engine: Typst,
+        created: 1760000000,
+        last_opened: 1760600000,
+        pinned: true,
+        archived: false,
+        tags: [
+            "phd",
+            "draft",
+        ],
+        trashed_at: None,
+    },
+    ProjectEntry {
+        path: "/home/ada/talks/qm",
+        name: "QM talk",
+        engine: Markdown,
+        created: 1750000000,
+        last_opened: 1750500000,
+        pinned: false,
+        archived: false,
+        tags: [],
+        trashed_at: Some(
+            "2026-10-01T12:00:00+00:00",
+        ),
+    },
+]

@@ -96,6 +96,44 @@ pub fn read_text(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> 
     String::from_utf8(bytes).map_err(|_| ProjectError::NotUtf8(display(raw)))
 }
 
+/// A content fingerprint: `b3:` and 32 hex digits of the BLAKE3 hash. The
+/// frontend treats it as opaque; it is what `project.write-file`'s `expected`
+/// argument and recovery snapshots compare.
+pub fn hash_bytes(bytes: &[u8]) -> String {
+    let digest = blake3::hash(bytes).to_hex();
+    format!("b3:{}", &digest.as_str()[..32])
+}
+
+/// Text read with the fingerprint of exactly the bytes returned.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TextRead {
+    pub content: String,
+    pub hash: String,
+    pub size: u64,
+    /// Milliseconds since the Unix epoch, when the platform reports it.
+    pub modified: Option<u64>,
+}
+
+/// Read a UTF-8 text file with its hash and modification time, from one read.
+pub fn read_text_hashed(root: &ProjectRoot, raw: &str) -> Result<TextRead, ProjectError> {
+    let bytes = read_limited(root, raw)?;
+    let hash = hash_bytes(&bytes);
+    let size = bytes.len() as u64;
+    let modified = stat(root, raw).ok().and_then(|s| s.modified);
+    let content = String::from_utf8(bytes).map_err(|_| ProjectError::NotUtf8(display(raw)))?;
+    Ok(TextRead {
+        content,
+        hash,
+        size,
+        modified,
+    })
+}
+
+/// The fingerprint of a project file as it is on disk now.
+pub fn file_hash(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> {
+    Ok(hash_bytes(&read_limited(root, raw)?))
+}
+
 /// Read a file's raw bytes (images, PDFs).
 pub fn read_bytes(root: &ProjectRoot, raw: &str) -> Result<Vec<u8>, ProjectError> {
     read_limited(root, raw)
@@ -141,6 +179,34 @@ fn sync_dir(dir: &Path) {
 /// Atomically write UTF-8 text to a project file, creating parent
 /// directories. Returns the number of bytes written.
 pub fn write_text(root: &ProjectRoot, raw: &str, content: &str) -> Result<usize, ProjectError> {
+    write_text_checked(root, raw, content, None).map(|w| w.bytes)
+}
+
+/// What a checked write stored.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Written {
+    pub bytes: usize,
+    /// Fingerprint of the content now on disk.
+    pub hash: String,
+}
+
+/// The `expected` value meaning "the file must not exist yet".
+pub const EXPECT_ABSENT: &str = "absent";
+
+/// Like [`write_text`], but when `expected` is given the write only happens if
+/// the file on disk still has that fingerprint (the one `read_text_hashed` or
+/// the previous write returned), or, for [`EXPECT_ABSENT`], does not exist.
+/// Otherwise nothing is written and the error is [`ProjectError::Conflict`], so
+/// the shell can ask before overwriting another program's change.
+///
+/// The check and the rename are not one atomic step: a change landing in
+/// between is still possible, but the window is microseconds, not minutes.
+pub fn write_text_checked(
+    root: &ProjectRoot,
+    raw: &str,
+    content: &str,
+    expected: Option<&str>,
+) -> Result<Written, ProjectError> {
     if content.len() > MAX_WRITE_BYTES {
         return Err(ProjectError::TooLarge {
             path: display(raw),
@@ -152,13 +218,47 @@ pub fn write_text(root: &ProjectRoot, raw: &str, content: &str) -> Result<usize,
     if path.is_dir() {
         return Err(ProjectError::NotAFile(display(raw)));
     }
+    if let Some(expected) = expected {
+        check_expected(root, raw, &path, expected)?;
+    }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             ProjectError::io(format!("creating directories for {}", display(raw)), e)
         })?;
     }
     atomic_write(&path, content.as_bytes())?;
-    Ok(content.len())
+    Ok(Written {
+        bytes: content.len(),
+        hash: hash_bytes(content.as_bytes()),
+    })
+}
+
+fn check_expected(
+    root: &ProjectRoot,
+    raw: &str,
+    path: &Path,
+    expected: &str,
+) -> Result<(), ProjectError> {
+    let conflict = |what: &'static str| ProjectError::Conflict {
+        path: display(raw),
+        what,
+    };
+    let exists = path.symlink_metadata().is_ok();
+    if expected == EXPECT_ABSENT {
+        return if exists {
+            Err(conflict("already exists on disk"))
+        } else {
+            Ok(())
+        };
+    }
+    if !exists {
+        return Err(conflict("was deleted on disk since it was loaded"));
+    }
+    if file_hash(root, raw)? == expected {
+        Ok(())
+    } else {
+        Err(conflict("changed on disk since it was loaded"))
+    }
 }
 
 /// Rename or move an entry within the project. Refuses to overwrite.
@@ -188,35 +288,95 @@ pub fn rename(root: &ProjectRoot, from: &str, to: &str) -> Result<(), ProjectErr
 
 static TRASH_SEQ: AtomicU64 = AtomicU64::new(0);
 
-/// Move an entry to the project's recoverable trash,
-/// `.manang/trash/<id>/<original path>`, and return the trashed path
-/// (project-relative, `/`-separated).
-///
-/// The trash lives inside the project so the move is an atomic same-volume
-/// rename that never copies data and never touches the user's OS trash.
-/// Restoring is moving the file back; `.manang/` is git-ignored by the
-/// starters.
-pub fn trash(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> {
-    let src = root.resolve_for_move(raw)?;
-    if src.symlink_metadata().is_err() {
-        return Err(ProjectError::NotFound(display(raw)));
-    }
-    let rel = lexical_relative(raw)?;
+/// A fresh directory `.manang/trash/<id>/` and its project-relative name.
+fn new_slot(root: &ProjectRoot) -> Result<(std::path::PathBuf, String), ProjectError> {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis());
     let base = root.path().join(STATE_DIR).join("trash");
     fs::create_dir_all(&base)
         .map_err(|e| ProjectError::io("creating the trash directory".to_owned(), e))?;
-    let (slot, id) = loop {
+    loop {
         let id = format!("{millis}-{}", TRASH_SEQ.fetch_add(1, Ordering::Relaxed));
         let slot = base.join(&id);
         match fs::create_dir(&slot) {
-            Ok(()) => break (slot, id),
+            Ok(()) => return Ok((slot, id)),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
             Err(e) => return Err(ProjectError::io("creating a trash slot".to_owned(), e)),
         }
+    }
+}
+
+/// Safety copies of files about to be changed or replaced, kept together in one
+/// `.manang/trash/<id>/` folder with their project-relative layout. Used by
+/// project-wide replace, Convert to Typst, and "Overwrite with my version", so a
+/// destructive step never leaves the original only in memory.
+#[derive(Debug)]
+pub struct BackupSlot {
+    dir: std::path::PathBuf,
+    name: String,
+}
+
+impl BackupSlot {
+    /// The slot's project-relative path, `.manang/trash/<id>`.
+    pub fn path(&self) -> String {
+        format!("{STATE_DIR}/trash/{}", self.name)
+    }
+
+    /// Keep `bytes` as the copy of project file `raw`.
+    pub fn save(&self, raw: &str, bytes: &[u8]) -> Result<(), ProjectError> {
+        let rel = lexical_relative(raw)?;
+        let dst = self.dir.join(rel);
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| ProjectError::io("preparing the backup folder".to_owned(), e))?;
+        }
+        atomic_write(&dst, bytes)
+    }
+
+    /// Remove the slot again when nothing was saved into it.
+    pub fn remove_if_empty(&self) {
+        // `remove_dir` fails on a folder with content, which is what we want.
+        let _ = fs::remove_dir(&self.dir);
+    }
+}
+
+/// Open a backup slot for the project.
+pub fn backup_slot(root: &ProjectRoot) -> Result<BackupSlot, ProjectError> {
+    let (dir, name) = new_slot(root)?;
+    Ok(BackupSlot { dir, name })
+}
+
+/// Copy one existing project file into a new trash slot and return the copy's
+/// project-relative path. `Ok(None)` when the file does not exist (nothing to
+/// lose). The original is left in place.
+pub fn backup_file(root: &ProjectRoot, raw: &str) -> Result<Option<String>, ProjectError> {
+    let bytes = match read_limited(root, raw) {
+        Ok(b) => b,
+        Err(ProjectError::NotFound(_)) => return Ok(None),
+        Err(e) => return Err(e),
     };
+    let slot = backup_slot(root)?;
+    slot.save(raw, &bytes)?;
+    let shown = to_slash(&lexical_relative(raw)?).unwrap_or_default();
+    Ok(Some(format!("{}/{shown}", slot.path())))
+}
+
+/// Move an entry to the project's recoverable trash,
+/// `.manang/trash/<id>/<original path>`, and return the trashed path
+/// (project-relative, `/`-separated).
+///
+/// The trash lives inside the project so the move is an atomic same-volume
+/// rename that never copies data and never touches the user's OS trash.
+/// Restoring is moving the file back; `.manang/` is ignored by version
+/// control in the starters.
+pub fn trash(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> {
+    let src = root.resolve_for_move(raw)?;
+    if src.symlink_metadata().is_err() {
+        return Err(ProjectError::NotFound(display(raw)));
+    }
+    let rel = lexical_relative(raw)?;
+    let (slot, id) = new_slot(root)?;
     let dst = slot.join(&rel);
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent)

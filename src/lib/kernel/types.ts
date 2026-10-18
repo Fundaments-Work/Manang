@@ -61,6 +61,11 @@ export interface ProjectSummary {
   readonly main: string;
   readonly config: ProjectConfig;
   readonly warnings: readonly string[];
+  /**
+   * Problems with Manang's own list files (a damaged or newer
+   * `projects.toml`, set aside or read-only). Absent from older kernels.
+   */
+  readonly format_warnings?: readonly string[];
   readonly tree: TreePage;
 }
 

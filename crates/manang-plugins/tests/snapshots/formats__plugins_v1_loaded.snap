@@ -1,0 +1,32 @@
+---
+source: crates/manang-plugins/tests/formats.rs
+expression: "registry.get(\"word-count\")"
+---
+Some(
+    PluginRecord {
+        enabled: true,
+        granted: Permissions {
+            filesystem: [],
+            network: [
+                "api.example.org",
+            ],
+            buffer: [],
+        },
+        reviewed: Permissions {
+            filesystem: [],
+            network: [
+                "api.example.org",
+            ],
+            buffer: [],
+        },
+        approved_version: Some(
+            "0.2.0",
+        ),
+        pending_version: None,
+        installed_at: 1760000000,
+        source: Some(
+            "/home/ada/plugins/word-count",
+        ),
+        publisher: None,
+    },
+)

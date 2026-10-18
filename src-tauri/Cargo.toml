@@ -48,6 +48,7 @@ manang-markdown = { path = "../crates/manang-markdown" }
 manang-diagram = { path = "../crates/manang-diagram" }
 manang-citations = { path = "../crates/manang-citations" }
 manang-plugins = { path = "../crates/manang-plugins" }
+manang-recovery = { path = "../crates/manang-recovery" }
 manang-wasm-host = { path = "../crates/manang-wasm-host" }
 
 [dev-dependencies]

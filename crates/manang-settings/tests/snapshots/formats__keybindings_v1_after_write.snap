@@ -1,0 +1,13 @@
+---
+source: crates/manang-settings/tests/formats.rs
+expression: text
+---
+version = 1
+# Mine
+[[bindings]]
+command = "editor.save"
+keys = ["Mod+Alt+S"]
+
+[[bindings]]
+command = "a.other"
+keys = ["Mod+K"]

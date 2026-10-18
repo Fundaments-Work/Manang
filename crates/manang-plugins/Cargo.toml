@@ -9,6 +9,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+manang-formats = { path = "../manang-formats" }
 manang-kernel = { path = "../manang-kernel" }
 manang-wasm-host = { path = "../manang-wasm-host" }
 blake3 = "1.8"
