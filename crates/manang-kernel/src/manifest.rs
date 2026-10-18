@@ -218,6 +218,111 @@ fn valid_menu_group(group: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
 }
 
+/// What a `[[contributes.format-adapters]]` entry declares: a source-text
+/// format the Visual editor can decorate (ADR 0015). The implementation is the
+/// plugin's own (a native `FormatAdapter` or a WASM component exporting
+/// `manang:format/adapter`); the manifest only announces it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct FormatAdapterSpec {
+    /// Kebab-case, unique across plugins.
+    pub id: String,
+    /// Shown in the UI; the id when absent.
+    #[serde(default)]
+    pub title: String,
+    /// Lowercase file extensions without the dot.
+    #[serde(default)]
+    pub extensions: Vec<String>,
+    /// The document type this adapter belongs to, when the format has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_type: Option<String>,
+    /// Span kinds it produces (`heading`, `strong`, ...); kebab-case names.
+    #[serde(default)]
+    pub kinds: Vec<String>,
+    /// Edit commands it implements (`bold`, `heading`, ...).
+    #[serde(default)]
+    pub commands: Vec<String>,
+}
+
+/// How an editor presents a document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EditorKind {
+    /// The source text editor.
+    Source,
+    /// The Visual editor: decorations over the source through a format adapter.
+    Visual,
+    /// A plugin-provided editor with its own UI `entry`.
+    Custom,
+}
+
+/// Whether an editor replaces the default for its document types.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EditorPriority {
+    /// Offered next to the default (a toggle), never opened by itself.
+    #[default]
+    Optional,
+    /// Opens documents of its types unless the user chose otherwise.
+    Default,
+}
+
+/// An editor a plugin contributes under `[[contributes.editors]]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct EditorSpec {
+    /// Kebab-case, unique across plugins.
+    pub id: String,
+    pub kind: EditorKind,
+    /// Format-adapter ids or file extensions this editor opens; `*` is every
+    /// type that has a format adapter (visual editors) or every type.
+    #[serde(default)]
+    pub document_types: Vec<String>,
+    #[serde(default)]
+    pub title: String,
+    /// The UI entry of a `custom` editor, a relative path in the plugin folder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+    #[serde(default)]
+    pub priority: EditorPriority,
+}
+
+/// One toolbar button.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolbarItem {
+    /// A command the same manifest declares.
+    pub command: String,
+    /// A generic icon name (kebab-case).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// A condition the shell evaluates, for example `adapter.has(bold)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<String>,
+}
+
+/// A group of toolbar buttons for an editor, under `[[contributes.toolbars]]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolbarSpec {
+    /// The id of the editor the toolbar belongs to.
+    pub editor: String,
+    #[serde(default)]
+    pub items: Vec<ToolbarItem>,
+}
+
+/// Most entries in one `kinds`, `commands`, `extensions` or `document-types` list.
+pub const MAX_LIST: usize = 64;
+/// Longest `when` condition.
+pub const MAX_WHEN: usize = 200;
+
+fn lowercase_word(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 16
+        && s.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Contributes {
     #[serde(default)]
@@ -228,6 +333,15 @@ pub struct Contributes {
     pub settings: Vec<SettingSpec>,
     #[serde(default)]
     pub menus: Vec<MenuSpec>,
+    /// Source formats the Visual editor can decorate.
+    #[serde(default, rename = "format-adapters")]
+    pub format_adapters: Vec<FormatAdapterSpec>,
+    /// Editors the plugin adds.
+    #[serde(default)]
+    pub editors: Vec<EditorSpec>,
+    /// Toolbar buttons for editors.
+    #[serde(default)]
+    pub toolbars: Vec<ToolbarSpec>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -439,9 +553,130 @@ impl Manifest {
             })?;
         }
         self.validate_menus()?;
+        self.validate_editing()?;
         check_settings_contexts(&self.plugin.settings_contexts)
             .map_err(ManifestError::BadSettingsContexts)?;
         CapabilitySet::from_permissions(&self.permissions)?;
+        Ok(())
+    }
+
+    /// Format adapters, editors and toolbars: well-formed, and toolbars only
+    /// name commands this manifest declares.
+    fn validate_editing(&self) -> Result<(), ManifestError> {
+        let c = &self.contributes;
+        for (n, what) in [
+            (c.format_adapters.len(), "format adapters"),
+            (c.editors.len(), "editors"),
+            (c.toolbars.len(), "toolbars"),
+        ] {
+            if n > MAX_ENTRIES {
+                return Err(ManifestError::TooMany(MAX_ENTRIES, what));
+            }
+        }
+        let mut seen = HashSet::new();
+        for a in &c.format_adapters {
+            let bad = |message: String| ManifestError::BadContribution {
+                what: "format adapter",
+                id: a.id.clone(),
+                message,
+            };
+            if !valid_name(&a.id) {
+                return Err(bad("the id must be lowercase kebab-case".to_owned()));
+            }
+            if !seen.insert(a.id.as_str()) {
+                return Err(bad("declared more than once".to_owned()));
+            }
+            if a.extensions.is_empty() || a.extensions.len() > MAX_LIST {
+                return Err(bad(format!("1 to {MAX_LIST} extensions are required")));
+            }
+            if let Some(e) = a.extensions.iter().find(|e| !lowercase_word(e)) {
+                return Err(bad(format!(
+                    "extension `{e}` must be lowercase letters and digits, without the dot"
+                )));
+            }
+            if a.document_type.as_deref().is_some_and(|d| !valid_name(d)) {
+                return Err(bad("`document-type` must be kebab-case".to_owned()));
+            }
+            for (list, label) in [(&a.kinds, "kind"), (&a.commands, "command")] {
+                if list.len() > MAX_LIST {
+                    return Err(bad(format!("at most {MAX_LIST} {label}s are allowed")));
+                }
+                if let Some(x) = list.iter().find(|x| !valid_name(x)) {
+                    return Err(bad(format!("{label} `{x}` must be kebab-case")));
+                }
+            }
+        }
+        let mut seen = HashSet::new();
+        for e in &c.editors {
+            let bad = |message: String| ManifestError::BadContribution {
+                what: "editor",
+                id: e.id.clone(),
+                message,
+            };
+            if !valid_name(&e.id) {
+                return Err(bad("the id must be lowercase kebab-case".to_owned()));
+            }
+            if !seen.insert(e.id.as_str()) {
+                return Err(bad("declared more than once".to_owned()));
+            }
+            if e.document_types.len() > MAX_LIST {
+                return Err(bad(format!(
+                    "at most {MAX_LIST} document types are allowed"
+                )));
+            }
+            if let Some(t) = e
+                .document_types
+                .iter()
+                .find(|t| *t != "*" && !valid_name(t) && !lowercase_word(t))
+            {
+                return Err(bad(format!(
+                    "document type `{t}` must be `*`, an adapter id or an extension"
+                )));
+            }
+            match (e.kind, &e.entry) {
+                (EditorKind::Custom, None) => {
+                    return Err(bad("a custom editor needs an `entry`".to_owned()));
+                }
+                (_, Some(entry)) if !safe_entry(entry) => {
+                    return Err(bad(
+                        "`entry` must be a relative path inside the plugin folder".to_owned(),
+                    ));
+                }
+                _ => {}
+            }
+        }
+        let declared: HashSet<&str> = c.commands.iter().map(|k| k.id.as_str()).collect();
+        for t in &c.toolbars {
+            let bad = |message: String| ManifestError::BadContribution {
+                what: "toolbar",
+                id: t.editor.clone(),
+                message,
+            };
+            if !valid_name(&t.editor) {
+                return Err(bad("`editor` must be an editor id".to_owned()));
+            }
+            if t.items.is_empty() || t.items.len() > MAX_LIST {
+                return Err(bad(format!("1 to {MAX_LIST} items are required")));
+            }
+            let mut seen = HashSet::new();
+            for item in &t.items {
+                if !declared.contains(item.command.as_str()) {
+                    return Err(bad(format!(
+                        "command `{}` is not declared in [[contributes.commands]]",
+                        item.command
+                    )));
+                }
+                if !seen.insert(item.command.as_str()) {
+                    return Err(bad(format!("command `{}` appears twice", item.command)));
+                }
+                if item.icon.as_deref().is_some_and(|i| !valid_name(i)) {
+                    return Err(bad("an icon name must be kebab-case".to_owned()));
+                }
+                if item.when.as_deref().is_some_and(|w| w.len() > MAX_WHEN) {
+                    return Err(bad(format!("`when` is longer than {MAX_WHEN} characters")));
+                }
+            }
+        }
         Ok(())
     }
 
