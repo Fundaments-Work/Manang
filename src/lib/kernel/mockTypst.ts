@@ -9,7 +9,7 @@
  */
 
 import { analyse } from "$lib/editor/diagnostics";
-import { approxMath } from "$lib/figure/mathApprox";
+import { approxMath, paintApprox } from "$lib/figure/mathApprox";
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
 import { textWidth, writePdf, type MockLink, type MockPage } from "./mockPdf";
@@ -647,7 +647,13 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
             throw { message: "`source` must be a string" };
           const size = typeof args["size"] === "number" ? args["size"] : 16;
           try {
-            return new TextEncoder().encode(approxMath("typst", source, size).svg);
+            const svg = approxMath("typst", source, size).svg;
+            const color = args["color"];
+            return new TextEncoder().encode(
+              typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)
+                ? paintApprox(svg, color.toLowerCase())
+                : svg,
+            );
           } catch (error) {
             throw { message: `[math_error] ${JSON.stringify(error)}` };
           }
