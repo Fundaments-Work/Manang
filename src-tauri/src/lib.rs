@@ -889,6 +889,24 @@ mod tests {
                 .iter()
                 .any(|t| t.tool.name == "figure_add_shapes")
         );
+        // The assistant's own tools and the citations plugin's, one name each, no old names.
+        let names: Vec<&str> = list.tools.iter().map(|t| t.tool.name.as_str()).collect();
+        for expected in [
+            "list_files",
+            "read_file",
+            "search",
+            "outline",
+            "diagnostics",
+            "bib_search",
+            "edit_text",
+            "ask_user",
+            "verify_citation",
+        ] {
+            assert!(names.contains(&expected), "missing tool {expected}");
+        }
+        for old in ["doc_read", "doc_propose_edit", "project_search"] {
+            assert!(!names.contains(&old), "{old} is gone");
+        }
     }
 
     #[test]
