@@ -605,6 +605,191 @@ async function autosaveSection(browser) {
 }
 
 /**
+ * The optional built-in LaTeX engine: with no TeX installed the preview, the
+ * Problems tab and the Output tab offer "Download the built-in engine"; the
+ * consent dialog says what is downloaded and from where, and nothing is fetched
+ * until Download is pressed; progress can be cancelled; a failure can be retried;
+ * after the install the document compiles with the built-in engine; Settings >
+ * LaTeX shows the status and can remove it. The mock kernel simulates the
+ * download (see `mockLatex.ts`); the real one is tested in
+ * `crates/manang-latex/tests/builtin.rs`.
+ *
+ * Self-contained, so `MANANG_ONLY=engine node scripts/verify-ui.mjs` runs only it.
+ */
+async function engineSection(browser) {
+  section("Built-in LaTeX engine");
+  const page = await newPage(browser);
+  current = page;
+  const run = (command, args = {}) =>
+    page.evaluate(
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
+    );
+  const dialog = `document.querySelector('[data-engine-dialog]')`;
+  const dialogStep = () => page.evaluate(`${dialog}?.dataset.engineDialog ?? null`);
+  const untouched = JSON.stringify({ calls: [], installed: false });
+
+  // This machine has no TeX.
+  await run("dev.latex-tex", { tex: false });
+  await waitFor(page, `!!document.querySelector('[data-project$="thesis-draft"]')`, {
+    label: "Home lists the LaTeX demo project",
+  });
+  await click(page, '[data-project$="thesis-draft"] button');
+  await expectEventually(
+    page,
+    "without TeX the preview says so and offers the built-in engine with its size",
+    `(() => { const p = document.querySelector('section[aria-label="Preview"]'); return !!p && p.innerText.includes("No TeX installation found") && (p.querySelector("[data-engine-offer]")?.innerText ?? "").startsWith("Download the built-in engine (about 14 MB)"); })()`,
+    { timeout: 20000 },
+  );
+  await shoot(page, "engine-1-offer");
+
+  // Problems and Output carry the same offer.
+  await page.evaluate(
+    `import("/src/lib/state/layout.svelte.ts").then((m) => m.layout.showPanel("problems"))`,
+  );
+  await expectEventually(
+    page,
+    "the Problems tab explains the failure and offers the engine",
+    `(() => { const p = document.querySelector("#bottom-panel"); return !!p && p.innerText.includes("No TeX installation found") && !!p.querySelector("[data-engine-offer]"); })()`,
+  );
+  await clickText(page, '#bottom-panel [role="tab"]', "Output");
+  await expectEventually(
+    page,
+    "the Output tab offers it too",
+    `!!document.querySelector("#bottom-panel [data-output-offer] [data-engine-offer]")`,
+  );
+  await page.evaluate(
+    `import("/src/lib/state/layout.svelte.ts").then((m) => m.layout.closePanel())`,
+  );
+
+  // The consent dialog: exact facts, and nothing downloaded yet.
+  await click(page, 'section[aria-label="Preview"] [data-engine-offer]');
+  await expectEventually(
+    page,
+    "the offer opens a consent dialog",
+    `${dialog}?.dataset.engineDialog === "consent"`,
+  );
+  const facts = await page.evaluate(
+    `(() => { const q = (s) => document.querySelector(s)?.innerText ?? ""; return { host: q("[data-engine-host]"), size: q("[data-engine-size]"), sha: q("[data-engine-sha]"), path: q("[data-engine-path]"), packages: q("[data-engine-packages]") }; })()`,
+  );
+  check(
+    "it names the host, the size and the SHA-256",
+    facts.host.trim() === "engines.manang.example" &&
+      facts.size.trim() === "14.4 MB" &&
+      /^[0-9a-f]{64}$/.test(facts.sha.trim()),
+    JSON.stringify(facts),
+  );
+  check(
+    "it says where the engine is saved",
+    facts.path.includes("engines/tectonic-0.17.0"),
+    facts.path,
+  );
+  check(
+    "it says packages are fetched on first use, and names that host",
+    facts.packages.includes("relay.fullyjustified.net") &&
+      facts.packages.includes("first time"),
+    facts.packages,
+  );
+  await shoot(page, "engine-2-consent");
+  check(
+    "nothing has been downloaded while the dialog is open",
+    JSON.stringify(await run("dev.latex-engine-calls")) === untouched,
+  );
+  await press(page, "Escape", { wait: 300 });
+  check("Escape closes the dialog", (await dialogStep()) === null);
+  check(
+    "cancelling the dialog downloaded nothing",
+    JSON.stringify(await run("dev.latex-engine-calls")) === untouched,
+  );
+
+  // Progress, then Cancel.
+  await run("dev.latex-engine-mode", { mode: "slow" });
+  await click(page, 'section[aria-label="Preview"] [data-engine-offer]');
+  await click(page, "[data-engine-confirm]");
+  await expectEventually(
+    page,
+    "pressing Download shows progress with a Cancel button",
+    `(document.querySelector("[data-engine-progress]")?.innerText ?? "").startsWith("Downloading") && !!document.querySelector("[data-engine-cancel]")`,
+  );
+  await sleep(500);
+  const bar = await page.evaluate(
+    `parseFloat(document.querySelector("[data-engine-bar]")?.style.width ?? "0")`,
+  );
+  check("the bar has moved", bar > 0 && bar < 100, String(bar));
+  await shoot(page, "engine-3-progress");
+  await click(page, "[data-engine-cancel]");
+  await expectEventually(
+    page,
+    "Cancel stops the download and closes the dialog",
+    `!document.querySelector('[data-engine-dialog]')`,
+    { timeout: 5000 },
+  );
+  check(
+    "a cancelled download leaves nothing installed",
+    (await run("dev.latex-engine-calls")).installed === false,
+  );
+
+  // A failure can be retried.
+  await run("dev.latex-engine-mode", { mode: "fail" });
+  await click(page, 'section[aria-label="Preview"] [data-engine-offer]');
+  await click(page, "[data-engine-confirm]");
+  await expectEventually(
+    page,
+    "a network failure is explained in plain words",
+    `(document.querySelector("[data-engine-error]")?.innerText ?? "").includes("internet connection")`,
+    { timeout: 5000 },
+  );
+  await shoot(page, "engine-4-failed");
+  await run("dev.latex-engine-mode", { mode: "normal" });
+  await click(page, "[data-engine-confirm]");
+  await expectEventually(
+    page,
+    "Try again installs the engine",
+    `${dialog}?.dataset.engineDialog === "done"`,
+    { timeout: 8000 },
+  );
+  await shoot(page, "engine-5-done");
+  await click(page, "[data-engine-close]");
+  await expectEventually(
+    page,
+    "the document compiles with the built-in engine",
+    `document.querySelector('[data-pdf-viewer] canvas') !== null && document.querySelector('section[aria-label="Preview"] [aria-label="Refresh preview"]').title.includes("xelatex, built-in engine")`,
+    { timeout: 20000 },
+  );
+  check(
+    "every download request carried the person's consent",
+    (await run("dev.latex-engine-calls")).calls.every((c) => c === true),
+  );
+
+  // Settings > LaTeX.
+  await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Settings"]');
+  await expectEventually(
+    page,
+    "Settings > LaTeX shows the installed engine and its version",
+    `(document.querySelector('[data-plugin="latex"] [data-engine-state]')?.innerText ?? "").includes("Installed: Tectonic 0.17.0")`,
+  );
+  check(
+    "the engine choice reads Automatic, System TeX, Built-in engine",
+    await page.evaluate(
+      `(() => { const t = document.querySelector('[data-plugin="latex"] [data-setting="latex.backend"]')?.innerText ?? ""; return ["Automatic", "System TeX", "Built-in engine"].every((n) => t.includes(n)); })()`,
+    ),
+  );
+  await shoot(page, "engine-6-settings");
+  await click(page, '[data-plugin="latex"] [data-engine-remove]');
+  await expectEventually(
+    page,
+    "Remove uninstalls it and offers the download again",
+    `(document.querySelector('[data-plugin="latex"] [data-engine-state]')?.innerText ?? "").includes("Not installed") && (document.querySelector('[data-plugin="latex"] [data-engine-offer]')?.innerText ?? "").includes("about 14 MB")`,
+  );
+  // The one error logged is the simulated network failure above.
+  const unexpected = page.errors.filter((e) => !e.includes("engine.install"));
+  check(
+    "the browser raised no unexpected errors",
+    unexpected.length === 0,
+    unexpected.slice(0, 2).join(" | "),
+  );
+}
+
+/**
  * The live session flow against the in-memory kernel: sharing (with and without
  * a relay), a scripted collaborator typing and moving a caret, a local edit
  * racing a delayed remote one, a dropped link, an error, joining with a
@@ -1475,10 +1660,12 @@ async function main() {
 
     if (
       process.env.MANANG_ONLY === "live" ||
+      process.env.MANANG_ONLY === "engine" ||
       process.env.MANANG_ONLY === "autosave" ||
       process.env.MANANG_ONLY === "feedback"
     ) {
       if (process.env.MANANG_ONLY === "feedback") await feedbackSection(browser);
+      else if (process.env.MANANG_ONLY === "engine") await engineSection(browser);
       else if (process.env.MANANG_ONLY === "autosave") await autosaveSection(browser);
       else await liveSection(browser);
       browser.close();
@@ -2071,7 +2258,7 @@ async function main() {
     await expectEventually(
       page,
       "searching narrows settings and plugins together",
-      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.backend,latex.engine,latex.latexmk,latex.timeout-seconds"; })()`,
+      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.backend,latex.engine,latex.fetch-packages,latex.latexmk,latex.timeout-seconds"; })()`,
       {
         show: `[...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join()`,
       },
@@ -8386,6 +8573,7 @@ async function main() {
 
     await feedbackSection(browser);
     await autosaveSection(browser);
+    await engineSection(browser);
     await liveSection(browser);
 
     /* ------------------------------------------------------------------ */
