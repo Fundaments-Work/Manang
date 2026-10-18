@@ -64,6 +64,8 @@ pub enum ProjectError {
     /// code the shell matches on.
     #[error("[conflict] `{path}` {what}")]
     Conflict { path: String, what: &'static str },
+    #[error(transparent)]
+    Format(#[from] manang_formats::FormatError),
     #[error("no project is open")]
     NoProject,
     #[error("`{0}` already exists")]

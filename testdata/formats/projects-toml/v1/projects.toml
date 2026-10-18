@@ -1,0 +1,17 @@
+[[projects]]
+path = "/home/ada/papers/thesis"
+name = "Thesis"
+engine = "typst"
+created = 1760000000
+last_opened = 1760600000
+pinned = true
+archived = false
+tags = ["phd", "draft"]
+
+[[projects]]
+path = "/home/ada/talks/qm"
+name = "QM talk"
+engine = "markdown"
+created = 1750000000
+last_opened = 1750500000
+trashed_at = "2026-10-01T12:00:00+00:00"

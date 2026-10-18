@@ -1,0 +1,13 @@
+version = 999
+
+[project]
+engine = "latex"
+name = "From the future"
+compiler-flags = ["-shell-escape"]
+
+[bibliography]
+paths = ["refs.bib"]
+style = "ieee"
+
+[collaboration]
+relay = "wss://example.invalid"

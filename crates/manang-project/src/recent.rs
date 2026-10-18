@@ -19,9 +19,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ProjectError;
 use crate::fsops::atomic_write;
+use crate::versioned::load_toml;
 
 /// File name inside the config directory.
 pub const RECENT_FILE: &str = "recent-projects.toml";
+/// The format version `recent-projects.toml` is written in (`docs/formats.md`).
+pub const RECENT_VERSION: u32 = 1;
 /// Most entries kept.
 pub const MAX_RECENT: usize = 20;
 
@@ -38,11 +41,21 @@ struct RecentFile {
     projects: Vec<RecentEntry>,
 }
 
+/// What is written: the version first, then the list.
+#[derive(Serialize)]
+struct RecentOut<'a> {
+    version: u32,
+    projects: &'a [RecentEntry],
+}
+
 /// The persisted recent-projects list.
 #[derive(Debug)]
 pub struct RecentStore {
     file: PathBuf,
     lock: Mutex<()>,
+    /// Written by a newer Manang: read-only, never written back.
+    newer: Mutex<Option<u32>>,
+    warnings: Mutex<Vec<String>>,
 }
 
 impl RecentStore {
@@ -50,21 +63,40 @@ impl RecentStore {
         Self {
             file: config_dir.as_ref().join(RECENT_FILE),
             lock: Mutex::new(()),
+            newer: Mutex::new(None),
+            warnings: Mutex::new(Vec::new()),
         }
     }
 
+    /// Read the list. A damaged file is set aside, never overwritten.
     fn read(&self) -> Vec<RecentEntry> {
-        fs::read_to_string(&self.file)
-            .ok()
-            .and_then(|text| toml::from_str::<RecentFile>(&text).ok())
-            .map(|f| f.projects)
-            .unwrap_or_default()
+        let loaded = load_toml::<RecentFile>(&self.file, RECENT_FILE, RECENT_VERSION, &[]);
+        *self.newer.lock() = loaded.newer;
+        let mut warnings = self.warnings.lock();
+        for warning in loaded.warnings {
+            if !warnings.contains(&warning) {
+                warnings.push(warning);
+            }
+        }
+        loaded.value.projects
+    }
+
+    /// Problems found while loading (set-aside, newer format), once each.
+    pub fn take_warnings(&self) -> Vec<String> {
+        let _guard = self.lock.lock();
+        let _ = self.read();
+        std::mem::take(&mut self.warnings.lock())
     }
 
     fn write(&self, projects: Vec<RecentEntry>) -> Result<(), ProjectError> {
-        let text = toml::to_string_pretty(&RecentFile { projects }).map_err(|e| {
-            ProjectError::io("serialising recent projects", std::io::Error::other(e))
-        })?;
+        if let Some(found) = *self.newer.lock() {
+            return Err(manang_formats::refuse_newer(RECENT_FILE, found, RECENT_VERSION).into());
+        }
+        let text = toml::to_string_pretty(&RecentOut {
+            version: RECENT_VERSION,
+            projects: &projects,
+        })
+        .map_err(|e| ProjectError::io("serialising recent projects", std::io::Error::other(e)))?;
         if let Some(parent) = self.file.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| ProjectError::io("creating the config directory".to_owned(), e))?;
