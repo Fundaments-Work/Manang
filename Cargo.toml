@@ -17,6 +17,7 @@ members = [
     "crates/manang-writing",
     "crates/manang-markdown",
     "crates/manang-citations",
+    "crates/manang-diagram",
 ]
 exclude = [
     "crates/manang-wasm-host/tests/fixtures/echo-guest",
@@ -29,7 +30,7 @@ edition = "2024"
 license = "MIT"
 authors = ["Fundaments.work"]
 repository = "https://github.com/Fundaments-Work/Manang"
-rust-version = "1.92"
+rust-version = "1.95"
 
 [workspace.dependencies]
 tauri = { version = "2", features = [] }

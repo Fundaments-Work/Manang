@@ -36,6 +36,11 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
       },
     ],
   },
+  diagram: {
+    description:
+      "Text diagrams (Mermaid, Pikchr, ASCII) to deterministic SVG. Diagnostics use 1-based lines and 1-based columns counted in characters, end exclusive, like the Typst plugin.",
+    permissions: {},
+  },
   editor: {
     description: "Document store, edits and the active-buffer service",
     permissions: { buffer: ["write:active"] },

@@ -1,0 +1,68 @@
+[package]
+name = "manang-diagram"
+description = "Manang's first-party text diagram plugin: Mermaid, Pikchr and ASCII diagrams to deterministic SVG"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+blake3 = "1.8"
+manang-kernel = { path = "../manang-kernel" }
+# No ELK: its layout port is EPL-2.0 (ADR 0011). Every built-in family is
+# listed explicitly so a new upstream family is an explicit decision.
+merman = { version = "=0.9.0", default-features = false, features = [
+    "complete-svg",
+    "diagram-agentflow",
+    "diagram-architecture",
+    "diagram-block",
+    "diagram-c4",
+    "diagram-class",
+    "diagram-cynefin",
+    "diagram-er",
+    "diagram-event-modeling",
+    "diagram-flowchart",
+    "diagram-gantt",
+    "diagram-git-graph",
+    "diagram-info",
+    "diagram-ishikawa",
+    "diagram-journey",
+    "diagram-kanban",
+    "diagram-mindmap",
+    "diagram-packet",
+    "diagram-pie",
+    "diagram-quadrant-chart",
+    "diagram-radar",
+    "diagram-railroad",
+    "diagram-requirement",
+    "diagram-sankey",
+    "diagram-sequence",
+    "diagram-state",
+    "diagram-swimlane",
+    "diagram-timeline",
+    "diagram-tree-view",
+    "diagram-treemap",
+    "diagram-usecase",
+    "diagram-venn",
+    "diagram-wardley",
+    "diagram-xychart",
+    "diagram-zenuml",
+] }
+pest = "2.8"
+pikru = "=1.0.1"
+quick-xml = "0.42"
+serde = { workspace = true }
+serde_json = { workspace = true }
+svgbob = "=0.7.2"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+insta = "1"
+proptest = "1"
+
+[[bench]]
+name = "diagram_render"
+harness = false

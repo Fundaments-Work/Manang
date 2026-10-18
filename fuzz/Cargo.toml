@@ -13,6 +13,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+manang-diagram = { path = "../crates/manang-diagram" }
 manang-kernel = { path = "../crates/manang-kernel" }
 manang-wasm-host = { path = "../crates/manang-wasm-host" }
 serde_json = "1"
@@ -27,6 +28,13 @@ bench = false
 [[bin]]
 name = "payload_boundary"
 path = "fuzz_targets/payload_boundary.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "diagram_render"
+path = "fuzz_targets/diagram_render.rs"
 test = false
 doc = false
 bench = false
