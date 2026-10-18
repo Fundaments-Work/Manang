@@ -23,8 +23,10 @@ export interface ShortcutGroup {
 }
 
 /**
- * Built-in global shortcuts that might not be in the dynamic command registry
- * (e.g. tab numeric switching or palette accelerators).
+ * Keys that are not commands in the keybindings registry, listed so the
+ * reference is complete: Escape dismisses whatever is on top (it is handled
+ * where the thing it closes lives), and Go to tab 1-9 is nine commands
+ * summarised as one row.
  */
 export const GLOBAL_WORKBENCH_SHORTCUTS: readonly {
   readonly id: string;
@@ -33,39 +35,6 @@ export const GLOBAL_WORKBENCH_SHORTCUTS: readonly {
   readonly shortcut: Shortcut;
   readonly description?: string;
 }[] = [
-  {
-    id: "workbench.shortcuts",
-    title: "Keyboard shortcuts cheat sheet",
-    category: "General",
-    shortcut: { key: "/", mod: true },
-    description: "Show this reference overlay",
-  },
-  {
-    id: "workbench.palette.commands",
-    title: "Command palette",
-    category: "General",
-    shortcut: { key: "k", mod: true },
-    description: "Search and run any command",
-  },
-  {
-    id: "workbench.palette.files",
-    title: "Quick open file",
-    category: "General",
-    shortcut: { key: "p", mod: true },
-    description: "Fuzzy find and switch files",
-  },
-  {
-    id: "workbench.tabs.cycle",
-    title: "Next tab",
-    category: "Tabs & Navigation",
-    shortcut: { key: "Tab", mod: true },
-  },
-  {
-    id: "workbench.tabs.prev",
-    title: "Previous tab",
-    category: "Tabs & Navigation",
-    shortcut: { key: "PageUp", mod: true },
-  },
   {
     id: "workbench.tabs.direct",
     title: "Switch to tab 1-9",
@@ -109,6 +78,8 @@ export function extractShortcutGroups(
   // 2. Add commands from the registry that have shortcuts
   for (const cmd of commands) {
     if (!cmd.shortcuts || cmd.shortcuts.length === 0) continue;
+    // Keys-only commands (Go to tab 3) are summarised by a global row.
+    if (cmd.palette === false) continue;
     if (seen.has(cmd.id)) continue;
     seen.add(cmd.id);
 
@@ -116,7 +87,14 @@ export function extractShortcutGroups(
     if (!shortcut) continue;
 
     let category = "General";
-    if (cmd.id.startsWith("view.") || cmd.id.startsWith("toggle.")) {
+    if (
+      cmd.id.startsWith("palette.") ||
+      cmd.id.startsWith("help.") ||
+      cmd.id.startsWith("app.") ||
+      cmd.id.startsWith("dev.")
+    ) {
+      category = "General";
+    } else if (cmd.id.startsWith("view.") || cmd.id.startsWith("toggle.")) {
       category = "Views & Panels";
     } else if (
       cmd.id.startsWith("file.") ||

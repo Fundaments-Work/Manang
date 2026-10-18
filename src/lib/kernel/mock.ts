@@ -128,7 +128,11 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
       pluginCommands.push({ id, title, plugin: plugin.name });
     }
     const manifest = MOCK_MANIFESTS[plugin.name];
-    const settings = plugin.settings ?? manifest?.settings ?? [];
+    const contexts = manifest?.settingsContexts ?? ["app"];
+    const settings = (plugin.settings ?? manifest?.settings ?? []).map((d) => ({
+      ...d,
+      contexts: d.contexts ?? contexts,
+    }));
     pluginInfo.push({
       name: plugin.name,
       version: plugin.version ?? "0.1.0",
@@ -137,6 +141,7 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
       permissions: plugin.permissions ?? manifest?.permissions ?? {},
       commands: plugin.commands.length,
       settings: settings.map((d) => d.id),
+      contexts,
     });
     if (settings.length > 0) declared.set(plugin.name, settings);
   }
@@ -260,6 +265,7 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
           permissions: { buffer: ["write:active"] },
           commands: EDITOR_COMMANDS.length,
           settings: [],
+          contexts: ["app"],
         });
       return Promise.resolve(
         structuredClone(list.sort((a, b) => a.name.localeCompare(b.name))),

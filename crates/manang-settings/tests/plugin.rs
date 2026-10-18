@@ -351,13 +351,13 @@ fn keybinding_commands_end_to_end() {
     // Rebind onto a key another command owns: allowed, but reported.
     let set = rig.ok(
         "keybindings.set",
-        json!({"command": "compile.run", "keys": ["mod+s"]}),
+        json!({"command": "doc.compile", "keys": ["mod+s"]}),
     );
     assert_eq!(set["keys"], json!(["Mod+S"]));
     assert_eq!(set["conflicts"][0]["kind"], "shadowed");
     assert_eq!(topics(&sub).len(), 1);
     let text = fs::read_to_string(rig.config.path().join("keybindings.toml")).expect("file");
-    assert!(text.contains("command = \"compile.run\""), "{text}");
+    assert!(text.contains("command = \"doc.compile\""), "{text}");
 
     // Two user bindings on one key tie: resolve reports it, never picks.
     rig.ok(
@@ -369,7 +369,7 @@ fn keybinding_commands_end_to_end() {
         json!({"context": [], "key": "Mod+S"}),
     );
     assert_eq!(tied["status"], "conflict");
-    assert_eq!(tied["commands"], json!(["a.other", "compile.run"]));
+    assert_eq!(tied["commands"], json!(["a.other", "doc.compile"]));
 
     rig.ok("keybindings.reset", json!({"command": "a.other"}));
     rig.ok("keybindings.reset", json!({}));
@@ -484,7 +484,8 @@ fn external_edits_reload_and_emit_events() {
     .expect("keys");
     assert!(ksub.recv_timeout(Duration::from_secs(10)).is_some());
     let hit = rig.ok("keybindings.resolve", json!({"key": "Ctrl+Shift+O"}));
-    assert_eq!(hit["command"], "project.open");
+    // Written under the old id, read under the new one.
+    assert_eq!(hit["command"], "project.switch");
 }
 
 #[test]

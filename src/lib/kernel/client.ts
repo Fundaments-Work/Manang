@@ -17,6 +17,15 @@ export interface KernelCommand {
   readonly id: string;
   readonly title: string;
   readonly plugin: string;
+  /** Menu placements from the manifest's `[[contributes.menus]]`. */
+  readonly menus?: readonly KernelMenuPlacement[] | undefined;
+}
+
+/** Where a plugin's manifest places one of its commands in the menu bar. */
+export interface KernelMenuPlacement {
+  readonly bar: "file" | "edit" | "view" | "go" | "build" | "help";
+  readonly group: string;
+  readonly order: number;
 }
 
 /** Access a plugin's manifest declares. */
@@ -37,6 +46,8 @@ export interface PluginInfo {
   readonly commands: number;
   /** Ids of the settings it declares in its manifest. */
   readonly settings: readonly string[];
+  /** `[plugin] settings_contexts`: where its Settings section belongs. Absent means `["app"]`. */
+  readonly contexts?: readonly string[];
 }
 
 /**

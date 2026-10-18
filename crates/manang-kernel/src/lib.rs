@@ -28,8 +28,8 @@ pub use error::{CapabilityError, KernelError, ManifestError, PluginError};
 pub use events::{Event, EventBus, Subscription};
 pub use kernel::{CommandInfo, Kernel};
 pub use manifest::{
-    CommandSpec, Contributes, Hook, HookMode, Manifest, PluginMeta, SettingKind, SettingScope,
-    SettingSpec, Tier,
+    CommandSpec, Contributes, Hook, HookMode, Manifest, MenuBar, MenuPlacement, MenuSpec,
+    PluginMeta, SettingKind, SettingScope, SettingSpec, Tier,
 };
 pub use payload::Payload;
 pub use plugin::{Context, MAX_CALL_DEPTH, Plugin};

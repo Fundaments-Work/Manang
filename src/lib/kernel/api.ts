@@ -776,6 +776,11 @@ export interface SettingDef {
   readonly "requires-restart": boolean;
   readonly owner: string;
   readonly category: string;
+  /**
+   * Where the setting's group belongs in a contextual Settings page
+   * (`document`, `engine:typst`, `figure`, ...). Absent means `["app"]`.
+   */
+  readonly contexts?: readonly string[] | undefined;
 }
 
 export interface SettingsSchema {

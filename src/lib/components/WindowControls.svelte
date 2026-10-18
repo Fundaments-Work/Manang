@@ -8,7 +8,7 @@
    * Minimise, maximise and close, drawn by Manang because the window has no
    * system title bar (`decorations: false`). Square 46x40 targets flush with
    * the top bar's edge, so a fling of the pointer to the corner closes the
-   * window, as on Windows and most Linux desktops.
+   * window, as on Windows and most Linux desktops. Hover turns the icon lime.
    */
 
   let maximized = $state(false);
@@ -23,7 +23,7 @@
 <div class="flex h-full shrink-0 items-stretch" role="group" aria-label="Window">
   <button
     type="button"
-    class="inset-focus flex w-[46px] items-center justify-center text-text-60 hover:bg-surface-hi hover:text-text"
+    class="inset-focus flex w-[46px] items-center justify-center text-text-60 mng-lime-hover"
     aria-label="Minimise"
     title="Minimise"
     onclick={() => void windowAction("minimize")}
@@ -32,7 +32,7 @@
   </button>
   <button
     type="button"
-    class="inset-focus flex w-[46px] items-center justify-center text-text-60 hover:bg-surface-hi hover:text-text"
+    class="inset-focus flex w-[46px] items-center justify-center text-text-60 mng-lime-hover"
     aria-label={maximized ? "Restore" : "Maximise"}
     title={maximized ? "Restore" : "Maximise"}
     onclick={() => void windowAction("toggle-maximize")}
@@ -41,7 +41,7 @@
   </button>
   <button
     type="button"
-    class="inset-focus flex w-[46px] items-center justify-center text-text-60 hover:bg-text hover:text-bg"
+    class="inset-focus flex w-[46px] items-center justify-center text-text-60 mng-lime-hover"
     aria-label="Close window"
     title="Close"
     onclick={() => void windowAction("close")}

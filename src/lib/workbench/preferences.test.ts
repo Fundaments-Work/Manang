@@ -23,6 +23,8 @@ describe("preferences", () => {
       "editor.line-numbers": false,
       "preview.auto-compile": false,
       "preview.debounce-ms": 120,
+      "preview.double-click-source": false,
+      "preview.dark-pages": true,
     };
     const prefs = resolvePreferences((id) => values[id]);
     expect(prefs.theme).toBe("light");
@@ -34,7 +36,27 @@ describe("preferences", () => {
       wordWrap: false,
       lineNumbers: false,
     });
-    expect(prefs.preview).toEqual({ autoCompile: false, debounceMs: 120 });
+    expect(prefs.preview).toEqual({
+      autoCompile: false,
+      debounceMs: 120,
+      doubleClickSource: false,
+      darkPages: true,
+    });
+  });
+
+  it("defaults the PDF viewer like Overleaf: double-click goes to the source, pages light", () => {
+    const prefs = resolvePreferences(() => undefined);
+    expect(prefs.preview.doubleClickSource).toBe(true);
+    expect(prefs.preview.darkPages).toBe(false);
+    const odd = resolvePreferences((id) =>
+      id === "preview.dark-pages"
+        ? "yes"
+        : id === "preview.double-click-source"
+          ? 0
+          : undefined,
+    );
+    expect(odd.preview.darkPages).toBe(false);
+    expect(odd.preview.doubleClickSource).toBe(true);
   });
 
   it("ignores values of the wrong type", () => {

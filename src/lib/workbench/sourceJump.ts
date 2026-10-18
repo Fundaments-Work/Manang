@@ -62,14 +62,3 @@ export function typstMarkBox(
     height: TEXT_BAND,
   };
 }
-
-/** `[width, height]` in points from an SVG's `viewBox`, or null. */
-export function svgPageSize(bytes: Uint8Array): { w: number; h: number } | null {
-  const head = new TextDecoder().decode(bytes.subarray(0, 2048));
-  const box = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(
-    head,
-  );
-  const w = Number(box?.[1]);
-  const h = Number(box?.[2]);
-  return w > 0 && h > 0 ? { w, h } : null;
-}

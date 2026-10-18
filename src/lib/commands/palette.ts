@@ -51,7 +51,7 @@ export function paletteCandidates(input: PaletteInput): Command[] {
   if (input.mode === "files") return files;
   const applies = input.applies ?? (() => true);
   const commands = mergeCommands(
-    input.workbench.filter((c) => applies(c.when)),
+    input.workbench.filter((c) => c.palette !== false && applies(c.when)),
     paletteKernelCommands(input.kernel, new Set(input.workbench.map((c) => c.id))),
     input.runKernel,
   );

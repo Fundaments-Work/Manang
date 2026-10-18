@@ -30,6 +30,7 @@
     error: "M2.5 2.5h11v11h-11z M5.5 5.5l5 5 M10.5 5.5l-5 5",
     warning: "M8 2.5l6 11H2z M8 6.5v3.5 M8 11.5v.5",
     check: "M3 8.5l3.5 3.5L13 4.5",
+    invert: "M2.5 2.5h11v11h-11z M8 2.5v11 M8 6l5.5-3.5 M8 10l5.5-3.5 M8 13.5l5.5-3.5",
     branch: "M4 2.5h2v2H4z M4 11.5h2v2H4z M10 5.5h2v2h-2z M5 4.5v7 M5 9h5V7.5",
     "source-control":
       "M4 2.5h2v2H4z M4 11.5h2v2H4z M10 6.5h2v2h-2z M5 4.5v7 M5 9.5h4v-1",

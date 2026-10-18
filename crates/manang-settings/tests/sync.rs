@@ -14,6 +14,7 @@ const DEMO: &str = r#"
 name = "demo"
 version = "0.1.0"
 tier = "native"
+settings_contexts = ["document", "engine:demo"]
 
 [[contributes.commands]]
 id = "demo.configure"
@@ -176,6 +177,7 @@ fn sync_registers_manifest_settings_and_pushes_defaults() {
             "title": "Mode",
             "owner": "demo",
             "category": "demo",
+            "contexts": ["document", "engine:demo"],
         })
     );
     let level = settings

@@ -26,6 +26,12 @@ title = "Say"
 [[contributes.commands]]
 id = "echo.write"
 title = "Write buffer"
+
+[[contributes.menus]]
+command = "echo.say"
+bar = "help"
+group = "9_echo"
+order = 1
 "#;
 
 struct Echo;
@@ -110,6 +116,13 @@ fn commands_are_listed_sorted_and_removed_on_unregister() {
     let k = kernel_with_echo();
     let ids: Vec<_> = k.commands().into_iter().map(|c| c.id).collect();
     assert_eq!(ids, ["echo.say", "echo.write"]);
+    // Menu placements from the manifest travel with the listing.
+    let listed = serde_json::to_value(k.commands()).expect("json");
+    assert_eq!(
+        listed[0]["menus"],
+        json!([{ "bar": "help", "group": "9_echo", "order": 1 }])
+    );
+    assert!(listed[1].get("menus").is_none(), "absent when not placed");
     k.unregister("echo").expect("registered");
     assert!(k.commands().is_empty());
     assert!(matches!(

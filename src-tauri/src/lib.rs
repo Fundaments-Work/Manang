@@ -274,6 +274,8 @@ pub struct PluginSummary {
     pub commands: usize,
     /// Ids of the settings it declares.
     pub settings: Vec<String>,
+    /// Where its Settings section belongs (`["app"]` when undeclared).
+    pub contexts: Vec<String>,
 }
 
 fn plugin_summaries(kernel: &Kernel) -> Vec<PluginSummary> {
@@ -282,6 +284,7 @@ fn plugin_summaries(kernel: &Kernel) -> Vec<PluginSummary> {
         .into_iter()
         .filter_map(|name| kernel.manifest(&name))
         .map(|m| PluginSummary {
+            contexts: m.settings_contexts(),
             name: m.plugin.name,
             version: m.plugin.version.to_string(),
             description: m.plugin.description,
