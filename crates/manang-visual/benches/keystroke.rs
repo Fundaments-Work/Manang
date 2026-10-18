@@ -75,19 +75,18 @@ fn percentile(sorted: &[Duration], p: f64) -> Duration {
 
 fn report(name: &str, adapter: &str, doc: &str) -> Duration {
     let (host, id) = host_with(adapter, doc);
-    let mut len = doc.len(); // the documents are ASCII: bytes == UTF-16 units
-    let start_at = len / 2;
+    let doc_len = doc.len(); // the documents are ASCII: bytes == UTF-16 units
+    let start_at = doc_len / 2;
     let mut samples = Vec::with_capacity(3000);
     let mut edits = Vec::with_capacity(3000);
     let mut bytes = 0;
     for i in 0..3000 {
         let at = start_at + i;
         let t = Instant::now();
-        let (b, edit) = keystroke_timed(&host, id, at, len);
+        let (b, edit) = keystroke_timed(&host, id, at, doc_len + i);
         bytes = b;
         samples.push(t.elapsed());
         edits.push(edit);
-        len += 1;
     }
     edits.sort();
     println!(

@@ -142,10 +142,9 @@ fn typing_updates_the_table_and_reports_dirty_ranges() {
     assert!(!kinds(&before).contains(&kind::STRONG));
 
     // Type `*bold*` at the end of "plain", one character per transaction.
-    let mut len = 14usize;
-    let mut at = 13usize;
     for (i, ch) in "*bold*".chars().enumerate() {
-        len += 1;
+        let at = 13 + i;
+        let len = 14 + i + 1;
         let out = call(
             &rig,
             "visual.edit",
@@ -155,7 +154,6 @@ fn typing_updates_the_table_and_reports_dirty_ranges() {
         assert_eq!(out["revision"], i + 1);
         assert_eq!(out["len"], len);
         assert!(out["dirty"]["to"].as_u64().expect("dirty") as usize >= at);
-        at += 1;
     }
     let after = blocks(&rig, &session, 0, 100);
     assert_eq!(after.revision, 6);
