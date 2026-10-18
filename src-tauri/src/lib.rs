@@ -6,6 +6,7 @@
 //! `crates/`.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use manang_editor::{Editor, EditorPlugin};
@@ -479,6 +480,35 @@ fn forward_events(app: tauri::AppHandle, events: &EventBus) -> std::io::Result<(
         .map(|_| ())
 }
 
+/// WebKitGTK's DMABUF renderer misdraws under Wayland with NVIDIA's driver:
+/// parts of the page do not paint, scrolling stutters, clicks miss. Returns the
+/// variable and value that turn it off when that is the situation and the user
+/// has not chosen either way (`WEBKIT_DISABLE_DMABUF_RENDERER=0` keeps it).
+pub fn webkit_renderer_override(
+    wayland: bool,
+    nvidia: bool,
+    already_set: bool,
+) -> Option<(&'static str, &'static str)> {
+    (cfg!(target_os = "linux") && wayland && nvidia && !already_set)
+        .then_some(("WEBKIT_DISABLE_DMABUF_RENDERER", "1"))
+}
+
+static RENDERER_OVERRIDDEN: AtomicBool = AtomicBool::new(false);
+
+/// `main` applied [`webkit_renderer_override`]; the log says so at startup.
+pub fn note_renderer_override() {
+    RENDERER_OVERRIDDEN.store(true, Ordering::Relaxed);
+}
+
+/// The inputs of [`webkit_renderer_override`] for this machine.
+pub fn webkit_renderer_situation() -> (bool, bool, bool) {
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
+        || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland");
+    let nvidia = std::path::Path::new("/proc/driver/nvidia/version").exists();
+    let already_set = std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some();
+    (wayland, nvidia, already_set)
+}
+
 /// How much the shell itself logs: everything while developing.
 const OWN_LEVEL: log::LevelFilter = if cfg!(debug_assertions) {
     log::LevelFilter::Debug
@@ -530,6 +560,12 @@ pub fn run() -> Result<(), tauri::Error> {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             use tauri::Manager;
+            if RENDERER_OVERRIDDEN.load(Ordering::Relaxed) {
+                log::info!(
+                    "WebKit DMABUF renderer off (Wayland with NVIDIA); \
+                     set WEBKIT_DISABLE_DMABUF_RENDERER=0 to keep it"
+                );
+            }
             let config_dir = app.path().app_config_dir()?;
             let cache_dir = app.path().app_cache_dir()?;
             let dirs = Dirs {
@@ -578,6 +614,17 @@ mod tests {
         assert!(check_destination(std::path::Path::new("out.pdf")).is_err());
         assert!(check_destination(dir.path()).is_err());
         assert!(check_destination(&dir.path().join("nope/out.pdf")).is_err());
+    }
+
+    #[test]
+    fn dmabuf_renderer_is_turned_off_only_for_wayland_on_nvidia_when_unset() {
+        use super::webkit_renderer_override as decide;
+        let off = Some(("WEBKIT_DISABLE_DMABUF_RENDERER", "1"));
+        let expected = if cfg!(target_os = "linux") { off } else { None };
+        assert_eq!(decide(true, true, false), expected);
+        assert_eq!(decide(false, true, false), None, "X11 is fine");
+        assert_eq!(decide(true, false, false), None, "AMD and Intel are fine");
+        assert_eq!(decide(true, true, true), None, "the user's choice wins");
     }
 
     #[test]
