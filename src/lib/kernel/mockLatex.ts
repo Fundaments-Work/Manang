@@ -80,11 +80,13 @@ interface Expansion {
 }
 
 /** The few commands whose package the demo can tell is missing (see `crates/manang-heal`). */
-const NEEDS_PACKAGE: readonly (readonly [RegExp, string])[] = [
-  [/\\(includegraphics|rotatebox|scalebox|resizebox)\b/, "graphicx"],
-  [/\\(textcolor|colorbox)\b/, "xcolor"],
-  [/\\(toprule|midrule|bottomrule)\b/, "booktabs"],
-  [/\\(multirow)\b/, "multirow"],
+const NEEDS_PACKAGE: readonly (readonly [RegExp, readonly string[]])[] = [
+  [/\\(includegraphics|rotatebox|scalebox|resizebox)\b/, ["graphicx"]],
+  [/\\(textcolor|colorbox)\b/, ["xcolor"]],
+  [/\\(toprule|midrule|bottomrule)\b/, ["booktabs"]],
+  [/\\(multirow)\b/, ["multirow"]],
+  // Two packages provide it: both heal fixes clear the error.
+  [/\\(url)\b/, ["hyperref", "url"]],
 ];
 
 /** Flatten `\input` / `\include`; diagnostics name files relative to `baseDir`. */
@@ -109,9 +111,10 @@ function expand(
       for (const name of (m[1] ?? "").split(",")) out.loaded?.add(name.trim());
     }
     if (out.loaded !== undefined) {
-      for (const [pattern, pkg] of NEEDS_PACKAGE) {
+      for (const [pattern, packages] of NEEDS_PACKAGE) {
         const found = pattern.exec(line);
-        if (found === null || out.loaded.has(pkg)) continue;
+        const pkg = packages[0] ?? "";
+        if (found === null || packages.some((p) => out.loaded?.has(p))) continue;
         out.diagnostics.push({
           severity: "error",
           message: `Undefined control sequence: \\${found[1] ?? ""}`,
