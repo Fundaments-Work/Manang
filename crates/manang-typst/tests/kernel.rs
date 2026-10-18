@@ -104,7 +104,8 @@ fn check_reports_problems_and_leaves_the_preview_alone() {
     let list = checked["diagnostics"].as_array().expect("list");
     assert!(
         list.iter()
-            .any(|d| d["severity"] == "error" && d["message"].as_str().unwrap_or("").contains("figur")),
+            .any(|d| d["severity"] == "error"
+                && d["message"].as_str().unwrap_or("").contains("figur")),
         "{checked}"
     );
     // The cached document is still the good one: it renders, and a recompile continues the count.
@@ -119,7 +120,10 @@ fn check_reports_problems_and_leaves_the_preview_alone() {
         )
         .expect("compile"),
     );
-    assert_eq!(again["generation"].as_u64(), generation.as_u64().map(|g| g + 1));
+    assert_eq!(
+        again["generation"].as_u64(),
+        generation.as_u64().map(|g| g + 1)
+    );
 }
 
 #[test]
