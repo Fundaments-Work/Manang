@@ -1032,3 +1032,54 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
   - `cargo clippy -p manang-typst --all-targets --locked -- -D warnings`: PASS (0 warnings)
   - `cargo test -p manang-typst --locked`: PASS (40/40 tests passing across all test suites)
 
+---
+
+## Private Beta Documentation, GitHub Templates & Welcome Starter (`antigravity/beta-docs`)
+
+- **Branch:** `antigravity/beta-docs`
+- **Commits:**
+  - `e8b2f86`: `feat(templates): add welcome interactive onboarding template`
+  - `999fb77`: `ci(github): add beta issue forms and pull request template`
+  - `6c10527`: `docs(contributing): add development guide and architecture map`
+  - `9736f80`: `docs(beta): add tester guide, known issues, release notes template, and changelog`
+- **Scope:** Complete documentation package and interactive onboarding starter for the private invite-only beta.
+
+### 1. Interactive Onboarding Template (`templates/welcome/`)
+- Created self-contained starter project designed to teach Manang's core workflows by direct hands-on interaction:
+  - `template.toml`: Valid manifest with id `welcome`, engine `typst`, descriptive tags and metadata.
+  - `main.typ`: Typst manuscript with title interpolation, headings, equations, bibliography citation, embedded vector SVG figure, table, and a 5-step "try this" walkthrough (instant live editing, SyncTeX click jump to source, command palette `Ctrl+K`, settings `Ctrl+,`, and "Save a version" preview).
+  - `sections/tour.typ`: Modular chapter include demonstrating multi-engine, figures, and bibliography capabilities.
+  - `references.bib`: Standard BibTeX entries (@knuth1984, @turing1936, @shannon1948).
+  - `figures/welcome.svg`: Hand-crafted, responsive vector diagram adhering to the Fundaments.work visual identity (dark `#141416`, hairlines `#3d3d42`, Acid Lime `#c6f135`, Sage `#b3d17a`).
+  - `figures/flow.mmd`: Clean Mermaid flowchart illustrating the "write, preview, export" authoring loop.
+  - `notes.md`: Markdown companion notes explaining keyboard shortcuts and multi-format support.
+- Fully verified: All manifest validation tests in `crates/manang-project/tests/templates.rs` pass with 0 errors.
+
+### 2. GitHub Issue Forms & Pull Request Template (`.github/`)
+- Added modern GitHub issue forms:
+  - `ISSUE_TEMPLATE/config.yml`: Directs testers to tester guide and known issues.
+  - `ISSUE_TEMPLATE/bug_report.yml`: Structured form requesting OS, Manang version, document engine, steps to reproduce, expected vs. actual behavior, and local `Manang.log` excerpt with strict zero-personal-data reminders.
+  - `ISSUE_TEMPLATE/feature_request.yml`: Structured form for scientific authoring workflow needs, proposals, and workarounds.
+  - `ISSUE_TEMPLATE/beta_feedback.yml`: Friction reporting form capturing "this felt slow or confusing" with area dropdown, sentiment, and short free-text explanation.
+  - `pull_request_template.md`: Mirrors AGENTS.md section 5 quality gates (Rust formatting, Clippy -D warnings, test suite, typecheck/lint, system library bans, and operational hygiene).
+
+### 3. Contributing Guide & Architecture Map (`CONTRIBUTING.md`)
+- Added comprehensive root `CONTRIBUTING.md` documenting:
+  - Toolchain requirements (Rust 1.95, Node 22, pnpm 10.18).
+  - Development setup and port allocations (port 1420 for app, 1431-1445 for agents).
+  - Complete one-page architecture maps of all 21 crates in `crates/` and all 18 subdirectories in `src/lib/`.
+  - Plugin-per-feature conventions (manifest.toml, plugin export, kernel integration tests).
+  - Exact command lines verified against `package.json` and `Cargo.toml`.
+
+### 4. Beta Documentation Suite & Changelog (`docs/beta/`, `CHANGELOG.md`)
+- `docs/beta/tester-guide.md`: Plain-English tester guide detailing what the beta is, expectations (backups in git, no unexpected file modifications), placeholder installer notes, 15-minute onboarding walk-through tour, issue reporting, zero-telemetry privacy promise, and local log file paths across Linux, macOS, and Windows.
+- `docs/beta/known-issues.md`: Living list of verified quirks, workarounds, and statuses (local TeX requirement for LaTeX, math in Mermaid labels, Linux Wayland + NVIDIA DMABUF workaround, macOS native menu bridge, plugin signature check status, and coming-soon indicators for live co-editing, AI writing assistant, and crash recovery).
+- `docs/beta/release-notes-template.md`: Reusable markdown template for beta releases.
+- `CHANGELOG.md`: Keep a Changelog standard with exhaustive `[Unreleased]` section derived directly from `git log --oneline` and `ag-progress.md` without inventing features.
+
+### 5. Quality Gates & Link Verification
+- `cargo test -p manang-project --locked --test templates`: PASS (4/4 tests passing).
+- `cargo fmt --all -- --check`: PASS (clean formatting across workspace).
+- Markdown link audit: Verified that all relative links and referenced filesystem paths across all created markdown files exist and resolve properly.
+
+
