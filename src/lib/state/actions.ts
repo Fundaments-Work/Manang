@@ -12,14 +12,16 @@ import { recheckWriting, runFormat } from "$lib/editor/writing";
 import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
 import { kernel, errorMessage, inTauri, reportError } from "$lib/kernel";
 import type { KernelEvent } from "$lib/kernel";
-import { writingApi } from "$lib/kernel/api";
+import { projectApi, writingApi } from "$lib/kernel/api";
 import type { Engine, ProjectChanged } from "$lib/kernel/types";
 import type { Problem } from "$lib/workbench/problems";
 import {
   hasNativeDialogs,
   openExternal,
+  openWithSystem,
   pickFolder,
   pickSavePath,
+  revealInFileManager,
   saveBinaryArtifact,
 } from "$lib/kernel/native";
 import { SESSION_KEY, loadJson, saveJson } from "$lib/workbench/persist";
@@ -27,14 +29,21 @@ import {
   basename,
   dirname,
   fileKind,
-  isOpenable,
   join,
   nameProblem,
   newFileName,
   uniqueName,
 } from "$lib/workbench/paths";
 import { citationFor, type BibEntry } from "$lib/workbench/references";
-import { kindForPath, sanitizeSession, toSession } from "$lib/workbench/tabs";
+import {
+  formatSize,
+  needsProbe,
+  openAsByContent,
+  openAsByName,
+  tabKindOf,
+  type OpenAs,
+} from "$lib/workbench/opener";
+import { sanitizeSession, toSession } from "$lib/workbench/tabs";
 
 import { build } from "./build.svelte";
 import { dialog } from "./dialog.svelte";
@@ -60,31 +69,99 @@ export interface OpenOptions {
   /** Move keyboard focus into the editor afterwards. Default true. */
   readonly focus?: boolean;
   readonly view?: "text" | "slides";
+  /** Open this way instead of deciding (an SVG opened as text, say). */
+  readonly as?: OpenAs;
 }
 
-/** Open a file in a tab, or focus the tab it already has. */
+/**
+ * How `path` opens (`workbench/opener.ts`): by its name, or by its first bytes
+ * when the name says nothing or it may be large. The bytes, when read, are
+ * returned so a viewer does not read the file twice.
+ */
+async function decideOpen(
+  path: string,
+): Promise<{ as: OpenAs; bytes?: Uint8Array } | null> {
+  const named = openAsByName(path);
+  if (named !== null && !needsProbe(path)) return { as: named };
+  try {
+    const bytes = await projectApi(kernel).readBytes(path);
+    return { as: openAsByContent(path, bytes), bytes };
+  } catch (error) {
+    reportError("actions.openFile", error);
+    notice.error(`Could not open ${path}: ${errorMessage(error)}`);
+    return null;
+  }
+}
+
+/** Open a file in a tab, or focus the tab it already has. Every file opens. */
 export async function openFile(
   path: string,
   options: OpenOptions = {},
 ): Promise<boolean> {
-  if (!isOpenable(path)) {
-    notice.error(
-      `${basename(path)} is not a text file, so it cannot be opened in a tab.`,
-    );
-    return false;
+  const open = tabs.tabs.find((t) => t.path === path);
+  if (open !== undefined && options.as === undefined) {
+    tabs.open(path, open.kind === "document" ? options.view : undefined);
+    if (layout.narrow) layout.closeSide();
+    if (options.focus !== false && open.kind === "document") documents.focusEditor();
+    return true;
   }
-  const kind = kindForPath(path);
+  const decided =
+    options.as === undefined ? await decideOpen(path) : { as: options.as };
+  if (decided === null) return false;
+  const { as, bytes } = decided;
+  const kind = tabKindOf(as);
   const ok =
     kind === "figure"
       ? (await figures.open(path)) !== null
       : kind === "viewer"
-        ? await viewers.open(path)
+        ? await viewers.open(path, as, bytes)
         : (await documents.open(path)) !== null;
   if (!ok) return false;
-  tabs.open(path, kind === "document" ? options.view : undefined);
+  if (as === "large-text") {
+    notice.show(
+      `${basename(path)} is ${formatSize(bytes?.length ?? 0)}, too large to edit here, so it opens read-only.`,
+    );
+  }
+  tabs.open(path, kind === "document" ? options.view : undefined, kind);
   if (layout.narrow) layout.closeSide();
   if (options.focus !== false && kind === "document") documents.focusEditor();
   return true;
+}
+
+/** Reopen a viewer tab (an SVG) in the text editor, in the same place. */
+export async function openAsText(path: string): Promise<void> {
+  if (!(await documents.open(path))) return;
+  tabs.reopenAs(path, "document");
+  viewers.drop(path);
+  documents.focusEditor();
+}
+
+/** "Open with system app" for a project file. False in the browser build. */
+export async function openInSystemApp(path: string): Promise<void> {
+  const root = workspace.project?.root;
+  if (root === undefined) return;
+  try {
+    if (!(await openWithSystem(`${root}/${path}`))) {
+      notice.show("Opening files in other apps needs the desktop app.");
+    }
+  } catch (error) {
+    reportError("actions.openInSystemApp", error);
+    notice.error(`Could not open ${basename(path)}: ${errorMessage(error)}`);
+  }
+}
+
+/** "Show in file manager" for a project file. */
+export async function revealFile(path: string): Promise<void> {
+  const root = workspace.project?.root;
+  if (root === undefined) return;
+  try {
+    if (!(await revealInFileManager(`${root}/${path}`))) {
+      notice.show("Showing files in the file manager needs the desktop app.");
+    }
+  } catch (error) {
+    reportError("actions.revealFile", error);
+    notice.error(`Could not show ${basename(path)}: ${errorMessage(error)}`);
+  }
 }
 
 export function isTabDirty(path: string): boolean {

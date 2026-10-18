@@ -16,11 +16,13 @@ import {
   openTab,
   removePath,
   renamePath,
+  setKind,
   setView,
   tabByShortcut,
   toSession,
   type DocumentView,
   type Tab,
+  type TabKind,
   type TabsModel,
 } from "$lib/workbench/tabs";
 
@@ -45,8 +47,8 @@ export class TabsState {
   replace(model: TabsModel): void {
     this.#set(model);
   }
-  open(path: string, view?: DocumentView): void {
-    this.#set(openTab(this.model, path, view));
+  open(path: string, view?: DocumentView, kind?: TabKind): void {
+    this.#set(openTab(this.model, path, view, kind));
   }
   activate(id: string): void {
     this.#set(activateTab(this.model, id));
@@ -71,6 +73,10 @@ export class TabsState {
   }
   setView(id: string, view: DocumentView): void {
     this.#set(setView(this.model, id, view));
+  }
+  /** Show the tab for `path` in another editor, in the same place. */
+  reopenAs(path: string, kind: TabKind): void {
+    this.#set(activateTab(setKind(this.model, path, kind), path));
   }
   renamed(from: string, to: string): void {
     this.#set(renamePath(this.model, from, to));
