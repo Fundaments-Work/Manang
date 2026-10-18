@@ -306,7 +306,7 @@
     openMenu(null, event.clientX, event.clientY);
   }}
 >
-  {#if workspace.error !== ""}
+  {#if workspace.error !== "" && rows.length === 0 && editing === null}
     <div class="m-3 border border-line bg-surface p-3 text-xs text-text" role="alert">
       <div class="flex items-center gap-1.5 text-text">
         <Icon name="error" size={13} />
