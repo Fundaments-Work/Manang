@@ -13,6 +13,7 @@
 import type { EditorState } from "@codemirror/state";
 import {
   Annotation,
+  Prec,
   StateEffect,
   StateField,
   Transaction,
@@ -163,17 +164,20 @@ const field = StateField.define<Field>({
 export function aiDiff(): Extension {
   return [
     field,
-    keymap.of([
-      {
-        key: "Escape",
-        run: (view) => {
-          const proposal = view.state.field(field, false)?.proposal;
-          if (proposal === null || proposal === undefined) return false;
-          handlers?.reject(proposal.id);
-          return true;
+    // Highest: the default Escape collapses a selection first and would swallow the key.
+    Prec.highest(
+      keymap.of([
+        {
+          key: "Escape",
+          run: (view) => {
+            const proposal = view.state.field(field, false)?.proposal;
+            if (proposal === null || proposal === undefined) return false;
+            handlers?.reject(proposal.id);
+            return true;
+          },
         },
-      },
-    ]),
+      ]),
+    ),
   ];
 }
 

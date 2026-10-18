@@ -1035,7 +1035,7 @@ fn the_rig_provider_streams_from_a_local_openai_compatible_server() {
     call("agent.consent", json!({"provider": "custom"})).expect("consent");
     call(
         "agent.configure",
-        json!({"values": {"agent.engine": "rig"}}),
+        json!({"values": {"agent.client": "rig"}}),
     )
     .expect("engine");
     let out = call("agent.start", json!({"feature": "chat", "prompt": "hi", "project_root": project.path().to_string_lossy()})).expect("start");

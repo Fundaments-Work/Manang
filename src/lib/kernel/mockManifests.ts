@@ -73,11 +73,11 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
         "requires-restart": false,
       },
       {
-        id: "agent.engine",
+        id: "agent.client",
         type: "enum",
         values: ["rig", "builtin"],
         default: "rig",
-        title: "Provider engine",
+        title: "Provider client",
         description:
           "rig is the default client layer; builtin is Manang's own, kept as a fallback.",
         scope: "user",
