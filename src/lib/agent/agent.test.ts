@@ -103,7 +103,14 @@ describe("diff from a proposal", () => {
   });
 
   it("locates the edit, follows moved text and calls changed text stale", () => {
-    const edit = { path: "a", from: 4, to: 9, before: "hello", after: "hi", explanation: "" };
+    const edit = {
+      path: "a",
+      from: 4,
+      to: 9,
+      before: "hello",
+      after: "hi",
+      explanation: "",
+    };
     expect(locateEdit("say hello there", edit)).toEqual({ from: 4, to: 9 });
     expect(locateEdit("oh, say hello there", edit)).toEqual({ from: 8, to: 13 });
     expect(locateEdit("say howdy there", edit)).toBeNull();
@@ -177,12 +184,29 @@ describe("transcript reducer", () => {
       ev("agent.proposal", {
         proposal_id: "p1",
         kind: "text_edit",
-        payload: { path: "a.md", from: 0, to: 2, before: "ab", after: "c", explanation: "x" },
+        payload: {
+          path: "a.md",
+          from: 0,
+          to: 2,
+          before: "ab",
+          after: "c",
+          explanation: "x",
+        },
       }),
       ev("agent.usage", {
-        total: { input: 10, output: 5, cache_read: 0, cache_write: 0, est_cost_micro_usd: 1234 },
+        total: {
+          input: 10,
+          output: 5,
+          cache_read: 0,
+          cache_write: 0,
+          est_cost_micro_usd: 1234,
+        },
       }),
-      ev("agent.error", { code: "authentication_error", message: "Rejected", request_id: "req_1" }),
+      ev("agent.error", {
+        code: "authentication_error",
+        message: "Rejected",
+        request_id: "req_1",
+      }),
     ]);
     expect(pendingProposal(state)?.proposalId).toBe("p1");
     state = decideProposal(state, "p1", "accepted");
@@ -199,7 +223,11 @@ describe("transcript reducer", () => {
   });
 
   it("shows a cancellation as a quiet notice", () => {
-    const state = run([ev("agent.started"), ev("agent.cancelled"), ev("agent.done", { stop_reason: "cancelled" })]);
+    const state = run([
+      ev("agent.started"),
+      ev("agent.cancelled"),
+      ev("agent.done", { stop_reason: "cancelled" }),
+    ]);
     expect(state.items.at(-1)).toMatchObject({ kind: "notice" });
     expect(state.stopReason).toBe("cancelled");
   });

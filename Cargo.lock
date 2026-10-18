@@ -6160,6 +6160,7 @@ name = "manang"
 version = "0.1.0"
 dependencies = [
  "log",
+ "manang-agent",
  "manang-citations",
  "manang-diagram",
  "manang-editor",

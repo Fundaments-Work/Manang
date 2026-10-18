@@ -26,7 +26,9 @@ const CAPS: Readonly<Record<ChipKind, number>> = {
 
 export function chipText(chip: ChipInput): string {
   if (chip.text !== undefined) return chip.text;
-  return (chip.diagnostics ?? []).map((d) => `${d.message}\n${d.context ?? ""}`).join("\n");
+  return (chip.diagnostics ?? [])
+    .map((d) => `${d.message}\n${d.context ?? ""}`)
+    .join("\n");
 }
 
 /** The tokens of what would be sent for this chip (capped like the host does). */
@@ -72,7 +74,12 @@ export function trayChip(input: ChipInput): TrayChip {
   };
 }
 
-export function selectionChip(path: string, from: number, to: number, text: string): TrayChip {
+export function selectionChip(
+  path: string,
+  from: number,
+  to: number,
+  text: string,
+): TrayChip {
   return trayChip({ kind: "selection", path, range: [from, to], text });
 }
 
@@ -94,9 +101,15 @@ export function toWire(chip: TrayChip): ChipInput {
  * The tray after a new request attaches `incoming`: pinned chips stay, a chip of the same
  * kind and path is replaced (a new selection replaces the old one), the rest are kept.
  */
-export function mergeTray(current: readonly TrayChip[], incoming: readonly TrayChip[]): TrayChip[] {
+export function mergeTray(
+  current: readonly TrayChip[],
+  incoming: readonly TrayChip[],
+): TrayChip[] {
   const kept = current.filter(
-    (c) => !incoming.some((n) => n.kind === c.kind && n.kind !== "pinned" && n.path === c.path),
+    (c) =>
+      !incoming.some(
+        (n) => n.kind === c.kind && n.kind !== "pinned" && n.path === c.path,
+      ),
   );
   return [...kept, ...incoming];
 }
