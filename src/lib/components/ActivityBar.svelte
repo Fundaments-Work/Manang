@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon, { type IconName } from "$lib/components/ui/Icon.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
+  import { context } from "$lib/state/context.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
@@ -82,7 +83,7 @@
     data-view={item.view}
     class="group relative flex h-12 w-12 shrink-0 items-center justify-center inset-focus {needsProject
       ? 'opacity-40'
-      : ''} {open ? 'text-text' : 'text-text-60 hover:text-text'}"
+      : ''} {open ? 'text-text' : 'text-text-60 mng-lime-hover'}"
     aria-label={item.label}
     aria-pressed={open}
     aria-disabled={needsProject}
@@ -92,7 +93,7 @@
     onclick={() => {
       if (needsProject) return;
       if (item.view === "settings") {
-        settingsPage.toggle();
+        settingsPage.toggle(context.settingsOrigin);
         return;
       }
       // A view button leaves the Settings page, showing its panel.

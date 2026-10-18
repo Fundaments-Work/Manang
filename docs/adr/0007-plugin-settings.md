@@ -64,6 +64,14 @@ against the settings plugin, and a different code path for native and WASM.
    same-owner re-registration with a changed definition replaces it, so a hot
    reloaded manifest can change its settings.
 
+5. **Contexts** (2026-10-18). `[plugin] settings_contexts` says where the
+   plugin's Settings section belongs when Settings are opened from a place:
+   `app`, `project`, `document`, `figure`, `diagram`, `pdf` or
+   `engine:<name>` (for example `["engine:typst"]`). Absent means `["app"]`:
+   shown only with all settings. Core categories declare theirs in
+   `manang_settings::defaults::CATEGORY_CONTEXTS`. Every setting in the
+   schema carries its group's `contexts`.
+
 Only settings that change behaviour today were added: `latex.backend`,
 `latex.engine`, `latex.latexmk`, `latex.timeout-seconds`; `search.exclude`,
 `search.include-hidden`; `writing.spellcheck`, `writing.spell-language`,

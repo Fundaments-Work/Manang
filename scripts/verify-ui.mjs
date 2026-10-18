@@ -682,10 +682,64 @@ async function main() {
     );
     check("main.typ opened in a tab on open", (await activeTab(page)) === "main.typ");
     check(
-      "breadcrumb names the project and file",
+      "the title bar has the logo only: no name, no breadcrumb",
       await page.evaluate(
-        `document.querySelector('nav[aria-label="Breadcrumb"]').innerText.replace(/\\s+/g, " ").includes("Entropy paper / main.typ")`,
+        `(() => { const b = document.querySelector('header button[aria-label="Home"]'); return b.innerText.trim() === "" && !document.querySelector('header nav[aria-label="Breadcrumb"]') && !!b.querySelector("svg"); })()`,
       ),
+    );
+    {
+      const logo = await rect(page, 'header button[aria-label="Home"]');
+      const colour = () =>
+        page.evaluate(
+          `getComputedStyle(document.querySelector('header button[aria-label="Home"] svg')).color`,
+        );
+      const bg = () =>
+        page.evaluate(
+          `getComputedStyle(document.querySelector('header button[aria-label="Home"]')).backgroundColor`,
+        );
+      const before = await colour();
+      await mouse(page, "mouseMoved", logo.x, logo.y);
+      await sleep(250);
+      check(
+        "hovering the logo turns it lime, without a background",
+        (await colour()) !== before &&
+          (await colour()) === "rgb(198, 241, 53)" &&
+          ["rgba(0, 0, 0, 0)", "transparent"].includes(await bg()),
+        `${before} -> ${await colour()}, bg ${await bg()}`,
+      );
+      await mouse(page, "mouseMoved", 640, 400);
+      // Every icon button turns lime on hover, with no background: a shared
+      // icon button (the Files panel header) and an activity-bar button. (The
+      // window controls only exist in the desktop app.)
+      for (const [name, selector] of [
+        ["a panel icon button", "#side-panel button.mng-icon-btn"],
+        [
+          "an activity-bar button",
+          'nav[aria-label="Workbench views"] button[aria-label="Search"]',
+        ],
+      ]) {
+        const target = await rect(page, selector);
+        if (target === null) {
+          check(`hover colour: ${name} exists`, false);
+          continue;
+        }
+        await mouse(page, "mouseMoved", target.x, target.y);
+        await sleep(250);
+        const seen = await page.evaluate(
+          `(() => { const s = getComputedStyle(document.querySelector(${JSON.stringify(selector)})); return s.color + " | " + s.backgroundColor; })()`,
+        );
+        check(
+          `hovering ${name} turns it lime, without a background`,
+          seen.startsWith("rgb(198, 241, 53)") &&
+            /\| (rgba\(0, 0, 0, 0\)|transparent)$/.test(seen),
+          seen,
+        );
+        await mouse(page, "mouseMoved", 640, 400);
+      }
+    }
+    check(
+      "the window title names the file and the project",
+      await page.evaluate(`document.title === "main.typ — Entropy paper"`),
     );
     check(
       "status bar shows engine, caret, words, git branch and kernel",
@@ -791,6 +845,10 @@ async function main() {
       "the top bar search now searches settings",
       await exists(page, 'header input[aria-label="Search settings and plugins"]'),
     );
+    // Opened over a document, Settings show that document's settings; this
+    // part checks the whole page, so widen to all settings first.
+    if (await exists(page, "[data-settings-scope]"))
+      await clickText(page, "[data-settings-scope] button", "Show all settings");
     await expectEventually(
       page,
       "settings list every registered plugin, with its access",
@@ -1003,6 +1061,254 @@ async function main() {
     await click(page, '[role="tab"][data-tab="notes.md"]', "middle");
     await noStrayEdits(page, "after converting");
     // The side panel shows References again, as before this section.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="References"]',
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Settings views");
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
+    );
+    await waitFor(page, `!!document.querySelector('section[aria-label="Settings"]')`);
+    await clickText(
+      page,
+      'section[aria-label="Settings"] button',
+      "Keyboard shortcuts",
+    );
+    await expectEventually(
+      page,
+      "Keyboard shortcuts lists a command with two shortcuts as two rows",
+      `(() => { const t = document.querySelector('section[aria-label="Settings"]').innerText; return t.includes("Ctrl+K") && t.includes("Ctrl+Shift+P"); })()`,
+      {
+        show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 300)`,
+      },
+    );
+    await clickText(page, 'section[aria-label="Settings"] button', "About");
+    await expectEventually(
+      page,
+      "About shows the app and its licences",
+      `(() => { const t = document.querySelector('section[aria-label="Settings"]').innerText; return t.includes("Manang") && /licen[cs]e/i.test(t); })()`,
+      {
+        show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 300)`,
+      },
+    );
+    await press(page, "Escape");
+    await press(page, "Escape");
+    await expectEventually(
+      page,
+      "Esc leaves Settings from the About view",
+      `!document.querySelector('section[aria-label="Settings"]')`,
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Contextual settings");
+    const settingsGroups = () =>
+      page.evaluate(
+        `[...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group)`,
+      );
+    const settingsNav = () =>
+      page.evaluate(
+        `document.querySelector('nav[aria-label="Settings sections"]')?.innerText ?? ""`,
+      );
+    const scopeLine = () =>
+      page.evaluate(`document.querySelector("[data-settings-scope]")?.innerText ?? ""`);
+    const closeSettings = async () => {
+      for (
+        let i = 0;
+        i < 3 && (await exists(page, 'section[aria-label="Settings"]'));
+        i++
+      )
+        await press(page, "Escape");
+      await waitFor(page, `!document.querySelector('section[aria-label="Settings"]')`, {
+        label: "settings closed",
+      });
+    };
+    const openSettingsFromBar = async () => {
+      await click(
+        page,
+        'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
+      );
+      await waitFor(
+        page,
+        `!!document.querySelector('section[aria-label="Settings"] [data-group]')`,
+        {
+          label: "settings open",
+        },
+      );
+    };
+
+    await press(page, "p", { ctrl: true, wait: 300 });
+    await insertText(page, "main.typ");
+    await press(page, "Enter", { wait: 600 });
+    await waitFor(
+      page,
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "main.typ"`,
+      {
+        label: "main.typ active",
+      },
+    );
+    await openSettingsFromBar();
+    await expectEventually(
+      page,
+      "from a Typst document, the scope line names the file and its engine",
+      `document.querySelector("[data-settings-scope]")?.innerText.includes("Settings for main.typ · Typst")`,
+      { show: `document.querySelector("[data-settings-scope]")?.innerText` },
+    );
+    await expectEventually(
+      page,
+      "a Typst document shows Editor, Preview, Compile, Typst, Writing and Citations",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return ["editor", "preview", "compile", "plugin:typst", "plugin:writing", "plugin:citations"].every((x) => g.includes(x)); })()`,
+      {
+        show: `[...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group).join()`,
+      },
+    );
+    {
+      const groups = await settingsGroups();
+      check(
+        "and not Appearance, LaTeX or Search",
+        !["appearance", "files", "plugin:latex", "plugin:search", "plugin:figure"].some(
+          (x) => groups.includes(x),
+        ),
+        groups.join(),
+      );
+      const nav = await settingsNav();
+      check(
+        "the section list holds only the shown groups",
+        ["Editor", "Preview", "Compile", "Typst", "Writing", "Citations"].every((n) =>
+          nav.includes(n),
+        ) &&
+          !["Appearance", "LaTeX", "Search", "Keyboard shortcuts", "About"].some((n) =>
+            nav.includes(n),
+          ),
+        nav.replace(/\s+/g, " "),
+      );
+      check(
+        "Keyboard shortcuts and About stay reachable as links",
+        await page.evaluate(
+          `(() => { const t = document.querySelector("[data-settings-app-links]")?.innerText ?? ""; return t.includes("Keyboard shortcuts") && t.includes("About"); })()`,
+        ),
+      );
+    }
+    await shoot(page, "07c-settings-document");
+
+    // Search finds in the scope first, and links what only all settings show.
+    await click(page, 'header input[aria-label="Search settings and plugins"]');
+    await insertText(page, "theme");
+    await expectEventually(
+      page,
+      "searching for a setting outside the scope offers it in all settings",
+      `/\\d+ more in all settings/.test(document.querySelector("[data-settings-more]")?.innerText ?? "") && !document.querySelector('[data-setting="appearance.theme"]')`,
+      {
+        show: `document.querySelector('section[aria-label="Settings"]').innerText.slice(0, 300)`,
+      },
+    );
+    await shoot(page, "07d-settings-search-elsewhere");
+    await clickText(page, "[data-settings-more] button", "more in all settings");
+    await expectEventually(
+      page,
+      "following the link shows the match in all settings, without closing",
+      `!!document.querySelector('[data-setting="appearance.theme"]') && !document.querySelector("[data-settings-scope]")`,
+    );
+    await closeSettings();
+    check(
+      "Escape returns to the same tab",
+      (await activeTab(page)) === "main.typ",
+      await activeTab(page),
+    );
+
+    // Show all settings widens the page without closing it.
+    await press(page, ",", { ctrl: true, wait: 400 });
+    await expectEventually(
+      page,
+      "Ctrl+, over a document opens that document's settings",
+      `document.querySelector("[data-settings-scope]")?.innerText.includes("main.typ")`,
+    );
+    await clickText(page, "[data-settings-scope] button", "Show all settings");
+    await expectEventually(
+      page,
+      "Show all settings shows every group and keeps the page open",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return ["appearance", "editor", "files", "plugin:latex", "plugin:search", "plugin:typst"].every((x) => g.includes(x)) && !document.querySelector("[data-settings-scope]"); })()`,
+    );
+    check(
+      "all settings list Keyboard shortcuts and About in the section list",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('nav[aria-label="Settings sections"]').innerText; return t.includes("Keyboard shortcuts") && t.includes("About"); })()`,
+      ),
+    );
+    await closeSettings();
+
+    // The palette's Document settings and Open all settings.
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "document settings");
+    await press(page, "Enter", { wait: 500 });
+    await expectEventually(
+      page,
+      "Document settings opens the active document's settings",
+      `document.querySelector("[data-settings-scope]")?.innerText.includes("main.typ")`,
+    );
+    await closeSettings();
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "open all settings");
+    await press(page, "Enter", { wait: 500 });
+    await expectEventually(
+      page,
+      "Open all settings shows everything over a document",
+      `!!document.querySelector('section[aria-label="Settings"] [data-group="appearance"]') && !document.querySelector("[data-settings-scope]")`,
+    );
+    await closeSettings();
+
+    // From a figure: the Figure plugin's settings.
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Figures"]');
+    await sleep(400);
+    await clickText(page, "#side-panel ul button", "state_lattice");
+    await waitFor(page, `document.querySelector('svg[role="application"]') !== null`, {
+      label: "figure editor",
+    });
+    await openSettingsFromBar();
+    await expectEventually(
+      page,
+      "from a figure, Settings show the Figure plugin only",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return g.includes("plugin:figure") && !g.includes("editor") && !g.includes("appearance") && !g.includes("plugin:typst"); })()`,
+      {
+        show: `[...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group).join()`,
+      },
+    );
+    check(
+      "the scope line names the figure",
+      (await scopeLine()).includes("state_lattice.figure.json · Figure"),
+      await scopeLine(),
+    );
+    await shoot(page, "07e-settings-figure");
+    await closeSettings();
+    check(
+      "closing returns to the figure",
+      (await activeTab(page)) === "figures/state_lattice.figure.json",
+    );
+    await click(
+      page,
+      '[role="tab"][data-tab="figures/state_lattice.figure.json"]',
+      "middle",
+    );
+
+    // From Home: everything.
+    await click(page, 'header button[aria-label="Home"]');
+    await waitFor(page, `!!document.querySelector('section[aria-label="Home"]')`, {
+      label: "Home shown",
+    });
+    await click(page, 'nav[aria-label="Home sections"] button[aria-label="Settings"]');
+    await expectEventually(
+      page,
+      "from Home, Settings show every group with no scope line",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return ["appearance", "editor", "preview", "compile", "files", "plugin:latex", "plugin:search", "plugin:typst", "plugin:figure"].every((x) => g.includes(x)) && !document.querySelector("[data-settings-scope]"); })()`,
+    );
+    await closeSettings();
+    await clickText(page, "button", "Back to Entropy paper");
+    await waitFor(page, `!document.querySelector('section[aria-label="Home"]')`, {
+      label: "back in the project",
+    });
     await click(
       page,
       'nav[aria-label="Workbench views"] button[aria-label="References"]',
@@ -2454,9 +2760,9 @@ async function main() {
       )) === "File,Edit,View,Go,Build,Help",
     );
     check(
-      "the menus sit between the mark and the breadcrumb",
+      "the menus sit after the mark, at the start of the free space",
       await page.evaluate(
-        `(() => { const home = document.querySelector('header button[aria-label="Home"]').getBoundingClientRect(); const bar = document.querySelector('header [role="menubar"]').getBoundingClientRect(); const crumbs = document.querySelector('header nav[aria-label="Breadcrumb"]').getBoundingClientRect(); return home.right <= bar.left && bar.right <= crumbs.left; })()`,
+        `(() => { const home = document.querySelector('header button[aria-label="Home"]').getBoundingClientRect(); const bar = document.querySelector('header [role="menubar"]').getBoundingClientRect(); const free = document.querySelector('header [data-menu-root]').parentElement.getBoundingClientRect(); return home.right <= bar.left && Math.abs(bar.left - free.left) < 2; })()`,
       ),
     );
     check(
@@ -2468,7 +2774,7 @@ async function main() {
     check(
       "the bar's empty areas still drag the window; the menus do not",
       await page.evaluate(
-        `(() => { const h = document.querySelector("header"); const crumbs = h.querySelector('nav[aria-label="Breadcrumb"]'); return h.hasAttribute("data-tauri-drag-region") && crumbs.hasAttribute("data-tauri-drag-region") && crumbs.getBoundingClientRect().width > 200 && [...h.querySelectorAll("[data-menu-root], [data-menu-root] *")].every((e) => !e.hasAttribute("data-tauri-drag-region")); })()`,
+        `(() => { const h = document.querySelector("header"); const free = h.querySelector("[data-menu-root]").parentElement; const bar = h.querySelector('[role="menubar"]').getBoundingClientRect(); return h.hasAttribute("data-tauri-drag-region") && free.hasAttribute("data-tauri-drag-region") && free.getBoundingClientRect().right - bar.right > 200 && [...h.querySelectorAll("[data-menu-root], [data-menu-root] *")].every((e) => !e.hasAttribute("data-tauri-drag-region")); })()`,
       ),
     );
     await focusEditor(page);
@@ -2768,10 +3074,7 @@ async function main() {
 
     /* ------------------------------------------------------------------ */
     section("Home inside a project, and switching");
-    const crumb = (cdp) =>
-      cdp.evaluate(
-        `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.replace(/\\s+/g, " ") ?? ""`,
-      );
+    const crumb = (cdp) => cdp.evaluate(`document.title`);
     await click(page, 'header button[aria-label="Home"]');
     await expectEventually(
       page,
@@ -2808,14 +3111,12 @@ async function main() {
     // Switch from Home.
     await click(page, 'header button[aria-label="Home"]');
     await clickText(page, "[data-project] button", "Lecture notes");
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Lecture notes")`,
-      { label: "switched to Lecture notes" },
-    );
+    await waitFor(page, `document.title.includes("Lecture notes")`, {
+      label: "switched to Lecture notes",
+    });
     check(
       "switching opens the other project's main file",
-      (await crumb(page)).includes("Lecture notes / index.md"),
+      (await crumb(page)).includes("index.md — Lecture notes"),
       await crumb(page),
     );
     check(
@@ -2841,11 +3142,9 @@ async function main() {
     await shoot(page, "24-switcher");
     await insertText(page, "entropy");
     await press(page, "Enter", { wait: 500 });
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
-      { label: "switched back" },
-    );
+    await waitFor(page, `document.title.includes("Entropy paper")`, {
+      label: "switched back",
+    });
     check(
       "the switcher opens the project and its earlier tabs come back",
       (await tabNames(page)).length > 1 && (await tabNames(page)).includes("main.typ"),
@@ -2873,20 +3172,16 @@ async function main() {
     await insertText(page, "lecture");
     await press(page, "Enter", { wait: 400 });
     await clickText(page, '[role="alertdialog"] button', "Don't save");
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Lecture notes")`,
-      { label: "switched after discarding" },
-    );
+    await waitFor(page, `document.title.includes("Lecture notes")`, {
+      label: "switched after discarding",
+    });
     check("discarding switches", (await crumb(page)).includes("Lecture notes"));
     await press(page, "o", { ctrl: true, synthetic: true });
     await insertText(page, "entropy");
     await press(page, "Enter", { wait: 500 });
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
-      { label: "back in Entropy paper" },
-    );
+    await waitFor(page, `document.title.includes("Entropy paper")`, {
+      label: "back in Entropy paper",
+    });
 
     section("LaTeX and Markdown preview");
     const doc = await newPage(browser);
@@ -3028,6 +3323,19 @@ async function main() {
         `document.querySelectorAll('[data-pdf-viewer] canvas').length <= 4`,
       ),
     );
+
+    // Contextual settings over a LaTeX document: LaTeX's, not Typst's.
+    await press(doc, ",", { ctrl: true, wait: 400 });
+    await expectEventually(
+      doc,
+      "from a LaTeX document, Settings show the LaTeX plugin and not Typst",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return g.includes("plugin:latex") && g.includes("editor") && !g.includes("plugin:typst") && !g.includes("appearance") && (document.querySelector("[data-settings-scope]")?.innerText ?? "").includes("· LaTeX"); })()`,
+      {
+        show: `[...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group).join()`,
+      },
+    );
+    await shoot(doc, "23b-settings-latex");
+    await press(doc, "Escape", { wait: 300 });
 
     // Markdown.
     await press(doc, "k", { ctrl: true, wait: 300 });

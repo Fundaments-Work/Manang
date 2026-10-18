@@ -12,16 +12,15 @@
   import { layout } from "$lib/state/layout.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { palette } from "$lib/state/palette.svelte";
-  import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { detectPlatform } from "$lib/util/keyboard";
 
   /**
-   * Top bar, which is also the window's title bar: the mark (it goes Home), a
-   * breadcrumb, a search field where there is something to search, the
+   * Top bar, which is also the window's title bar: the mark (it goes Home), free
+   * space that drags the window, a search field where there is something to search, the
    * surface's few actions, and the window controls.
    *
-   * The menus (File ... Help) sit between the mark and the breadcrumb.
+   * The menus (File ... Help) sit in the free space after the mark.
    *
    * There is one search and it searches what is on screen: projects on Home,
    * settings and plugins on the Settings page. In the editor the field is
@@ -93,16 +92,6 @@
 
   const platform = detectPlatform();
   const homeHint = formatShortcut({ key: "h", mod: true, shift: true }, platform);
-
-  const crumbs = $derived.by(() => {
-    if (surface === "home") return ["Home"];
-    if (surface === "settings") return ["Settings"];
-    const project = workspace.project;
-    const active = tabs.active;
-    if (project === null) return [];
-    const parts = active === undefined ? [] : active.path.split("/");
-    return [project.name, ...parts];
-  });
 </script>
 
 <svelte:window onkeydown={onWindowKey} />
@@ -119,7 +108,7 @@
   {/if}
   <button
     type="button"
-    class="inset-focus -ml-1.5 flex h-8 shrink-0 items-center gap-2 px-1.5 text-text hover:bg-surface-hi"
+    class="inset-focus -ml-1.5 flex h-8 shrink-0 items-center px-1.5 text-text mng-lime-hover"
     aria-label="Home"
     title="Home ({homeHint})"
     aria-keyshortcuts="Control+Shift+H"
@@ -128,51 +117,18 @@
       goHome();
     }}
   >
-    <Mark class="text-text" />
-    <span
-      class="hidden text-[15px] font-light {menusInBar ? '' : 'min-[900px]:inline'}"
-      style="letter-spacing: var(--tracking-headline)">Manang</span
-    >
+    <Mark size={18} />
   </button>
 
-  {#if menusInBar}
-    <MenuBar folded={foldMenus} />
-  {:else if platformKnown && controlsLeft}
-    <NativeMenu />
-  {/if}
-
-  <nav
-    aria-label="Breadcrumb"
-    class="min-w-0 flex-1 basis-0 {surface === 'workbench' ? '' : 'max-[640px]:hidden'}"
-    data-tauri-drag-region
-  >
-    <ol
-      class="pointer-events-none m-0 flex min-w-0 list-none items-center gap-1.5 p-0 text-xs text-text-60"
-    >
-      {#each crumbs as crumb, index (index)}
-        {@const last = index === crumbs.length - 1}
-        <li
-          class="min-w-0 truncate {last ? 'text-text' : ''} {!last &&
-          index < crumbs.length - 2
-            ? 'max-[900px]:hidden'
-            : ''}"
-          aria-current={last ? "page" : undefined}
-        >
-          {crumb}
-        </li>
-        {#if !last}
-          <li
-            aria-hidden="true"
-            class="text-text-muted {index < crumbs.length - 2
-              ? 'max-[900px]:hidden'
-              : ''}"
-          >
-            /
-          </li>
-        {/if}
-      {/each}
-    </ol>
-  </nav>
+  <!-- Free space: a drag handle for the window, and where the menus sit. Only
+       this element drags; the menu buttons inside it do not. -->
+  <div class="flex min-w-0 flex-1 basis-0 self-stretch" data-tauri-drag-region>
+    {#if menusInBar}
+      <MenuBar folded={foldMenus} />
+    {:else if platformKnown && controlsLeft}
+      <NativeMenu />
+    {/if}
+  </div>
 
   {#if surface !== "workbench"}
     <label

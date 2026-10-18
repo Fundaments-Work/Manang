@@ -231,7 +231,7 @@
         aria-controls="menu-folded-list"
         tabindex="0"
         data-menu-fold
-        class="inset-focus flex h-full items-center px-2.5 text-[13px] text-text-60 hover:bg-surface-hi hover:text-text {nav.mode ===
+        class="inset-focus flex h-full items-center px-2.5 text-[13px] text-text-60 mng-lime-hover {nav.mode ===
         'open'
           ? 'bg-surface-hi text-text'
           : ''}"
@@ -303,7 +303,7 @@
             tabindex={nav.active === i ? 0 : -1}
             data-menu-bar={i}
             data-menu={menu.id}
-            class="inset-focus flex h-full items-center px-2 text-[13px] hover:bg-surface-hi hover:text-text {expanded(
+            class="inset-focus flex h-full items-center px-2 text-[13px] mng-lime-hover {expanded(
               i,
             ) ||
             (nav.mode === 'bar' && nav.active === i)

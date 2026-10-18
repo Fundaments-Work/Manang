@@ -3,6 +3,7 @@ name = "typst"
 version = "0.1.0"
 description = "Typst compiler: incremental compile, SVG page render, PDF export and source/preview jumps"
 tier = "native"
+settings_contexts = ["engine:typst"]
 
 [permissions]
 filesystem = ["read:project"]

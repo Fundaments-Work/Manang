@@ -46,6 +46,8 @@ export interface PluginInfo {
   readonly commands: number;
   /** Ids of the settings it declares in its manifest. */
   readonly settings: readonly string[];
+  /** `[plugin] settings_contexts`: where its Settings section belongs. Absent means `["app"]`. */
+  readonly contexts?: readonly string[];
 }
 
 /**
