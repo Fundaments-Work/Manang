@@ -1,0 +1,19 @@
+---
+source: crates/manang-markdown/tests/diagrams.rs
+expression: typst
+---
+= Pictures
+
+#figure(image("/.manang/cache/diagrams/eb6cef84b22f9023.svg"))
+
+Some _text_ between.
+
+```svgbob
++--+
+|  |
++--+
+```
+
+```rust
+fn main() {}
+```

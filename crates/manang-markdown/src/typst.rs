@@ -1,10 +1,47 @@
 //! Conversion from CommonMark/Markdown constructs to Typst markup.
 
-use pulldown_cmark::{
-    CodeBlockKind, Event, HeadingLevel, MetadataBlockKind, Options, Parser, Tag, TagEnd,
-};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, MetadataBlockKind, Parser, Tag, TagEnd};
 
 use crate::diagnostics::Diagnostic;
+use crate::diagrams::{DiagramFence, OpenFence};
+use crate::html::parse_options;
+
+/// A diagram fence as a figure, or as the code block it was.
+fn push_fence(
+    typst: &mut String,
+    diagnostics: &mut Vec<Diagnostic>,
+    fence: &DiagramFence,
+    figure: Option<FenceFigure>,
+) {
+    match figure {
+        Some(FenceFigure::Image(path)) => {
+            typst.push_str(&format!(
+                "#figure(image(\"{}\"))\n\n",
+                escape_typst_string(&path)
+            ));
+        }
+        other => {
+            if let Some(FenceFigure::Keep(why)) = other {
+                diagnostics.push(Diagnostic::warning(why, Some(fence.line)));
+            }
+            let ticks = longest_backtick_run(&fence.source).max(2) + 1;
+            let fence_marks = "`".repeat(ticks);
+            typst.push_str(&fence_marks);
+            typst.push_str(&fence.language);
+            typst.push('\n');
+            typst.push_str(&fence.source);
+            if !fence.source.ends_with('\n') {
+                typst.push('\n');
+            }
+            typst.push_str(&fence_marks);
+            typst.push_str("\n\n");
+        }
+    }
+}
+
+fn longest_backtick_run(text: &str) -> usize {
+    text.split(|c| c != '`').map(str::len).max().unwrap_or(0)
+}
 
 fn escape_typst_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
@@ -25,21 +62,35 @@ fn escape_typst_text(s: &str) -> String {
     out
 }
 
-/// Converts markdown source text into Typst markup, logging diagnostics for unsupported constructs.
-pub fn markdown_to_typst(source: &str) -> (String, Vec<Diagnostic>) {
-    let options = Options::ENABLE_TABLES
-        | Options::ENABLE_FOOTNOTES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_HEADING_ATTRIBUTES
-        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
-        | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS
-        | Options::ENABLE_MATH
-        | Options::ENABLE_GFM;
+/// What a diagram fence becomes in Typst.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FenceFigure {
+    /// `#figure(image("<path>"))`: the rendered picture's path as Typst
+    /// resolves it (`/...` is relative to the project root).
+    Image(String),
+    /// Keep the fence as a code block and report why as a warning.
+    Keep(String),
+}
 
-    let parser = Parser::new_ext(source, options).into_offset_iter();
+/// Converts markdown source text into Typst markup, logging diagnostics for
+/// unsupported constructs. Diagram fences stay code blocks; see
+/// [`markdown_to_typst_with`] to turn them into figures.
+pub fn markdown_to_typst(source: &str) -> (String, Vec<Diagnostic>) {
+    markdown_to_typst_with(source, 0, &mut |_| None)
+}
+
+/// [`markdown_to_typst`] for text that starts after `line_offset` lines of
+/// its file, asking `figure` what each diagram fence becomes (`None` keeps it
+/// as a code block silently).
+pub fn markdown_to_typst_with(
+    source: &str,
+    line_offset: usize,
+    figure: &mut dyn FnMut(&DiagramFence) -> Option<FenceFigure>,
+) -> (String, Vec<Diagnostic>) {
+    let parser = Parser::new_ext(source, parse_options()).into_offset_iter();
     let mut typst = String::new();
     let mut diagnostics = Vec::new();
+    let mut diagram: Option<OpenFence> = None;
 
     let mut in_code_block = false;
     let mut in_metadata_block = false;
@@ -49,7 +100,27 @@ pub fn markdown_to_typst(source: &str) -> (String, Vec<Diagnostic>) {
     let mut ordered_stack: Vec<bool> = Vec::new();
 
     for (event, range) in parser {
-        let line = source[..range.start].chars().filter(|&c| c == '\n').count() + 1;
+        let line = line_offset + source[..range.start].chars().filter(|&c| c == '\n').count() + 1;
+
+        if let Some(fence) = diagram.as_mut() {
+            match event {
+                Event::Text(text) => fence.source.push_str(&text),
+                Event::End(TagEnd::CodeBlock) => {
+                    if let Some(fence) = diagram.take() {
+                        let fence = fence.finish();
+                        push_fence(&mut typst, &mut diagnostics, &fence, figure(&fence));
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+        if !in_metadata_block {
+            diagram = OpenFence::start(&event, source, &range, line_offset);
+            if diagram.is_some() {
+                continue;
+            }
+        }
 
         match event {
             Event::Start(Tag::MetadataBlock(kind)) => {

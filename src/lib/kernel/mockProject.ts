@@ -8,9 +8,13 @@
  */
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
+import { mockKey, mockRender } from "./mockDiagram";
 import type {
   ChangeState,
+  DiagramExport,
+  DiagramLanguageId,
   Engine,
+  FileStat,
   GitChange,
   GitStatus,
   ProjectConfig,
@@ -426,7 +430,55 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["project.forget", "Remove a project from the list"],
   ["project.thumbnail-get", "Read a project thumbnail"],
   ["project.thumbnail-set", "Store a project thumbnail"],
+  ["project.stat", "File size, date and kind"],
+  ["project.export-diagram", "Write a diagram's SVG (and PDF for LaTeX) next to it"],
+  ["project.cache-diagram", "Render an inline diagram to the project cache"],
+  ["project.export-pdf", "Write a PDF next to an SVG for LaTeX"],
 ];
+
+/** Mirrors `crates/manang-project/src/export.rs`. */
+const DIAGRAM_EXTENSIONS: Readonly<Record<string, DiagramLanguageId>> = {
+  mmd: "mermaid",
+  mermaid: "mermaid",
+  pikchr: "pikchr",
+  bob: "svgbob",
+};
+
+/** Stands in for `typst.svg-to-pdf`: a PDF header, clearly a mock. */
+const MOCK_PDF = "%PDF-1.7\n% Manang browser mock: one page, no drawing.\n%%EOF\n";
+
+function sibling(path: string, extension: string): string {
+  const slash = path.lastIndexOf("/");
+  const name = path.slice(slash + 1);
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  return `${path.slice(0, slash + 1)}${stem}.${extension}`;
+}
+
+function wantsPdf(fs: MockProjectFs): boolean {
+  return (
+    fs.engine === "latex" ||
+    [...fs.files.keys()].some(
+      (path) => path.toLowerCase().endsWith(".tex") && !path.startsWith(".manang/"),
+    )
+  );
+}
+
+function header(language: DiagramLanguageId, key: string): string {
+  return `<!-- manang-diagram ${language} key=${key} -->\n`;
+}
+
+/** `{ ok: false }` with the mock renderer's message, or the SVG text. */
+function renderPrint(
+  language: DiagramLanguageId,
+  source: string,
+): { svg: string } | { error: string } {
+  try {
+    return { svg: mockRender(language, source, "print") };
+  } catch (error) {
+    return { error: (error as Error).message };
+  }
+}
 
 export function projectPlugin(host: MockProjectHost): MockPluginFactory {
   return (emit): MockPlugin => {
@@ -434,6 +486,17 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
       fs: MockProjectFs,
       changes: readonly { path: string; kind: string; from?: string }[],
     ): void => emit("project.changed", { root: fs.root, changes });
+
+    /** Modification times of files written since start; others are `opened`. */
+    const modified = new Map<string, number>();
+    const opened = Date.now();
+    /** Write a file as the plugin would, with its change event. */
+    const write = (fs: MockProjectFs, path: string, content: string): void => {
+      const existed = fs.files.has(path);
+      fs.files.set(path, content);
+      modified.set(path, Date.now());
+      changed(fs, [{ path, kind: existed ? "modified" : "created" }]);
+    };
 
     const textOf = (fs: MockProjectFs, path: string): string => {
       const value = fs.files.get(path);
@@ -482,9 +545,7 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           if (typeof content !== "string") {
             throw { message: "bad arguments: `content` must be a string" };
           }
-          const existed = fs.files.has(path);
-          fs.files.set(path, content);
-          changed(fs, [{ path, kind: existed ? "modified" : "created" }]);
+          write(fs, path, content);
           return { bytes: new TextEncoder().encode(content).length };
         },
         "project.rename": (args) => {
@@ -557,6 +618,115 @@ export function projectPlugin(host: MockProjectHost): MockPluginFactory {
           }
           host.setThumbnail(confineRoot(args), svg);
           return null;
+        },
+        "project.stat": (args): FileStat => {
+          const fs = host.require();
+          const path = confine(args["path"]);
+          const value = fs.files.get(path);
+          if (value === undefined) {
+            if (path === "" || isDir(fs, path)) {
+              return { size: 0, modified: modified.get(path) ?? opened, kind: "dir" };
+            }
+            throw { message: `\`${path}\` does not exist` };
+          }
+          const size =
+            typeof value === "string"
+              ? new TextEncoder().encode(value).length
+              : value.byteLength;
+          return { size, modified: modified.get(path) ?? opened, kind: "file" };
+        },
+        "project.export-diagram": (args): DiagramExport => {
+          const fs = host.require();
+          const path = confine(args["path"]);
+          const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+          const language = DIAGRAM_EXTENSIONS[extension];
+          if (language === undefined) {
+            throw {
+              message: `invalid path \`${path}\`: not a diagram file (.mmd, .mermaid, .pikchr, .bob)`,
+            };
+          }
+          const source = textOf(fs, path);
+          const svgPath = sibling(path, "svg");
+          const top = header(language, mockKey(language, source, "print"));
+          const existing = fs.files.get(svgPath);
+          const written: string[] = [];
+          let fresh = false;
+          if (!(typeof existing === "string" && existing.startsWith(top))) {
+            const rendered = renderPrint(language, source);
+            if ("error" in rendered) {
+              return {
+                ok: false,
+                svg: existing === undefined ? null : svgPath,
+                pdf: null,
+                written,
+                error: rendered.error,
+              };
+            }
+            write(fs, svgPath, top + rendered.svg);
+            written.push(svgPath);
+            fresh = true;
+          }
+          let pdf: string | null = null;
+          if (wantsPdf(fs)) {
+            pdf = sibling(path, "pdf");
+            if (fresh || !fs.files.has(pdf)) {
+              write(fs, pdf, MOCK_PDF);
+              written.push(pdf);
+            }
+          }
+          return { ok: true, svg: svgPath, pdf, written, error: null };
+        },
+        "project.cache-diagram": (args): DiagramExport => {
+          const fs = host.require();
+          const language = args["language"];
+          const source = args["source"];
+          if (
+            (language !== "mermaid" &&
+              language !== "pikchr" &&
+              language !== "svgbob") ||
+            typeof source !== "string"
+          ) {
+            throw { message: "bad arguments: `language` and `source` are required" };
+          }
+          const key = mockKey(language, source, "print");
+          const svgPath = `.manang/cache/diagrams/${key}.svg`;
+          if (fs.files.has(svgPath)) {
+            return { ok: true, svg: svgPath, pdf: null, written: [], error: null };
+          }
+          const rendered = renderPrint(language, source);
+          if ("error" in rendered) {
+            return {
+              ok: false,
+              svg: null,
+              pdf: null,
+              written: [],
+              error: rendered.error,
+            };
+          }
+          fs.files.set(svgPath, header(language, key) + rendered.svg);
+          return { ok: true, svg: svgPath, pdf: null, written: [svgPath], error: null };
+        },
+        "project.export-pdf": (args): DiagramExport => {
+          const fs = host.require();
+          const raw = args["path"];
+          const prefix = `${fs.root}/`;
+          const path = confine(
+            typeof raw === "string" && raw.startsWith(prefix)
+              ? raw.slice(prefix.length)
+              : raw,
+          );
+          if (!path.toLowerCase().endsWith(".svg")) {
+            throw { message: `invalid path \`${path}\`: not an SVG file` };
+          }
+          if (!(args["force"] === true || wantsPdf(fs))) {
+            return { ok: true, svg: path, pdf: null, written: [], error: null };
+          }
+          const pdf = sibling(path, "pdf");
+          if (fs.files.has(pdf)) {
+            return { ok: true, svg: path, pdf, written: [], error: null };
+          }
+          write(fs, pdf, MOCK_PDF);
+          return { ok: true, svg: path, pdf, written: [pdf], error: null };
         },
       },
       binaryHandlers: {

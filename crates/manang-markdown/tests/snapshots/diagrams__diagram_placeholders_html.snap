@@ -1,0 +1,11 @@
+---
+source: crates/manang-markdown/tests/diagrams.rs
+expression: html
+---
+<h1>Pictures</h1>
+<figure class="mng-diagram" data-diagram="eb6cef84b22f9023" data-language="mermaid" data-line="7"></figure>
+<p>Some <em>text</em> between.</p>
+<figure class="mng-diagram" data-diagram="60673589cb320f72" data-language="svgbob" data-line="14"></figure>
+<pre><code class="language-rust">fn main() {}
+</code></pre>
+&lt;figure class=&quot;mng-diagram&quot; data-diagram=&quot;0000000000000000&quot;&gt;&lt;/figure&gt;

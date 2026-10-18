@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   LARGE_TEXT_BYTES,
   describeFile,
+  formatModified,
   formatSize,
   looksLikeText,
   needsProbe,
@@ -109,5 +110,9 @@ describe("what opens a file", () => {
     expect(formatSize(812)).toBe("812 B");
     expect(formatSize(3 * 1024 + 400)).toBe("3.4 KB");
     expect(formatSize(12 * 1024 * 1024)).toBe("12.0 MB");
+    expect(formatModified(null)).toBe("");
+    expect(formatModified(new Date(2026, 9, 18, 9, 5).getTime())).toBe(
+      "2026-10-18 09:05",
+    );
   });
 });

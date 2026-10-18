@@ -116,6 +116,9 @@ export class FiguresStore {
         // Only the SVG is missing: write it alone, leaving the scene file as it is.
         await project.writeFile(svg, await figure.exportSvg());
       }
+      // LaTeX includes the PDF next to the SVG; the plugin skips a current one
+      // and writes none in projects without LaTeX.
+      if (workspace.engine === "latex") await project.exportPdf(svg);
     } catch (error) {
       reportError("figures.embed", error);
       notice.error(`Could not write ${svg}: ${errorMessage(error)}`);

@@ -233,7 +233,11 @@ export function mockRender(
   return placeholderSvg(name, colours);
 }
 
-function key(id: DiagramLanguageId, source: string, colourTheme: DiagramTheme): string {
+export function mockKey(
+  id: DiagramLanguageId,
+  source: string,
+  colourTheme: DiagramTheme,
+): string {
   let hash = 0x811c9dc5;
   const input = `${id}\u0000${colourTheme}\u0000${source}`;
   for (let i = 0; i < input.length; i += 1) {
@@ -255,7 +259,7 @@ export function diagramPlugin(): MockPluginFactory {
         return { diagnostics: mockCheck(text(args, "source")) };
       },
       "diagram.key": (args) => ({
-        key: key(language(args), text(args, "source"), theme(args)),
+        key: mockKey(language(args), text(args, "source"), theme(args)),
       }),
     },
     binaryHandlers: {

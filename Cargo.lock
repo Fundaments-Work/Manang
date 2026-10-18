@@ -5662,6 +5662,8 @@ version = "0.1.0"
 dependencies = [
  "insta",
  "manang-kernel",
+ "manang-project",
+ "manang-typst",
  "parking_lot",
  "perfect_freehand",
  "proptest",
@@ -5727,11 +5729,14 @@ name = "manang-markdown"
 version = "0.1.0"
 dependencies = [
  "insta",
+ "manang-diagram",
  "manang-kernel",
+ "manang-project",
  "proptest",
  "pulldown-cmark",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "toml 0.8.2",
  "yaml-rust",
@@ -5763,7 +5768,9 @@ dependencies = [
  "gix",
  "ignore",
  "insta",
+ "manang-diagram",
  "manang-kernel",
+ "manang-typst",
  "notify",
  "notify-debouncer-full",
  "parking_lot",

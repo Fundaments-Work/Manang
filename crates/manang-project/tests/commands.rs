@@ -71,7 +71,7 @@ impl Harness {
 fn manifest_matches_the_commands_the_plugin_handles() {
     let h = harness();
     let ids: Vec<String> = h.kernel.commands().into_iter().map(|c| c.id).collect();
-    assert_eq!(ids.len(), 18);
+    assert_eq!(ids.len(), 22);
     // Every declared command is routed (an unknown one would error with UnknownCommand).
     for id in ids {
         if let Err(err) = h.call(&id, json!({ "bogus": 1 })) {

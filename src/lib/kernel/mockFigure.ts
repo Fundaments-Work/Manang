@@ -153,20 +153,34 @@ export function figurePlugin(host: MockProjectHost): MockPluginFactory {
       return doc;
     };
 
-    const write = (doc: Doc): { json: string; svg: string; revision: number } => {
+    const write = (
+      doc: Doc,
+    ): { json: string; svg: string; revision: number; pdf: string | null } => {
       if (doc.path === null) throw fail("figure has no file path associated");
       const paths = figurePaths(doc.path);
       const json = locate(paths.json);
       const svg = locate(paths.svg);
-      const changes = [json, svg].map(({ fs, rel }) => ({
+      // LaTeX projects also get the PDF `\includegraphics` takes, as the
+      // real plugin asks `project.export-pdf` for.
+      const pdfRel =
+        svg.fs.engine === "latex" ? svg.rel.replace(/\.svg$/, ".pdf") : null;
+      const touched = [
+        json,
+        svg,
+        ...(pdfRel === null ? [] : [{ fs: svg.fs, rel: pdfRel }]),
+      ];
+      const changes = touched.map(({ fs, rel }) => ({
         path: rel,
         kind: fs.files.has(rel) ? "modified" : "created",
       }));
       json.fs.files.set(json.rel, `${JSON.stringify(doc.scene, null, 2)}\n`);
       svg.fs.files.set(svg.rel, renderSceneSvg(doc.scene));
+      if (pdfRel !== null) {
+        svg.fs.files.set(pdfRel, "%PDF-1.7\n% Manang browser mock: one page.\n%%EOF\n");
+      }
       doc.savedRevision = doc.revision;
       emit("project.changed", { root: json.fs.root, changes });
-      return { json: paths.json, svg: paths.svg, revision: doc.revision };
+      return { json: paths.json, svg: paths.svg, revision: doc.revision, pdf: pdfRel };
     };
 
     const result = (doc: Doc, applied: boolean) => ({

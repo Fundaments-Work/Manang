@@ -2085,11 +2085,50 @@ async function main() {
       `document.querySelector(${JSON.stringify(diagramImg)})?.dataset.theme === "dark"`,
     );
 
+    // Saving writes the print-ready picture next to the source.
+    const showFiles = async () => {
+      // The Files button toggles the side panel when Files is already shown.
+      if (!(await exists(page, '[role="treeitem"][data-path="main.typ"]'))) {
+        await click(
+          page,
+          'nav[aria-label="Workbench views"] button[aria-label="Files"]',
+        );
+      }
+      await waitFor(
+        page,
+        `!!document.querySelector('[role="treeitem"][data-path="main.typ"]')`,
+        {
+          label: "Files is shown",
+        },
+      );
+      await page.evaluate(
+        `(() => { const d = document.querySelector('[role="treeitem"][data-path="figures"]'); if (d && d.getAttribute("aria-expanded") === "false") d.click(); })()`,
+      );
+      await sleep(300);
+    };
+    await showFiles();
+    check(
+      "flow.mmd has no picture next to it before the first save",
+      (await exists(page, '[role="treeitem"][data-path="figures/flow.mmd"]')) &&
+        !(await exists(page, '[role="treeitem"][data-path="figures/flow.svg"]')),
+    );
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(page, "  D --> E[Report]\n");
+    await press(page, "s", { ctrl: true, wait: 600 });
+    await expectEventually(
+      page,
+      "saving flow.mmd makes figures/flow.svg appear in Files",
+      `!!document.querySelector('[role="treeitem"][data-path="figures/flow.svg"]')`,
+    );
+    await shoot(page, "diagram-saved-svg");
+
     await runCommand("Copy include line");
     await expectEventually(
       page,
       "Copy include line gives the Typst include for the main document",
-      `document.querySelector('footer[aria-label="Status"]').innerText.includes('#image("figures/flow.svg")')`,
+      `(() => { const t = document.querySelector('footer[aria-label="Status"]').innerText; return t.includes('#figure(image("figures/flow.svg"))') && !t.includes("not write"); })()`,
+      { show: `document.querySelector('footer[aria-label="Status"]').innerText` },
     );
 
     await runCommand("New diagram");
@@ -2098,9 +2137,28 @@ async function main() {
       "New diagram asks for a name, with focus in the field",
       `document.activeElement === document.querySelector('[role="alertdialog"] input')`,
     );
+    check(
+      "New diagram has the kind as one single-select and one action row (Cancel, Create)",
+      await page.evaluate(`(() => {
+        const box = document.querySelector('[role="alertdialog"]');
+        const radios = [...box.querySelectorAll('[role="radiogroup"] [role="radio"]')];
+        const actions = [...box.querySelectorAll('button:not([role="radio"])')];
+        const tops = (els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().top)));
+        return radios.length === 4 && tops(radios).size === 1 &&
+          radios.filter((r) => r.getAttribute("aria-checked") === "true").length === 1 &&
+          actions.map((b) => b.textContent.trim()).join() === "Cancel,Create" && tops(actions).size === 1;
+      })()`),
+    );
     await shoot(page, "diagram-new");
     await insertText(page, "setup");
-    await clickText(page, '[role="alertdialog"] button', "Pikchr");
+    await clickText(page, '[role="alertdialog"] [role="radio"]', "Pikchr");
+    check(
+      "picking a kind selects it",
+      await page.evaluate(
+        `[...document.querySelectorAll('[role="alertdialog"] [role="radio"][aria-checked="true"]')].map((r) => r.textContent.trim()).join() === "Pikchr"`,
+      ),
+    );
+    await clickText(page, '[role="alertdialog"] button', "Create");
     await expectEventually(
       page,
       "it writes figures/setup.pikchr and opens it with a preview",
@@ -2112,7 +2170,8 @@ async function main() {
       `document.querySelector('[role="alertdialog"] input') !== null`,
     );
     await insertText(page, "setup");
-    await clickText(page, '[role="alertdialog"] button', "Pikchr");
+    await clickText(page, '[role="alertdialog"] [role="radio"]', "Pikchr");
+    await clickText(page, '[role="alertdialog"] button', "Create");
     await expectEventually(
       page,
       "a taken name is never overwritten: Manang asks",
@@ -2124,6 +2183,60 @@ async function main() {
       await clickText(page, '[role="tab"]', name);
       await press(page, "w", { ctrl: true, synthetic: true, wait: 300 });
     }
+
+    // Diagram fences in Markdown: pictures in the preview, errors in Problems.
+    await showFiles();
+    await click(page, '[role="treeitem"][data-path="notes.md"]');
+    await waitFor(
+      page,
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "notes.md"`,
+      {
+        label: "notes.md open",
+      },
+    );
+    await focusEditor(page);
+    await caretToEnd(page);
+    await insertText(
+      page,
+      "\n```mermaid\nflowchart LR\n  A[Draft] --> B[Paper]\n```\n",
+    );
+    const fenceImg = `article[aria-label="Markdown preview"] figure.mng-diagram img[data-diagram-fence]`;
+    await expectEventually(
+      page,
+      "a mermaid fence in Markdown shows as an image in the preview",
+      `(() => { const i = document.querySelector(${JSON.stringify(fenceImg)}); if (!i || !i.complete || i.naturalWidth === 0) return false; return i.src.startsWith("blob:") && i.getBoundingClientRect().width > 0 && !document.querySelector('article[aria-label="Markdown preview"] svg'); })()`,
+    );
+    await shoot(page, "diagram-markdown-fence");
+    await insertText(page, "\n```mermaid\nflowchart TD\n  A -->>> B\n```\n");
+    // The broken fence opens on the last line that reads ```mermaid; its
+    // error is two lines further down.
+    const fenceLine = await page.evaluate(
+      `(() => { const lines = [...document.querySelectorAll(".cm-line")].map((l) => l.textContent); return lines.lastIndexOf("\`\`\`mermaid") + 1; })()`,
+    );
+    await expectEventually(
+      page,
+      "a broken fence shows a quiet error box in the preview",
+      `(() => { const e = document.querySelector('article[aria-label="Markdown preview"] figure[data-diagram-error]'); return !!e && e.innerText.includes("line ${fenceLine}:") && e.innerText.includes("unexpected token"); })()`,
+      {
+        show: `document.querySelector('article[aria-label="Markdown preview"]')?.innerHTML.slice(0, 600)`,
+      },
+    );
+    await runCommand("Show problems");
+    await expectEventually(
+      page,
+      "Problems lists the broken fence at its line in notes.md",
+      `(() => { const t = document.querySelector("#bottom-panel")?.innerText ?? ""; return t.includes("notes.md") && t.includes("unexpected token") && /Ln ${fenceLine + 2}, Col 5/.test(t); })()`,
+      { show: `document.querySelector("#bottom-panel")?.innerText` },
+    );
+    await shoot(page, "diagram-markdown-error");
+    await press(page, "j", { ctrl: true, wait: 200 });
+    // Leave notes.md as it was.
+    await click(page, '[role="tab"][data-tab="notes.md"]', "middle");
+    if (await exists(page, '[role="alertdialog"]')) {
+      await clickText(page, '[role="alertdialog"] button', "Don't save");
+      await sleep(300);
+    }
+    await noStrayEdits(page, "after the Markdown fences");
 
     /* ------------------------------------------------------------------ */
     section("Zen mode");

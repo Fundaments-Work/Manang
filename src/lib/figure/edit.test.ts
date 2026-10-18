@@ -169,7 +169,7 @@ describe("embedLine", () => {
       '#figure(image("figures/a.svg", width: 80%))',
     );
     expect(embedLine("figures/a.svg", "latex")).toBe(
-      "\\includesvg[width=0.8\\linewidth]{figures/a.svg}",
+      "\\includegraphics[width=0.8\\linewidth]{figures/a.pdf}",
     );
     expect(embedLine("figures/a.svg", "markdown")).toBe("![](figures/a.svg)");
   });

@@ -91,10 +91,28 @@ fn failed(error: impl std::fmt::Display) -> PluginError {
     PluginError::Failed(error.to_string())
 }
 
+/// The PDF LaTeX includes, written next to the just-saved `svg` by the
+/// project plugin (`project.export-pdf`, which knows whether the project uses
+/// LaTeX and may write there). Returns its project-relative path, or None
+/// when the project does not include PDFs or no project plugin is present.
+fn pdf_for(ctx: &Context<'_>, svg: &str) -> Result<Option<String>, PluginError> {
+    const COMMAND: &str = "project.export-pdf";
+    if !ctx.has_command(COMMAND) {
+        return Ok(None);
+    }
+    match ctx.invoke(COMMAND, Payload::Json(json!({ "path": svg }))) {
+        Ok(Payload::Json(out)) => Ok(out.get("pdf").and_then(Value::as_str).map(str::to_owned)),
+        Ok(_) => Ok(None),
+        Err(e) => Err(PluginError::Failed(format!(
+            "saved {svg}, but its PDF could not be written: {e}"
+        ))),
+    }
+}
+
 impl Plugin for FigurePlugin {
     fn invoke(
         &self,
-        _ctx: &Context<'_>,
+        ctx: &Context<'_>,
         command: &str,
         input: Payload,
     ) -> Result<Payload, PluginError> {
@@ -114,10 +132,12 @@ impl Plugin for FigurePlugin {
                             .store
                             .create_at(Path::new(path), width, height)
                             .map_err(failed)?;
+                        let pdf = pdf_for(ctx, &saved.svg)?;
                         Ok(Payload::Json(json!({
                             "id": id,
                             "json": saved.json,
                             "svg": saved.svg,
+                            "pdf": pdf,
                         })))
                     }
                 }
@@ -131,9 +151,12 @@ impl Plugin for FigurePlugin {
                 let fig_id = id(&a)?;
                 let path = a.get("path").and_then(Value::as_str).map(Path::new);
                 let saved = self.store.save(fig_id, path).map_err(failed)?;
-                serde_json::to_value(saved)
-                    .map(Payload::Json)
-                    .map_err(failed)
+                let pdf = pdf_for(ctx, &saved.svg)?;
+                let mut out = serde_json::to_value(saved).map_err(failed)?;
+                if let Value::Object(map) = &mut out {
+                    map.insert("pdf".to_owned(), pdf.map_or(Value::Null, Value::String));
+                }
+                Ok(Payload::Json(out))
             }
             "figure.close" => {
                 let fig_id =
