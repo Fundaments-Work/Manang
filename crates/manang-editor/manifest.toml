@@ -59,3 +59,10 @@ title = "Read text range"
 [[contributes.commands]]
 id = "editor.line-col"
 title = "Convert character index to line and column"
+
+[[contributes.editors]]
+id = "source"
+kind = "source"
+document-types = ["*"]
+title = "Source"
+priority = "default"
