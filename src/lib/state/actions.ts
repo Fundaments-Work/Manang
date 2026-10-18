@@ -57,6 +57,7 @@ import { sanitizeSession, toSession } from "$lib/workbench/tabs";
 
 import { build } from "./build.svelte";
 import { diagram } from "./diagram.svelte";
+import { heal } from "./heal.svelte";
 import { exportDiagramsOnSave } from "./diagramFiles";
 import { autosave } from "./autosave.svelte";
 import { dialog } from "./dialog.svelte";
@@ -893,6 +894,7 @@ export async function boot(): Promise<void> {
   void live.reset();
   window.addEventListener("pagehide", () => void recovery.flushAll());
   diagram.start();
+  heal.start();
   exportDiagramsOnSave();
   void kernel.onEvent(onKernelEvent);
   await workspace.loadRecent();

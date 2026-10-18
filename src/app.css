@@ -421,6 +421,19 @@
     font-size: 11px;
     color: var(--mng-text-60);
   }
+  /* The heal plugin's fixes under a diagnostic: square hairline buttons. */
+  .manang-problem-fixes {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  .manang-fix {
+    height: 24px;
+    justify-content: flex-start;
+    font-size: 11px;
+    cursor: pointer;
+  }
 }
 
 /* Zen mode: the editor becomes a quiet 680px reading column. */

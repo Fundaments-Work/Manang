@@ -5,7 +5,7 @@
  * rest of the kernel; the editor wants UTF-16 offsets.
  */
 
-import type { Diagnostic } from "$lib/editor/diagnostics";
+import type { Diagnostic, FixChoice } from "$lib/editor/diagnostics";
 
 import { scalarToUtf16 } from "./offsets";
 
@@ -15,6 +15,9 @@ export interface LintItem {
   readonly column: number;
   readonly severity: "error" | "warning";
   readonly message: string;
+  /** The Problem this marker stands for, so a quick fix can find it. */
+  readonly problemId?: string;
+  readonly fixes?: readonly FixChoice[];
 }
 
 /**
@@ -45,7 +48,16 @@ export function toEditorDiagnostics(
     if (to <= from) to = Math.min(from + 1, text.length);
     if (to <= from) continue;
 
-    out.push({ from, to, message: item.message, severity: item.severity });
+    out.push({
+      from,
+      to,
+      message: item.message,
+      severity: item.severity,
+      ...(item.problemId === undefined ? {} : { problemId: item.problemId }),
+      ...(item.fixes === undefined || item.fixes.length === 0
+        ? {}
+        : { fixes: item.fixes }),
+    });
   }
   return out;
 }

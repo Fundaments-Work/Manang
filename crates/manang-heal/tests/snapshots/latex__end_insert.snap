@@ -1,0 +1,35 @@
+---
+source: crates/manang-heal/tests/latex.rs
+expression: "show(Engine::Latex, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "latex.end-insert:\\end{itemize}:65",
+        "label": "Add \\end{itemize} before \\end{document}",
+        "why": "`\\end{document}` is reached while an environment is still open.",
+        "edits": [
+          {
+            "from": 65,
+            "to": 65,
+            "insert": "\\end{itemize}\n"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "latex.unbalanced-environment",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "latex.end-insert:\\end{itemize}:65",
+      "after": "\\documentclass{article}\n\\begin{document}\n\\begin{itemize}\n\\item a\n\\end{itemize}\n\\end{document}\n"
+    }
+  ],
+  "fix_all": null
+}

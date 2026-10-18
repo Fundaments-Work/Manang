@@ -21,6 +21,7 @@ import {
 } from "@codemirror/view";
 
 import type { Diagnostic } from "./diagnostics";
+import { runFix } from "./healBridge";
 
 /** A marker on one line. */
 class ProblemMarker extends GutterMarker {
@@ -133,6 +134,30 @@ export function problemCallout(): Extension {
           row.append(message);
 
           wrapper.append(row);
+
+          // Deterministic fixes (the heal plugin): one button each, so several
+          // fixes are a small list. mousedown keeps the editor's focus.
+          const { problemId, fixes } = diagnostic;
+          if (problemId !== undefined && fixes !== undefined && fixes.length > 0) {
+            const list = document.createElement("div");
+            list.className = "manang-problem-fixes";
+            list.setAttribute("role", "group");
+            list.setAttribute("aria-label", "Quick fixes");
+            for (const fix of fixes) {
+              const button = document.createElement("button");
+              button.type = "button";
+              button.className = "manang-fix mng-btn mng-lime-hover";
+              button.dataset["fix"] = fix.id;
+              button.title = fix.why;
+              button.textContent = `${fixes.length === 1 ? "Quick fix" : "Fix"}: ${fix.label}`;
+              button.addEventListener("mousedown", (event) => event.preventDefault());
+              button.addEventListener("click", () => {
+                runFix(problemId, fix.id);
+              });
+              list.append(button);
+            }
+            wrapper.append(list);
+          }
         }
 
         return { dom: wrapper };

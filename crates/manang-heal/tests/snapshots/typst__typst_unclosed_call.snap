@@ -1,0 +1,35 @@
+---
+source: crates/manang-heal/tests/typst.rs
+expression: "show(Engine::Typst, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "typst.close:):44",
+        "label": "Add ) to close the `(` on line 1",
+        "why": "A delimiter is opened and never closed; this closes it where the statement appears to end.",
+        "edits": [
+          {
+            "from": 44,
+            "to": 44,
+            "insert": ")"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "typst.unclosed-delimiter",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "typst.close:):44",
+      "after": "#figure(\n  rect(width: 3em),\n  caption: [x],)\n\nafter\n"
+    }
+  ],
+  "fix_all": null
+}

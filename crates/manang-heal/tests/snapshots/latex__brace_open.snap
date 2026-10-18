@@ -1,0 +1,35 @@
+---
+source: crates/manang-heal/tests/latex.rs
+expression: "show(Engine::Latex, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "latex.close-brace:63",
+        "label": "Add the missing } at the end of line 3",
+        "why": "A `{` is never closed; this closes it at the end of the line it opens on.",
+        "edits": [
+          {
+            "from": 63,
+            "to": 63,
+            "insert": "}"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "latex.unbalanced-brace",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "latex.close-brace:63",
+      "after": "\\documentclass{article}\n\\begin{document}\nSome \\textbf{bold text} % note\nmore\n\\end{document}\n"
+    }
+  ],
+  "fix_all": null
+}

@@ -1,0 +1,35 @@
+---
+source: crates/manang-heal/tests/typst.rs
+expression: "show(Engine::Typst, \"#sett text(size: 11pt)\\nhello\\n\", &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "typst.rename:sett->set:1",
+        "label": "Change sett to set",
+        "why": "`sett` is not defined; `set` is the only keyword one letter away.",
+        "edits": [
+          {
+            "from": 1,
+            "to": 5,
+            "insert": "set"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "typst.misspelled-name",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "typst.rename:sett->set:1",
+      "after": "#set text(size: 11pt)\nhello\n"
+    }
+  ],
+  "fix_all": null
+}

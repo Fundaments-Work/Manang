@@ -1,0 +1,43 @@
+---
+source: crates/manang-heal/tests/markdown.rs
+expression: "show(Engine::Markdown, text, &[])"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "markdown.table-delimiter:14",
+        "label": "Make the delimiter row 3 columns wide",
+        "why": "Without a delimiter row as wide as the header, the table is not recognised.",
+        "edits": [
+          {
+            "from": 14,
+            "to": 23,
+            "insert": "| --- | --- | --- |"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "markdown.table-delimiter",
+        "diagnostics": [],
+        "finding": 0
+      }
+    ],
+    "findings": [
+      {
+        "message": "Table delimiter row has 2 columns but the header has 3",
+        "severity": "warning",
+        "from": 14,
+        "to": 23,
+        "line": 2,
+        "rule": "markdown.table-delimiter"
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "markdown.table-delimiter:14",
+      "after": "| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n"
+    }
+  ],
+  "fix_all": null
+}

@@ -101,15 +101,26 @@
     </button>
   {/if}
 
-  <span
-    class="min-w-0 flex-1 truncate px-3 leading-6 {notice.kind === 'error'
-      ? 'text-text'
-      : ''}"
-    role={notice.kind === "error" ? "alert" : "status"}
-    aria-live={notice.kind === "error" ? "assertive" : "polite"}
-  >
-    {notice.text}
-  </span>
+  <div class="flex min-w-0 flex-1 items-center">
+    <span
+      class="min-w-0 truncate pl-3 leading-6 {notice.action === null
+        ? 'flex-1 pr-3'
+        : 'pr-2'} {notice.kind === 'error' ? 'text-text' : ''}"
+      role={notice.kind === "error" ? "alert" : "status"}
+      aria-live={notice.kind === "error" ? "assertive" : "polite"}
+    >
+      {notice.text}
+    </span>
+    {#if notice.action !== null}
+      <button
+        type="button"
+        class="mng-lime-hover inset-focus h-6 shrink-0 px-2 text-xs text-text underline"
+        data-notice-action
+        onclick={() => notice.runAction()}>{notice.action.label}</button
+      >
+      <span class="flex-1"></span>
+    {/if}
+  </div>
 
   <AgentChip />
   {#if live.active}

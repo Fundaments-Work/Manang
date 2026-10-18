@@ -19,6 +19,9 @@ Manang is a fast, local-first scientific authoring and illustration desktop appl
 - **[Preview and PDF](preview-and-pdf.md)**  
   Control preview layouts, compile documents automatically, use the built-in PDF viewer, jump between source text and the preview with SyncTeX, export PDFs, and configure TeX Live for LaTeX.
 
+- **[Fixing errors](fixing-errors.md)**  
+  Use the Fix button, the editor quick fix and Fix all for small compile errors such as a missing package, undo a fix, and turn automatic fixes on or off.
+
 - **[Figures and diagrams](figures-and-diagrams.md)**  
   Draw vector sketches in the figure studio, use bound arrows and frames, render text diagrams in Mermaid, Pikchr, and ASCII format, and include figures in your documents.
 

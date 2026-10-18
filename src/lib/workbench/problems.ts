@@ -5,7 +5,7 @@
 
 import type { Text } from "@codemirror/state";
 
-import type { Diagnostic } from "$lib/editor/diagnostics";
+import type { Diagnostic, FixChoice } from "$lib/editor/diagnostics";
 import type { LintFinding } from "$lib/editor/writing/bus";
 import { toEditorDiagnostics, type LintItem } from "$lib/kernel/lint";
 import { scalarLength } from "$lib/kernel/offsets";
@@ -36,6 +36,8 @@ export interface Problem {
   readonly source?: string;
   /** Rule id of a writing finding, e.g. `repeated-word`. */
   readonly code?: string;
+  /** Scalar offsets into the file's text, when the compiler gave them (Typst). */
+  readonly range?: { readonly start: number; readonly end: number };
 }
 
 export interface Counts {
@@ -59,6 +61,7 @@ export function fromWire(diagnostics: readonly WireDiagnostic[]): Problem[] {
       line: d.line,
       column: d.column,
       hints: d.hints,
+      ...(d.range === null ? {} : { range: d.range }),
     })),
   );
 }
@@ -152,7 +155,11 @@ export function problemsIn(problems: readonly Problem[], file: string): Problem[
 }
 
 /** Gutter markers for one file's text. Problems without a position are skipped. */
-export function toGutter(text: string, problems: readonly Problem[]): Diagnostic[] {
+export function toGutter(
+  text: string,
+  problems: readonly Problem[],
+  fixesFor: (problem: Problem) => readonly FixChoice[] = () => [],
+): Diagnostic[] {
   const items: LintItem[] = [];
   for (const problem of problems) {
     // Writing findings are underlined in the text, not marked in the gutter.
@@ -163,6 +170,8 @@ export function toGutter(text: string, problems: readonly Problem[]): Diagnostic
       column: problem.column ?? 1,
       severity: problem.severity === "error" ? "error" : "warning",
       message: problem.message,
+      problemId: problem.id,
+      fixes: fixesFor(problem),
     });
   }
   return toEditorDiagnostics(text, items);

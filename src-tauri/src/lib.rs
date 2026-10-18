@@ -219,6 +219,7 @@ fn build_kernel_parts(
         manang_writing::manifest()?,
         Arc::new(manang_writing::plugin(dirs.config.to_path_buf())),
     )?;
+    kernel.register(manang_heal::manifest()?, Arc::new(manang_heal::plugin()))?;
     kernel.register(
         manang_markdown::manifest()?,
         Arc::new(manang_markdown::plugin()),

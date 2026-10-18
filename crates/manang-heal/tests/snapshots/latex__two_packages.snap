@@ -1,0 +1,56 @@
+---
+source: crates/manang-heal/tests/latex.rs
+expression: "show(Engine::Latex, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "latex.package:hyperref",
+        "label": "Add \\usepackage{hyperref}",
+        "why": "`\\url` is defined by the `hyperref` package, which this document does not load. Another package also provides it; pick the one you use.",
+        "edits": [
+          {
+            "from": 23,
+            "to": 23,
+            "insert": "\n\\usepackage{hyperref}"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "latex.missing-package",
+        "diagnostics": [
+          0
+        ]
+      },
+      {
+        "id": "latex.package:url",
+        "label": "Add \\usepackage{url}",
+        "why": "`\\url` is defined by the `url` package, which this document does not load. Another package also provides it; pick the one you use.",
+        "edits": [
+          {
+            "from": 23,
+            "to": 23,
+            "insert": "\n\\usepackage{url}"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "latex.missing-package",
+        "diagnostics": [
+          0
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "latex.package:hyperref",
+      "after": "\\documentclass{article}\n\\usepackage{hyperref}\n\\begin{document}\n\\url{x}\n\\end{document}\n"
+    },
+    {
+      "id": "latex.package:url",
+      "after": "\\documentclass{article}\n\\usepackage{url}\n\\begin{document}\n\\url{x}\n\\end{document}\n"
+    }
+  ],
+  "fix_all": null
+}

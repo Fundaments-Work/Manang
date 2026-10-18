@@ -1,0 +1,56 @@
+---
+source: crates/manang-heal/tests/latex.rs
+expression: "show(Engine::Latex, text, &diags)"
+---
+{
+  "suggestion": {
+    "fixes": [
+      {
+        "id": "latex.theorem:theorem",
+        "label": "Declare the theorem environment",
+        "why": "`theorem` needs a `\\newtheorem` declaration; this adds one (numbered, titled \"Theorem\").",
+        "edits": [
+          {
+            "from": 23,
+            "to": 23,
+            "insert": "\n\\usepackage{amsthm}\n\\newtheorem{theorem}{Theorem}"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "latex.undeclared-theorem",
+        "diagnostics": [
+          0
+        ]
+      },
+      {
+        "id": "latex.theorem:lemma",
+        "label": "Declare the lemma environment",
+        "why": "`lemma` needs a `\\newtheorem` declaration; this adds one (numbered, titled \"Lemma\").",
+        "edits": [
+          {
+            "from": 23,
+            "to": 23,
+            "insert": "\n\\usepackage{amsthm}\n\\newtheorem{lemma}{Lemma}"
+          }
+        ],
+        "confidence": "likely",
+        "rule": "latex.undeclared-theorem",
+        "diagnostics": [
+          1
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "results": [
+    {
+      "id": "latex.theorem:theorem",
+      "after": "\\documentclass{article}\n\\usepackage{amsthm}\n\\newtheorem{theorem}{Theorem}\n\\begin{document}\n\\begin{theorem}\nx\n\\end{theorem}\n\\begin{lemma}y\\end{lemma}\n\\end{document}\n"
+    },
+    {
+      "id": "latex.theorem:lemma",
+      "after": "\\documentclass{article}\n\\usepackage{amsthm}\n\\newtheorem{lemma}{Lemma}\n\\begin{document}\n\\begin{theorem}\nx\n\\end{theorem}\n\\begin{lemma}y\\end{lemma}\n\\end{document}\n"
+    }
+  ],
+  "fix_all": null
+}
