@@ -32,6 +32,6 @@ pub use scene::{
 };
 pub use store::{
     ApplyResult, DEFAULT_MAX_HISTORY, DEFAULT_SCENE_HEIGHT, DEFAULT_SCENE_WIDTH, FigureDocument,
-    FigureId, FigureInfo, FigureOp, FigureStore, resolve_figure_paths,
+    FigureId, FigureInfo, FigureOp, FigureStore, SavedPaths, resolve_figure_paths,
 };
 pub use svg::{SvgExportOptions, escape_xml, render_svg};
