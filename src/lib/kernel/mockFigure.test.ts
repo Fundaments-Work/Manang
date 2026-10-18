@@ -13,7 +13,7 @@ const RECT: FigureNode = {
   y: 20,
   width: 40,
   height: 30,
-  stroke: "#e8e6e1",
+  style: { stroke: "ink" },
 };
 
 async function opened() {
@@ -41,6 +41,7 @@ describe("browser figure plugin", () => {
       applied: true,
       can_undo: true,
       can_redo: false,
+      changed: ["r1"],
     });
     await figure.apply(id, { op: "translate", id: "r1", dx: 5, dy: -4 });
     expect((await figure.get(id)).nodes[0]).toMatchObject({ x: 15, y: 16, width: 40 });

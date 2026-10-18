@@ -60,7 +60,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false }
-insta = "1"
+insta = { version = "1", features = ["json"] }
 proptest = "1"
 
 [[bench]]

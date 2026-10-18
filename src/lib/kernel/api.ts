@@ -6,7 +6,7 @@
  * in a Rust plugin touches this file and `types.ts`, nothing else.
  */
 
-import type { FigureEdit } from "$lib/figure/edit";
+import type { FigureOp } from "$lib/figure/ops";
 import type { FigureNode, FigureScene } from "$lib/figure/scene";
 
 import type { Kernel } from "./client";
@@ -1035,8 +1035,8 @@ export interface MarkdownHeading {
 /* Figures (`figure.*`). Paths are absolute: the plugin is not project-bound. */
 /* -------------------------------------------------------------------------- */
 
-/** One operation, exactly as `figure.apply` takes it (`op` tag, kebab-case). */
-export type FigureOp = FigureEdit | { readonly op: "undo" } | { readonly op: "redo" };
+/** One operation, exactly as `figure.apply` takes it (ADR 0012; `op` tag, kebab-case). */
+export type { FigureOp };
 
 export interface FigureApplyResult {
   readonly revision: number;
@@ -1044,6 +1044,8 @@ export interface FigureApplyResult {
   readonly applied: boolean;
   readonly can_undo: boolean;
   readonly can_redo: boolean;
+  /** Ids of the nodes that changed, re-routed arrows included. */
+  readonly changed: readonly string[];
 }
 
 export interface FigureSaved {

@@ -1,0 +1,13 @@
+---
+source: crates/manang-figure/tests/svg_snapshots.rs
+expression: svg
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 10 300 200" width="300" height="200">
+  <g id="inside">
+    <path d="M40 40L180 40L180 110L40 110Z" fill="none" stroke="#1c1c1c" stroke-width="1.5"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="110" y="80.6">in</tspan></text>
+  </g>
+  <g id="m">
+    <svg x="140" y="100" width="140" height="70" viewBox="0 0 50 20" preserveAspectRatio="xMidYMid meet"><rect width="50" height="20"/></svg>
+  </g>
+</svg>

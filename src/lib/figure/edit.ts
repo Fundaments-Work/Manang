@@ -1,69 +1,70 @@
 /**
- * Pure figure edits, kept out of the reactive figure state so they can be unit
- * tested and reused by other tools (nudging, dragging, undo).
+ * Editor-side helpers around the operation model: live (preview-only)
+ * moves with bound arrows following, and the paths and embed lines of a
+ * figure's files. Operations themselves live in `ops.ts`.
  */
 
-import {
-  appendNode,
-  nodeById,
-  removeNode,
-  replaceNode,
-  type FigureNode,
-  type FigureScene,
-  type Vec,
-} from "./scene";
+import { route } from "./binding";
+import { applyOp, type FigureEditOp } from "./ops";
+import { isConnector, type FigureNode, type FigureScene, type Vec } from "./scene";
 
-/**
- * A scene edit, exactly as the figure plugin's `figure.apply` takes it. Each
- * one addresses nodes by id and carries everything it needs, so applying it
- * to the same scene gives the same result on both sides of the IPC boundary:
- * the editor applies it at once and the plugin, which owns the scene and its
- * history, applies it in order behind.
- */
-export type FigureEdit =
-  | { readonly op: "add-node"; readonly node: FigureNode }
-  | { readonly op: "update-node"; readonly node: FigureNode }
-  | { readonly op: "remove-node"; readonly id: string }
-  | {
-      readonly op: "translate";
-      readonly id: string;
-      readonly dx: number;
-      readonly dy: number;
-    }
-  | { readonly op: "clear" };
+export type { FigureOp, FigureEditOp } from "./ops";
 
-/**
- * `edit` applied to `scene`, with the plugin's rules: a duplicate id or a
- * missing node is refused (thrown), never silently ignored.
- */
+/** An edit as the editor sends it (everything but undo and redo). */
+export type FigureEdit = FigureEditOp;
+
+/** `edit` applied to `scene` with the plugin's rules; throws when refused. */
 export function applyEdit(scene: FigureScene, edit: FigureEdit): FigureScene {
-  switch (edit.op) {
-    case "add-node":
-      if (nodeById(scene, edit.node.id) !== undefined) {
-        throw new Error(`node with id \`${edit.node.id}\` already exists`);
-      }
-      return appendNode(scene, edit.node);
-    case "update-node":
-      requireNode(scene, edit.node.id);
-      return replaceNode(scene, edit.node);
-    case "remove-node":
-      requireNode(scene, edit.id);
-      return removeNode(scene, edit.id);
-    case "translate":
-      if (!Number.isFinite(edit.dx) || !Number.isFinite(edit.dy)) {
-        throw new Error("invalid argument: `dx` and `dy` must be finite numbers");
-      }
-      requireNode(scene, edit.id);
-      return translatedScene(scene, edit.id, { x: edit.dx, y: edit.dy });
-    case "clear":
-      return { ...scene, nodes: [] };
+  return applyOp(scene, edit).scene;
+}
+
+function moved(node: FigureNode, d: Vec): FigureNode {
+  switch (node.kind) {
+    case "arrow":
+    case "line":
+      return {
+        ...node,
+        points: node.points.map((p) => ({ x: p.x + d.x, y: p.y + d.y })),
+      };
+    case "freedraw":
+      return {
+        ...node,
+        points: node.points.map((p) => ({ ...p, x: p.x + d.x, y: p.y + d.y })),
+      };
+    default:
+      return { ...node, x: node.x + d.x, y: node.y + d.y };
   }
 }
 
-function requireNode(scene: FigureScene, id: string): void {
-  if (nodeById(scene, id) === undefined) {
-    throw new Error(`node with id \`${id}\` not found`);
-  }
+/**
+ * The scene with nodes `ids` moved by `delta` and every arrow bound to them
+ * re-routed: the live preview of a drag. The same scene when nothing moves.
+ */
+export function translatedNodes(
+  scene: FigureScene,
+  ids: readonly string[],
+  delta: Vec,
+): FigureScene {
+  if ((delta.x === 0 && delta.y === 0) || ids.length === 0) return scene;
+  const moving = new Set(ids);
+  if (!scene.nodes.some((n) => moving.has(n.id))) return scene;
+  let nodes = scene.nodes.map((n) => (moving.has(n.id) ? moved(n, delta) : n));
+  const next = { ...scene, nodes };
+  nodes = nodes.map((n) => {
+    if (!isConnector(n) || moving.has(n.id)) return n;
+    const bound = [n.start, n.end].some((b) => b !== undefined && moving.has(b.node));
+    return bound ? { ...n, points: route(next, n) } : n;
+  });
+  return { ...scene, nodes };
+}
+
+/** One node moved (see `translatedNodes`). */
+export function translatedScene(
+  scene: FigureScene,
+  id: string,
+  delta: Vec,
+): FigureScene {
+  return translatedNodes(scene, [id], delta);
 }
 
 /** Where the rendered SVG of a figure lives: next to its `.figure.json`. */
@@ -78,8 +79,7 @@ export function pdfPathFor(svgPath: string): string {
 
 /**
  * The line that embeds a figure (its project-relative SVG path) in a document
- * of the given engine. LaTeX takes the PDF written next to the SVG on save
- * (pdfTeX and XeTeX cannot read SVG, and `\includesvg` needs Inkscape).
+ * of the given engine. LaTeX takes the PDF written next to the SVG on save.
  */
 export function embedLine(
   svgPath: string,
@@ -92,51 +92,5 @@ export function embedLine(
       return `\\includegraphics[width=0.8\\linewidth]{${pdfPathFor(svgPath)}}`;
     case "markdown":
       return `![](${svgPath})`;
-  }
-}
-
-/** The scene with one node moved; the same scene if the node does not exist. */
-export function translatedScene(
-  scene: FigureScene,
-  id: string,
-  delta: Vec,
-): FigureScene {
-  const node = nodeById(scene, id);
-  if (node === undefined || (delta.x === 0 && delta.y === 0)) return scene;
-
-  switch (node.kind) {
-    case "rect":
-      return replaceNode(scene, {
-        ...node,
-        x: node.x + delta.x,
-        y: node.y + delta.y,
-      });
-    case "ellipse":
-      return replaceNode(scene, {
-        ...node,
-        cx: node.cx + delta.x,
-        cy: node.cy + delta.y,
-      });
-    case "arrow":
-      return replaceNode(scene, {
-        ...node,
-        from: { x: node.from.x + delta.x, y: node.from.y + delta.y },
-        to: { x: node.to.x + delta.x, y: node.to.y + delta.y },
-      });
-    case "math":
-      return replaceNode(scene, {
-        ...node,
-        x: node.x + delta.x,
-        y: node.y + delta.y,
-      });
-    case "stroke":
-      return replaceNode(scene, {
-        ...node,
-        points: node.points.map((point) => ({
-          ...point,
-          x: point.x + delta.x,
-          y: point.y + delta.y,
-        })),
-      });
   }
 }

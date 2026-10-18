@@ -1,5 +1,5 @@
 //! Kernel plugin interface: `diagram.languages`, `diagram.check`,
-//! `diagram.render`, `diagram.key`.
+//! `diagram.render`, `diagram.key`, `diagram.layout`.
 
 use std::sync::Arc;
 
@@ -165,6 +165,18 @@ impl Plugin for DiagramPlugin {
                     .render(string(&a, "language")?, string(&a, "source")?, theme(&a)?)
                     .map_err(failed)?;
                 Ok(Payload::Binary(Arc::from(svg.into_bytes())))
+            }
+            "diagram.layout" => {
+                let language = a
+                    .get("language")
+                    .and_then(Value::as_str)
+                    .unwrap_or("mermaid");
+                let source = string(&a, "source")?;
+                let laid_out = self
+                    .engine(language)
+                    .and_then(|e| e.layout(source))
+                    .map_err(failed)?;
+                Ok(Payload::Json(laid_out))
             }
             "diagram.key" => {
                 let key = self

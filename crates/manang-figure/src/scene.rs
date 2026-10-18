@@ -1,10 +1,21 @@
-use serde::{Deserialize, Serialize};
+//! The figure scene graph, format version 2 (ADR 0012).
+//!
+//! A scene is plain data: a page size and an ordered list of nodes, painted
+//! first to last. It serialises to the `.figure.json` files people commit,
+//! so every optional field is omitted at its default and numbers are written
+//! with at most two decimals ([`FigureScene::to_file_json`]).
 
-/// Version tag for the figure scene format.
-pub const SCENE_VERSION: u32 = 1;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::error::FigureError;
+
+/// Version tag written by this crate.
+pub const SCENE_VERSION: u32 = 2;
 
 /// A 2D vector in scene coordinates (1 unit = 1 CSS pixel at 100% zoom).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Vec2 {
     /// X coordinate.
     pub x: f64,
@@ -19,16 +30,17 @@ impl Vec2 {
     }
 }
 
-/// A rectangle in scene coordinates.
+/// An axis-aligned rectangle in scene coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Rect {
-    /// X coordinate of origin.
+    /// Left edge.
     pub x: f64,
-    /// Y coordinate of origin.
+    /// Top edge.
     pub y: f64,
-    /// Width of the rectangle.
+    /// Width (non-negative once normalised).
     pub width: f64,
-    /// Height of the rectangle.
+    /// Height (non-negative once normalised).
     pub height: f64,
 }
 
@@ -43,23 +55,55 @@ impl Rect {
         }
     }
 
-    /// An empty rectangle with zero dimensions at (0, 0).
-    pub const EMPTY: Self = Self {
-        x: 0.0,
-        y: 0.0,
-        width: 0.0,
-        height: 0.0,
-    };
+    /// An empty rectangle at the origin.
+    pub const EMPTY: Self = Self::new(0.0, 0.0, 0.0, 0.0);
+
+    /// The centre point.
+    pub fn center(&self) -> Vec2 {
+        Vec2::new(self.x + self.width / 2.0, self.y + self.height / 2.0)
+    }
+
+    /// Right edge.
+    pub fn right(&self) -> f64 {
+        self.x + self.width
+    }
+
+    /// Bottom edge.
+    pub fn bottom(&self) -> f64 {
+        self.y + self.height
+    }
+
+    /// Whether `p` lies inside or on the edge.
+    pub fn contains(&self, p: Vec2) -> bool {
+        p.x >= self.x && p.x <= self.right() && p.y >= self.y && p.y <= self.bottom()
+    }
+
+    /// Whether `other` lies entirely inside this rectangle.
+    pub fn contains_rect(&self, other: &Rect) -> bool {
+        other.x >= self.x
+            && other.y >= self.y
+            && other.right() <= self.right()
+            && other.bottom() <= self.bottom()
+    }
+
+    /// Whether the two rectangles overlap (touching counts).
+    pub fn intersects(&self, other: &Rect) -> bool {
+        self.x <= other.right()
+            && other.x <= self.right()
+            && self.y <= other.bottom()
+            && other.y <= self.bottom()
+    }
 }
 
 /// A sampled point on a freehand path with pen pressure.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StrokeSample {
     /// X coordinate.
     pub x: f64,
     /// Y coordinate.
     pub y: f64,
-    /// Pressure value (0.0 to 1.0).
+    /// Pressure (0.0 to 1.0).
     pub pressure: f64,
 }
 
@@ -70,200 +114,716 @@ impl StrokeSample {
     }
 }
 
-/// Perimeter attachment side for arrow anchoring.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// How a stroke is dashed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum AnchorSide {
-    /// Top perimeter edge.
-    Top,
-    /// Right perimeter edge.
-    Right,
-    /// Bottom perimeter edge.
-    Bottom,
-    /// Left perimeter edge.
+pub enum StrokeStyle {
+    /// Continuous.
+    #[default]
+    Solid,
+    /// Long dashes.
+    Dashed,
+    /// Dots.
+    Dotted,
+}
+
+/// Typeface for labels and text.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FontFamily {
+    /// DM Sans.
+    #[default]
+    Sans,
+    /// DM Mono.
+    Mono,
+}
+
+/// Horizontal text alignment.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextAlign {
+    /// Flush left.
     Left,
+    /// Centred.
+    #[default]
+    Center,
+    /// Flush right.
+    Right,
 }
 
-/// An attachment point on a node's perimeter where arrows magnetically snap.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Anchor {
-    /// X position of the anchor in scene coordinates.
-    pub x: f64,
-    /// Y position of the anchor in scene coordinates.
-    pub y: f64,
-    /// Which perimeter side this anchor belongs to.
-    pub side: AnchorSide,
-    /// ID of the parent node.
-    #[serde(rename = "nodeId")]
-    pub node_id: String,
+/// Per-node style. Every field is optional; `None` means the default, so
+/// files stay small and a default change is one place.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Style {
+    /// Stroke colour: a palette token or `#rrggbb`. Default `ink`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<String>,
+    /// Fill colour: `none`, a palette token or `#rrggbb`. Default `none`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
+    /// Stroke width in scene units. Default 1.5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_width: Option<f64>,
+    /// Dashing. Default solid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_style: Option<StrokeStyle>,
+    /// Opacity, 0 to 100. Default 100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f64>,
+    /// 0 clean, 1 sketchy, 2 very sketchy. Default 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roughness: Option<u8>,
+    /// Typeface. Default sans.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_family: Option<FontFamily>,
+    /// Font size in scene units. Default 16.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_size: Option<f64>,
+    /// Alignment. Default centre (left for text nodes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_align: Option<TextAlign>,
 }
 
-/// A freehand pressure-tapered vector stroke.
+/// Default stroke width.
+pub const DEFAULT_STROKE_WIDTH: f64 = 1.5;
+/// Default font size.
+pub const DEFAULT_FONT_SIZE: f64 = 16.0;
+
+impl Style {
+    /// Whether every field is at its default.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The stroke colour.
+    pub fn stroke(&self) -> &str {
+        self.stroke.as_deref().unwrap_or("ink")
+    }
+
+    /// The fill colour.
+    pub fn fill(&self) -> &str {
+        self.fill.as_deref().unwrap_or("none")
+    }
+
+    /// The stroke width.
+    pub fn stroke_width(&self) -> f64 {
+        self.stroke_width.unwrap_or(DEFAULT_STROKE_WIDTH)
+    }
+
+    /// The dash style.
+    pub fn stroke_style(&self) -> StrokeStyle {
+        self.stroke_style.unwrap_or_default()
+    }
+
+    /// Opacity as 0..1.
+    pub fn opacity(&self) -> f64 {
+        (self.opacity.unwrap_or(100.0) / 100.0).clamp(0.0, 1.0)
+    }
+
+    /// Roughness, clamped to 0..=2.
+    pub fn roughness(&self) -> u8 {
+        self.roughness.unwrap_or(0).min(2)
+    }
+
+    /// The typeface.
+    pub fn font_family(&self) -> FontFamily {
+        self.font_family.unwrap_or_default()
+    }
+
+    /// The font size.
+    pub fn font_size(&self) -> f64 {
+        self.font_size.unwrap_or(DEFAULT_FONT_SIZE)
+    }
+
+    /// Merge `other` over `self`: every field `other` sets wins.
+    pub fn merged(&self, other: &Style) -> Style {
+        Style {
+            stroke: other.stroke.clone().or_else(|| self.stroke.clone()),
+            fill: other.fill.clone().or_else(|| self.fill.clone()),
+            stroke_width: other.stroke_width.or(self.stroke_width),
+            stroke_style: other.stroke_style.or(self.stroke_style),
+            opacity: other.opacity.or(self.opacity),
+            roughness: other.roughness.or(self.roughness),
+            font_family: other.font_family.or(self.font_family),
+            font_size: other.font_size.or(self.font_size),
+            text_align: other.text_align.or(self.text_align),
+        }
+    }
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
+/// A box-shaped node: rectangle, diamond, ellipse, frame, text, image or
+/// Mermaid block. Kind-specific fields: `label` (shapes, frames, text
+/// content), `src` (image), `source` (Mermaid).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct StrokeNode {
-    /// Unique node ID.
+#[serde(deny_unknown_fields)]
+pub struct ShapeNode {
+    /// Unique node id.
     pub id: String,
-    /// Sampled path points with pressure.
-    pub points: Vec<StrokeSample>,
-    /// Base stroke diameter in scene units.
-    pub size: f64,
-    /// Hex stroke color.
-    pub color: String,
-}
-
-/// A sharp mathematical rectangle.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RectNode {
-    /// Unique node ID.
-    pub id: String,
-    /// Top-left X.
+    /// Left edge.
     pub x: f64,
-    /// Top-left Y.
+    /// Top edge.
     pub y: f64,
     /// Width.
     pub width: f64,
     /// Height.
     pub height: f64,
-    /// Hex stroke color.
-    pub stroke: String,
-    /// Optional hex fill color.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fill: Option<String>,
-}
-
-/// An ellipse geometry node.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EllipseNode {
-    /// Unique node ID.
-    pub id: String,
-    /// Center X.
-    pub cx: f64,
-    /// Center Y.
-    pub cy: f64,
-    /// Radius X.
-    pub rx: f64,
-    /// Radius Y.
-    pub ry: f64,
-    /// Hex stroke color.
-    pub stroke: String,
-    /// Optional hex fill color.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fill: Option<String>,
-}
-
-/// A directional connector arrow with optional label.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ArrowNode {
-    /// Unique node ID.
-    pub id: String,
-    /// Starting coordinate.
-    pub from: Vec2,
-    /// Ending coordinate.
-    pub to: Vec2,
-    /// Hex color.
-    pub color: String,
-    /// Optional centered text label.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Rotation in degrees, clockwise, about the box centre.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub angle: f64,
+    /// The label drawn inside (for text nodes, the text itself; for frames,
+    /// the title).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// Image source: a path relative to the figure or a `data:` URI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub src: Option<String>,
+    /// Mermaid source of a Mermaid block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Style overrides.
+    #[serde(default, skip_serializing_if = "Style::is_empty")]
+    pub style: Style,
+    /// Group ids, innermost first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<String>,
+    /// Locked nodes cannot be selected on the canvas.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub locked: bool,
 }
 
-/// A stamped mathematical formula node.
+impl ShapeNode {
+    /// A box with an id and nothing else set.
+    pub fn new(id: impl Into<String>, x: f64, y: f64, width: f64, height: f64) -> Self {
+        Self {
+            id: id.into(),
+            x,
+            y,
+            width,
+            height,
+            angle: 0.0,
+            label: None,
+            src: None,
+            source: None,
+            style: Style::default(),
+            groups: Vec::new(),
+            locked: false,
+        }
+    }
+
+    /// The unrotated box.
+    pub fn rect(&self) -> Rect {
+        Rect::new(self.x, self.y, self.width, self.height)
+    }
+}
+
+/// Where an arrow end attaches to a shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MathNode {
-    /// Unique node ID.
+#[serde(deny_unknown_fields)]
+pub struct Binding {
+    /// Id of the bound shape.
+    pub node: String,
+    /// Fixed point on the shape, as fractions of its box (0..1). Absent:
+    /// the end floats along the outline toward the other end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<Vec2>,
+}
+
+impl Binding {
+    /// A floating binding to `node`.
+    pub fn to(node: impl Into<String>) -> Self {
+        Self {
+            node: node.into(),
+            anchor: None,
+        }
+    }
+}
+
+/// How a connector runs between its ends.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Routing {
+    /// Straight segments through the points.
+    #[default]
+    Straight,
+    /// Horizontal and vertical segments only.
+    Elbow,
+    /// A smooth curve.
+    Curved,
+}
+
+impl Routing {
+    fn is_straight(&self) -> bool {
+        *self == Routing::Straight
+    }
+}
+
+/// An arrow head.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Head {
+    /// No head.
+    None,
+    /// Open chevron.
+    Arrow,
+    /// Filled triangle.
+    Triangle,
+    /// Filled dot.
+    Dot,
+    /// Perpendicular bar.
+    Bar,
+}
+
+/// Heads at either end of a connector. `None` means the kind's default
+/// (arrows: none at the start, `arrow` at the end; lines: none).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Heads {
+    /// Head at the first point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<Head>,
+    /// Head at the last point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<Head>,
+}
+
+impl Heads {
+    fn is_default(&self) -> bool {
+        self.start.is_none() && self.end.is_none()
+    }
+}
+
+/// An arrow or a line.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectorNode {
+    /// Unique node id.
     pub id: String,
-    /// Anchor X coordinate.
+    /// Absolute points, at least two.
+    pub points: Vec<Vec2>,
+    /// Binding of the first point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<Binding>,
+    /// Binding of the last point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<Binding>,
+    /// Routing.
+    #[serde(default, skip_serializing_if = "Routing::is_straight")]
+    pub routing: Routing,
+    /// Heads.
+    #[serde(default, skip_serializing_if = "Heads::is_default")]
+    pub heads: Heads,
+    /// Label at the middle of the path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Style overrides.
+    #[serde(default, skip_serializing_if = "Style::is_empty")]
+    pub style: Style,
+    /// Group ids, innermost first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<String>,
+    /// Locked.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub locked: bool,
+}
+
+impl ConnectorNode {
+    /// An unbound straight connector from `from` to `to`.
+    pub fn new(id: impl Into<String>, from: Vec2, to: Vec2) -> Self {
+        Self {
+            id: id.into(),
+            points: vec![from, to],
+            start: None,
+            end: None,
+            routing: Routing::Straight,
+            heads: Heads::default(),
+            label: None,
+            style: Style::default(),
+            groups: Vec::new(),
+            locked: false,
+        }
+    }
+}
+
+/// A freehand pressure-tapered stroke.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FreedrawNode {
+    /// Unique node id.
+    pub id: String,
+    /// Sampled points.
+    pub points: Vec<StrokeSample>,
+    /// Base diameter in scene units.
+    pub size: f64,
+    /// Style overrides (the stroke colour fills the outline).
+    #[serde(default, skip_serializing_if = "Style::is_empty")]
+    pub style: Style,
+    /// Group ids, innermost first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<String>,
+    /// Locked.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub locked: bool,
+}
+
+/// A stamped formula, drawn as its source text until a math renderer is
+/// attached.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MathNode {
+    /// Unique node id.
+    pub id: String,
+    /// Baseline-left X.
     pub x: f64,
-    /// Anchor Y coordinate.
+    /// Baseline Y.
     pub y: f64,
-    /// Raw TeX / Typst math formula string.
+    /// TeX / Typst math source.
     pub tex: String,
     /// Font size in scene units.
     pub size: f64,
-    /// Hex text color.
-    pub color: String,
+    /// Style overrides (stroke colour = text colour; default `sage`).
+    #[serde(default, skip_serializing_if = "Style::is_empty")]
+    pub style: Style,
+    /// Group ids, innermost first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<String>,
+    /// Locked.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub locked: bool,
 }
 
-/// Polymorphic scene graph node tagged with `"kind"`.
+/// A scene node, tagged with `"kind"`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", rename_all = "lowercase")]
 pub enum FigureNode {
-    /// Freehand stroke.
-    #[serde(rename = "stroke")]
-    Stroke(StrokeNode),
     /// Rectangle.
-    #[serde(rename = "rect")]
-    Rect(RectNode),
-    /// Ellipse.
-    #[serde(rename = "ellipse")]
-    Ellipse(EllipseNode),
-    /// Arrow connector.
-    #[serde(rename = "arrow")]
-    Arrow(ArrowNode),
-    /// Stamped math formula.
-    #[serde(rename = "math")]
+    Rect(ShapeNode),
+    /// Diamond (rhombus inscribed in the box).
+    Diamond(ShapeNode),
+    /// Ellipse inscribed in the box.
+    Ellipse(ShapeNode),
+    /// Free text (the label is the text).
+    Text(ShapeNode),
+    /// A frame: a titled region and export area.
+    Frame(ShapeNode),
+    /// An image.
+    Image(ShapeNode),
+    /// A Mermaid block rendered by the diagram plugin.
+    Mermaid(ShapeNode),
+    /// Arrow (default head at the end).
+    Arrow(ConnectorNode),
+    /// Line (no heads by default).
+    Line(ConnectorNode),
+    /// Freehand stroke.
+    Freedraw(FreedrawNode),
+    /// Formula.
     Math(MathNode),
 }
 
 impl FigureNode {
-    /// Returns the unique node ID.
-    pub fn id(&self) -> &str {
+    /// The kind tag as written in JSON.
+    pub fn kind(&self) -> &'static str {
         match self {
-            FigureNode::Stroke(s) => &s.id,
-            FigureNode::Rect(r) => &r.id,
-            FigureNode::Ellipse(e) => &e.id,
-            FigureNode::Arrow(a) => &a.id,
-            FigureNode::Math(m) => &m.id,
+            Self::Rect(_) => "rect",
+            Self::Diamond(_) => "diamond",
+            Self::Ellipse(_) => "ellipse",
+            Self::Text(_) => "text",
+            Self::Frame(_) => "frame",
+            Self::Image(_) => "image",
+            Self::Mermaid(_) => "mermaid",
+            Self::Arrow(_) => "arrow",
+            Self::Line(_) => "line",
+            Self::Freedraw(_) => "freedraw",
+            Self::Math(_) => "math",
         }
     }
 
-    /// Moves the node by `(dx, dy)` scene units. Every coordinate shifts, so
-    /// sizes, radii and stroke pressure are unchanged.
+    /// The node id.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => &s.id,
+            Self::Arrow(c) | Self::Line(c) => &c.id,
+            Self::Freedraw(f) => &f.id,
+            Self::Math(m) => &m.id,
+        }
+    }
+
+    /// The box-shaped part, for box kinds.
+    pub fn shape(&self) -> Option<&ShapeNode> {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Mutable box-shaped part.
+    pub fn shape_mut(&mut self) -> Option<&mut ShapeNode> {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The connector part, for arrows and lines.
+    pub fn connector(&self) -> Option<&ConnectorNode> {
+        match self {
+            Self::Arrow(c) | Self::Line(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    /// Mutable connector part.
+    pub fn connector_mut(&mut self) -> Option<&mut ConnectorNode> {
+        match self {
+            Self::Arrow(c) | Self::Line(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    /// Whether arrows may bind to this node.
+    pub fn is_bindable(&self) -> bool {
+        matches!(
+            self,
+            Self::Rect(_)
+                | Self::Diamond(_)
+                | Self::Ellipse(_)
+                | Self::Text(_)
+                | Self::Frame(_)
+                | Self::Image(_)
+                | Self::Mermaid(_)
+        )
+    }
+
+    /// The style.
+    pub fn style(&self) -> &Style {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => &s.style,
+            Self::Arrow(c) | Self::Line(c) => &c.style,
+            Self::Freedraw(f) => &f.style,
+            Self::Math(m) => &m.style,
+        }
+    }
+
+    /// Mutable style.
+    pub fn style_mut(&mut self) -> &mut Style {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => &mut s.style,
+            Self::Arrow(c) | Self::Line(c) => &mut c.style,
+            Self::Freedraw(f) => &mut f.style,
+            Self::Math(m) => &mut m.style,
+        }
+    }
+
+    /// Group ids, innermost first.
+    pub fn groups(&self) -> &[String] {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => &s.groups,
+            Self::Arrow(c) | Self::Line(c) => &c.groups,
+            Self::Freedraw(f) => &f.groups,
+            Self::Math(m) => &m.groups,
+        }
+    }
+
+    /// Mutable group ids.
+    pub fn groups_mut(&mut self) -> &mut Vec<String> {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => &mut s.groups,
+            Self::Arrow(c) | Self::Line(c) => &mut c.groups,
+            Self::Freedraw(f) => &mut f.groups,
+            Self::Math(m) => &mut m.groups,
+        }
+    }
+
+    /// Whether the node is locked.
+    pub fn locked(&self) -> bool {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => s.locked,
+            Self::Arrow(c) | Self::Line(c) => c.locked,
+            Self::Freedraw(f) => f.locked,
+            Self::Math(m) => m.locked,
+        }
+    }
+
+    /// The human-visible text of the node: a label, text content, frame
+    /// title or formula.
+    pub fn label(&self) -> Option<&str> {
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => s.label.as_deref(),
+            Self::Arrow(c) | Self::Line(c) => c.label.as_deref(),
+            Self::Freedraw(_) => None,
+            Self::Math(m) => Some(&m.tex),
+        }
+    }
+
+    /// Moves the node by `(dx, dy)`.
     pub fn translate(&mut self, dx: f64, dy: f64) {
         match self {
-            FigureNode::Stroke(s) => {
-                for p in &mut s.points {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => {
+                s.x += dx;
+                s.y += dy;
+            }
+            Self::Arrow(c) | Self::Line(c) => {
+                for p in &mut c.points {
                     p.x += dx;
                     p.y += dy;
                 }
             }
-            FigureNode::Rect(r) => {
-                r.x += dx;
-                r.y += dy;
+            Self::Freedraw(f) => {
+                for p in &mut f.points {
+                    p.x += dx;
+                    p.y += dy;
+                }
             }
-            FigureNode::Ellipse(e) => {
-                e.cx += dx;
-                e.cy += dy;
-            }
-            FigureNode::Arrow(a) => {
-                a.from.x += dx;
-                a.from.y += dy;
-                a.to.x += dx;
-                a.to.y += dy;
-            }
-            FigureNode::Math(m) => {
+            Self::Math(m) => {
                 m.x += dx;
                 m.y += dy;
             }
         }
     }
+
+    /// Every number in the node, for validation.
+    fn numbers(&self) -> Vec<f64> {
+        let style = self.style();
+        let mut out: Vec<f64> = [style.stroke_width, style.opacity, style.font_size]
+            .into_iter()
+            .flatten()
+            .collect();
+        match self {
+            Self::Rect(s)
+            | Self::Diamond(s)
+            | Self::Ellipse(s)
+            | Self::Text(s)
+            | Self::Frame(s)
+            | Self::Image(s)
+            | Self::Mermaid(s) => out.extend([s.x, s.y, s.width, s.height, s.angle]),
+            Self::Arrow(c) | Self::Line(c) => {
+                out.extend(c.points.iter().flat_map(|p| [p.x, p.y]));
+                for b in [&c.start, &c.end].into_iter().flatten() {
+                    if let Some(a) = b.anchor {
+                        out.extend([a.x, a.y]);
+                    }
+                }
+            }
+            Self::Freedraw(f) => {
+                out.push(f.size);
+                out.extend(f.points.iter().flat_map(|p| [p.x, p.y, p.pressure]));
+            }
+            Self::Math(m) => out.extend([m.x, m.y, m.size]),
+        }
+        out
+    }
+
+    /// Checks the invariants a node must hold on its own: finite numbers,
+    /// a non-empty id, two or more connector points, the fields its kind
+    /// needs.
+    pub fn validate(&self) -> Result<(), FigureError> {
+        let id = self.id();
+        let bad = |why: &str| Err(FigureError::InvalidArgument(format!("node `{id}`: {why}")));
+        if id.is_empty() {
+            return Err(FigureError::InvalidArgument(
+                "a node id must not be empty".to_owned(),
+            ));
+        }
+        if self.numbers().iter().any(|n| !n.is_finite()) {
+            return bad("every number must be finite");
+        }
+        match self {
+            Self::Arrow(c) | Self::Line(c) if c.points.len() < 2 => {
+                bad("a connector needs at least two points")
+            }
+            Self::Image(s) if s.src.as_deref().is_none_or(str::is_empty) => {
+                bad("an image needs `src`")
+            }
+            Self::Mermaid(s) if s.source.is_none() => bad("a Mermaid block needs `source`"),
+            _ => Ok(()),
+        }
+    }
 }
 
-/// The complete Figure scene data model.
+/// The complete figure scene.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FigureScene {
-    /// Schema version (always 1).
+    /// Format version (2).
     pub version: u32,
-    /// Canvas width in scene units.
+    /// Page width: the export region when there is no frame.
     pub width: f64,
-    /// Canvas height in scene units.
+    /// Page height.
     pub height: f64,
-    /// List of ordered nodes (painted from first to last).
+    /// Nodes in paint order (first is bottom).
     pub nodes: Vec<FigureNode>,
 }
 
 impl FigureScene {
-    /// Creates a new empty figure scene.
+    /// An empty scene.
     pub fn new(width: f64, height: f64) -> Self {
         Self {
             version: SCENE_VERSION,
@@ -273,60 +833,156 @@ impl FigureScene {
         }
     }
 
-    /// Finds a node by ID.
+    /// The node with `id`.
     pub fn node_by_id(&self, id: &str) -> Option<&FigureNode> {
         self.nodes.iter().find(|n| n.id() == id)
     }
 
-    /// Appends a new node to the scene.
+    /// Mutable node with `id`.
+    pub fn node_mut(&mut self, id: &str) -> Option<&mut FigureNode> {
+        self.nodes.iter_mut().find(|n| n.id() == id)
+    }
+
+    /// Index of the node with `id`.
+    pub fn index_of(&self, id: &str) -> Option<usize> {
+        self.nodes.iter().position(|n| n.id() == id)
+    }
+
+    /// Appends a node.
     pub fn append_node(&mut self, node: FigureNode) {
         self.nodes.push(node);
     }
 
-    /// Replaces an existing node matching `node.id()`.
-    /// Returns true if a node was replaced, false otherwise.
+    /// Replaces the node with the same id; false when there is none.
     pub fn replace_node(&mut self, node: FigureNode) -> bool {
-        let id = node.id().to_owned();
-        if let Some(pos) = self.nodes.iter().position(|n| n.id() == id) {
-            self.nodes[pos] = node;
-            true
-        } else {
-            false
+        match self.index_of(node.id()) {
+            Some(i) => {
+                self.nodes[i] = node;
+                true
+            }
+            None => false,
         }
     }
 
-    /// Removes a node by ID. Returns the removed node if found.
+    /// Removes and returns the node with `id`.
     pub fn remove_node(&mut self, id: &str) -> Option<FigureNode> {
-        if let Some(pos) = self.nodes.iter().position(|n| n.id() == id) {
-            Some(self.nodes.remove(pos))
-        } else {
-            None
-        }
+        self.index_of(id).map(|i| self.nodes.remove(i))
     }
 
-    /// Serializes the scene to a JSON string.
+    /// The highest counter used by an `n<base36>` id, so new ids never
+    /// collide with loaded ones.
+    pub fn highest_counter(&self) -> usize {
+        self.nodes
+            .iter()
+            .filter_map(|n| parse_node_id(n.id()))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The next free `n<base36>` id.
+    pub fn next_node_id(&self) -> String {
+        format_node_id(self.highest_counter() + 1)
+    }
+
+    /// Checks scene-wide invariants: a sane page, valid nodes, unique ids.
+    pub fn validate(&self) -> Result<(), FigureError> {
+        if !(self.width.is_finite() && self.height.is_finite())
+            || self.width <= 0.0
+            || self.height <= 0.0
+        {
+            return Err(FigureError::InvalidArgument(
+                "the page size must be positive and finite".to_owned(),
+            ));
+        }
+        let mut seen = std::collections::HashSet::new();
+        for node in &self.nodes {
+            node.validate()?;
+            if !seen.insert(node.id()) {
+                return Err(FigureError::DuplicateNode(node.id().to_owned()));
+            }
+        }
+        Ok(())
+    }
+
+    /// Compact JSON (for IPC).
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
 
-    /// Deserializes a scene from a JSON string.
-    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json)
+    /// Reads a scene of any supported version, migrating v1 (ADR 0012).
+    pub fn from_json(json: &str) -> Result<Self, FigureError> {
+        let value: Value = serde_json::from_str(json)?;
+        Self::from_value(value)
+    }
+
+    /// [`FigureScene::from_json`] from an already parsed value.
+    pub fn from_value(value: Value) -> Result<Self, FigureError> {
+        let value = crate::migrate::to_current(value)?;
+        let scene: FigureScene = serde_json::from_value(value)?;
+        scene.validate()?;
+        Ok(scene)
+    }
+
+    /// The file form: pretty-printed, numbers rounded to two decimals and
+    /// whole numbers written without a fraction, final newline.
+    pub fn to_file_json(&self) -> Result<String, FigureError> {
+        let mut value = serde_json::to_value(self)?;
+        tidy_numbers(&mut value);
+        let mut text = serde_json::to_string_pretty(&value)?;
+        text.push('\n');
+        Ok(text)
     }
 }
 
-/// Generates a deterministic base-36 node ID matching TypeScript `formatNodeId`.
+/// Rounds every float in `value` to two decimals; whole numbers become
+/// integers so `40.0` is written `40`.
+pub fn tidy_numbers(value: &mut Value) {
+    match value {
+        Value::Number(n) => {
+            if let Some(f) = n.as_f64()
+                && !n.is_i64()
+                && !n.is_u64()
+            {
+                let r = (f * 100.0).round() / 100.0;
+                let r = if r == 0.0 { 0.0 } else { r };
+                *value = if r.fract() == 0.0 && r.abs() < 9.0e15 {
+                    Value::from(r as i64)
+                } else {
+                    serde_json::Number::from_f64(r).map_or(Value::Null, Value::Number)
+                };
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(tidy_numbers),
+        Value::Object(map) => map.values_mut().for_each(tidy_numbers),
+        _ => {}
+    }
+}
+
+const DIGITS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+
+/// A deterministic base-36 node id, matching TypeScript `formatNodeId`.
 pub fn format_node_id(counter: usize) -> String {
-    const DIGITS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    if counter == 0 {
-        return "n0".to_string();
+    format!("n{}", base36(counter))
+}
+
+/// Base-36 digits of `n`.
+pub fn base36(mut n: usize) -> String {
+    if n == 0 {
+        return "0".to_owned();
     }
-    let mut num = counter;
     let mut buf = Vec::new();
-    while num > 0 {
-        buf.push(DIGITS[num % 36]);
-        num /= 36;
+    while n > 0 {
+        buf.push(DIGITS[n % 36] as char);
+        n /= 36;
     }
-    buf.reverse();
-    format!("n{}", std::str::from_utf8(&buf).unwrap_or("0"))
+    buf.iter().rev().collect()
+}
+
+/// The counter of an `n<base36>` id.
+pub fn parse_node_id(id: &str) -> Option<usize> {
+    let digits = id.strip_prefix('n')?;
+    if digits.is_empty() || digits.len() > 10 {
+        return None;
+    }
+    usize::from_str_radix(digits, 36).ok()
 }
