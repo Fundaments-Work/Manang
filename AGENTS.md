@@ -177,6 +177,7 @@ Agents (and humans) work in parallel on one machine with limited CPU and disk. A
 * **Concurrency budget on one machine:** at most one heavy Rust build at a time (a workspace test run, `tauri dev`, or an agent's crate build), and at most one build-heavy agent alongside another tool such as Antigravity. Never run a full-workspace gate while agents are building. Watch `uptime`: a load average far above the core count means stop and serialise.
 * Agents share the main build cache: `CARGO_TARGET_DIR=<repo>/target` with `-p <crate>`, instead of a fresh multi-GB `target/` per worktree.
 * To wait for a process, wait on its PID (`while kill -0 <pid>; do ...`), never `pgrep -f "<its command text>"`: the waiting shell's own command line matches and the loop never ends.
+* The root `Cargo.toml` optimises **dependencies** in dev builds (`[profile.dev.package."*"] opt-level = 3`) while our own crates stay at `opt-level = 1`. An unoptimised Typst is 10-50x slower and makes `tauri dev` unusable for judging speed. Keep it; judge performance only on this profile or release, never on a plain debug build.
 * Delete build output you created in disposable worktrees (`cargo clean` or remove the worktree). Do not commit `target/`, `dist/`, `artifacts/` or fuzz corpora beyond minimal regression seeds.
 * Scratch files go in the session scratchpad directory, never in the repo root or `/tmp`.
 
