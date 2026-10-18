@@ -49,7 +49,7 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
         ],
         default: "anthropic",
         title: "Provider",
-        description: "Who answers your requests. Set the key under Provider and key.",
+        description: "Who answers your requests. Set the key under Key.",
         scope: "user",
         "requires-restart": false,
       },
