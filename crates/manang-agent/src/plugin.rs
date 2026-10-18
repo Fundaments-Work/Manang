@@ -154,7 +154,7 @@ impl AgentPlugin {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("manang-agent")
-            .enable_time()
+            .enable_all()
             .build()
             .map_err(|e| AgentError::unavailable(format!("the agent runtime failed: {e}")))?;
         let pool = rayon::ThreadPoolBuilder::new()

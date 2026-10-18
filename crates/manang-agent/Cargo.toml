@@ -25,7 +25,7 @@ serde_json = { workspace = true, features = ["raw_value"] }
 thiserror = { workspace = true }
 toml = "0.8"
 # Tokio is for streaming, timers and cancellation only.
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros", "net"] }
 tokio-util = { version = "0.7", default-features = false }
 url = "2"
 
