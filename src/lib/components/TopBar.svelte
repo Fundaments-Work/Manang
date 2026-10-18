@@ -165,6 +165,7 @@
           type="button"
           class="mng-btn shrink-0 px-2 max-[1100px]:px-1.5"
           title="New project"
+          aria-label="New project"
           onclick={() => home.openNew()}
         >
           <Icon name="plus" size={14} />
@@ -174,6 +175,7 @@
           type="button"
           class="mng-btn shrink-0 px-2 max-[1100px]:px-1.5"
           title="Open folder"
+          aria-label="Open folder"
           onclick={() => void openFolder()}
         >
           <Icon name="folder-open" size={14} />
