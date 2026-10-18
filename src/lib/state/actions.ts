@@ -348,8 +348,8 @@ export function goHome(): void {
   home.show();
 }
 
-export async function closeProject(): Promise<void> {
-  if (!(await confirmDiscard())) return;
+export async function closeProject(): Promise<boolean> {
+  if (!(await confirmDiscard())) return false;
   rememberSession();
   resetEditors();
   await workspace.close();
@@ -358,6 +358,7 @@ export async function closeProject(): Promise<void> {
   home.hide();
   void home.load();
   void build.compile();
+  return true;
 }
 
 /* -------------------------------------------------------------------------- */

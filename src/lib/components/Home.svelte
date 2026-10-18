@@ -6,7 +6,8 @@
   import ProjectCard from "./home/ProjectCard.svelte";
   import ContextMenu, { type MenuItem } from "./ui/ContextMenu.svelte";
   import Icon, { type IconName } from "./ui/Icon.svelte";
-  import { openFolder, openProject } from "$lib/state/actions";
+  import { closeProject, openFolder, openProject } from "$lib/state/actions";
+  import { dialog } from "$lib/state/dialog.svelte";
   import { home } from "$lib/state/home.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { notice } from "$lib/state/notice.svelte";
@@ -34,6 +35,7 @@
     pinned: "pin",
     archive: "archive",
     templates: "templates",
+    trash: "trash",
   };
 
   let now = $state(Math.floor(Date.now() / 1000));
@@ -61,7 +63,14 @@
 
   // The typed-path form, opened by "Open folder" (top bar or empty state).
   $effect(() => {
-    if (home.typingPath) void tick().then(() => folderInput?.focus());
+    if (home.typingPath) {
+      folder = "";
+      workspace.error = "";
+      void tick().then(() => {
+        folderInput?.focus();
+        folderInput?.select();
+      });
+    }
   });
 
   async function submitFolder(event: SubmitEvent): Promise<void> {
@@ -75,7 +84,7 @@
   }
 
   async function open(entry: ProjectEntry): Promise<void> {
-    if (!entry.exists) return;
+    if (!entry.exists || entry.trashed_at) return;
     workspace.error = "";
     if (entry.path === currentRoot) {
       home.hide();
@@ -93,7 +102,69 @@
     }
   }
 
+  async function trashProject(entry: ProjectEntry): Promise<void> {
+    if (workspace.project?.root === entry.path) {
+      const closed = await closeProject();
+      if (!closed) return;
+      home.show();
+    }
+    const ok = await home.trash(entry.path);
+    if (ok) {
+      notice.show(`Moved ${entry.name} to trash.`);
+    }
+  }
+
+  async function restoreProject(entry: ProjectEntry): Promise<void> {
+    const ok = await home.restoreProject(entry.path);
+    if (ok) {
+      notice.show(`Restored ${entry.name}.`);
+    }
+  }
+
+  async function promptDelete(entry: ProjectEntry): Promise<void> {
+    const choice = await dialog.ask({
+      title: `Delete “${entry.name}”?`,
+      message:
+        "You can remove the project from Manang while keeping its folder, or move the folder to your system trash.",
+      actions: [
+        { id: "remove", label: "Remove from Manang" },
+        { id: "system-trash", label: "Move folder to system trash" },
+      ],
+    });
+    if (choice === "remove") {
+      const ok = await home.purge(entry.path, false);
+      if (ok) notice.show(`Removed ${entry.name} from Manang.`);
+    } else if (choice === "system-trash") {
+      const ok = await home.purge(entry.path, true);
+      if (ok) notice.show(`Moved ${entry.name} to system trash.`);
+    }
+  }
+
+  async function promptEmptyTrash(): Promise<void> {
+    const choice = await dialog.ask({
+      title: "Empty trash?",
+      message:
+        "Projects in trash will be removed from Manang. Their folders on your computer will stay where they are.",
+      actions: [{ id: "empty", label: "Empty trash" }],
+    });
+    if (choice === "empty") {
+      const ok = await home.emptyTrash();
+      if (ok) notice.show("Emptied trash.");
+    }
+  }
+
   function menuItems(entry: ProjectEntry): MenuItem[] {
+    if (entry.trashed_at) {
+      return [
+        { label: "Restore", onselect: () => void restoreProject(entry) },
+        { label: "Delete…", onselect: () => void promptDelete(entry) },
+        {
+          label: "Copy path",
+          separated: true,
+          onselect: () => void copyPath(entry.path),
+        },
+      ];
+    }
     return [
       { label: "Open", disabled: !entry.exists, onselect: () => void open(entry) },
       { label: "Rename", onselect: () => (editing = { mode: "name", entry }) },
@@ -112,11 +183,8 @@
         onselect: () => void copyPath(entry.path),
       },
       {
-        label: "Remove from list",
-        onselect: () => {
-          void home.forget(entry.path);
-          notice.show(`Removed ${entry.name} from the list. Its folder is untouched.`);
-        },
+        label: "Move to trash",
+        onselect: () => void trashProject(entry),
       },
     ];
   }
@@ -128,7 +196,7 @@
     aria-label="Home sections"
   >
     <ul class="m-0 flex list-none flex-col p-0 pt-3">
-      {#each SECTIONS as section (section.id)}
+      {#each SECTIONS.filter((s) => s.id !== "trash") as section (section.id)}
         {@const on = home.section === section.id}
         {@const count = home.counts[section.id]}
         <li>
@@ -154,6 +222,25 @@
       {/each}
     </ul>
     <div class="mt-auto flex flex-col border-t border-line">
+      <button
+        type="button"
+        class="inset-focus relative flex h-8 w-full items-center gap-3 px-3 text-left text-xs max-[800px]:justify-center max-[800px]:px-0 {home.section ===
+        'trash'
+          ? 'bg-surface-hi text-text'
+          : 'text-text-60 hover:bg-surface-hi hover:text-text'}"
+        aria-current={home.section === "trash" ? "page" : undefined}
+        aria-label="Trash"
+        title="Trash"
+        onclick={() => home.setSection("trash")}
+      >
+        <Icon name="trash" size={14} />
+        <span class="flex-1 max-[800px]:hidden">Trash</span>
+        {#if home.counts.trash !== undefined && home.counts.trash > 0}
+          <span class="font-mono text-[11px] text-text-muted max-[800px]:hidden"
+            >{home.counts.trash}</span
+          >
+        {/if}
+      </button>
       {#if workspace.project !== null}
         <button
           type="button"
@@ -208,7 +295,11 @@
           <button
             type="button"
             class="mng-btn"
-            onclick={() => (home.typingPath = false)}>Cancel</button
+            onclick={() => {
+              home.typingPath = false;
+              folder = "";
+              workspace.error = "";
+            }}>Cancel</button
           >
         </form>
       {/if}
@@ -236,6 +327,15 @@
               : ""}
           </span>
           <div class="ml-auto flex items-center gap-2">
+            {#if home.section === "trash" && home.shown.length > 0}
+              <button
+                type="button"
+                class="mng-btn text-xs"
+                onclick={() => void promptEmptyTrash()}
+              >
+                Empty trash
+              </button>
+            {/if}
             <label class="flex items-center max-[800px]:hidden">
               <select
                 class="mng-field w-auto"
@@ -342,6 +442,8 @@
                 onopen={() => void open(entry)}
                 onmenu={(x, y) => (menu = { x, y, entry })}
                 onpin={() => void home.patch(entry.path, { pinned: !entry.pinned })}
+                onrestore={() => void restoreProject(entry)}
+                ondelete={() => void promptDelete(entry)}
               />
             </div>
           {/each}
@@ -358,6 +460,8 @@
                 onopen={() => void open(entry)}
                 onmenu={(x, y) => (menu = { x, y, entry })}
                 onpin={() => void home.patch(entry.path, { pinned: !entry.pinned })}
+                onrestore={() => void restoreProject(entry)}
+                ondelete={() => void promptDelete(entry)}
               />
             </div>
           {/each}

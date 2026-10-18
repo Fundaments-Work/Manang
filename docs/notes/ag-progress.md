@@ -835,11 +835,74 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - Headless visual verification harness (`verify-ui.mjs` on port 1431) passing all 122/122 checks.
    - Zero ports or processes left running.
 
+
 ---
 
-## Final UI Wiring Summary
+## Task: Recoverable Home Trash
 
-All tasks from Batches 1 and 2 have been completed, verified against the strict quality gates, and committed to `antigravity/ui-wiring`:
+- **Commits:**
+  - `f27d4f1`: `feat(project): support project trash, restore, purge and empty-trash in registry`
+  - `538018e`: `feat(home): add Home trash section, cards restore/delete, and purge confirmations`
+  - `0ea3e6d`: `test(verify-ui): add Home trash section and verify folder re-open`
+- **Branch:** `antigravity/home-trash`
+
+### 1. Engine & Registry (`crates/manang-project`)
+- **Metadata Extension & Backwards Compatibility:**
+  - Added `trashed_at: Option<String>` (RFC 3339 timestamp) to `ProjectEntry` with `#[serde(default, skip_serializing_if = "Option::is_none")]` ensuring full backwards compatibility with existing `projects.toml` files.
+  - Added `include_trashed: bool` (default `false`) to `ListQuery`.
+  - Updated `select()` to exclude trashed projects from normal listings unless explicitly requested, and updated section counts.
+- **Commands & Safety Invariants:**
+  - `project.trash { path }`: Sets `trashed_at` to the current UTC timestamp (RFC 3339).
+  - `project.restore { path }`: Clears `trashed_at` back to `None`.
+  - `project.purge { path, delete_files }`: Removes entry from the registry. If `delete_files` is `true`, moves the folder on disk to the OS trash using the `trash = "5.2"` crate (`trash::delete`). **Never calls `std::fs::remove_dir_all`**. Verified zero bundled C library linkage (`cargo tree -p manang | grep -iE "tectonic|harfbuzz"` is empty).
+  - `project.empty-trash { older_than_days? }`: Drops all (or older-than-$N$-days) trashed project registry entries.
+- **Unit & Integration Tests:**
+  - 82 passing tests in `crates/manang-project`: unit tests in `registry.rs` and kernel integration tests in `tests/registry.rs` covering trash, restore, purge, empty-trash, and query filtering.
+
+### 2. Browser Dev Kernel & Mock (`src/lib/kernel/`)
+- **Type Definitions (`types.ts`):** Added `trashed_at?: string | null` to `ProjectMeta` and `include_trashed?: boolean` to `ListProjectsOptions`.
+- **Typed API Wrappers (`api.ts`):** Exported `trashProject`, `restoreProject`, `purgeProject`, and `emptyTrash`. Preserved file-level `trash` method for workspace files.
+- **In-Memory Mock (`mockProject.ts`):** Added `trashedAt` to `SeedProject` and `Meta`, implemented host methods (`trash`, `restore`, `purge`, `emptyTrash`), and added command handlers for `project.trash`, `project.restore`, `project.purge`, and `project.empty-trash`.
+
+### 3. Pure Workbench Models & State (`src/lib/workbench/`, `src/lib/state/`)
+- **Workbench Model (`home.ts`):**
+  - Added `"trash"` to `HomeSection`.
+  - Updated `matchesQuery` and `selectProjects` so trashed projects appear only in the Trash section.
+  - Added section counts for `"trash"`.
+  - Added empty state definition for the Trash section ("Trash is empty. Trashed projects will appear here until permanently deleted.").
+- **Workbench Actions & State (`actions.ts`, `home.svelte.ts`):**
+  - Updated `closeProject()` in `actions.ts` to return `Promise<boolean>` for unsaved-changes confirmation handling before trashing an open project.
+  - Updated `HomeState.load()` to fetch with `{ include_archived: true, include_trashed: true }`.
+  - Added `trash`, `restoreProject`, `purge`, and `emptyTrash` methods using `SvelteDate` to meet Svelte 5 reactivity lint rules.
+
+### 4. Home UI Components (`src/lib/components/`)
+- **Sidebar & Sections (`Home.svelte`):**
+  - Positioned the Trash section at the bottom of the sidebar with an item count badge.
+  - Replaced "Remove from list" in project card context menus with "Move to trash" (permanent forgetting is only accessible from Trash).
+  - Trashing an active project prompts to close and save changes before trashing.
+  - Added "Empty trash" header button in the Trash section with a confirmation dialog.
+  - Added Purge confirmation dialog offering two distinct choices:
+    1. "Remove from Manang" (removes from list only; preserves files on disk).
+    2. "Move folder to system trash" (moves files to OS trash).
+- **Project Cards (`ProjectCard.svelte`):**
+  - In Trash view: displays relative deletion time (e.g., `Trashed 5 minutes ago`), disables direct opening of trashed projects, and shows explicit "Restore" and "Delete" action buttons.
+- **Design System Fidelity:**
+  - Strictly adheres to Fundaments.work specifications: `--radius: 0`, 1px hairlines (`#3d3d42`), DM Sans (300/400), DM Mono (400), dark base (`#141416`), no rounded corners, no shadows.
+
+### 5. Verification & Quality Gates
+- **Rust Quality Gates:**
+  - `cargo fmt --all -- --check`: PASS
+  - `cargo clippy -p manang-project --all-targets --locked -- -D warnings`: PASS (0 warnings)
+  - `cargo test -p manang-project --locked`: PASS (82 tests passing)
+- **Frontend Quality Gates:**
+  - `pnpm test`: PASS (63 test files, 486 unit/workbench tests passing)
+  - `pnpm run check`: PASS (0 errors, 0 warnings)
+  - `pnpm run lint`: PASS (0 errors, 0 warnings)
+- **Headless CDP In-Browser End-to-End Verification:**
+  - Added "Home trash" section to `scripts/verify-ui.mjs` testing sidebar trash section, moving card to trash, trashing open project with auto-close, trashed card UI, restore project, purge dialog ("Remove from Manang" vs "Move folder to system trash"), empty trash, and folder re-opening.
+  - Ran against headless dev server (port 1442, CDP 9352): **289/289 checks passed**, zero regressions across all 7 screens and brand invariants.
+- **Operational Hygiene:**
+  - Verified no stray processes or listening ports (`lsof -ti:1442 -sTCP:LISTEN` is empty).
 
 - **Batch 1:**
   - **Task A (`search.*` - Commit `d7263a7`):** Search panel with file-name and text content modes, regex/case/word options, include/exclude glob filters, match highlighting, and replace preview/apply.

@@ -69,6 +69,22 @@ export function projectApi(kernel: Kernel) {
     /** Drops the project from the list; never touches its folder. */
     forget: (path: string) =>
       kernel.run<{ removed: boolean }>("project.forget", { path }),
+    /** Move a project to trash in the registry. */
+    trashProject: (path: string) => kernel.run<ProjectEntry>("project.trash", { path }),
+    /** Restore a project from trash in the registry. */
+    restoreProject: (path: string) =>
+      kernel.run<ProjectEntry>("project.restore", { path }),
+    /** Purge a project from the registry, optionally deleting files to OS trash. */
+    purgeProject: (path: string, deleteFiles = false) =>
+      kernel.run<{ purged: boolean; deleted_files: boolean }>("project.purge", {
+        path,
+        delete_files: deleteFiles,
+      }),
+    /** Empty all trashed projects (or those older than given days) from the registry. */
+    emptyTrash: (olderThanDays?: number) =>
+      kernel.run<{ count: number }>("project.empty-trash", {
+        older_than_days: olderThanDays,
+      }),
     /** SVG bytes. Only call when the entry has `has_thumbnail`. */
     thumbnail: (path: string) => kernel.runBinary("project.thumbnail-get", { path }),
     setThumbnail: (path: string, svg: string) =>
