@@ -1,0 +1,10 @@
+---
+source: crates/manang-agent/src/tools.rs
+expression: render_tree(&files)
+---
+chapters/
+  a.typ 1.2k
+  deep/
+    b.typ 300 B
+main.typ 4.2k
+refs.bib 2.5M

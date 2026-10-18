@@ -1,7 +1,7 @@
 [plugin]
 name = "agent"
 version = "0.1.0"
-description = "AI agent: chat, rewrite, explain and fix with your own provider key. Writes are proposals you accept."
+description = "AI writing assistant: chat and slash commands with your own provider key. Every change is a proposal you accept."
 tier = "native"
 settings_contexts = ["app", "project", "document"]
 
@@ -31,6 +31,10 @@ title = "Reject an AI proposal"
 [[contributes.commands]]
 id = "agent.preview-request"
 title = "Preview exactly what would be sent to the AI provider"
+
+[[contributes.commands]]
+id = "agent.commands"
+title = "List the slash commands of the AI assistant"
 
 [[contributes.commands]]
 id = "agent.sessions"
@@ -73,24 +77,36 @@ id = "agent.key.clear"
 title = "Remove an AI provider API key"
 
 [[contributes.commands]]
-id = "agent.doc-read"
-title = "Agent tool: read part of a project file"
+id = "agent.list-files"
+title = "Agent tool: list the project's text sources"
 
 [[contributes.commands]]
-id = "agent.doc-diagnostics"
-title = "Agent tool: list the editor's problems"
+id = "agent.read-file"
+title = "Agent tool: read a project file"
 
 [[contributes.commands]]
-id = "agent.doc-outline"
-title = "Agent tool: outline of a document"
-
-[[contributes.commands]]
-id = "agent.doc-propose-edit"
-title = "Agent tool: propose a text edit"
-
-[[contributes.commands]]
-id = "agent.project-search"
+id = "agent.search"
 title = "Agent tool: search the project"
+
+[[contributes.commands]]
+id = "agent.outline"
+title = "Agent tool: outline of a file or the project"
+
+[[contributes.commands]]
+id = "agent.diagnostics"
+title = "Agent tool: list the problems, optionally with pending edits"
+
+[[contributes.commands]]
+id = "agent.bib-search"
+title = "Agent tool: search the bibliography"
+
+[[contributes.commands]]
+id = "agent.edit-text"
+title = "Agent tool: propose a text edit as search and replace pairs"
+
+[[contributes.commands]]
+id = "agent.ask-user"
+title = "Agent tool: ask the author a question"
 
 [[contributes.settings]]
 id = "agent.enabled"
@@ -140,17 +156,32 @@ description = "Only providers on this machine (localhost) may be contacted."
 id = "agent.include-thinking"
 type = "bool"
 default = false
-title = "Show the model's reasoning"
-description = "Shows the model's reasoning text dimmed in the Agent view when the provider streams it."
+title = "Developer: stream the model's reasoning"
+description = "Off by default: the panel only says Thinking. On, the reasoning text is sent to the panel's event stream (for debugging prompts)."
 
 [[contributes.settings]]
-id = "agent.max-context-tokens"
+id = "agent.context-window"
 type = "int"
-min = 1000
+min = 8000
 max = 1000000
-default = 32000
-title = "Context limit (tokens)"
-description = "A request whose attached context is larger than this is refused before it is sent. About 3.5 characters per token."
+default = 100000
+title = "Working window (tokens)"
+description = "How much conversation the assistant keeps before it clears old tool results (at 60%) and summarises the older part (at 85%). Models with larger windows are not filled on purpose: cost and quality fall first."
+
+[[contributes.settings]]
+id = "agent.reasoning-effort"
+type = "enum"
+values = ["auto", "low", "high"]
+default = "auto"
+title = "Reasoning effort"
+description = "For models that take it (DeepSeek). auto uses low for slash commands such as /rewrite and high for open chat. Fixed when a chat starts."
+
+[[contributes.settings]]
+id = "agent.use-agents-md"
+type = "bool"
+default = false
+title = "Use AGENTS.md as project instructions"
+description = "Read AGENTS.md or CLAUDE.md when the project has no MANANG.md. Off by default: in a research repository they are usually build notes for coding agents."
 
 [[contributes.settings]]
 id = "agent.redact-emails"

@@ -1,0 +1,7 @@
+---
+source: crates/manang-agent/src/tools.rs
+expression: out
+---
+error main.typ:2:2 unknown variable: figur
+    1| a
+    2| #figur("x")

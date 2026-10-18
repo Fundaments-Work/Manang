@@ -1,0 +1,13 @@
+---
+source: crates/manang-agent/src/context.rs
+expression: render_header(&info)
+---
+<project name="Paper" formats="typst, bibtex" problems="1">
+<files shown="2" total="2">
+main.typ 4.2k
+refs.bib 1.0k
+</files>
+<instructions source="MANANG.md">
+Use British spelling.
+</instructions>
+</project>
