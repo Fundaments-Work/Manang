@@ -4,13 +4,13 @@ expression: "all[\"warnings\"]"
 ---
 [
   {
-    "id": "editor.mystery",
     "layer": "user",
+    "id": "editor.mystery",
     "message": "unknown setting `editor.mystery`; kept in the file but has no effect"
   },
   {
-    "id": "zzz.flag",
     "layer": "user",
+    "id": "zzz.flag",
     "message": "unknown setting `zzz.flag`; kept in the file but has no effect"
   }
 ]
