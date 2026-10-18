@@ -271,7 +271,7 @@
       class={over ? "text-text" : ""}
       data-tray-tokens
       title="About 3.5 characters per token; the provider's count and bill are the truth"
-      >~{tokenLabel(agent.trayTokens)} / {tokenLabel(limit)} attached</span
+      >~{tokenLabel(agent.trayTokens)} / {tokenLabel(limit)} tokens</span
     >
     <button
       type="button"

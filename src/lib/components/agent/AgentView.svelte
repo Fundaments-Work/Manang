@@ -36,8 +36,12 @@
 
   // The conversation follows the newest line, unless the person scrolled up to read.
   $effect(() => {
-    void agent.view.items;
+    const count = agent.view.items.length;
     if (log === undefined) return;
+    if (count === 0) {
+      log.scrollTop = 0;
+      return;
+    }
     void tick().then(() => {
       if (log !== undefined && stick) log.scrollTop = log.scrollHeight;
     });

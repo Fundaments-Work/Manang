@@ -69,8 +69,8 @@ describe("readiness", () => {
 
 describe("toolLine", () => {
   it("says what happened in plain words", () => {
-    expect(toolLine("agent.doc-read", "main.typ", "done")).toBe("Read main.typ");
-    expect(toolLine("agent.project-search", "", "done")).toBe("Searched the project");
-    expect(toolLine("agent.doc-read", "", "error")).toBe("Could not run: read");
+    expect(toolLine("doc_read", "main.typ", "done")).toBe("Read main.typ");
+    expect(toolLine("project_search", "", "done")).toBe("Searched the project");
+    expect(toolLine("doc_read", "", "error")).toBe("Could not run: read");
   });
 });
