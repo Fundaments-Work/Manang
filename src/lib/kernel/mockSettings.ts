@@ -182,6 +182,28 @@ const CORE_SETTINGS: Omit<SettingDef, "contexts">[] = [
     description: "Milliseconds to wait after the last keystroke before recompiling.",
   },
   {
+    id: "preview.double-click-source",
+    type: "bool",
+    default: true,
+    scope: "user",
+    "requires-restart": false,
+    owner: "core",
+    category: "preview",
+    description:
+      "Double-click in the PDF goes to the source. Alt+double-click then selects a word.",
+  },
+  {
+    id: "preview.dark-pages",
+    type: "bool",
+    default: false,
+    scope: "user",
+    "requires-restart": false,
+    owner: "core",
+    category: "preview",
+    description:
+      "Show PDF pages inverted for reading in the dark. Export is unaffected.",
+  },
+  {
     id: "compile.engine",
     type: "enum",
     values: ["typst", "latex", "markdown"],

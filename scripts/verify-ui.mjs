@@ -431,6 +431,9 @@ async function noStrayEdits(cdp, where) {
   );
 }
 
+/** The PDF page box in the preview header: `{ page, of }` (1-based), or null. */
+const PAGE_BOX = `(() => { const i = document.querySelector('[data-page-input]'); if (!i) return null; const m = /\\/\\s*(\\d+)/.exec(i.closest("label")?.innerText ?? ""); return { page: Number(i.value), of: Number(m?.[1] ?? 0) }; })()`;
+
 const exists = (cdp, selector) =>
   cdp.evaluate(`document.querySelector(${JSON.stringify(selector)}) !== null`);
 
@@ -662,8 +665,8 @@ async function main() {
     );
     await expectEventually(
       page,
-      "preview renders the compiled page as SVG from typst.render",
-      `document.querySelector('img[alt^="Page 1"]')?.src.startsWith("blob:")`,
+      "preview shows the Typst document as a PDF from typst.export-pdf",
+      `document.querySelector('[data-pdf-viewer] canvas') !== null`,
     );
     await expectEventually(
       page,
@@ -749,7 +752,7 @@ async function main() {
     check(
       "the page stays paper-white in the dark theme",
       await page.evaluate(
-        `getComputedStyle(document.querySelector('img[alt^="Page 1"]')).backgroundColor === "rgb(250, 249, 247)"`,
+        `getComputedStyle(document.querySelector('[data-pdf-viewer] [data-page="1"]')).backgroundColor === "rgb(250, 249, 247)"`,
       ),
     );
     check(
@@ -1572,9 +1575,9 @@ async function main() {
       `document.querySelectorAll(".manang-problem-error").length >= 1`,
     );
     check(
-      "the preview keeps the last good page and says so",
+      "the preview keeps the last good pages and says so",
       await page.evaluate(
-        `document.querySelector('img[alt^="Page 1"]') !== null && document.querySelector('section[aria-label="Preview"]').innerText.includes("last good page")`,
+        `document.querySelector('[data-pdf-viewer] canvas') !== null && document.querySelector('section[aria-label="Preview"]').innerText.includes("last good page")`,
       ),
     );
     await shoot(page, "12-error-state");
@@ -1645,19 +1648,25 @@ async function main() {
     await press(page, "j", { ctrl: true });
 
     // Preview toolbar
+    const box = await page.evaluate(PAGE_BOX);
     check(
       "preview toolbar shows page n of N",
-      await page.evaluate(
-        `/Page 1 of \\d+/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
-      ),
+      box !== null && box.page === 1 && box.of >= 1,
+      JSON.stringify(box),
     );
+    const zoomText = () =>
+      page.evaluate(
+        `document.querySelector("[data-zoom-menu]")?.textContent.trim() ?? ""`,
+      );
+    const zoomBefore = await zoomText();
     await click(page, 'button[aria-label="Zoom in"]');
+    const zoomAfter = await zoomText();
     check(
-      "zoom in sets a percentage",
-      await page.evaluate(
-        `/125%/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
-      ),
+      "zoom in steps up to the next preset percentage",
+      /^\d+%$/.test(zoomAfter) && parseInt(zoomAfter) > parseInt(zoomBefore),
+      `${zoomBefore} -> ${zoomAfter}`,
     );
+    await click(page, 'button[aria-label="Zoom out"]');
     await click(page, 'button[aria-label="Refresh preview"]');
     // Layout switch, from the preview's own header.
     await click(
@@ -2251,8 +2260,8 @@ async function main() {
     /* ------------------------------------------------------------------ */
     section("Source and preview");
     await clickText(page, '[role="tab"]', "main.typ");
-    await waitFor(page, `document.querySelector('img[alt^="Page 1"]') !== null`, {
-      label: "the Typst page",
+    await waitFor(page, `document.querySelector('[data-pdf-viewer] canvas') !== null`, {
+      label: "the Typst pages",
     });
     const caretLine = () =>
       page.evaluate(
@@ -2263,12 +2272,10 @@ async function main() {
     await press(page, "Home", { ctrl: true });
     for (let i = 0; i < 10; i += 1) await press(page, "ArrowDown", { wait: 30 });
     const sourceLine = await caretLine();
-    await page.evaluate(
-      `document.querySelector('[role="region"][aria-label="Rendered page"]').scrollTop = 1e6`,
-    );
+    await page.evaluate(`document.querySelector('[data-pdf-viewer]').scrollTop = 1e6`);
     await press(page, "j", { ctrl: true, alt: true, wait: 500 });
     const markRect = await rect(page, "[data-preview-mark]");
-    const region = await rect(page, '[role="region"][aria-label="Rendered page"]');
+    const region = await rect(page, "[data-pdf-viewer]");
     check(
       '"Show in preview" (Ctrl+Alt+J) outlines the caret\'s text on the page',
       markRect !== null && sourceLine > 2,
@@ -2324,6 +2331,483 @@ async function main() {
       ),
     );
     await shoot(page, "18-source-jump");
+
+    /* ------------------------------------------------------------------ */
+    section("PDF viewer");
+    // Several pages, a web link and the bibliography's citations: the Typst
+    // preview is the same PDF viewer as LaTeX (ADR 0006, 2026-10-18).
+    const viewerSel = "[data-pdf-viewer]";
+    const viewerTop = () =>
+      page.evaluate(`document.querySelector("${viewerSel}").scrollTop`);
+    await focusEditor(page);
+    await caretToEnd(page);
+    {
+      const para =
+        "Entropy production in driven quantum systems is bounded below by the thermodynamic length of the protocol.";
+      let appendix =
+        '\n= Appendix\n\nSee #link("https://typst.app")[the Typst website] for details.\n\n';
+      for (let i = 0; i < 24; i += 1) appendix += `${para} Paragraph ${i}.\n\n`;
+      await insertText(page, appendix);
+    }
+    await expectEventually(
+      page,
+      "the Typst document shows all its pages in one scroll",
+      `(() => { const v = document.querySelector("${viewerSel}"); const n = v?.querySelectorAll("[data-page]").length ?? 0; return n >= 3 && (${PAGE_BOX})?.of === n && v.scrollHeight > v.clientHeight * 2; })()`,
+      { timeout: 10000 },
+    );
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 0`);
+    await sleep(600);
+    await shoot(page, "25-pdf-pages");
+
+    // Text selection: drag across the title on the text layer.
+    const title = await page.evaluate(`(() => {
+      const s = [...document.querySelectorAll('[data-page="1"] [data-text-layer] span')].find((e) => e.textContent.includes("Quantum thermodynamic"));
+      if (!s) return null;
+      const r = s.getBoundingClientRect();
+      return { left: r.left, right: r.right, y: (r.top + r.bottom) / 2 };
+    })()`);
+    if (title !== null) {
+      await mouse(page, "mouseMoved", title.left + 1, title.y);
+      await mouse(page, "mousePressed", title.left + 1, title.y);
+      for (let x = title.left + 1; x <= title.right - 1; x += 16) {
+        await page.send("Input.dispatchMouseEvent", {
+          type: "mouseMoved",
+          x,
+          y: title.y,
+          button: "left",
+          buttons: 1,
+        });
+      }
+      await mouse(page, "mouseReleased", title.right - 1, title.y);
+      await sleep(200);
+    }
+    const selected = await page.evaluate(`getSelection().toString()`);
+    check(
+      "dragging over the text layer selects the words",
+      selected.includes("Quantum thermodynamic"),
+      JSON.stringify(selected),
+    );
+    check(
+      "the selection uses the accent selection tone, and the text stays invisible",
+      await page.evaluate(`(() => {
+        const s = document.querySelector('[data-page="1"] [data-text-layer] span');
+        const sel = getComputedStyle(s, "::selection");
+        return sel.backgroundColor.startsWith("color(srgb") || sel.backgroundColor.includes("198, 241, 53") ? getComputedStyle(s).color === "rgba(0, 0, 0, 0)" : false;
+      })()`),
+      await page.evaluate(
+        `getComputedStyle(document.querySelector('[data-page="1"] [data-text-layer] span'), "::selection").backgroundColor`,
+      ),
+    );
+    check(
+      "copy puts the selected PDF text on the clipboard as plain text",
+      await page.evaluate(`(() => {
+        const data = new DataTransfer();
+        const event = new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true });
+        document.querySelector('[data-page="1"] [data-text-layer] span').dispatchEvent(event);
+        return event.defaultPrevented && data.getData("text/plain").includes("Quantum thermodynamic");
+      })()`),
+    );
+    check(
+      "a selection is not a source jump: the caret stays in the editor where it was",
+      /Ln \d+, Col \d+/.test(await statusText(page)) &&
+        (await page.evaluate(
+          `document.querySelector(".cm-line[data-source-flash]") === null`,
+        )),
+    );
+
+    // Alt+double-click selects a word; plain double-click goes to the source.
+    const word = await page.evaluate(`(() => {
+      const s = [...document.querySelectorAll('[data-page="1"] [data-text-layer] span')].find((e) => e.textContent.startsWith("Monte Carlo"));
+      if (!s) return null;
+      const r = s.getBoundingClientRect();
+      return { x: r.left + 12, y: (r.top + r.bottom) / 2 };
+    })()`);
+    if (word !== null) {
+      for (const [type, count] of [
+        ["mousePressed", 1],
+        ["mouseReleased", 1],
+        ["mousePressed", 2],
+        ["mouseReleased", 2],
+      ]) {
+        await page.send("Input.dispatchMouseEvent", {
+          type,
+          x: word.x,
+          y: word.y,
+          button: "left",
+          buttons: 1,
+          clickCount: count,
+          modifiers: 1,
+        });
+      }
+      await sleep(200);
+    }
+    check(
+      "Alt+double-click selects the word under the pointer",
+      (await page.evaluate(`getSelection().toString().trim()`)) === "Monte",
+      await page.evaluate(`getSelection().toString()`),
+    );
+    await press(page, "Home", { ctrl: true });
+    if (word !== null) {
+      for (const [type, count] of [
+        ["mousePressed", 1],
+        ["mouseReleased", 1],
+        ["mousePressed", 2],
+        ["mouseReleased", 2],
+      ]) {
+        await mouse(page, type, word.x, word.y, "left", count);
+      }
+    }
+    await expectEventually(
+      page,
+      "double-click on the page goes to the source line (Overleaf's default)",
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "sections/results.typ" && document.querySelector(".cm-line[data-source-flash]") !== null`,
+      { timeout: 4000 },
+    );
+    await clickText(page, '[role="tab"]', "main.typ");
+    await waitFor(page, `document.querySelector("${viewerSel} canvas") !== null`);
+
+    // Find in PDF.
+    await click(page, `${viewerSel} [data-page="1"]`);
+    await press(page, "f", { ctrl: true, wait: 300 });
+    check(
+      "Ctrl+F in the preview opens its own find bar, focused",
+      await page.evaluate(
+        `document.activeElement?.closest("[data-pdf-find]") !== null && document.querySelector('[data-pdf-find]')?.getAttribute("role") === "search"`,
+      ),
+    );
+    await insertText(page, "entropy production");
+    await expectEventually(
+      page,
+      "find counts the matches across all pages: 1 of N",
+      `/^1 of (2[5-9]|[3-9]\\d)$/.test(document.querySelector("[data-pdf-find-count]")?.textContent.trim() ?? "")`,
+      {
+        show: `document.querySelector("[data-pdf-find-count]")?.textContent`,
+        timeout: 6000,
+      },
+    );
+    check(
+      "the current match is outlined in the accent, the others in a quiet tone",
+      await page.evaluate(`(() => {
+        const current = document.querySelectorAll(".mng-hit[data-current]");
+        const other = document.querySelector(".mng-hit:not([data-current])");
+        if (current.length < 1 || other === null) return false;
+        const c = getComputedStyle(current[0]);
+        return c.outlineColor === "rgb(198, 241, 53)" && c.outlineStyle === "solid" && getComputedStyle(other).outlineStyle === "none";
+      })()`),
+    );
+    const firstHit = await page.evaluate(
+      `document.querySelector(".mng-hit[data-current]")?.getBoundingClientRect().top ?? null`,
+    );
+    await press(page, "Enter", { wait: 300 });
+    check(
+      "Enter moves to the next match",
+      (await page.evaluate(
+        `document.querySelector("[data-pdf-find-count]")?.textContent.trim().startsWith("2 of")`,
+      )) &&
+        (await page.evaluate(
+          `document.querySelector(".mng-hit[data-current]")?.getBoundingClientRect().top ?? null`,
+        )) !== firstHit,
+    );
+    await press(page, "Enter", { shift: true, wait: 300 });
+    check(
+      "Shift+Enter moves back",
+      await page.evaluate(
+        `document.querySelector("[data-pdf-find-count]")?.textContent.trim().startsWith("1 of")`,
+      ),
+    );
+    const total = () =>
+      page.evaluate(
+        `Number(/of (\\d+)/.exec(document.querySelector("[data-pdf-find-count]")?.textContent ?? "")?.[1] ?? 0)`,
+      );
+    const anyCase = await total();
+    await click(page, 'button[aria-label="Match case"]');
+    const exactCase = await total();
+    check(
+      "Match case narrows the search to the lower-case matches",
+      exactCase >= 1 && exactCase < anyCase,
+      `${anyCase} -> ${exactCase}`,
+    );
+    await click(page, 'button[aria-label="Match case"]');
+    await shoot(page, "26-pdf-find");
+    await press(page, "Escape", { wait: 200 });
+    check(
+      "Esc closes the find bar and clears the highlights",
+      !(await exists(page, "[data-pdf-find]")) && !(await exists(page, ".mng-hit")),
+    );
+
+    // Ctrl+wheel zooms at the pointer, without zooming the page itself.
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 300`);
+    await sleep(300);
+    const box1 = await rect(page, viewerSel);
+    const pointer = { x: box1.left + box1.w * 0.6, y: box1.top + box1.h * 0.45 };
+    const anchor = await page.evaluate(`(() => {
+      const slot = document.elementFromPoint(${pointer.x}, ${pointer.y})?.closest("[data-index]");
+      if (!slot) return null;
+      const r = slot.getBoundingClientRect();
+      return { index: slot.dataset.index, fx: (${pointer.x} - r.left) / r.width, fy: (${pointer.y} - r.top) / r.height, width: r.width };
+    })()`);
+    for (let i = 0; i < 4; i += 1) {
+      await page.send("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        x: pointer.x,
+        y: pointer.y,
+        deltaX: 0,
+        deltaY: -100,
+        modifiers: 2,
+      });
+      await sleep(30);
+    }
+    await sleep(700);
+    const moved = await page.evaluate(`(() => {
+      const slot = document.querySelector('[data-index="${anchor?.index}"]');
+      if (!slot) return null;
+      const r = slot.getBoundingClientRect();
+      return { x: r.left + ${anchor?.fx} * r.width, y: r.top + ${anchor?.fy} * r.height, width: r.width };
+    })()`);
+    check(
+      "Ctrl+wheel zooms in, keeping the point under the pointer within 3px",
+      anchor !== null &&
+        moved !== null &&
+        moved.width > anchor.width * 1.3 &&
+        Math.abs(moved.x - pointer.x) <= 3 &&
+        Math.abs(moved.y - pointer.y) <= 3,
+      JSON.stringify({ pointer, moved }),
+    );
+    check(
+      "the browser's own zoom is untouched",
+      await page.evaluate(
+        `window.visualViewport.scale === 1 && document.documentElement.style.zoom === ""`,
+      ),
+    );
+    await expectEventually(
+      page,
+      "after the zoom settles the visible pages are redrawn sharply",
+      `(() => { const c = document.querySelector('${viewerSel} [data-page] canvas'); if (!c) return false; const r = c.getBoundingClientRect(); return c.width >= Math.floor(r.width * devicePixelRatio) - 2; })()`,
+    );
+    await shoot(page, "27-pdf-wheel-zoom");
+
+    // Presets: a menu that the keyboard can use.
+    await press(page, "0", { ctrl: true, wait: 300 });
+    const fitWidth = await page.evaluate(
+      `document.querySelector('${viewerSel} [data-page="1"]').getBoundingClientRect().width`,
+    );
+    await page.evaluate(`document.querySelector("[data-zoom-menu]").focus()`);
+    await press(page, "ArrowDown", { wait: 200 });
+    check(
+      "the zoom value opens a menu of presets from the keyboard",
+      await page.evaluate(`(() => {
+        const items = [...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].map((b) => b.textContent.trim());
+        return ["Fit width", "Fit page", "50%", "75%", "100%", "125%", "150%", "200%", "300%", "400%"].every((l) => items.some((t) => t.startsWith(l))) && document.activeElement?.getAttribute("role")?.startsWith("menuitem");
+      })()`),
+    );
+    check(
+      "the current zoom is the checked entry",
+      await page.evaluate(
+        `[...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((b) => b.textContent.trim()).join() .startsWith("Fit width")`,
+      ),
+    );
+    await page.evaluate(
+      `[...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].find((b) => b.textContent.trim().startsWith("200%")).click()`,
+    );
+    await sleep(400);
+    const at200 = await page.evaluate(
+      `document.querySelector('${viewerSel} [data-page="1"]').getBoundingClientRect().width`,
+    );
+    check(
+      "the 200% preset shows the page at twice its printed size",
+      Math.abs(at200 - 595.28 * (96 / 72) * 2) < 3 && at200 !== fitWidth,
+      `${fitWidth} -> ${at200}`,
+    );
+    await press(page, "-", { ctrl: true, wait: 300 });
+    check(
+      "Ctrl+- steps down a preset",
+      (await page.evaluate(
+        `document.querySelector("[data-zoom-menu]").textContent.trim()`,
+      )) === "150%",
+    );
+    await press(page, "=", { ctrl: true, wait: 300 });
+    await press(page, "=", { ctrl: true, wait: 300 });
+    await press(page, "=", { ctrl: true, wait: 600 });
+    check(
+      "Ctrl+= steps up to 400% at most",
+      (await page.evaluate(
+        `document.querySelector("[data-zoom-menu]").textContent.trim()`,
+      )) === "400%",
+    );
+    const memory = await page.evaluate(`(() => ({
+      canvases: document.querySelectorAll("${viewerSel} canvas").length,
+      pixels: [...document.querySelectorAll("${viewerSel} canvas")].reduce((n, c) => n + c.width * c.height, 0),
+      heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
+      pages: document.querySelectorAll("${viewerSel} [data-page]").length,
+    }))()`);
+    check(
+      "at 400% only the pages near the viewport own a canvas",
+      memory.canvases <= 3 && memory.canvases < memory.pages,
+      JSON.stringify(memory),
+    );
+    await press(page, "0", { ctrl: true, wait: 400 });
+    check(
+      "Ctrl+0 fits the width again",
+      Math.abs(
+        (await page.evaluate(
+          `document.querySelector('${viewerSel} [data-page="1"]').getBoundingClientRect().width`,
+        )) - fitWidth,
+      ) < 2,
+    );
+
+    // Links: a citation scrolls to the bibliography; a web link opens the
+    // system browser (here: window.open), never the webview.
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 0`);
+    await sleep(300);
+    const cite = await rect(
+      page,
+      `${viewerSel} [data-page="1"] a[data-pdf-link="internal"]`,
+    );
+    if (cite !== null) {
+      await mouse(page, "mouseMoved", cite.x, cite.y);
+      check(
+        "links show a pointer",
+        await page.evaluate(
+          `getComputedStyle(document.querySelector('${viewerSel} a[data-pdf-link]')).cursor === "pointer"`,
+        ),
+      );
+      await mouse(page, "mousePressed", cite.x, cite.y);
+      await mouse(page, "mouseReleased", cite.x, cite.y);
+    }
+    await expectEventually(
+      page,
+      "a citation link scrolls to the References heading",
+      `(() => { const h = [...document.querySelectorAll("${viewerSel} [data-text-layer] span")].find((s) => s.textContent === "References"); if (!h) return false; const top = h.getBoundingClientRect().top - document.querySelector("${viewerSel}").getBoundingClientRect().top; return document.querySelector("${viewerSel}").scrollTop > 0 && top >= 0 && top < 80; })()`,
+      { timeout: 4000 },
+    );
+    await page.evaluate(
+      `window.__opened = []; window.open = (url) => { window.__opened.push(url); return null; }`,
+    );
+    const web = await rect(page, `${viewerSel} a[data-pdf-link="external"]`);
+    if (web !== null) {
+      await page.evaluate(
+        `document.querySelector('${viewerSel} a[data-pdf-link="external"]').scrollIntoView({ block: "center" })`,
+      );
+      const webNow = await rect(page, `${viewerSel} a[data-pdf-link="external"]`);
+      await mouse(page, "mouseMoved", webNow.x, webNow.y);
+      await mouse(page, "mousePressed", webNow.x, webNow.y);
+      await mouse(page, "mouseReleased", webNow.x, webNow.y);
+      await sleep(300);
+    }
+    check(
+      "a web link opens outside the app and the webview stays put",
+      (await page.evaluate(`JSON.stringify(window.__opened)`)) ===
+        '["https://typst.app/"]' && (await page.evaluate(`location.pathname`)) === "/",
+      await page.evaluate(`JSON.stringify(window.__opened)`),
+    );
+
+    // The page box, keys, outline and dark pages.
+    await click(page, "[data-page-input]");
+    await page.evaluate(`document.querySelector("[data-page-input]").select()`);
+    await insertText(page, "3");
+    await press(page, "Enter", { wait: 400 });
+    check(
+      "typing a page number and Enter jumps to that page",
+      (await page.evaluate(PAGE_BOX))?.page === 3 &&
+        (await page.evaluate(
+          `Math.abs(document.querySelector('${viewerSel} [data-page="3"]').getBoundingClientRect().top - document.querySelector("${viewerSel}").getBoundingClientRect().top - 16) < 4`,
+        )),
+      JSON.stringify(await page.evaluate(PAGE_BOX)),
+    );
+    await page.evaluate(`document.querySelector("${viewerSel}").focus()`);
+    await press(page, "Home", { wait: 300 });
+    check("Home goes to the first page", (await viewerTop()) === 0);
+    await press(page, "PageDown", { wait: 300 });
+    check(
+      "PageDown goes to the next page",
+      (await page.evaluate(PAGE_BOX))?.page === 2,
+    );
+    await press(page, "End", { wait: 300 });
+    check(
+      "End goes to the last page",
+      (await page.evaluate(PAGE_BOX))?.page === (await page.evaluate(PAGE_BOX))?.of,
+    );
+    await click(page, 'button[aria-label="PDF outline"]');
+    check(
+      "the outline lists the document's headings",
+      await page.evaluate(`(() => {
+        const t = document.querySelector("[data-pdf-outline]")?.innerText ?? "";
+        return t.includes("Quantum thermodynamic bounds") && t.includes("References") && t.includes("Appendix");
+      })()`),
+    );
+    await shoot(page, "28-pdf-outline");
+    await clickText(page, "[data-pdf-outline] button", "Quantum thermodynamic bounds");
+    await sleep(300);
+    check("an outline entry scrolls to its heading", (await viewerTop()) < 40);
+    await click(page, 'button[aria-label="PDF outline"]');
+    check("the outline toggles off", !(await exists(page, "[data-pdf-outline]")));
+    // In this split the pane is narrow enough that the toggle gives way.
+    await page.evaluate(
+      `document.querySelector('button[aria-label="Dark pages"]').click()`,
+    );
+    await sleep(200);
+    check(
+      "Dark pages inverts the page pictures only, keeping hues",
+      await page.evaluate(`(() => {
+        const c = getComputedStyle(document.querySelector("${viewerSel} canvas")).filter;
+        const t = getComputedStyle(document.querySelector("${viewerSel} [data-text-layer]")).filter;
+        return c === "invert(1) hue-rotate(180deg)" && t === "none";
+      })()`),
+    );
+    await shoot(page, "29-pdf-dark");
+    // In this split the pane is narrow enough that the toggle gives way.
+    await page.evaluate(
+      `document.querySelector('button[aria-label="Dark pages"]').click()`,
+    );
+    await sleep(200);
+    check(
+      "Dark pages toggles back off",
+      await page.evaluate(
+        `getComputedStyle(document.querySelector("${viewerSel} canvas")).filter === "none"`,
+      ),
+    );
+
+    // The reading position survives switching to another document and back.
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 700`);
+    await sleep(400);
+    const readingAt = await viewerTop();
+    await goToFile("notes.md");
+    await waitFor(page, `!!document.querySelector('article[aria-label="Markdown preview"]')`);
+    await clickText(page, '[role="tab"]', "main.typ");
+    await waitFor(page, `document.querySelector("${viewerSel} canvas") !== null`);
+    await sleep(500);
+    check(
+      "switching tabs and back keeps the place in the PDF",
+      Math.abs((await viewerTop()) - readingAt) < 4,
+      `${readingAt} -> ${await viewerTop()}`,
+    );
+
+    // At 1024px with the side panel open nothing in the header is cut off.
+    await resize(page, 1024, 700);
+    await sleep(300);
+    check(
+      "at 1024px with the side panel open every header control is whole and clickable",
+      await page.evaluate(`(() => {
+        if (!document.querySelector("#side-panel")) return false;
+        const s = document.querySelector('section[aria-label="Preview"]');
+        const bar = s.querySelector('[role="toolbar"]');
+        const sr = s.getBoundingClientRect();
+        const shown = [...bar.querySelectorAll("button, input")].filter((b) => b.getBoundingClientRect().width > 0);
+        return bar.scrollWidth <= bar.clientWidth && shown.length >= 6 && shown.every((b) => { const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return r.left >= sr.left && r.right <= sr.right && (hit === b || b.contains(hit)); });
+      })()`),
+      await page.evaluate(
+        `[...document.querySelectorAll('section[aria-label="Preview"] [role="toolbar"] button, section[aria-label="Preview"] [role="toolbar"] input')].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.getAttribute("aria-label")).join("|")`,
+      ),
+    );
+    await shoot(page, "30-pdf-header-1024");
+    await resize(page, 1280, 820);
+    await sleep(300);
+
+    // Put main.typ back as it was.
+    await focusEditor(page);
+    for (let i = 0; i < 6 && (await dirtyTabs(page)).includes("main.typ"); i += 1)
+      await press(page, "z", { ctrl: true, wait: 400 });
+    await noStrayEdits(page, "after the PDF viewer");
 
     /* ------------------------------------------------------------------ */
     section("Diagrams");
@@ -2962,11 +3446,11 @@ async function main() {
       "status bar reports the LaTeX compile time",
       `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
     );
+    const latexBox = await doc.evaluate(PAGE_BOX);
     check(
       "the toolbar says which page of how many",
-      await doc.evaluate(
-        `/Page 1 of \\d+/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
-      ),
+      latexBox !== null && latexBox.page === 1 && latexBox.of >= 1,
+      JSON.stringify(latexBox),
     );
     check(
       "the preview header names the TeX backend",
@@ -3055,14 +3539,15 @@ async function main() {
     await expectEventually(
       doc,
       "a long document reports several pages",
-      `/Page 1 of ([2-9]|\\d\\d)/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
+      `(${PAGE_BOX})?.of >= 2`,
       { timeout: 8000 },
     );
-    await click(doc, 'button[aria-label="Next page"]');
+    await doc.evaluate(`document.querySelector("[data-pdf-viewer]").focus()`);
+    await press(doc, "PageDown");
     await expectEventually(
       doc,
-      "Next page scrolls the viewer to page 2",
-      `/Page 2 of/.test(document.querySelector('section[aria-label="Preview"]').innerText) && document.querySelector('[data-pdf-viewer]').scrollTop > 100`,
+      "PageDown in the viewer scrolls to page 2",
+      `(${PAGE_BOX})?.page === 2 && document.querySelector('[data-pdf-viewer]').scrollTop > 100`,
     );
     const scrollBefore = await doc.evaluate(
       `document.querySelector('[data-pdf-viewer]').scrollTop`,
