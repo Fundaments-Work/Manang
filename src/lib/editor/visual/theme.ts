@@ -51,6 +51,8 @@ export const visualTheme = EditorView.theme({
   },
   ".cm-vis-source": { fontFamily: "var(--font-mono)", fontWeight: "400" },
   ".cm-vis-num": { color: "var(--mng-text-60)" },
+  // The Markdown highlight greys whole list items; in Visual their text is prose.
+  "&.cm-visual .cm-vis-li > span:not([class*='cm-vis-'])": { color: "var(--mng-text)" },
 
   ".cm-vis-quote": {
     borderLeft: "1px solid var(--mng-text-60)",
@@ -139,6 +141,7 @@ export const visualTheme = EditorView.theme({
   ".cm-vis-image-figure": { display: "block", textAlign: "center", margin: "0.5em 0" },
   ".cm-vis-image-img": {
     maxWidth: "100%",
+    minWidth: "48px",
     maxHeight: "360px",
     backgroundColor: "var(--mng-paper)",
     border: "1px solid var(--mng-line)",

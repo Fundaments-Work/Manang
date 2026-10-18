@@ -9,8 +9,7 @@
  * cursor-reveal rule depends on the selection.
  */
 
-import type {
-  ChangeSet} from "@codemirror/state";
+import type { ChangeSet } from "@codemirror/state";
 import {
   StateEffect,
   StateField,

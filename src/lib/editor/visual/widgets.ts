@@ -174,6 +174,8 @@ export class ImageWidget extends WidgetType {
         img.className = "cm-vis-image-img";
         img.alt = this.alt;
         img.draggable = false;
+        // An SVG without a size of its own would draw as a dot; give it a column.
+        if (mime === "image/svg+xml") img.style.width = "min(100%, 520px)";
         img.addEventListener("load", () => view.requestMeasure());
         img.src = url;
         dom.replaceChildren(img);

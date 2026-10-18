@@ -12,7 +12,7 @@
  * always correct.
  */
 
-import type { ChangeSet} from "@codemirror/state";
+import type { ChangeSet } from "@codemirror/state";
 import { type StateField } from "@codemirror/state";
 import { ViewPlugin, type EditorView, type ViewUpdate } from "@codemirror/view";
 
