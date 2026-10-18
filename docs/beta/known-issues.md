@@ -10,10 +10,10 @@ This is a living document of known issues, platform quirks, and workarounds veri
 | :--- | :--- | :--- | :--- | :--- |
 | [1. Local TeX distribution required for LaTeX](#1-local-tex-distribution-required-for-latex) | LaTeX Compiler | All | Medium | Yes |
 | [2. Math formulas in Mermaid text diagrams](#2-math-formulas-in-mermaid-text-diagrams) | Diagrams | All | Low | Yes |
-| [3. Linux Wayland + NVIDIA display stutter](#3-linux-wayland--nvidia-display-stutter) | Desktop Shell | Linux | Low | Yes (Automatic) |
+| [3. Linux Wayland + NVIDIA display stutter](#3-linux-wayland-nvidia-display-stutter) | Desktop Shell | Linux | Low | Yes (Automatic) |
 | [4. macOS native top menu bar integration](#4-macos-native-top-menu-bar-integration) | Menus | macOS | Low | Yes |
 | [5. Plugin cryptographic signature verification](#5-plugin-cryptographic-signature-verification) | Plugins | All | Medium | Yes |
-| [6. Real-time co-editing & remote sharing](#6-real-time-co-editing--remote-sharing) | Collaboration | All | Low | Coming soon |
+| [6. Real-time co-editing & remote sharing](#6-real-time-co-editing-remote-sharing) | Collaboration | All | Low | Coming soon |
 | [7. AI agent assistant view](#7-ai-agent-assistant-view) | AI Assistant | All | Low | Coming soon |
 | [8. Unsaved external disk change prompt](#8-unsaved-external-disk-change-prompt) | Project / Buffer | All | Medium | Coming soon |
 
