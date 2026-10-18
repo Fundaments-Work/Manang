@@ -47,7 +47,10 @@ fn usage_of(usage: &RigUsage, wire: Wire) -> Usage {
     Usage {
         // Anthropic reports input_tokens without the cached part; OpenAI-style APIs include it.
         input: match wire {
-            Wire::Anthropic => input,
+            // Rig folds the cache read and write counts into Anthropic's `input_tokens`.
+            Wire::Anthropic => input
+                .saturating_sub(cached)
+                .saturating_sub(usage.cache_creation_input_tokens.unwrap_or(0)),
             Wire::OpenAiCompat => input.saturating_sub(cached),
         },
         output: usage.output_tokens.unwrap_or(0),
@@ -72,6 +75,23 @@ fn stop_reason(reason: Option<&FinishReason>) -> StopReason {
     }
 }
 
+/// The block, and for a tool call the parsed call, for a finished Rig part.
+fn end_events(content: &AssistantContent, wire: Wire, names: &ToolNameMap) -> Vec<ProviderEvent> {
+    let mut out = Vec::new();
+    if let Some(block) = block_of(content, wire) {
+        out.push(ProviderEvent::Block { block });
+    }
+    if let AssistantContent::ToolCall(call) = content {
+        let wire_name = call.function.name.as_str();
+        out.push(ProviderEvent::ToolUse {
+            id: call.id.wire().into_owned(),
+            name: names.internal(wire_name).unwrap_or(wire_name).to_owned(),
+            input: Value::Object(call.function.arguments.clone()),
+        });
+    }
+    out
+}
+
 fn error_event(error: manang_agent_core::ProviderError) -> ProviderEvent {
     ProviderEvent::Error { error }
 }
@@ -82,10 +102,12 @@ pub(crate) fn drive(
     streamed: CompletionStream,
     names: ToolNameMap,
     wire: Wire,
+    model: String,
 ) -> EventStream<'static> {
     Box::pin(async_stream::stream! {
         let mut streamed = streamed;
         let mut started = false;
+        let mut held: Vec<(usize, AssistantContent)> = Vec::new();
         while let Some(item) = streamed.next().await {
             let event = match item {
                 Ok(Item::Event(event)) => event,
@@ -100,7 +122,9 @@ pub(crate) fn drive(
                 let partial = streamed.partial();
                 yield ProviderEvent::Started {
                     request_id: partial.provider_request_id.clone(),
-                    model: partial.origin.response_model.clone(),
+                    // Rig fills the provider-reported model only when the reply ends; until then the
+                    // requested model stands in.
+                    model: partial.origin.response_model.clone().or(Some(model.clone())),
                 };
             }
             match event {
@@ -110,20 +134,24 @@ pub(crate) fn drive(
                 StreamEvent::Reasoning { text, .. } if !text.is_empty() => {
                     yield ProviderEvent::ThinkingDelta { text };
                 }
-                StreamEvent::End { content, .. } => {
-                    if let Some(block) = block_of(&content, wire) {
-                        yield ProviderEvent::Block { block };
-                    }
-                    if let AssistantContent::ToolCall(call) = &content {
-                        let wire_name = call.function.name.as_str();
-                        yield ProviderEvent::ToolUse {
-                            id: call.id.wire().into_owned(),
-                            name: names.internal(wire_name).unwrap_or(wire_name).to_owned(),
-                            input: Value::Object(call.function.arguments.clone()),
-                        };
+                StreamEvent::End { part, content } => {
+                    if wire == Wire::Anthropic {
+                        for event in end_events(&content, wire, &names) {
+                            yield event;
+                        }
+                    } else {
+                        // Rig closes a reasoning part after the text that follows it; the
+                        // in-house adapter emits blocks in message order at the end.
+                        held.push((part.index(), content));
                     }
                 }
                 _ => {}
+            }
+        }
+        held.sort_by_key(|(index, _)| *index);
+        for (_, content) in &held {
+            for event in end_events(content, wire, &names) {
+                yield event;
             }
         }
         match streamed.finish().await {
