@@ -33,6 +33,8 @@ const SETTING_ORDER: readonly string[] = [
   "editor.tab-size",
   "preview.auto-compile",
   "preview.debounce-ms",
+  "preview.double-click-source",
+  "preview.dark-pages",
 ];
 
 function settingRank(id: string): number {

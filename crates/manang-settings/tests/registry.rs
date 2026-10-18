@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 #[test]
 fn core_registry_builds_and_defaults_validate() {
     let reg = Registry::with_core();
-    assert_eq!(reg.len(), 15);
+    assert_eq!(reg.len(), 17);
     for def in reg.iter() {
         assert_eq!(
             def.validate(&def.default).as_ref(),
