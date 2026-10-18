@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon, { type IconName } from "$lib/components/ui/Icon.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
+  import { context } from "$lib/state/context.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
@@ -92,7 +93,7 @@
     onclick={() => {
       if (needsProject) return;
       if (item.view === "settings") {
-        settingsPage.toggle();
+        settingsPage.toggle(context.settingsOrigin);
         return;
       }
       // A view button leaves the Settings page, showing its panel.

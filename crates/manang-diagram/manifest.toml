@@ -3,6 +3,7 @@ name = "diagram"
 version = "0.1.0"
 description = "Text diagrams (Mermaid, Pikchr, ASCII) to deterministic SVG. Diagnostics use 1-based lines and 1-based columns counted in characters, end exclusive, like the Typst plugin."
 tier = "native"
+settings_contexts = ["diagram"]
 
 # No permissions: every command is a pure function of its arguments.
 

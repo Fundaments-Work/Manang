@@ -18,6 +18,15 @@ describe("ui context", () => {
     expect([...contextKeys({ ...base, surface: "home" })].sort()).toEqual(
       ["home", "project"].sort(),
     );
+    // Settings keeps the context it was opened over.
+    expect([...contextKeys({ ...base, surface: "settings" })].sort()).toEqual(
+      ["document", "project", "settings", "typst"].sort(),
+    );
+    expect(
+      [
+        ...contextKeys({ ...base, surface: "settings", editor: null, engine: null }),
+      ].sort(),
+    ).toEqual(["project", "settings"].sort());
   });
 
   it("evaluates when clauses", () => {
