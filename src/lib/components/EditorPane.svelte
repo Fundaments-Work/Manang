@@ -8,6 +8,7 @@
   import { diagram } from "$lib/state/diagram.svelte";
   import { documents } from "$lib/state/documents.svelte";
   import { heal } from "$lib/state/heal.svelte";
+  import { visualMode } from "$lib/state/visual.svelte";
   import { problemsIn, toGutter } from "$lib/workbench/problems";
 
   /**
@@ -50,6 +51,14 @@
       documents.show(session);
       documents.applyReveal();
     });
+  });
+
+  // Visual mode follows the tab's choice, or the per-type default setting.
+  $effect(() => {
+    void documents.version;
+    void visualMode.isOn(path);
+    if (view === undefined) return;
+    untrack(() => void visualMode.apply(path));
   });
 
   $effect(() => {

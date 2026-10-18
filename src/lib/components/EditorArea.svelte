@@ -15,6 +15,7 @@
   import { layout } from "$lib/state/layout.svelte";
   import { palette } from "$lib/state/palette.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
+  import { visualMode } from "$lib/state/visual.svelte";
   import { detectPlatform } from "$lib/util/keyboard";
   import { DEFAULT_LAYOUT, SPLIT_MAX, SPLIT_MIN } from "$lib/workbench/layout";
   import { basename } from "$lib/workbench/paths";
@@ -35,6 +36,10 @@
   let Preview = $state.raw<Component | undefined>();
   let Figure = $state.raw<Component<{ figure: FigureState }> | undefined>();
   let Slides = $state.raw<Component<{ path: string }> | undefined>();
+  let VisualToolbar = $state.raw<Component<{ path: string }> | undefined>();
+  const visualOn = $derived(
+    tab?.kind === "document" && tab.view === "text" && visualMode.isOn(tab.path),
+  );
 
   /**
    * Why a heavy view could not load (its chunk failed to import, or the figure
@@ -64,6 +69,12 @@
       lazy(
         () => import("./PreviewPane.svelte"),
         (c) => (Preview = c),
+      );
+    }
+    if (visualOn && VisualToolbar === undefined) {
+      lazy(
+        () => import("./VisualToolbar.svelte"),
+        (c) => (VisualToolbar = c),
       );
     }
     if (tab?.kind === "figure" && Figure === undefined) {
@@ -162,6 +173,9 @@
       >
         <ExternalChangeBar path={tab.path} kind="document" />
         <LiveBar path={tab.path} />
+        {#if visualOn && VisualToolbar !== undefined}
+          <VisualToolbar path={tab.path} />
+        {/if}
         <CoachLine target="editor" />
         <div class="min-h-0 flex-1">
           <EditorPane path={tab.path} zen={layout.zen} />
