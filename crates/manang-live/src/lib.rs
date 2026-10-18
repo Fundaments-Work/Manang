@@ -12,6 +12,7 @@
 
 pub mod bridge;
 pub mod engine;
+pub mod envelope;
 pub mod error;
 pub mod loro_engine;
 pub mod yrs_engine;
