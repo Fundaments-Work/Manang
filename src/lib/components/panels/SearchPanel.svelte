@@ -55,9 +55,7 @@
   let searchToken = 0;
 
   const projectRoot = $derived(workspace.project?.root ?? "");
-  const totalMatches = $derived(
-    fileHits.reduce((n, f) => n + f.matches.length, 0),
-  );
+  const totalMatches = $derived(fileHits.reduce((n, f) => n + f.matches.length, 0));
 
   onMount(() => {
     inputEl?.focus();
@@ -234,7 +232,9 @@
       type="button"
       class="mng-icon-btn"
       title={collapsedFiles.size === fileHits.length ? "Expand all" : "Collapse all"}
-      aria-label={collapsedFiles.size === fileHits.length ? "Expand all" : "Collapse all"}
+      aria-label={collapsedFiles.size === fileHits.length
+        ? "Expand all"
+        : "Collapse all"}
       onclick={toggleCollapseAll}
     >
       <Icon name="collapse-all" size={14} />
@@ -274,7 +274,7 @@
         <button
           type="button"
           class="flex h-5 w-5 items-center justify-center font-mono text-[10px] transition-colors {matchCase
-            ? 'bg-surface-hi text-accent font-bold'
+            ? 'bg-surface-hi text-text'
             : 'text-text-muted hover:text-text'}"
           title="Match case (Alt+C)"
           aria-pressed={matchCase}
@@ -285,7 +285,7 @@
         <button
           type="button"
           class="flex h-5 w-5 items-center justify-center font-mono text-[10px] transition-colors {wholeWord
-            ? 'bg-surface-hi text-accent font-bold'
+            ? 'bg-surface-hi text-text'
             : 'text-text-muted hover:text-text'}"
           title="Match whole word (Alt+W)"
           aria-pressed={wholeWord}
@@ -296,7 +296,7 @@
         <button
           type="button"
           class="flex h-5 w-5 items-center justify-center font-mono text-[10px] transition-colors {useRegex
-            ? 'bg-surface-hi text-accent font-bold'
+            ? 'bg-surface-hi text-text'
             : 'text-text-muted hover:text-text'}"
           title="Use regular expression (Alt+R)"
           aria-pressed={useRegex}
@@ -345,7 +345,9 @@
     {#if showFilters}
       <div class="mt-1.5 space-y-1.5 pl-4">
         <div>
-          <label for="search-include" class="block text-[10px] text-text-muted">Files to include</label>
+          <label for="search-include" class="block text-[10px] text-text-muted"
+            >Files to include</label
+          >
           <input
             id="search-include"
             bind:value={includePattern}
@@ -356,7 +358,9 @@
           />
         </div>
         <div>
-          <label for="search-exclude" class="block text-[10px] text-text-muted">Files to exclude</label>
+          <label for="search-exclude" class="block text-[10px] text-text-muted"
+            >Files to exclude</label
+          >
           <input
             id="search-exclude"
             bind:value={excludePattern}
@@ -391,7 +395,7 @@
         and {nameHits.length} matching {nameHits.length === 1 ? "name" : "names"}
       {/if}
       {#if truncated}
-        <span class="text-accent"> (results truncated)</span>
+        <span class="text-text-60"> (results truncated)</span>
       {/if}
     {/if}
   </p>
@@ -419,7 +423,9 @@
               <Icon name="file" size={13} class="text-text-muted shrink-0" />
               <span class="truncate">{basename(hit.path)}</span>
               {#if dirname(hit.path) !== ""}
-                <span class="truncate text-[11px] text-text-muted">{dirname(hit.path)}</span>
+                <span class="truncate text-[11px] text-text-muted"
+                  >{dirname(hit.path)}</span
+                >
               {/if}
             </button>
           </li>
@@ -454,20 +460,26 @@
       {#if !isCollapsed}
         <ul class="m-0 list-none p-0">
           {#each file.matches as match (`${file.path}:${match.line}:${match.column}`)}
-            {@const segments = splitLineByRanges(match.text, match.ranges, match.text_offset ?? 0)}
+            {@const segments = splitLineByRanges(
+              match.text,
+              match.ranges,
+              match.text_offset ?? 0,
+            )}
             <li>
               <button
                 type="button"
                 class="inset-focus flex w-full items-baseline gap-2 px-4 py-1 text-left text-xs text-text-60 hover:bg-surface-hi hover:text-text"
                 onclick={() => void goToMatch(file.path, match.line, match.column)}
               >
-                <span class="w-6 shrink-0 text-right font-mono text-[10px] text-text-muted">
+                <span
+                  class="w-6 shrink-0 text-right font-mono text-[10px] text-text-muted"
+                >
                   {match.line}
                 </span>
                 <span class="truncate font-mono text-[11px]">
                   {#each segments as seg, idx (idx)}
                     {#if seg.isMatch}
-                      <mark class="bg-math/25 text-text font-medium">{seg.text}</mark>
+                      <mark class="bg-math/25 text-text">{seg.text}</mark>
                     {:else}
                       {seg.text}
                     {/if}

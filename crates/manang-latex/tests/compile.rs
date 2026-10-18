@@ -31,6 +31,17 @@ fn config(cache: Option<PathBuf>) -> LatexConfig {
     }
 }
 
+/// Whether the Tectonic worker exists. It builds only with the `engine`
+/// feature (`cargo build -p manang-latex --features engine`), which the
+/// workspace gate leaves off; tests that spawn it skip (saying why) without it.
+fn worker_built() -> bool {
+    let built = std::path::Path::new(WORKER).is_file();
+    if !built {
+        eprintln!("SKIP: {WORKER} is not built; build manang-latex with --features engine");
+    }
+    built
+}
+
 fn kernel_with(config: LatexConfig) -> Kernel {
     let kernel = Kernel::new();
     kernel
@@ -40,8 +51,11 @@ fn kernel_with(config: LatexConfig) -> Kernel {
 }
 
 /// A kernel on the user's cache, or `None` (after saying why) when the
-/// bundle is not available offline.
+/// worker is not built or the bundle is not available offline.
 fn engine_kernel() -> Option<Kernel> {
+    if !worker_built() {
+        return None;
+    }
     let cfg = config(None);
     let cache = resolve_cache_dir(&cfg).ok()?;
     let populated = std::fs::read_dir(cache.join("bundles"))
@@ -218,6 +232,9 @@ fn runaway_documents_are_killed_at_the_timeout() {
 
 #[test]
 fn missing_bundle_without_network_fails_fast_and_clearly() {
+    if !worker_built() {
+        return;
+    }
     let empty = tempfile::tempdir().expect("tempdir");
     let k = kernel_with(LatexConfig {
         allow_network: false,

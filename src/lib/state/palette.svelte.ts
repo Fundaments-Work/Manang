@@ -19,6 +19,7 @@ import { workbenchCommands } from "$lib/commands/workbench";
 import { kernel, type KernelCommand } from "$lib/kernel";
 
 import { openFile, runKernelCommand } from "./actions";
+import { context } from "./context.svelte";
 import { workspace } from "./workspace.svelte";
 
 export class PaletteState {
@@ -38,6 +39,7 @@ export class PaletteState {
       kernel: this.kernelCommands,
       runKernel: (id) => void runKernelCommand(id),
       openFile: (path) => void openFile(path),
+      applies: (when) => context.when(when),
     }),
   );
   readonly groups: PaletteGroup[] = $derived(

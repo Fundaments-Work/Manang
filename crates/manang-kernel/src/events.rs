@@ -167,6 +167,12 @@ impl Subscription {
         std::iter::from_fn(|| self.try_recv()).collect()
     }
 
+    /// True once every handle to the bus is dropped: no event can arrive any
+    /// more (after the queue is drained).
+    pub fn is_closed(&self) -> bool {
+        self.bus.strong_count() == 0
+    }
+
     /// Events discarded because this subscriber's queue was full.
     pub fn dropped(&self) -> u64 {
         self.dropped.load(Ordering::Relaxed)
@@ -235,6 +241,18 @@ mod tests {
         drop(sub);
         assert_eq!(bus.subscriber_count(), 0);
         assert_eq!(bus.emit("t", Payload::Empty), 0);
+    }
+
+    #[test]
+    fn subscription_reports_a_dropped_bus() {
+        let bus = EventBus::new();
+        let sub = bus.subscribe("t");
+        let other = bus.clone();
+        drop(bus);
+        assert!(!sub.is_closed());
+        drop(other);
+        assert!(sub.is_closed());
+        assert!(sub.recv().is_none());
     }
 
     #[test]

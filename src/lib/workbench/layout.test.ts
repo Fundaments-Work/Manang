@@ -71,7 +71,12 @@ describe("sanitizeLayout", () => {
   it("keeps a collapsed side panel collapsed", () => {
     expect(sanitizeLayout({ sideView: null }).sideView).toBeNull();
     expect(
-      sanitizeLayout({ sideView: "plugins", panelOpen: true, theme: "light" }),
-    ).toMatchObject({ sideView: "plugins", panelOpen: true, theme: "light" });
+      sanitizeLayout({ sideView: "outline", panelOpen: true, theme: "light" }),
+    ).toMatchObject({ sideView: "outline", panelOpen: true, theme: "light" });
+  });
+
+  it("drops side views that became pages (plugins, settings)", () => {
+    expect(sanitizeLayout({ sideView: "plugins" }).sideView).toBe("files");
+    expect(sanitizeLayout({ sideView: "settings" }).sideView).toBe("files");
   });
 });

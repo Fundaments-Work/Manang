@@ -22,6 +22,9 @@
 //!   `user` or `project`). Fired for commands and for external file edits.
 //! * `settings.registered {owner, ids}`
 //! * `settings.warnings {warnings}`: the set of file problems changed.
+//! * `settings.project-changed {path}`: `settings.use-project` swapped the
+//!   project layer (`path` is the project root or `null`). Fired after the
+//!   `settings.changed` events the swap caused.
 //! * `keybindings.changed {}`
 //!
 //! Commands run synchronously and touch the disk, so the shell should invoke
@@ -62,6 +65,8 @@ pub const TOPIC_CHANGED: &str = "settings.changed";
 pub const TOPIC_REGISTERED: &str = "settings.registered";
 pub const TOPIC_WARNINGS: &str = "settings.warnings";
 pub const TOPIC_KEYBINDINGS: &str = "keybindings.changed";
+/// `settings.use-project` selected (or cleared) the project layer.
+pub const TOPIC_PROJECT: &str = "settings.project-changed";
 
 /// Default watcher debounce window.
 pub const DEFAULT_DEBOUNCE: Duration = Duration::from_millis(100);
@@ -689,7 +694,8 @@ impl SettingsPlugin {
                 .as_deref()
                 .map(store::read_layer)
                 .unwrap_or_default();
-            let events = state.diff();
+            let mut events = state.diff();
+            events.push((TOPIC_PROJECT, json!({"path": a.path})));
             Ok((json!({"warnings": state.warnings()}), events))
         });
         self.restart_watch();

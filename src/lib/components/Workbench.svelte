@@ -15,6 +15,7 @@
   import ConfirmDialog from "./ui/ConfirmDialog.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import ShortcutOverlay from "./ShortcutOverlay.svelte";
+  import SettingsPage from "./settings/SettingsPage.svelte";
   import { matches } from "$lib/commands/shortcut";
   import {
     PALETTE_COMMANDS_SHORTCUTS,
@@ -27,7 +28,10 @@
   import { dialog } from "$lib/state/dialog.svelte";
   import { home } from "$lib/state/home.svelte";
   import { layout } from "$lib/state/layout.svelte";
+  import { context } from "$lib/state/context.svelte";
   import { palette } from "$lib/state/palette.svelte";
+  import { settings } from "$lib/state/settings.svelte";
+  import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { slides } from "$lib/state/slides.svelte";
   import { switcher } from "$lib/state/switcher.svelte";
   import { captureThumbnail } from "$lib/state/thumbnails";
@@ -74,8 +78,16 @@
     });
   });
 
+  // Project settings layer follows the open project.
+  $effect(() => {
+    const root = workspace.project?.root ?? null;
+    untrack(() => void settings.load(root));
+  });
+
   const sideOverlay = $derived(
-    layout.narrow && sidePanelVisible(layout.sideView, workspace.project !== null),
+    layout.narrow &&
+      !home.showing &&
+      sidePanelVisible(layout.sideView, workspace.project !== null),
   );
 
   function onkeydown(event: KeyboardEvent): void {
@@ -109,6 +121,9 @@
       if (layout.zen) {
         event.preventDefault();
         layout.toggleZen();
+      } else if (settingsPage.open) {
+        event.preventDefault();
+        settingsPage.hide();
       } else if (home.visible && workspace.project !== null) {
         event.preventDefault();
         home.hide();
@@ -148,9 +163,10 @@
       return;
     }
 
-    const hit = shortcutTable(workbenchCommands((mode) => palette.show(mode))).find(
-      (entry) => matches(event, entry.shortcut),
-    );
+    const hit = shortcutTable(
+      workbenchCommands((mode) => palette.show(mode)),
+      (when) => context.when(when),
+    ).find((entry) => matches(event, entry.shortcut));
     if (hit !== undefined) {
       event.preventDefault();
       hit.run();
@@ -166,7 +182,7 @@
   {/if}
 
   <div class="relative flex min-h-0 flex-1">
-    {#if !layout.zen}
+    {#if !layout.zen && !home.showing}
       <ActivityBar />
       <SideBar />
       {#if sideOverlay}
@@ -184,7 +200,10 @@
     <main class="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {#if workspace.project !== null}
         <!-- Stays mounted under Home so the editor keeps its caret and scroll. -->
-        <div class="flex min-h-0 flex-1 flex-col" inert={home.visible}>
+        <div
+          class="flex min-h-0 flex-1 flex-col"
+          inert={home.visible || settingsPage.open}
+        >
           {#if !layout.zen}
             <TabStrip />
           {/if}
@@ -205,8 +224,13 @@
         </div>
       {/if}
       {#if home.showing}
-        <div class="absolute inset-0 z-10 bg-bg">
+        <div class="absolute inset-0 z-10 bg-bg" inert={settingsPage.open}>
           <Home />
+        </div>
+      {/if}
+      {#if settingsPage.open && !layout.zen}
+        <div class="absolute inset-0 z-20 bg-bg">
+          <SettingsPage />
         </div>
       {/if}
     </main>

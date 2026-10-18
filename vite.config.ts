@@ -39,8 +39,22 @@ export default defineConfig(() => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. Watch only the frontend. Everything else in the repo is large and
+      //    busy: `target/` holds gigabytes that cargo rewrites during every
+      //    build, `.claude/worktrees` holds whole copies of the repo. Walking
+      //    them delayed the server's start by minutes ("Waiting for your
+      //    frontend dev server") and kept a core busy on cargo's writes.
+      ignored: [
+        "**/src-tauri/**",
+        "**/target/**",
+        "**/crates/**",
+        "**/.claude/**",
+        "**/artifacts/**",
+        "**/docs/**",
+        "**/testdata/**",
+        "**/fuzz/**",
+        "**/.git/**",
+      ],
     },
   },
 

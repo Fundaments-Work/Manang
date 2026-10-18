@@ -383,9 +383,12 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
           if (latest === null) {
             throw { message: "nothing has been compiled successfully yet" };
           }
-          return new TextEncoder().encode(
-            `%PDF-1.7\n% Manang mock export: ${latest.pages.length} page(s), generation ${latest.generation}\n%%EOF\n`,
-          );
+          // The demo kernel imitates the preview; it cannot produce a real PDF,
+          // so it says so instead of handing over a file that will not open.
+          throw {
+            message:
+              "the browser demo does not compile documents. Run the desktop app (pnpm app:dev) to export a real PDF.",
+          };
         },
       },
     };

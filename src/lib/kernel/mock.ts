@@ -14,8 +14,12 @@ import type {
   KernelCommand,
   KernelError,
   KernelEvent,
+  PluginInfo,
+  PluginPermissions,
   Unlisten,
 } from "./client";
+import type { SettingDef } from "./api";
+import { MOCK_MANIFESTS } from "./mockManifests";
 
 export type MockHandler = (args: Args) => unknown;
 export type MockBinaryHandler = (args: Args) => Uint8Array;
@@ -28,6 +32,12 @@ export interface MockPlugin {
   readonly commands: readonly (readonly [string, string])[];
   readonly handlers: Readonly<Record<string, MockHandler>>;
   readonly binaryHandlers?: Readonly<Record<string, MockBinaryHandler>>;
+  /** From the manifest's `[plugin]` table. */
+  readonly version?: string;
+  readonly description?: string;
+  readonly permissions?: PluginPermissions;
+  /** `[[contributes.settings]]`, registered with the settings plugin at start. */
+  readonly settings?: readonly Omit<SettingDef, "owner" | "category">[];
 }
 
 /** Builds a plugin once the kernel's event bus exists. */
@@ -98,6 +108,8 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
     }, 0);
   };
   const pluginCommands: KernelCommand[] = [];
+  const pluginInfo: PluginInfo[] = [];
+  const declared = new Map<string, readonly Omit<SettingDef, "owner" | "category">[]>();
   const pluginHandlers: Record<string, MockHandler> = {};
   const pluginBinary: Record<string, MockBinaryHandler> = {};
   for (const factory of options.plugins ?? []) {
@@ -107,6 +119,18 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
     for (const [id, title] of plugin.commands) {
       pluginCommands.push({ id, title, plugin: plugin.name });
     }
+    const manifest = MOCK_MANIFESTS[plugin.name];
+    const settings = plugin.settings ?? manifest?.settings ?? [];
+    pluginInfo.push({
+      name: plugin.name,
+      version: plugin.version ?? "0.1.0",
+      description: plugin.description ?? manifest?.description ?? "",
+      tier: "native",
+      permissions: plugin.permissions ?? manifest?.permissions ?? {},
+      commands: plugin.commands.length,
+      settings: settings.map((d) => d.id),
+    });
+    if (settings.length > 0) declared.set(plugin.name, settings);
   }
   const files = new Map(Object.entries(options.files ?? {}));
   let nextId = 0;
@@ -204,12 +228,36 @@ export function createMockKernel(options: MockOptions = {}): Kernel & {
     ...options.handlers,
   };
 
+  // Like the shell's settings sync: each plugin's manifest settings are
+  // registered with the settings plugin, owned by that plugin.
+  const register = handlers["settings.register"];
+  if (register !== undefined) {
+    for (const [owner, settings] of declared) register({ settings, owner });
+  }
+
   const binary: Record<string, MockBinaryHandler> = {
     ...pluginBinary,
     ...options.binaryHandlers,
   };
 
   return {
+    plugins(): Promise<PluginInfo[]> {
+      const list = [...pluginInfo];
+      if (!list.some((p) => p.name === "editor"))
+        list.push({
+          name: "editor",
+          version: "0.1.0",
+          description: "Document store, edits and the active-buffer service",
+          tier: "native",
+          permissions: { buffer: ["write:active"] },
+          commands: EDITOR_COMMANDS.length,
+          settings: [],
+        });
+      return Promise.resolve(
+        structuredClone(list.sort((a, b) => a.name.localeCompare(b.name))),
+      );
+    },
+
     commands(): Promise<KernelCommand[]> {
       const list: KernelCommand[] = EDITOR_COMMANDS.map(([id, title]) => ({
         id,

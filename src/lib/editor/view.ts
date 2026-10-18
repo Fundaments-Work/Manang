@@ -34,6 +34,7 @@ import {
   foldGutter,
   foldKeymap,
   indentOnInput,
+  indentUnit,
 } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -57,6 +58,52 @@ export { languageFor, type EditorLanguage };
 
 /** Shared by every state: each state holds its own content for it. */
 export const languageCompartment = new Compartment();
+
+/**
+ * The user's editor preferences that need CodeMirror's help: the gutter,
+ * wrapping and indentation. Font size and line height are CSS variables set
+ * on the document root (see `preferences.svelte.ts`), so they never cost a
+ * reconfigure. One extension value is shared by every document; a document
+ * created or shown later picks up the current one through `syncEditorPrefs`.
+ */
+export const prefsCompartment = new Compartment();
+
+export interface EditorLayoutPrefs {
+  readonly tabSize: number;
+  readonly wordWrap: boolean;
+  readonly lineNumbers: boolean;
+}
+
+function prefsExtension(prefs: EditorLayoutPrefs): Extension {
+  return [
+    prefs.lineNumbers ? [lineNumbers(), highlightActiveLineGutter()] : [],
+    prefs.wordWrap ? EditorView.lineWrapping : [],
+    EditorState.tabSize.of(prefs.tabSize),
+    indentUnit.of(" ".repeat(prefs.tabSize)),
+  ];
+}
+
+let currentPrefs: EditorLayoutPrefs = { tabSize: 2, wordWrap: true, lineNumbers: true };
+let currentPrefsExtension: Extension = prefsExtension(currentPrefs);
+
+/** Change the preferences; returns false when nothing changed. */
+export function setEditorPrefs(prefs: EditorLayoutPrefs): boolean {
+  if (
+    prefs.tabSize === currentPrefs.tabSize &&
+    prefs.wordWrap === currentPrefs.wordWrap &&
+    prefs.lineNumbers === currentPrefs.lineNumbers
+  )
+    return false;
+  currentPrefs = prefs;
+  currentPrefsExtension = prefsExtension(prefs);
+  return true;
+}
+
+/** Bring a view's current state up to the latest preferences, if it is behind. */
+export function syncEditorPrefs(view: EditorView): void {
+  if (prefsCompartment.get(view.state) === currentPrefsExtension) return;
+  view.dispatch({ effects: prefsCompartment.reconfigure(currentPrefsExtension) });
+}
 
 const loaded = new Map<EditorLanguage, Promise<Extension>>();
 
@@ -82,8 +129,7 @@ export function createEditorState(text: string, extra: Extension): EditorState {
   return EditorState.create({
     doc: text,
     extensions: [
-      lineNumbers(),
-      highlightActiveLineGutter(),
+      prefsCompartment.of(currentPrefsExtension),
       highlightSpecialChars(),
       history(),
       foldGutter(),
@@ -96,7 +142,6 @@ export function createEditorState(text: string, extra: Extension): EditorState {
       highlightSelectionMatches(),
       search({ top: true }),
       autocompletion({ activateOnTyping: true }),
-      EditorView.lineWrapping,
       EditorView.contentAttributes.of({
         "aria-label": "Document text",
         "aria-multiline": "true",

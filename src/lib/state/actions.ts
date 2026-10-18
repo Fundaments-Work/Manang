@@ -10,12 +10,19 @@
 import { paletteAction } from "$lib/commands/allowlist";
 import { recheckWriting, runFormat } from "$lib/editor/writing";
 import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
-import { kernel, errorMessage } from "$lib/kernel";
+import { kernel, errorMessage, inTauri } from "$lib/kernel";
 import type { KernelEvent } from "$lib/kernel";
 import { writingApi } from "$lib/kernel/api";
 import type { Engine, ProjectChanged } from "$lib/kernel/types";
 import type { Problem } from "$lib/workbench/problems";
-import { hasNativeDialogs, pickSavePath, saveBinaryArtifact } from "$lib/kernel/native";
+import {
+  forwardErrorsToLog,
+  hasNativeDialogs,
+  openExternal,
+  pickFolder,
+  pickSavePath,
+  saveBinaryArtifact,
+} from "$lib/kernel/native";
 import { SESSION_KEY, loadJson, saveJson } from "$lib/workbench/persist";
 import {
   basename,
@@ -38,7 +45,9 @@ import { figures } from "./figures.svelte";
 import { home } from "./home.svelte";
 import { layout } from "./layout.svelte";
 import { notice } from "./notice.svelte";
+import { applyPreferences } from "./preferences.svelte";
 import { preview } from "./preview.svelte";
+import { settings } from "./settings.svelte";
 import { slides } from "./slides.svelte";
 import { tabs } from "./tabs.svelte";
 import { workspace } from "./workspace.svelte";
@@ -229,6 +238,25 @@ export function createProject(
 }
 
 /** Show Home over the open project without closing it. */
+/**
+ * Open a project folder: the native picker on the desktop, otherwise (or if
+ * the picker fails) the typed-path form on Home.
+ */
+export async function openFolder(): Promise<void> {
+  workspace.error = "";
+  home.show();
+  if (hasNativeDialogs()) {
+    try {
+      const picked = await pickFolder("Open project folder");
+      if (picked !== null) await openProject(picked);
+      return;
+    } catch {
+      // The picker itself failed; offer the typed path instead.
+    }
+  }
+  home.typingPath = true;
+}
+
 export function goHome(): void {
   home.show();
 }
@@ -418,7 +446,15 @@ async function exportPdfNative(name: string): Promise<void> {
       notice.error("Fix the errors in the Problems panel before exporting a PDF.");
       return;
     }
-    await saveBinaryArtifact("typst.export-pdf", null, dest);
+    // The engine that compiled the preview exports it: Typst from its last
+    // compile, LaTeX from the build directory of the main file.
+    if (build.engine === "latex")
+      await saveBinaryArtifact(
+        "latex.export-pdf",
+        { main: join(root ?? "", build.target) },
+        dest,
+      );
+    else await saveBinaryArtifact("typst.export-pdf", null, dest);
     notice.show(`Exported ${basename(dest)}.`);
   } catch (error) {
     notice.error(`Could not export a PDF: ${errorMessage(error)}`);
@@ -522,11 +558,51 @@ function onKernelEvent(event: KernelEvent): void {
 let booted = false;
 
 /** Restore layout, the last project and its tabs, and start listening to the kernel. */
+/**
+ * Web links anywhere in the shell (a DOI, a licence) open in the default
+ * browser instead of replacing the app. One listener, so no component needs
+ * its own handling.
+ */
+function routeExternalLinks(): void {
+  document.addEventListener("click", (event) => {
+    const link = (event.target as HTMLElement | null)?.closest?.("a[href]");
+    if (!(link instanceof HTMLAnchorElement) || !/^https?:/i.test(link.href)) return;
+    event.preventDefault();
+    openExternal(link.href).catch((error: unknown) =>
+      notice.error(errorMessage(error)),
+    );
+  });
+}
+
+/**
+ * Closing the window (the title bar's close button, Alt+F4, the dock) asks
+ * about unsaved changes first, then remembers the session and closes.
+ */
+async function guardWindowClose(): Promise<void> {
+  if (!inTauri()) return;
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  const win = getCurrentWindow();
+  let closing = false;
+  await win.onCloseRequested(async (event) => {
+    if (closing) return;
+    event.preventDefault();
+    if (!(await confirmDiscard())) return;
+    rememberSession();
+    closing = true;
+    await win.destroy();
+  });
+}
+
 export async function boot(): Promise<void> {
   if (booted) return;
   booted = true;
   layout.restore();
   home.restore();
+  applyPreferences();
+  void settings.load(null);
+  void guardWindowClose();
+  void forwardErrorsToLog();
+  routeExternalLinks();
   documents.onEdit(() => build.schedule("edit"));
   void kernel.onEvent(onKernelEvent);
   await workspace.loadRecent();

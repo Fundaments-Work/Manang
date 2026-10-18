@@ -355,6 +355,52 @@ fn format_apa_and_numeric_styles() {
     assert!(formatted_num.starts_with("[1]"));
     assert!(formatted_num.contains("J. D. Watson and F. H. C. Crick"));
     assert!(formatted_num.contains("\"Molecular Structure of Nucleic Acids"));
+
+    // The configured style applies when a request names none.
+    let format_default = |k: &Kernel| match k
+        .invoke(
+            "citations.format",
+            Payload::Json(json!({ "key": "watsoncrick1953" })),
+        )
+        .expect("format default")
+    {
+        Payload::Json(v) => v,
+        _ => panic!("json"),
+    };
+    let m = manifest().expect("manifest");
+    assert_eq!(
+        m.contributes.settings[0].default,
+        Some(json!(manang_citations::DEFAULT_STYLE))
+    );
+    assert_eq!(format_default(&k)["formatted"], val_apa["formatted"]);
+    k.invoke(
+        "citations.configure",
+        Payload::Json(json!({ "values": { "citations.style": "numeric" } })),
+    )
+    .expect("configure");
+    let configured = format_default(&k);
+    assert_eq!(configured["style"], "numeric");
+    assert_eq!(configured["formatted"], val_num["formatted"]);
+    // An explicit style still wins; unsupported styles are refused.
+    let explicit = k
+        .invoke(
+            "citations.format",
+            Payload::Json(json!({ "key": "watsoncrick1953", "style": "apa" })),
+        )
+        .expect("explicit");
+    assert_eq!(explicit, Payload::Json(val_apa.clone()));
+    for bad in [
+        json!({ "values": { "citations.style": "chicago" } }),
+        json!({ "values": { "citations.style": 3 } }),
+        json!({}),
+    ] {
+        assert!(
+            k.invoke("citations.configure", Payload::Json(bad.clone()))
+                .is_err(),
+            "{bad}"
+        );
+    }
+    assert_eq!(format_default(&k)["style"], "numeric");
 }
 
 #[test]

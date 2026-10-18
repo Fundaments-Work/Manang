@@ -1,6 +1,14 @@
 use crate::error::CitationsError;
 use crate::models::{Author, Entry};
 
+/// Whether [`format_entry`] accepts `style`.
+pub fn is_supported_style(style: &str) -> bool {
+    matches!(
+        style.trim().to_ascii_lowercase().as_str(),
+        "apa" | "apa-like" | "numeric" | "ieee"
+    )
+}
+
 /// Formats an entry in a given bibliographic style.
 pub fn format_entry(entry: &Entry, style: &str) -> Result<String, CitationsError> {
     let style_clean = style.trim().to_ascii_lowercase();
