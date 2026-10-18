@@ -184,6 +184,23 @@ expression: "Registry::with_core().schema()"
       ]
     },
     {
+      "id": "editor.visual-default",
+      "type": "list",
+      "item": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "File types that open in the Visual editor: `markdown`, `typst`. Empty opens every file as source.",
+      "scope": "user",
+      "requires-restart": false,
+      "owner": "core",
+      "category": "editor",
+      "contexts": [
+        "document",
+        "diagram"
+      ]
+    },
+    {
       "id": "editor.word-wrap",
       "type": "bool",
       "default": true,

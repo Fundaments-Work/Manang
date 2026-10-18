@@ -23,6 +23,7 @@
   import { build } from "$lib/state/build.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
+  import { visualMode } from "$lib/state/visual.svelte";
   import { engineOf } from "$lib/workbench/paths";
   import { tabLabels, type Tab } from "$lib/workbench/tabs";
 
@@ -57,6 +58,20 @@
   const slotOf = (n: number): number => ((n % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
 
   const labels = $derived(tabLabels(tabs.tabs));
+  const visualAvailable = $derived(
+    tabs.active?.kind === "document" &&
+      tabs.active.view === "text" &&
+      visualMode.available(tabs.active.path),
+  );
+  const visualOn = $derived(
+    visualAvailable && tabs.active !== undefined && visualMode.isOn(tabs.active.path),
+  );
+  const visualKey = $derived.by(() => {
+    const first = keymap.shortcuts("view.visual")[0];
+    return first === undefined ? "" : formatShortcut(first, platform);
+  });
+  const withKey = (label: string): string =>
+    visualKey === "" ? label : `${label} (${visualKey})`;
   const activeTypst = $derived(
     tabs.active?.kind === "document" && engineOf(tabs.active.path) === "typst",
   );
@@ -343,6 +358,49 @@
         <li class="px-1 text-[11px] text-text-muted max-md:hidden">Only you</li>
       {/if}
     </ul>
+  {/if}
+
+  {#if visualAvailable && tabs.active !== undefined}
+    {@const path = tabs.active.path}
+    <div
+      role="radiogroup"
+      aria-label="Editing mode"
+      tabindex="0"
+      data-testid="mode-toggle"
+      class="flex shrink-0 items-center gap-px border-l border-line px-2 focus-visible:outline-none"
+      onkeydown={(e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          if (!visualOn) void visualMode.set(path, true);
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          if (visualOn) void visualMode.set(path, false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        role="radio"
+        aria-checked={!visualOn}
+        aria-keyshortcuts={visualKey}
+        tabindex={!visualOn ? 0 : -1}
+        data-testid="mode-source"
+        title={withKey("Source")}
+        class="mng-btn inset-focus h-6 px-2"
+        onclick={() => visualOn && void visualMode.set(path, false)}>Source</button
+      >
+      <button
+        type="button"
+        role="radio"
+        aria-checked={visualOn}
+        aria-keyshortcuts={visualKey}
+        tabindex={visualOn ? 0 : -1}
+        data-testid="mode-visual"
+        title={withKey("Visual")}
+        class="mng-btn inset-focus h-6 px-2"
+        onclick={() => !visualOn && void visualMode.set(path, true)}>Visual</button
+      >
+    </div>
   {/if}
 
   {#if activeTypst && tabs.active !== undefined}

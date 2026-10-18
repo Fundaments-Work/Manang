@@ -220,6 +220,7 @@ pub const CORE_DEFAULTS: &[(&str, &str, &str)] = &[
     ("view.toggle-panel", "Mod+J", ""),
     ("view.problems", "Mod+Shift+M", ""),
     ("view.cycle-preview", "Mod+Shift+V", ""),
+    ("view.visual", "Mod+Alt+V", ""),
     ("view.zen", "Mod+\\", ""),
     ("tab.next", "Mod+PageDown", ""),
     ("tab.next", "Mod+Tab", ""),

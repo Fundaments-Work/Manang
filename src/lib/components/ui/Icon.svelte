@@ -100,6 +100,17 @@
     eye: "M1.5 8l3-3.5h7L14.5 8l-3 3.5h-7z M7 7h2v2H7z",
     "eye-off": "M1.5 8l3-3.5h7L14.5 8l-3 3.5h-7z M2.5 13.5l11-11",
     layers: "M8 2.5l6 3-6 3-6-3z M2 8.5l6 3 6-3 M2 11.5l6 3 6-3",
+    bold: "M4.5 2.5v11 M4.5 2.5h4.5v5H4.5 M4.5 7.5h5.5v6H4.5",
+    italic: "M6.5 2.5h5 M4.5 13.5h5 M9.5 2.5l-3 11",
+    code: "M5.5 4.5L2 8l3.5 3.5 M10.5 4.5L14 8l-3.5 3.5",
+    strike: "M4.5 4.5h7 M4.5 11.5h7 M2.5 8h11",
+    heading: "M3.5 2.5v11 M12.5 2.5v11 M3.5 8h9",
+    "list-bullet": "M2.5 3.5h2v2h-2z M7 4.5h6.5 M2.5 9.5h2v2h-2z M7 10.5h6.5",
+    "list-ordered": "M3 3.5h1.5v3 M7 5h6.5 M2.5 9.5h2.5l-2.5 3h2.5 M7 11h6.5",
+    quote: "M3.5 3v10 M6.5 5h7 M6.5 8h7 M6.5 11h5",
+    link: "M7 5.5H3.5v5H7 M9 5.5h3.5v5H9 M5.5 8h5",
+    image: "M2.5 3h11v10h-11z M2.5 11l3.5-3.5 3 3 2-2 2.5 2.5 M10.5 5.5h1",
+    rule: "M2 8h12 M2.5 4.5h3 M10.5 4.5h3 M2.5 11.5h3 M10.5 11.5h3",
   } as const;
 
   export type IconName = keyof typeof PATHS;

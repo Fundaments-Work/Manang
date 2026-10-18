@@ -14,6 +14,7 @@
 import {
   Transaction,
   type ChangeSpec,
+  type Extension,
   type EditorState,
   type Text,
   type TransactionSpec,
@@ -32,6 +33,7 @@ import {
   createEditorState,
   languageCompartment,
   liveCompartment,
+  visualCompartment,
   languageFor,
   loadLanguage,
   syncEditorPrefs,
@@ -184,6 +186,11 @@ export class DocSession {
     this.#dispatch({ effects: liveCompartment.reconfigure([]) });
     this.live = false;
     return this.sync.resume(this.text());
+  }
+
+  /** Switch the Visual editor on (its extension) or off (`[]`) for this document. */
+  setVisual(extension: Extension): void {
+    this.#dispatch({ effects: visualCompartment.reconfigure(extension) });
   }
 
   /** Caret and scroll, for the recovery snapshot and its restore. */

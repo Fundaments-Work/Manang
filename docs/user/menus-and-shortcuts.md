@@ -99,6 +99,7 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 | **Editor only** | `view.preview-editor` | — | Hides the preview pane to maximize editor space. |
 | **Preview only** | `view.preview-preview` | — | Maximizes the preview pane across the workspace. |
 | **Cycle preview layout** | `view.cycle-preview` | `Ctrl+Shift+V` (`Cmd+Shift+V`) | Cycles through Split, Editor only, and Preview only. |
+| **Visual editor** | `view.visual` | `Ctrl+Alt+V` (`Cmd+Option+V`) | Switches a Markdown or Typst file between Source and Visual. See [The Visual editor](visual-editor.md). |
 | *— Separator —* | | | |
 | **Zen mode** | `view.zen` | `Ctrl+\` (`Cmd+\`) | Toggles distraction-free reading column. |
 | **Switch to light/dark theme** | `view.theme` | — | Switches between Dark and Light color themes. |

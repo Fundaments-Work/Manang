@@ -172,6 +172,18 @@ const CORE_SETTINGS: Omit<SettingDef, "contexts">[] = [
     description: "Use Vim-style modal editing. Off keeps the editor modeless.",
   },
   {
+    id: "editor.visual-default",
+    type: "list",
+    item: { type: "string" },
+    default: [],
+    scope: "user",
+    "requires-restart": false,
+    owner: "core",
+    category: "editor",
+    description:
+      "File types that open in the Visual editor: `markdown`, `typst`. Empty opens every file as source.",
+  },
+  {
     id: "preview.auto-compile",
     type: "bool",
     default: true,

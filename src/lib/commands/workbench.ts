@@ -28,6 +28,7 @@ import { shortcutOverlay } from "$lib/state/shortcutOverlay.svelte";
 import { showInPreview } from "$lib/state/sourceJump";
 import { switcher } from "$lib/state/switcher.svelte";
 import { tabs } from "$lib/state/tabs.svelte";
+import { visualMode } from "$lib/state/visual.svelte";
 import { saveVersion } from "$lib/state/versionActions";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
@@ -98,6 +99,7 @@ const WHEN: Readonly<Record<string, string>> = {
   "view.preview-preview": "workbench && document",
   "view.cycle-preview": "workbench && document",
   "view.zen": "workbench && document",
+  "view.visual": "workbench && document",
   "tab.next": "workbench",
   "tab.previous": "workbench",
   "tab.close": "workbench",
@@ -593,6 +595,22 @@ export function workbenchCommands(
       group: "Workbench",
       menu: at("view", "4_preview", 3),
       run: () => layout.cyclePreview(),
+    },
+    {
+      id: "view.visual",
+      title:
+        isDocument && visualMode.isOn(active.path)
+          ? "Switch to Source editor"
+          : "Switch to Visual editor",
+      menuTitle: "Visual editor",
+      group: "Workbench",
+      keywords: "wysiwyg live preview rich text source markdown typst toggle",
+      enabled:
+        isDocument && active.view === "text" && visualMode.available(active.path),
+      menu: at("view", "4_preview", 4),
+      run: () => {
+        if (isDocument) void visualMode.toggle(active.path);
+      },
     },
     {
       id: "view.zen",
