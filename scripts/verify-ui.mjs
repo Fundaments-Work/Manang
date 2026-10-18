@@ -509,9 +509,9 @@ async function main() {
     })()`),
     );
     check(
-      "home nav lists Projects, Recent, Pinned, Archive, Templates and Settings",
+      "home nav lists Projects, Recent, Pinned, Archive, Templates, Trash and Settings",
       await page.evaluate(
-        `[...document.querySelectorAll('nav[aria-label="Home sections"] button')].map((b) => b.getAttribute("aria-label")).join() === "Projects,Recent,Pinned,Archive,Templates,Settings"`,
+        `[...document.querySelectorAll('nav[aria-label="Home sections"] button')].map((b) => b.getAttribute("aria-label")).join() === "Projects,Recent,Pinned,Archive,Templates,Trash,Settings"`,
       ),
     );
     check(
@@ -608,7 +608,7 @@ async function main() {
     check(
       "the context menu offers open, rename, pin, archive, copy path and remove",
       await page.evaluate(
-        `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((i) => i.textContent.trim()).join() === "Open,Rename,Edit tags,Pin,Archive,Copy path,Remove from list"`,
+        `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((i) => i.textContent.trim()).join() === "Open,Rename,Edit tags,Pin,Archive,Copy path,Move to trash"`,
       ),
     );
     await shoot(page, "04-card-menu");
@@ -654,6 +654,95 @@ async function main() {
       "Esc closes the new project dialog",
       !(await exists(page, '[role="dialog"]')),
     );
+
+    /* ------------------------------------------------------------------ */
+    section("Home trash");
+
+    // Move a project to trash via card context menu.
+    await page.evaluate(
+      `document.querySelector('[data-project$="lecture-notes"] button').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 300 }))`,
+    );
+    await sleep(200);
+    await clickText(page, '[role="menuitem"]', "Move to trash");
+    await sleep(200);
+    check(
+      "trashed project leaves Projects list",
+      !(await cards(page)).includes("lecture-notes"),
+    );
+    check(
+      "Trash nav shows count 1",
+      await page.evaluate(
+        `document.querySelector('nav[aria-label="Home sections"] button[aria-label="Trash"]')?.textContent.includes("1") ?? false`,
+      ),
+    );
+
+    // Navigate to Trash section.
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Trash");
+    await sleep(200);
+    check(
+      "Trash section lists the trashed project",
+      (await cards(page)).includes("lecture-notes"),
+    );
+    check(
+      "trashed card shows relative trash time and Restore/Delete buttons",
+      await page.evaluate(`(() => {
+        const card = document.querySelector('[data-project$="lecture-notes"]');
+        if (!card) return false;
+        const text = card.innerText;
+        const hasTime = text.includes("Trashed");
+        const hasRestore = !!card.querySelector('button[aria-label^="Restore"]');
+        const hasDelete = !!card.querySelector('button[aria-label^="Delete"]');
+        return hasTime && hasRestore && hasDelete;
+      })()`),
+    );
+    await shoot(page, "05b-home-trash");
+
+    // Restore brings it back to Projects.
+    await clickText(page, '[data-project$="lecture-notes"] button', "Restore");
+    await sleep(200);
+    check("after restore, Trash section is empty", (await cards(page)).length === 0);
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Projects");
+    await sleep(200);
+    check(
+      "restored project is back in Projects",
+      (await cards(page)).includes("lecture-notes"),
+    );
+
+    // Re-trash and purge ("Remove from Manang").
+    await page.evaluate(
+      `document.querySelector('[data-project$="lecture-notes"] button').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 300 }))`,
+    );
+    await sleep(200);
+    await clickText(page, '[role="menuitem"]', "Move to trash");
+    await sleep(200);
+    await clickText(page, 'nav[aria-label="Home sections"] button', "Trash");
+    await sleep(200);
+
+    // Click Delete… on the card.
+    await clickText(page, '[data-project$="lecture-notes"] button', "Delete…");
+    await sleep(200);
+    check(
+      "delete dialog asks how to remove",
+      await page.evaluate(
+        `document.querySelector('[role="alertdialog"]')?.textContent.includes("Remove from Manang") ?? false`,
+      ),
+    );
+    // Choose "Remove from Manang".
+    await clickText(page, '[role="alertdialog"] button', "Remove from Manang");
+    await sleep(200);
+    check("purged project is gone from Trash", (await cards(page)).length === 0);
+
+    // Folder still exists in mock, so typing the path can find it.
+    await clickText(page, "button", "Open folder");
+    await sleep(250);
+    await click(page, 'input[placeholder*="my-paper"]');
+    await insertText(page, "/home/author/lecture-notes");
+    await press(page, "Enter", { wait: 500 });
+    check(
+      "folder still exists and can be re-opened",
+      await page.evaluate(`!document.querySelector('[role="alert"]')`),
+    );
+    await page.evaluate(`localStorage.removeItem("manang.session.v1")`);
 
     /* ------------------------------------------------------------------ */
     section("Workbench");
