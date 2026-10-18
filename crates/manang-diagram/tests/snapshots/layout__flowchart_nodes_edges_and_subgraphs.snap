@@ -1,0 +1,174 @@
+---
+source: crates/manang-diagram/tests/layout.rs
+expression: rounded(out)
+---
+{
+  "family": "flowchart",
+  "direction": "TB",
+  "nodes": [
+    {
+      "id": "A",
+      "label": "Start",
+      "shape": "rect",
+      "x": 8.0,
+      "y": 8.0,
+      "width": 180.0,
+      "height": 45.4
+    },
+    {
+      "id": "B",
+      "label": "Is it?",
+      "shape": "diamond",
+      "x": 15.3,
+      "y": 103.4,
+      "width": 165.4,
+      "height": 165.4
+    },
+    {
+      "id": "C",
+      "label": "Do it",
+      "shape": "round",
+      "x": 88.0,
+      "y": 363.2,
+      "width": 150.0,
+      "height": 45.4
+    },
+    {
+      "id": "D",
+      "label": "End",
+      "shape": "circle",
+      "x": 30.0,
+      "y": 483.6,
+      "width": 136.0,
+      "height": 136.0
+    }
+  ],
+  "edges": [
+    {
+      "id": "L_A_B_0",
+      "from": "A",
+      "to": "B",
+      "label": null,
+      "points": [
+        {
+          "x": 98.0,
+          "y": 53.4
+        },
+        {
+          "x": 98.0,
+          "y": 78.4
+        },
+        {
+          "x": 98.0,
+          "y": 103.4
+        }
+      ],
+      "dashed": false,
+      "start": "none",
+      "end": "arrow"
+    },
+    {
+      "id": "L_B_C_0",
+      "from": "B",
+      "to": "C",
+      "label": "Yes",
+      "points": [
+        {
+          "x": 127.5,
+          "y": 239.3
+        },
+        {
+          "x": 163.0,
+          "y": 303.5
+        },
+        {
+          "x": 163.0,
+          "y": 338.2
+        },
+        {
+          "x": 163.0,
+          "y": 363.2
+        }
+      ],
+      "dashed": false,
+      "start": "none",
+      "end": "arrow"
+    },
+    {
+      "id": "L_B_D_0",
+      "from": "B",
+      "to": "D",
+      "label": null,
+      "points": [
+        {
+          "x": 68.5,
+          "y": 239.3
+        },
+        {
+          "x": 33.0,
+          "y": 303.5
+        },
+        {
+          "x": 33.0,
+          "y": 338.2
+        },
+        {
+          "x": 33.0,
+          "y": 385.9
+        },
+        {
+          "x": 33.0,
+          "y": 433.6
+        },
+        {
+          "x": 33.0,
+          "y": 458.6
+        },
+        {
+          "x": 50.5,
+          "y": 483.6
+        }
+      ],
+      "dashed": true,
+      "start": "none",
+      "end": "arrow"
+    },
+    {
+      "id": "L_C_D_0",
+      "from": "C",
+      "to": "D",
+      "label": null,
+      "points": [
+        {
+          "x": 163.0,
+          "y": 408.6
+        },
+        {
+          "x": 163.0,
+          "y": 433.6
+        },
+        {
+          "x": 163.0,
+          "y": 458.6
+        },
+        {
+          "x": 145.5,
+          "y": 483.6
+        }
+      ],
+      "dashed": false,
+      "start": "arrow",
+      "end": "arrow"
+    }
+  ],
+  "clusters": [
+    {
+      "id": "S",
+      "title": "Group",
+      "x": 53.0,
+      "y": 338.2,
+      "width": 220.0,
+      "height": 95.4
+    }
+  ]
+}

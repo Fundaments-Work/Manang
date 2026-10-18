@@ -139,6 +139,7 @@ done (2026-10-18) as follows:
 | `diagram.check` | `{ language, source }` | `{ diagnostics: [{ severity, message, line, column, endLine, endColumn, code? }] }` |
 | `diagram.render` | `{ language, source, theme }` | binary SVG (UTF-8) |
 | `diagram.key` | `{ language, source, theme }` | `{ key }` (64 hex digits) |
+| `diagram.layout` | `{ source, language? }` (Mermaid flowchart, state, class, sequence) | `{ family, direction, nodes, edges, clusters }`: merman's laid-out geometry with labels and shapes, for the figure studio (ADR 0012); other families fail with `[unsupported_layout]` |
 
 Lines and columns are 1-based, columns counted in Unicode scalar values, end
 exclusive, as in the Typst plugin's diagnostics. Render failures are
