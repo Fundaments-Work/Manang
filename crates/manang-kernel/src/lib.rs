@@ -12,6 +12,7 @@
 //! The kernel owns no UI and no Tauri types. The shell talks to it through
 //! command ids and [`Payload`]s only.
 
+pub mod agent;
 pub mod capability;
 pub mod error;
 pub mod events;
@@ -21,6 +22,7 @@ pub mod payload;
 pub mod plugin;
 pub mod services;
 
+pub use agent::{AgentTool, AgentToolError, AgentToolList, RegisteredTool, SchemaIssue};
 pub use capability::{Access, Capability, CapabilitySet};
 pub use error::{CapabilityError, KernelError, ManifestError, PluginError};
 pub use events::{Event, EventBus, Subscription};
