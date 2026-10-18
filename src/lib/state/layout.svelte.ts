@@ -14,9 +14,11 @@ import {
   cyclePreview,
   effectivePreview,
   isNarrow,
+  revealPreview,
   sanitizeLayout,
   showPanel,
   showSide,
+  toggleMaximisedPreview,
   toggleSide,
   type LayoutModel,
   type PanelTab,
@@ -103,6 +105,18 @@ export class LayoutState {
   }
   setPreview(mode: PreviewMode): void {
     this.#set({ ...this.#model, preview: mode });
+  }
+  /** Preview header: preview only from split, back to split from there. */
+  toggleMaximisedPreview(): void {
+    this.setPreview(toggleMaximisedPreview(this.effectivePreview));
+  }
+  /** Preview header "Close preview": the editor alone. */
+  closePreview(): void {
+    this.setPreview("editor");
+  }
+  /** Tab strip "Show preview": split, or the preview alone in a narrow window. */
+  showPreview(): void {
+    this.setPreview(revealPreview(this.width));
   }
   cyclePreview(): void {
     this.setPreview(cyclePreview(this.#model.preview));

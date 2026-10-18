@@ -8,9 +8,12 @@ import {
   SPLIT_MAX,
   cyclePreview,
   effectivePreview,
+  hasPreview,
   isNarrow,
+  revealPreview,
   sanitizeLayout,
   showPanel,
+  toggleMaximisedPreview,
   toggleSide,
 } from "./layout";
 
@@ -41,6 +44,28 @@ describe("layout model", () => {
     expect(effectivePreview("split", 700)).toBe("editor");
     expect(effectivePreview("split", 1000)).toBe("split");
     expect(effectivePreview("preview", 700)).toBe("preview");
+  });
+
+  it("maximises the preview from split and restores split from preview only", () => {
+    expect(toggleMaximisedPreview("split")).toBe("preview");
+    expect(toggleMaximisedPreview("preview")).toBe("split");
+  });
+
+  it("shows the preview again in split, or alone when split cannot fit", () => {
+    expect(revealPreview(1280)).toBe("split");
+    expect(revealPreview(800)).toBe("split");
+    expect(revealPreview(640)).toBe("preview");
+    // What comes back is visible: the narrow rule never hides it again.
+    expect(effectivePreview(revealPreview(640), 640)).toBe("preview");
+    expect(effectivePreview(revealPreview(1280), 1280)).toBe("split");
+  });
+
+  it("offers a preview only for Typst, LaTeX and Markdown documents", () => {
+    expect(hasPreview("main.typ")).toBe(true);
+    expect(hasPreview("paper/main.tex")).toBe(true);
+    expect(hasPreview("notes.md")).toBe(true);
+    expect(hasPreview("refs.bib")).toBe(false);
+    expect(hasPreview("data.csv")).toBe(false);
   });
 });
 

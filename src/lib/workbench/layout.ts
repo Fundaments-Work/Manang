@@ -6,6 +6,8 @@
  * from an older build can be validated before it reaches the UI.
  */
 
+import { engineOf } from "./paths";
+
 export type SideView =
   "files" | "search" | "source-control" | "outline" | "figures" | "references";
 export type PanelTab = "problems" | "output";
@@ -105,6 +107,28 @@ export function togglePanel(model: LayoutModel): LayoutModel {
 
 export function showPanel(model: LayoutModel, tab: PanelTab): LayoutModel {
   return { ...model, panelOpen: true, panelTab: tab };
+}
+
+/** Whether a file has a preview: a Typst, LaTeX or Markdown document. */
+export function hasPreview(path: string): boolean {
+  return engineOf(path) !== null;
+}
+
+/**
+ * The preview header's "Maximise preview" / "Restore split": preview only from
+ * split, split from preview only. The button is hidden in a narrow window,
+ * where split cannot be shown.
+ */
+export function toggleMaximisedPreview(effective: PreviewMode): PreviewMode {
+  return effective === "preview" ? "split" : "preview";
+}
+
+/**
+ * The layout "Show preview" brings back: split, or the preview alone when the
+ * window is too narrow for two columns.
+ */
+export function revealPreview(viewportWidth: number): PreviewMode {
+  return isNarrow(viewportWidth) ? "preview" : "split";
 }
 
 const PREVIEW_CYCLE: readonly PreviewMode[] = ["split", "editor", "preview"];
