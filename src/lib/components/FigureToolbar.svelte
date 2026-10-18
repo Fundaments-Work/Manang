@@ -1,5 +1,11 @@
+<script lang="ts" module>
+  /** The formula text field, focused by a double-click on a formula. */
+  export const FORMULA_FIELD = "figure-formula-text";
+</script>
+
 <script lang="ts">
   import Icon, { type IconName } from "$lib/components/ui/Icon.svelte";
+  import { figures } from "$lib/state/figures.svelte";
   import { notice } from "$lib/state/notice.svelte";
   import { TOOLS, type FigureState, type PenTool } from "$lib/state/figure.svelte";
 
@@ -34,8 +40,10 @@
     if (formula !== undefined) figure.setMathText(formula.id, input.value);
   }
 
+  /** Saves first when needed, so the line always names an SVG that exists. */
   async function copyEmbed(): Promise<void> {
-    const line = figure.embedSnippet();
+    const line = await figures.embed(figure.path);
+    if (line === null) return;
     try {
       await navigator.clipboard.writeText(line);
       notice.show("Copied the embed line. Paste it into a document.");
@@ -72,7 +80,7 @@
     disabled={!figure.canUndo}
     title="Undo (Ctrl+Z)"
     aria-keyshortcuts="Control+Z"
-    onclick={() => figure.undo()}
+    onclick={() => void figure.undo()}
   >
     <Icon name="undo" size={14} /> Undo
   </button>
@@ -82,7 +90,7 @@
     disabled={!figure.canRedo}
     title="Redo (Ctrl+Shift+Z)"
     aria-keyshortcuts="Control+Shift+Z"
-    onclick={() => figure.redo()}
+    onclick={() => void figure.redo()}
   >
     <Icon name="redo" size={14} /> Redo
   </button>
@@ -100,6 +108,7 @@
     <label class="flex items-center gap-1.5 text-text-60">
       Formula
       <input
+        id={FORMULA_FIELD}
         class="mng-field selectable h-7 w-48 font-mono text-[12px]"
         value={formula.tex}
         aria-label="Formula text"
@@ -117,7 +126,7 @@
     type="button"
     class="mng-btn h-7 px-2"
     onclick={() => void copyEmbed()}
-    title="Copy the line that embeds this figure in a Typst document"
+    title="Copy the line that embeds this figure's SVG in a document (saves first if needed)"
   >
     <Icon name="copy" size={13} /> Copy embed line
   </button>

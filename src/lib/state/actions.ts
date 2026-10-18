@@ -10,16 +10,18 @@
 import { paletteAction } from "$lib/commands/allowlist";
 import { recheckWriting, runFormat } from "$lib/editor/writing";
 import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
-import { kernel, errorMessage, inTauri } from "$lib/kernel";
+import { kernel, errorMessage, inTauri, reportError } from "$lib/kernel";
 import type { KernelEvent } from "$lib/kernel";
-import { writingApi } from "$lib/kernel/api";
+import { projectApi, writingApi } from "$lib/kernel/api";
 import type { Engine, ProjectChanged } from "$lib/kernel/types";
 import type { Problem } from "$lib/workbench/problems";
 import {
   hasNativeDialogs,
   openExternal,
+  openWithSystem,
   pickFolder,
   pickSavePath,
+  revealInFileManager,
   saveBinaryArtifact,
 } from "$lib/kernel/native";
 import { SESSION_KEY, loadJson, saveJson } from "$lib/workbench/persist";
@@ -27,20 +29,29 @@ import {
   basename,
   dirname,
   fileKind,
-  isOpenable,
   join,
   nameProblem,
   newFileName,
   uniqueName,
 } from "$lib/workbench/paths";
 import { citationFor, type BibEntry } from "$lib/workbench/references";
+import {
+  formatSize,
+  needsProbe,
+  openAsByContent,
+  openAsByName,
+  tabKindOf,
+  type OpenAs,
+} from "$lib/workbench/opener";
 import { sanitizeSession, toSession } from "$lib/workbench/tabs";
 
 import { build } from "./build.svelte";
+import { diagram } from "./diagram.svelte";
 import { dialog } from "./dialog.svelte";
 import { documents } from "./documents.svelte";
 import { blankFigure } from "./figure.svelte";
 import { figures } from "./figures.svelte";
+import { viewers } from "./viewers.svelte";
 import { home } from "./home.svelte";
 import { layout } from "./layout.svelte";
 import { notice } from "./notice.svelte";
@@ -59,28 +70,99 @@ export interface OpenOptions {
   /** Move keyboard focus into the editor afterwards. Default true. */
   readonly focus?: boolean;
   readonly view?: "text" | "slides";
+  /** Open this way instead of deciding (an SVG opened as text, say). */
+  readonly as?: OpenAs;
 }
 
-/** Open a file in a tab, or focus the tab it already has. */
+/**
+ * How `path` opens (`workbench/opener.ts`): by its name, or by its first bytes
+ * when the name says nothing or it may be large. The bytes, when read, are
+ * returned so a viewer does not read the file twice.
+ */
+async function decideOpen(
+  path: string,
+): Promise<{ as: OpenAs; bytes?: Uint8Array } | null> {
+  const named = openAsByName(path);
+  if (named !== null && !needsProbe(path)) return { as: named };
+  try {
+    const bytes = await projectApi(kernel).readBytes(path);
+    return { as: openAsByContent(path, bytes), bytes };
+  } catch (error) {
+    reportError("actions.openFile", error);
+    notice.error(`Could not open ${path}: ${errorMessage(error)}`);
+    return null;
+  }
+}
+
+/** Open a file in a tab, or focus the tab it already has. Every file opens. */
 export async function openFile(
   path: string,
   options: OpenOptions = {},
 ): Promise<boolean> {
-  if (!isOpenable(path)) {
-    notice.error(
-      `${basename(path)} is not a text file, so it cannot be opened in a tab.`,
-    );
-    return false;
+  const open = tabs.tabs.find((t) => t.path === path);
+  if (open !== undefined && options.as === undefined) {
+    tabs.open(path, open.kind === "document" ? options.view : undefined);
+    if (layout.narrow) layout.closeSide();
+    if (options.focus !== false && open.kind === "document") documents.focusEditor();
+    return true;
   }
-  const isFigure = fileKind(path) === "figure";
-  const ok = isFigure
-    ? (await figures.open(path)) !== null
-    : (await documents.open(path)) !== null;
+  const decided =
+    options.as === undefined ? await decideOpen(path) : { as: options.as };
+  if (decided === null) return false;
+  const { as, bytes } = decided;
+  const kind = tabKindOf(as);
+  const ok =
+    kind === "figure"
+      ? (await figures.open(path)) !== null
+      : kind === "viewer"
+        ? await viewers.open(path, as, bytes)
+        : (await documents.open(path)) !== null;
   if (!ok) return false;
-  tabs.open(path, isFigure ? undefined : options.view);
+  if (as === "large-text") {
+    notice.show(
+      `${basename(path)} is ${formatSize(bytes?.length ?? 0)}, too large to edit here, so it opens read-only.`,
+    );
+  }
+  tabs.open(path, kind === "document" ? options.view : undefined, kind);
   if (layout.narrow) layout.closeSide();
-  if (options.focus !== false && !isFigure) documents.focusEditor();
+  if (options.focus !== false && kind === "document") documents.focusEditor();
   return true;
+}
+
+/** Reopen a viewer tab (an SVG) in the text editor, in the same place. */
+export async function openAsText(path: string): Promise<void> {
+  if (!(await documents.open(path))) return;
+  tabs.reopenAs(path, "document");
+  viewers.drop(path);
+  documents.focusEditor();
+}
+
+/** "Open with system app" for a project file. False in the browser build. */
+export async function openInSystemApp(path: string): Promise<void> {
+  const root = workspace.project?.root;
+  if (root === undefined) return;
+  try {
+    if (!(await openWithSystem(`${root}/${path}`))) {
+      notice.show("Opening files in other apps needs the desktop app.");
+    }
+  } catch (error) {
+    reportError("actions.openInSystemApp", error);
+    notice.error(`Could not open ${basename(path)}: ${errorMessage(error)}`);
+  }
+}
+
+/** "Show in file manager" for a project file. */
+export async function revealFile(path: string): Promise<void> {
+  const root = workspace.project?.root;
+  if (root === undefined) return;
+  try {
+    if (!(await revealInFileManager(`${root}/${path}`))) {
+      notice.show("Showing files in the file manager needs the desktop app.");
+    }
+  } catch (error) {
+    reportError("actions.revealFile", error);
+    notice.error(`Could not show ${basename(path)}: ${errorMessage(error)}`);
+  }
 }
 
 export function isTabDirty(path: string): boolean {
@@ -123,6 +205,7 @@ export async function closeTab(id: string): Promise<boolean> {
   tabs.close(id);
   documents.drop(tab.path);
   figures.drop(tab.path);
+  viewers.drop(tab.path);
   return true;
 }
 
@@ -166,6 +249,7 @@ function resetEditors(): void {
   for (const tab of tabs.tabs) {
     documents.drop(tab.path);
     figures.drop(tab.path);
+    viewers.drop(tab.path);
   }
   tabs.clear();
   preview.release();
@@ -317,10 +401,22 @@ export async function newFigure(): Promise<void> {
     notice.error("Open a folder before creating a figure.");
     return;
   }
-  await workspace.loadDir("figures").catch(() => undefined);
-  const name = uniqueName("untitled.figure.json", workspace.namesIn("figures"));
-  const problem = await createFile("figures", name);
-  if (problem !== null) notice.error(`Could not create the figure: ${problem}`);
+  await workspace.loadDir("figures");
+  const path = join(
+    "figures",
+    uniqueName("untitled.figure.json", workspace.namesIn("figures")),
+  );
+  try {
+    // The figure plugin writes the scene and its SVG and keeps it open.
+    await figures.create(path);
+  } catch (error) {
+    reportError("actions.newFigure", error);
+    notice.error(`Could not create the figure: ${errorMessage(error)}`);
+    return;
+  }
+  await workspace.loadDir("figures");
+  await workspace.reveal(path);
+  await openFile(path);
 }
 
 export async function newFileHere(): Promise<void> {
@@ -353,6 +449,7 @@ export async function renameEntry(
   tabs.renamed(path, to);
   documents.renamed(path, to);
   figures.renamed(path, to);
+  viewers.renamed(path, to);
   return null;
 }
 
@@ -371,6 +468,7 @@ export async function trashEntry(path: string): Promise<void> {
   tabs.removed(path);
   documents.dropUnder(path);
   figures.dropUnder(path);
+  viewers.dropUnder(path);
   notice.show(
     lost.length > 0
       ? `Moved ${basename(path)} to the trash. Unsaved changes in it were discarded.`
@@ -519,6 +617,9 @@ export async function runKernelCommand(id: string): Promise<void> {
     case "export-pdf":
       exportPdf();
       return;
+    case "new-figure":
+      await newFigure();
+      return;
     case null:
       break;
   }
@@ -551,6 +652,7 @@ function onKernelEvent(event: KernelEvent): void {
     .filter((c) => c.kind === "modified" || c.kind === "created")
     .map((c) => c.path);
   void documents.externalChange(touched);
+  void viewers.externalChange(touched);
   build.noteDiskChange();
 }
 
@@ -602,6 +704,7 @@ export async function boot(): Promise<void> {
   void guardWindowClose();
   routeExternalLinks();
   documents.onEdit(() => build.schedule("edit"));
+  diagram.start();
   void kernel.onEvent(onKernelEvent);
   await workspace.loadRecent();
   void home.load();

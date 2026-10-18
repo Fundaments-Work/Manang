@@ -2,9 +2,10 @@
   import { dialog } from "$lib/state/dialog.svelte";
 
   /**
-   * Modal confirmation (`alertdialog`). Focus lands on the first action, Tab
-   * stays inside, Esc cancels, and focus returns to where it was. Used only when
-   * closing something with unsaved changes.
+   * Modal confirmation (`alertdialog`). Focus lands on the first action (or the
+   * text field of a prompt), Tab stays inside, Esc cancels, and focus returns to
+   * where it was. Used when closing something with unsaved changes, and as the
+   * one-field prompt that names a new diagram (Enter picks the first choice).
    */
 
   let box: HTMLDivElement | undefined = $state();
@@ -14,7 +15,11 @@
     if (dialog.request === null) return;
     returnTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    box?.querySelector<HTMLElement>("button")?.focus();
+    const field = box?.querySelector<HTMLInputElement>("input");
+    if (field != null) {
+      field.focus();
+      field.select();
+    } else box?.querySelector<HTMLElement>("button")?.focus();
     return () => returnTo?.focus();
   });
 
@@ -26,7 +31,7 @@
       return;
     }
     if (event.key !== "Tab" || box === undefined) return;
-    const buttons = [...box.querySelectorAll<HTMLElement>("button")];
+    const buttons = [...box.querySelectorAll<HTMLElement>("input, button")];
     const first = buttons[0];
     const last = buttons[buttons.length - 1];
     if (event.shiftKey && document.activeElement === first) {
@@ -71,7 +76,24 @@
       <p id="dialog-message" class="mt-2 mb-5 text-xs leading-relaxed text-text-60">
         {request.message}
       </p>
-      <div class="flex justify-end gap-2">
+      {#if request.input !== undefined}
+        <label class="mb-5 flex flex-col gap-1.5 text-xs text-text-60">
+          {request.input.label}
+          <input
+            bind:value={dialog.value}
+            class="mng-field h-9 text-[13px]"
+            autocomplete="off"
+            spellcheck="false"
+            onkeydown={(event) => {
+              const first = request.actions[0];
+              if (event.key !== "Enter" || first === undefined) return;
+              event.preventDefault();
+              dialog.answer(first.id);
+            }}
+          />
+        </label>
+      {/if}
+      <div class="flex flex-wrap justify-end gap-2">
         <button type="button" class="mng-btn" onclick={() => dialog.answer("cancel")}
           >Cancel</button
         >

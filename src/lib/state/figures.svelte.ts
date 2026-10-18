@@ -1,17 +1,42 @@
 /**
- * Open figures: one `FigureState` per `.figure.json` tab, loaded and saved
- * through the project plugin.
+ * Open figures: one `FigureState` per `.figure.json` tab. The figure plugin
+ * (`figure.*`) holds each scene; this maps project paths to the plugin's ids
+ * and turns failures into notices.
  */
 
 import { SvelteMap } from "svelte/reactivity";
 
-import { errorMessage, kernel } from "$lib/kernel";
+import { embedLine, svgPathFor } from "$lib/figure/edit";
+import { errorMessage, kernel, reportError } from "$lib/kernel";
+import { figureApi, projectApi } from "$lib/kernel/api";
+import { basename, dirname } from "$lib/workbench/paths";
 
-import { svgPathFor } from "$lib/figure/edit";
-
-import { FigureState, parseScene, serializeScene } from "./figure.svelte";
+import { FigureState, type FigureBackend } from "./figure.svelte";
 import { notice } from "./notice.svelte";
 import { workspace } from "./workspace.svelte";
+
+const api = figureApi(kernel);
+const project = projectApi(kernel);
+
+/** The plugin works on absolute paths; the workbench on project-relative ones. */
+function absolute(path: string): string {
+  const root = workspace.project?.root;
+  if (root === undefined) throw new Error("No project is open.");
+  return `${root.replace(/\/+$/, "")}/${path}`;
+}
+
+function backendFor(id: number): FigureBackend {
+  return {
+    apply: (op) => api.apply(id, op),
+    get: () => api.get(id),
+    hitTest: async (point) => (await api.hitTest(id, point.x, point.y)).node_id,
+    save: (path) => api.save(id, absolute(path)),
+    close: async () => {
+      await api.close(id);
+    },
+    exportSvg: async () => new TextDecoder().decode(await api.exportSvg(id)),
+  };
+}
 
 export class FiguresStore {
   readonly #open = new SvelteMap<string, FigureState>();
@@ -27,46 +52,89 @@ export class FiguresStore {
     return [...this.#open.values()];
   }
 
+  async #adopt(path: string, id: number): Promise<FigureState> {
+    const figure = new FigureState(path, await api.get(id), backendFor(id));
+    this.#open.set(path, figure);
+    this.version += 1;
+    return figure;
+  }
+
   async open(path: string): Promise<FigureState | null> {
     const existing = this.#open.get(path);
     if (existing !== undefined) return existing;
     try {
-      const figure = new FigureState(path, parseScene(await workspace.readFile(path)));
-      this.#open.set(path, figure);
-      this.version += 1;
-      return figure;
+      const { id } = await api.open(absolute(path));
+      return await this.#adopt(path, id);
     } catch (error) {
+      reportError("figures.open", error);
       notice.error(`Could not open ${path}: ${errorMessage(error)}`);
       return null;
     }
+  }
+
+  /**
+   * Create `path` (a `.figure.json`) through the plugin, which writes the
+   * scene and its SVG at once, and hold it open. Throws a readable error.
+   */
+  async create(path: string): Promise<FigureState> {
+    const { id } = await api.createAt(absolute(path), 960, 540);
+    return this.#adopt(path, id);
   }
 
   isDirty(path: string): boolean {
     return this.#open.get(path)?.dirty ?? false;
   }
 
+  /** Save the scene and its SVG; false (with a notice) on failure. */
   async save(path: string): Promise<boolean> {
     const figure = this.#open.get(path);
     if (figure === undefined) return true;
-    const scene = figure.scene;
     try {
-      await workspace.writeFile(path, serializeScene(scene));
-      figure.markSaved(scene);
+      await figure.save();
+      return true;
     } catch (error) {
+      reportError("figures.save", error);
       notice.error(`Could not save ${path}: ${errorMessage(error)}`);
       return false;
     }
-    // The SVG next to the scene is what documents embed. The scene is already
-    // safe on disk, so a rendering failure is reported but does not fail the save.
+  }
+
+  /**
+   * The embed line for a figure, after making sure the SVG it names is on
+   * disk and current: unsaved changes are saved (scene and SVG), and a saved
+   * figure whose SVG was never written (or was deleted) gets just the SVG.
+   */
+  async embed(path: string): Promise<string | null> {
+    const figure = this.#open.get(path);
+    if (figure === undefined) return null;
+    const svg = svgPathFor(path);
     try {
-      const bytes = await kernel.runBinary("figure.render-svg", { scene });
-      await workspace.writeFile(svgPathFor(path), new TextDecoder().decode(bytes));
+      await figure.idle();
+      if (figure.dirty) {
+        await figure.save();
+      } else if (!(await this.#exists(svg))) {
+        // Only the SVG is missing: write it alone, leaving the scene file as it is.
+        await project.writeFile(svg, await figure.exportSvg());
+      }
     } catch (error) {
-      notice.error(
-        `Saved ${path}, but could not write its SVG: ${errorMessage(error)}`,
-      );
+      reportError("figures.embed", error);
+      notice.error(`Could not write ${svg}: ${errorMessage(error)}`);
+      return null;
     }
-    return true;
+    return embedLine(svg, workspace.engine);
+  }
+
+  async #exists(path: string): Promise<boolean> {
+    const dir = dirname(path);
+    await workspace.loadDir(dir);
+    if (workspace.namesIn(dir).includes(basename(path))) return true;
+    // A folder listing can be paged; ask for the file itself to be sure.
+    try {
+      await project.readBytes(path);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   renamed(from: string, to: string): void {
@@ -74,6 +142,7 @@ export class FiguresStore {
       if (key !== from && !key.startsWith(`${from}/`)) continue;
       const next = to + key.slice(from.length);
       this.#open.delete(key);
+      // The next save passes the new path, so the plugin follows the rename.
       figure.path = next;
       this.#open.set(next, figure);
     }
@@ -81,7 +150,11 @@ export class FiguresStore {
   }
 
   drop(path: string): void {
-    if (this.#open.delete(path)) this.version += 1;
+    const figure = this.#open.get(path);
+    if (figure === undefined) return;
+    this.#open.delete(path);
+    this.version += 1;
+    figure.close().catch((error: unknown) => reportError("figures.close", error));
   }
 
   dropUnder(path: string): void {

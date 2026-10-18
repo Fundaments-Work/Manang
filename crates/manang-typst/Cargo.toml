@@ -13,6 +13,7 @@ manang-kernel = { path = "../manang-kernel" }
 typst = "=0.15.1"
 typst-kit = { version = "=0.15.1", features = ["embedded-fonts", "scan-fonts", "system-packages"] }
 typst-layout = "=0.15.1"
+typst-ide = "=0.15.1"
 typst-svg = "=0.15.1"
 typst-pdf = "=0.15.1"
 parking_lot = "0.12"

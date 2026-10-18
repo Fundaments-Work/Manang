@@ -76,6 +76,20 @@ fn parse_request(args: &Value) -> Result<CompileRequest, PluginError> {
     })
 }
 
+fn uint(args: &Value, key: &str) -> Result<usize, PluginError> {
+    args.get(key)
+        .and_then(Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| failed(format!("`{key}` must be an unsigned integer")))
+}
+
+fn finite(args: &Value, key: &str) -> Result<f64, PluginError> {
+    args.get(key)
+        .and_then(Value::as_f64)
+        .filter(|v| v.is_finite())
+        .ok_or_else(|| failed(format!("`{key}` must be a finite number")))
+}
+
 impl Plugin for TypstPlugin {
     fn invoke(
         &self,
@@ -105,6 +119,32 @@ impl Plugin for TypstPlugin {
                 self.compiler
                     .render(page)
                     .map(Payload::Binary)
+                    .map_err(failed)
+            }
+            "typst.jump-from-click" => {
+                let jump = self
+                    .compiler
+                    .jump_from_click(
+                        uint(&args, "page")?,
+                        finite(&args, "x")?,
+                        finite(&args, "y")?,
+                    )
+                    .map_err(failed)?;
+                serde_json::to_value(jump)
+                    .map(Payload::Json)
+                    .map_err(failed)
+            }
+            "typst.jump-from-cursor" => {
+                let path = args
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| failed("`path` must be a string"))?;
+                let positions = self
+                    .compiler
+                    .jump_from_cursor(path, uint(&args, "line")?, uint(&args, "column")?)
+                    .map_err(failed)?;
+                serde_json::to_value(positions)
+                    .map(Payload::Json)
                     .map_err(failed)
             }
             "typst.export-pdf" => self

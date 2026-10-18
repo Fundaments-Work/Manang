@@ -2,6 +2,8 @@
   import { onDestroy, untrack } from "svelte";
   import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 
+  import type { PreviewMark } from "$lib/state/preview.svelte";
+
   import { createBook } from "$lib/workbench/pdfBook";
 
   /**
@@ -24,12 +26,26 @@
     jump: number;
     /** 0-based page the user asked for. */
     page: number;
+    /** A box (points, top-left origin) to outline and scroll to, or null. */
+    mark?: PreviewMark | null;
     onpage: (page: number) => void;
     onpages: (count: number) => void;
     onerror: (message: string) => void;
+    /** Ctrl+click (Cmd+click) at `(x, y)` points from the top-left of 0-based `page`. */
+    onsourceclick?: (page: number, x: number, y: number) => void;
   }
 
-  const { data, zoom, jump, page, onpage, onpages, onerror }: Props = $props();
+  const {
+    data,
+    zoom,
+    jump,
+    page,
+    mark = null,
+    onpage,
+    onpages,
+    onerror,
+    onsourceclick,
+  }: Props = $props();
 
   const GAP = 16;
   const SIDE = 24;
@@ -237,11 +253,46 @@
       const el = scroller;
       if (el === undefined) return;
       const target = slots.get(page);
-      el.scrollTo({
-        top: target === undefined ? page * (slotHeight + GAP) : target.offsetTop - GAP,
-      });
+      const top =
+        target === undefined ? page * (slotHeight + GAP) + GAP : target.offsetTop;
+      // A mark on this page: bring it to the upper third of the pane.
+      const within =
+        mark !== null && mark.page === page
+          ? Math.max(0, mark.y * scale - el.clientHeight / 3)
+          : -GAP;
+      el.scrollTo({ top: top + within });
     });
   });
+
+  /** Where a mark sits inside the column of pages, in CSS px. */
+  const markBox = $derived.by(() => {
+    if (mark === null || mark.page >= count) return null;
+    return {
+      left: SIDE + mark.x * scale - 2,
+      top: GAP + mark.page * (slotHeight + GAP) + mark.y * scale - 2,
+      width: Math.max(8, mark.width * scale + 4),
+      height: Math.max(8, mark.height * scale + 4),
+    };
+  });
+
+  /** Ctrl+click (Cmd+click) on a page asks for the source behind that point. */
+  function onclick(event: MouseEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || onsourceclick === undefined) return;
+    const slotEl = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+      "[data-index]",
+    );
+    if (slotEl === null || slotEl === undefined) return;
+    const index = Number(slotEl.dataset["index"]);
+    const rect = slotEl.getBoundingClientRect();
+    if (!Number.isInteger(index) || rect.width === 0) return;
+    event.preventDefault();
+    const ratio = base.w / rect.width;
+    onsourceclick(
+      index,
+      (event.clientX - rect.left) * ratio,
+      (event.clientY - rect.top) * ratio,
+    );
+  }
 
   onDestroy(() => {
     loadToken += 1;
@@ -261,9 +312,11 @@
   role="document"
   aria-label="PDF pages"
 >
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
-    class="mx-auto flex flex-col items-center"
+    class="relative mx-auto flex flex-col items-center"
     style="width: {cssWidth + SIDE * 2}px; padding: {GAP}px {SIDE}px; gap: {GAP}px"
+    {onclick}
   >
     {#each { length: count } as _, index (index)}
       <div
@@ -275,6 +328,16 @@
         aria-label="Page {index + 1} of {count}"
       ></div>
     {/each}
+    {#if markBox !== null}
+      {#key mark?.id}
+        <div
+          class="mng-preview-mark pointer-events-none absolute"
+          style="left: {markBox.left}px; top: {markBox.top}px; width: {markBox.width}px; height: {markBox.height}px"
+          data-preview-mark
+          aria-hidden="true"
+        ></div>
+      {/key}
+    {/if}
   </div>
   {#if failed !== ""}
     <p class="m-0 px-6 pt-6 text-xs text-text-60" role="alert">{failed}</p>

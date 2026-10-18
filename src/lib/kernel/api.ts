@@ -6,11 +6,18 @@
  * in a Rust plugin touches this file and `types.ts`, nothing else.
  */
 
+import type { FigureEdit } from "$lib/figure/edit";
+import type { FigureNode, FigureScene } from "$lib/figure/scene";
+
 import type { Kernel } from "./client";
 import type {
   ChangeState,
   MarkdownDiagnostic,
   CompileReport,
+  DiagramDiagnostic,
+  DiagramLanguage,
+  DiagramLanguageId,
+  DiagramTheme,
   Engine,
   LatexReport,
   MarkdownRender,
@@ -40,6 +47,8 @@ export function projectApi(kernel: Kernel) {
     close: () => kernel.run<null>("project.close"),
     tree: (query: TreeQuery = {}) => kernel.run<TreePage>("project.tree", { ...query }),
     readFile: (path: string) => kernel.run<string>("project.read-file", { path }),
+    /** Any project file as raw bytes (images, PDFs); never base64. */
+    readBytes: (path: string) => kernel.runBinary("project.read-bytes", { path }),
     writeFile: (path: string, content: string) =>
       kernel.run<{ bytes: number }>("project.write-file", { path, content }),
     rename: (from: string, to: string) =>
@@ -64,6 +73,28 @@ export function projectApi(kernel: Kernel) {
   };
 }
 
+/** A point on a rendered page: 0-based page, points from the top-left corner. */
+export interface PagePoint {
+  readonly page: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * Where a click on a Typst page leads (`crates/manang-typst` `SourceJump`).
+ * `path` is project-relative, or `@ns/name:version/path` inside a package;
+ * line and column are 1-based, the column counted in characters.
+ */
+export type TypstJump =
+  | {
+      readonly kind: "file";
+      readonly path: string;
+      readonly line: number;
+      readonly column: number;
+    }
+  | { readonly kind: "url"; readonly url: string }
+  | ({ readonly kind: "position" } & PagePoint);
+
 export function typstApi(kernel: Kernel) {
   return {
     compile: (request: CompileRequest) =>
@@ -71,6 +102,12 @@ export function typstApi(kernel: Kernel) {
     /** One page as SVG bytes. */
     render: (page: number) => kernel.runBinary("typst.render", { page }),
     exportPdf: () => kernel.runBinary("typst.export-pdf"),
+    /** What produced the point `(x, y)` (pt) on 0-based `page`; null for blank space. */
+    jumpFromClick: (page: number, x: number, y: number) =>
+      kernel.run<TypstJump | null>("typst.jump-from-click", { page, x, y }),
+    /** Where the text at a 1-based line and column landed on the pages. */
+    jumpFromCursor: (path: string, line: number, column: number) =>
+      kernel.run<PagePoint[]>("typst.jump-from-cursor", { path, line, column }),
   };
 }
 
@@ -244,12 +281,57 @@ export interface LatexCompileRequest {
   readonly allow_network?: boolean;
 }
 
+/** One backend in `latex.status`. */
+export interface LatexBackendStatus {
+  readonly id: "system" | "tectonic";
+  readonly available: boolean;
+  readonly version: string | null;
+  readonly engines: readonly string[];
+}
+
+/** What `latex.status` answers with; `default` is `none` when nothing can compile. */
+export interface LatexStatus {
+  readonly backends: readonly LatexBackendStatus[];
+  readonly default: "system" | "tectonic" | "none";
+  readonly default_engine: string;
+}
+
+/** A box in the PDF from SyncTeX: 1-based page, points from the top-left corner. */
+export interface SynctexBox {
+  readonly page: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export function latexApi(kernel: Kernel) {
   return {
     compile: (request: LatexCompileRequest) =>
       kernel.run<LatexReport>("latex.compile", { ...request }),
     /** The PDF of the latest build of `main`, as raw bytes. */
     exportPdf: (main: string) => kernel.runBinary("latex.export-pdf", { main }),
+    /** Which TeX backends this machine has. */
+    status: () => kernel.run<LatexStatus>("latex.status"),
+    /**
+     * Source line behind a point on 1-based `page` of the latest build of `main`
+     * (absolute). `file` is relative to the main file's directory, unless it lies
+     * outside it.
+     */
+    synctexReverse: (main: string, page: number, x: number, y: number) =>
+      kernel.run<{ readonly file: string; readonly line: number }>("latex.synctex", {
+        main,
+        page,
+        x,
+        y,
+      }),
+    /** Where a 1-based line of `file` (relative to the main file's directory) landed. */
+    synctexForward: (main: string, file: string, line: number) =>
+      kernel.run<{ readonly positions: readonly SynctexBox[] }>("latex.synctex", {
+        main,
+        file,
+        line,
+      }),
   };
 }
 
@@ -266,6 +348,30 @@ export function markdownApi(kernel: Kernel) {
       kernel.run<MarkdownToTypst>("markdown.to-typst", { source }),
   };
 }
+
+/** `diagram.*`: Mermaid, Pikchr and ASCII (svgbob) diagrams rendered to SVG. */
+export function diagramApi(kernel: Kernel) {
+  return {
+    languages: () =>
+      kernel.run<{ languages: readonly DiagramLanguage[] }>("diagram.languages", {}),
+    check: (language: DiagramLanguageId, source: string) =>
+      kernel.run<{ diagnostics: readonly DiagramDiagnostic[] }>("diagram.check", {
+        language,
+        source,
+      }),
+    /**
+     * SVG bytes. A source that does not parse rejects with a message starting
+     * `[diagram_error] line L:C: ...`.
+     */
+    render: (language: DiagramLanguageId, source: string, theme: DiagramTheme) =>
+      kernel.runBinary("diagram.render", { language, source, theme }),
+    /** A cache key for the rendered SVG of these inputs. */
+    key: (language: DiagramLanguageId, source: string, theme: DiagramTheme) =>
+      kernel.run<{ key: string }>("diagram.key", { language, source, theme }),
+  };
+}
+
+export type DiagramApi = ReturnType<typeof diagramApi>;
 
 export interface MarkdownToTypst {
   readonly typst: string;
@@ -896,3 +1002,69 @@ export interface MarkdownHeading {
   readonly line: number;
   readonly offset: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Figures (`figure.*`). Paths are absolute: the plugin is not project-bound. */
+/* -------------------------------------------------------------------------- */
+
+/** One operation, exactly as `figure.apply` takes it (`op` tag, kebab-case). */
+export type FigureOp = FigureEdit | { readonly op: "undo" } | { readonly op: "redo" };
+
+export interface FigureApplyResult {
+  readonly revision: number;
+  /** False when the op changed nothing (undo with no history, a zero move). */
+  readonly applied: boolean;
+  readonly can_undo: boolean;
+  readonly can_redo: boolean;
+}
+
+export interface FigureSaved {
+  /** Absolute paths of the written scene and its SVG. */
+  readonly json: string;
+  readonly svg: string;
+  readonly revision: number;
+}
+
+export interface FigureInfo {
+  readonly id: number;
+  readonly path: string | null;
+  readonly nodes: number;
+  readonly revision: number;
+  readonly dirty: boolean;
+}
+
+export interface FigureHit {
+  readonly hit: boolean;
+  readonly node_id: string | null;
+  readonly node: FigureNode | null;
+}
+
+export function figureApi(kernel: Kernel) {
+  return {
+    /** A new figure written to `path` straight away (scene and SVG). */
+    createAt: (path: string, width?: number, height?: number) =>
+      kernel.run<{ id: number } & Omit<FigureSaved, "revision">>("figure.create", {
+        path,
+        ...(width === undefined ? {} : { width }),
+        ...(height === undefined ? {} : { height }),
+      }),
+    open: (path: string) => kernel.run<{ id: number }>("figure.open", { path }),
+    get: (id: number) => kernel.run<FigureScene>("figure.get", { id }),
+    apply: (id: number, op: FigureOp) =>
+      kernel.run<FigureApplyResult>("figure.apply", { id, op }),
+    /** Writes `<name>.figure.json` and `<name>.svg`; `path` follows a rename. */
+    save: (id: number, path?: string) =>
+      kernel.run<FigureSaved>("figure.save", {
+        id,
+        ...(path === undefined ? {} : { path }),
+      }),
+    close: (id: number) => kernel.run<{ closed: boolean }>("figure.close", { id }),
+    list: () => kernel.run<FigureInfo[]>("figure.list"),
+    hitTest: (id: number, x: number, y: number) =>
+      kernel.run<FigureHit>("figure.hit-test", { id, x, y }),
+    /** The open figure as SVG bytes. */
+    exportSvg: (id: number) => kernel.runBinary("figure.export-svg", { id }),
+  };
+}
+
+export type FigureApi = ReturnType<typeof figureApi>;

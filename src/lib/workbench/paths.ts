@@ -84,10 +84,23 @@ export function fileKind(path: string): FileKind {
   }
 }
 
-/** Whether the workbench can open the file in a tab (text or a figure). */
-export function isOpenable(path: string): boolean {
-  const kind = fileKind(path);
-  return kind !== "binary" && kind !== "image";
+/** Media types for the images a viewer tab shows (see `opener.ts`). */
+const IMAGE_TYPES: Readonly<Record<string, string>> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  avif: "image/avif",
+  ico: "image/x-icon",
+};
+
+/** The media type of an image a viewer can show, or null. */
+export function imageType(path: string): string | null {
+  const ext = extension(path);
+  return Object.hasOwn(IMAGE_TYPES, ext) ? (IMAGE_TYPES[ext] ?? null) : null;
 }
 
 /** The engine a document is written for, or null for non-manuscript files. */
