@@ -978,3 +978,19 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
    - `pnpm run check && pnpm run lint` passed with 0 errors and 0 warnings.
    - `pnpm test` passed all 64 test suites (488 tests).
 
+---
+
+## Task: User Guide Refresh & Accurate Feature Documentation
+
+- **Branch:** `antigravity/docs-refresh`
+- **Scope:** Brought `docs/user/` up to date with landed features, added `docs/user/menus-and-shortcuts.md`, fixed known errors, and updated links in `README.md`.
+- **Key Changes:**
+  1. **Menu Bar & Navigation:** Documented title bar menus (File, Edit, View, Go, Build, Help) with `Alt+letter` mnemonics, `F10` keyboard focusing, arrow navigation, and narrow window collapse into a single "Menu" button (<900 px width).
+  2. **PDF Preview Viewer:** Replaced "coming soon" with complete step-by-step documentation for text layer selection and copying (`Ctrl+C`), `Ctrl+F` find bar with match counter, links, outline navigation, continuous pointer zoom (`Ctrl+wheel` / pinch) and presets, dark pages night mode, page box navigation, and bidirectional SyncTeX (double-click to jump to source line, `Alt+double-click` to select words).
+  3. **Vector Figure Studio:** Documented the full toolbar and single-key tools (Select `V`/`1`, Hand `H`/`2`, Rect `R`/`3`, Diamond `D`/`4`, Ellipse `O`/`5`, Arrow `A`/`6`, Line `L`/`7`, Draw `P`/`B`/`8`, Text `T`/`9`, Frame `F`, Eraser `E`, Laser `K`, Formula `M`), bound arrows with auto-snapping to shape anchors and head styles, container frames, clipboard copy/paste, undo/redo, deterministic SVG/PDF export, and Mermaid diagram insertion. Noted math formulas and custom color picker as one-line coming soon notes. Removed unplanned PlantUML and Ditaa references.
+  4. **Contextual Settings:** Documented file-scoped settings (`Settings for <file>`), the scope banner with "Show all settings", `File > All settings`, `File > Document settings`, and immediate application of custom keybindings.
+  5. **Home Trash & Templates:** Detailed project trash workflow (Move to trash, Restore, Delete/Purge choices between removing from registry vs system trash, and Empty trash) and template browsing with language filters and "Use template".
+  6. **Convert to Typst:** Documented `Edit > Convert to Typst` (`markdown.to-typst`) with overwrite confirmation and diagnostic reporting.
+  7. **New Page `menus-and-shortcuts.md`:** Exhaustive hierarchy of every menu item, group, command ID, and shortcut derived directly from `src/lib/commands/workbench.ts`, `menu.ts`, and `crates/manang-settings/src/keybindings.rs`.
+  8. **Corrections & Invariants:** Corrected MSRV requirement from Rust 1.85 to Rust 1.95 in `getting-started.md` and `README.md`. Clarified that the title bar carries the logo mark and menus without unclickable breadcrumbs, while document identity appears in the OS window title (`<file> — <project>`). Preserved one-line "coming soon" notes for in-development features (plugin manager, Save a version, AI agent).
+

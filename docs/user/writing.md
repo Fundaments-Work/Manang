@@ -6,7 +6,7 @@ You can write and edit scientific papers in Typst, LaTeX, and Markdown, format c
 
 Manang includes a lightweight, responsive text editor built with CodeMirror 6.
 
-1. Open any text document from the Files sidebar (`Ctrl+Shift+E` (`Cmd+Shift+E`)) or quick open with `Ctrl+P` (`Cmd+P`).
+1. Open any text document from the Files sidebar (`Ctrl+Shift+E` (`Cmd+Shift+E`)), quick open with `Ctrl+P` (`Cmd+P`), or choose **File > New file** (`Ctrl+N` (`Cmd+N`)).
 2. The editor provides syntax highlighting for:
    - Typst (`.typ`)
    - LaTeX (`.tex`, `.sty`, `.cls`, `.dtx`, `.ltx`)
@@ -18,10 +18,12 @@ Manang includes a lightweight, responsive text editor built with CodeMirror 6.
    - **Undo:** `Ctrl+Z` (`Cmd+Z`)
    - **Redo:** `Ctrl+Shift+Z` (`Cmd+Shift+Z` or `Ctrl+Y`)
    - **Find in document:** `Ctrl+F` (`Cmd+F`)
-   - **Replace in document:** `Ctrl+H` (`Cmd+Option+F`)
+   - **Replace in document:** Choose **Edit > Replace** from the menu bar.
 4. Focus completely on your text with **Zen mode**:
-   - Press `Ctrl+\` (`Cmd+\`) to enter Zen mode. The Activity bar, sidebar, and panels disappear, centering your document in a comfortable reading column.
+   - Press `Ctrl+\` (`Cmd+\`) or choose **View > Zen mode**. The Activity bar, sidebar, and panels disappear, centering your document in a comfortable reading column.
    - Press `Escape` or `Ctrl+\` (`Cmd+\`) to return to the full workspace layout.
+5. *Version snapshots and "Save a version" are coming soon.*
+6. *An integrated AI authoring assistant is coming soon.*
 
 ## 2. Work with document engines
 
@@ -39,7 +41,7 @@ Typst provides fast compilation and concise syntax designed for modern academic 
    - Display math with spacing: `$ sum_(i=1)^n x_i = (n(n+1)) / 2 $`
 3. Style text using asterisks for `*bold*` and underscores for `_italics_`.
 4. Include images or diagrams: `#figure(image("figures/diagram.svg"), caption: [Flowchart])`.
-5. Present slides: If you structure your Typst document with slide headings (`== Slide Title`), switch to presentation view by running `Show document as slides` from the command palette (`Ctrl+K` (`Cmd+K`)).
+5. Present slides: If you structure your Typst document with slide headings (`== Slide Title`), switch to presentation view by choosing **View > Slides** or running `Show document as slides` from the command palette (`Ctrl+K` (`Cmd+K`)). Press `F5` to present slides full screen.
 
 ### LaTeX (`.tex`)
 LaTeX supports existing TeX workflows, academic journal classes, and BibTeX bibliographies.
@@ -66,7 +68,10 @@ Markdown offers a distraction-free environment for notes, drafts, and documentat
      A[Input] --> B[Output]
    ```
    ````
-4. Convert Markdown to Typst: If you want to turn a Markdown note into a publication-ready Typst file, open the command palette (`Ctrl+K` (`Cmd+K`)), select `Convert to Typst`, and press `Enter`. Manang creates a `.typ` file beside your Markdown file.
+4. **Convert Markdown to Typst:**
+   - To turn a Markdown note into a publication-ready Typst file, choose **Edit > Convert to Typst** from the menu bar, or open the command palette (`Ctrl+K` (`Cmd+K`)) and run `Convert to Typst`.
+   - Manang parses the Markdown source into idiomatic Typst markup using the markdown plugin (`markdown.to-typst`), writes `<name>.typ` directly next to your Markdown file, and opens it in a new editor tab.
+   - If a `<name>.typ` file already exists, Manang prompts you to confirm replacing its contents before overwriting.
 
 ## 3. Check spelling and manage personal dictionaries
 
@@ -93,6 +98,7 @@ You can tidy document whitespace, indentation, and alignment in one step.
 
 1. Open the document you wish to format.
 2. Press `Shift+Alt+F` (`Shift+Option+F`).
+   - Or choose **Edit > Format document** from the menu bar.
    - Or press `Ctrl+K` (`Cmd+K`), type `Format document`, and press `Enter`.
 3. Manang formats the file in place without losing your undo history.
 4. To adjust the target line width for Typst documents:
