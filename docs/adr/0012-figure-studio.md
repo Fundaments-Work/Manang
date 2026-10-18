@@ -127,9 +127,10 @@ diff:
   (box kinds: `x`, `y`, `width`, `height`); `arrow`, `line` (absolute
   `points`, `start`/`end` bindings, `routing`, `heads`); `freedraw`
   (`points` with pressure, `size`); `math` (`x`, `y`, `tex`, `size`).
-  `text` has `text`; `image` has `src` (a path relative to the figure, or a
-  `data:` URI for small pasted images); `mermaid` has `source`; `frame` has
-  `name`.
+  Box kinds share one shape: `label` is the text inside a shape, the text of
+  a `text` node and the title of a `frame`; `image` has `src` (a path
+  relative to the figure, or a `data:` URI for small pasted images);
+  `mermaid` has `source`.
 * `style`: `stroke`, `fill`, `strokeWidth`, `strokeStyle`, `opacity`
   (0-100), `roughness` (0-2), `fontFamily` (`sans`, `mono`), `fontSize`,
   `textAlign`. All optional; defaults are `ink`, `none`, 1.5, `solid`, 100,
@@ -323,7 +324,14 @@ active figure. Errors name what was wrong and what would work, for example
 * 60 fps with 2,000 shapes on screen; < 8 ms per pointer move (preview only,
   no IPC).
 * `figure.apply` of one operation on a 2,000-shape scene < 1 ms; rendering
-  2,000 shapes to SVG < 20 ms (criterion bench `figure_ops`).
+  2,000 shapes to SVG < 20 ms in the clean style (criterion bench
+  `figure_ops`).
+
+Measured (2026-10-18, dev machine, `cargo bench -p manang-figure`): one move
+on a 2,000-shape scene with 667 bound arrows 0.12 ms; 1,000 operations with
+undo/redo history 88 ms (0.09 ms each); SVG export of 2,000 shapes 11.8 ms
+clean, 25.5 ms hand-drawn (the hand-drawn style draws every edge twice; it is
+an export-time cost, not a per-keystroke one).
 
 ## Alternatives rejected
 
