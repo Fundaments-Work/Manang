@@ -60,7 +60,7 @@ pub fn escape_html(input: &str) -> String {
     out
 }
 
-/// Returns true if a URL contains unsafe protocols such as javascript:, vbscript:, or data:text/html.
+/// Returns true if a URL contains unsafe protocols such as javascript:, vbscript:, or data:.
 pub fn is_unsafe_url(url: &str) -> bool {
     let clean: String = url
         .chars()
@@ -68,10 +68,7 @@ pub fn is_unsafe_url(url: &str) -> bool {
         .collect();
     let lower = clean.to_ascii_lowercase();
 
-    lower.starts_with("javascript:")
-        || lower.starts_with("vbscript:")
-        || lower.starts_with("data:text/html")
-        || lower.starts_with("data:application/javascript")
+    lower.starts_with("javascript:") || lower.starts_with("vbscript:") || lower.starts_with("data:")
 }
 
 /// Inspects a raw HTML snippet and returns either the allowed safe HTML or the escaped representation.
@@ -110,22 +107,30 @@ fn sanitize_raw_html_tag(
 
     // Inspect attributes for event handlers or unsafe URLs
     let lower_inner = tag_content.to_ascii_lowercase();
-    for attr in [
-        "onerror",
-        "onload",
-        "onclick",
-        "onmouseover",
-        "onfocus",
-        "onblur",
-        "javascript:",
-    ] {
-        if lower_inner.contains(attr) {
-            diagnostics.push(Diagnostic::warning(
-                format!("raw HTML tag `<{tag_name_clean}>` contained unsafe attribute `{attr}` and was escaped"),
-                Some(line),
-            ));
-            return escape_html(raw);
-        }
+    if lower_inner.contains("javascript:") || lower_inner.contains("data:") {
+        diagnostics.push(Diagnostic::warning(
+            format!("raw HTML tag `<{tag_name_clean}>` contained unsafe attribute and was escaped"),
+            Some(line),
+        ));
+        return escape_html(raw);
+    }
+
+    let has_event_handler = parts.any(|part| {
+        let p = part.trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
+        let p_lower = p.to_ascii_lowercase();
+        p_lower.starts_with("on")
+            && p_lower[2..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic())
+    });
+
+    if has_event_handler {
+        diagnostics.push(Diagnostic::warning(
+            format!("raw HTML tag `<{tag_name_clean}>` contained event handler attribute and was escaped"),
+            Some(line),
+        ));
+        return escape_html(raw);
     }
 
     raw.to_string()
@@ -174,9 +179,16 @@ pub fn render_to_html_at(
 
     let mut in_metadata_block = false;
     let mut diagram: Option<OpenFence> = None;
+    let mut last_offset = 0;
+    let mut current_line = line_offset + 1;
 
     for (event, range) in parser {
-        let line = line_offset + source[..range.start].chars().filter(|&c| c == '\n').count() + 1;
+        if range.start > last_offset {
+            let slice = &source.as_bytes()[last_offset..range.start.min(source.len())];
+            current_line += slice.iter().filter(|&&b| b == b'\n').count();
+            last_offset = range.start;
+        }
+        let line = current_line;
 
         if let Some(fence) = diagram.as_mut() {
             match event {

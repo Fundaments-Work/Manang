@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "width": 800,
+  "height": 600,
+  "nodes": [
+    {
+      "kind": "rect",
+      "id": "r1",
+      "x": 100,
+      "y": 100,
+      "width": -150,
+      "height": -80,
+      "stroke": "crimson",
+      "fill": "lemon"
+    },
+    {
+      "kind": "ellipse",
+      "id": "e1",
+      "cx": 300,
+      "cy": 200,
+      "rx": -50,
+      "ry": 30,
+      "stroke": "#336699",
+      "fill": "lavender"
+    },
+    {
+      "kind": "stroke",
+      "id": "s1",
+      "points": [
+        { "x": 10, "y": 10, "pressure": 0.5 },
+        { "x": 20, "y": 25, "pressure": 0.8 },
+        { "x": 35, "y": 40, "pressure": 0.6 }
+      ],
+      "size": 3.0,
+      "color": "ink"
+    },
+    {
+      "kind": "arrow",
+      "id": "a1",
+      "from": { "x": 50, "y": 50 },
+      "to": { "x": 200, "y": 180 },
+      "label": "v1 arrow",
+      "color": "pine"
+    },
+    {
+      "kind": "math",
+      "id": "m1",
+      "x": 250,
+      "y": 350,
+      "tex": "E = mc^2",
+      "size": 24.0,
+      "color": "ink"
+    }
+  ]
+}

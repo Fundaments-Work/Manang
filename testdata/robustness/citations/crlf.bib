@@ -1,0 +1,47 @@
+@string{ieee = "IEEE Transactions"}
+@preamble{"Robustness test bib file"}
+@comment{A top level comment}
+
+@article{nested_and_accents,
+    author = {M{\"u}ller, J{\"o}rg and Ren{\'e} Pe{\~n}a and Fran\c{c}ois \AA berg},
+    title = {A Title with {Nested {Braces}} and Math $E=mc^2$},
+    journal = ieee,
+    year = 2023,
+    month = jan,
+    abstract = {This field contains 50% performance improvement and "quotes" inside.},
+    doi = {10.1000/182}
+}
+
+@article{key:with/unusual.chars+2024_beta,
+    author = {Unusual, Key},
+    title = {Key with unusual characters},
+    year = 2024
+}
+
+@article{duplicate_key_entry,
+    author = {First, Author},
+    title = {Duplicate key first entry},
+    year = 2021
+}
+
+@article{duplicate_key_entry,
+    author = {Second, Author},
+    title = {Duplicate key second entry},
+    year = 2022
+}
+
+@article{malformed_missing_brace,
+    author = {Nobody},
+    title = {Unclosed title brace
+    year = 2023
+}
+
+@article{broken_syntax,
+    title Not Valid
+}
+
+@article{recovered_entry,
+    author = {Survivor, A.},
+    title = {Recovered after error},
+    year = 2024
+}
