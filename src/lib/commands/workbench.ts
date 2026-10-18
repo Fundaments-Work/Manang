@@ -7,6 +7,7 @@
  */
 
 import { build } from "$lib/state/build.svelte";
+import { convertToTypst } from "$lib/state/convert";
 import { documents } from "$lib/state/documents.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
@@ -65,6 +66,7 @@ const WHEN: Readonly<Record<string, string>> = {
   "doc.export-pdf": "workbench && document",
   "doc.format": "workbench && document",
   "doc.slides": "workbench && typst",
+  "doc.convert-typst": "workbench && markdown",
   "project.close": "project",
 };
 
@@ -98,6 +100,7 @@ export function workbenchCommands(
   const active = tabs.active;
   const isDocument = active?.kind === "document";
   const isTypst = isDocument && engineOf(active.path) === "typst";
+  const isMarkdown = isDocument && engineOf(active.path) === "markdown";
   const list: Command[] = [
     {
       id: "goto.file",
@@ -351,6 +354,16 @@ export function workbenchCommands(
       keywords: "deck presentation",
       enabled: isTypst,
       run: () => actions.toggleSlides(),
+    },
+    {
+      id: "doc.convert-typst",
+      title: "Convert to Typst",
+      group: "Workbench",
+      keywords: "markdown export typ markdown.to-typst",
+      enabled: isMarkdown,
+      run: () => {
+        if (active !== undefined) void convertToTypst(active.path);
+      },
     },
     {
       id: "home.show",
