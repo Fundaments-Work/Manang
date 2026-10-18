@@ -73,4 +73,51 @@ describe("dev kernel: project registry", () => {
       message: expect.stringContaining("not an SVG"),
     });
   });
+
+  it("moves a project to trash, hides it from normal list, and restores it", async () => {
+    const project = projectApi(createDevKernel());
+    const trashed = await project.trashProject(DEMO_ROOT);
+    expect(trashed.trashed_at).toBeTruthy();
+
+    const normal = await project.list();
+    expect(normal.some((p) => p.path === DEMO_ROOT)).toBe(false);
+
+    const withTrashed = await project.list({ include_trashed: true });
+    expect(withTrashed.some((p) => p.path === DEMO_ROOT)).toBe(true);
+
+    const restored = await project.restoreProject(DEMO_ROOT);
+    expect(restored.trashed_at).toBeNull();
+
+    const normalAfter = await project.list();
+    expect(normalAfter.some((p) => p.path === DEMO_ROOT)).toBe(true);
+  });
+
+  it("purges a project from registry and optionally deletes files", async () => {
+    const kernel = createDevKernel();
+    const project = projectApi(kernel);
+    const purged = await project.purgeProject(DEMO_ROOT, false);
+    expect(purged).toEqual({ purged: true, deleted_files: false });
+    expect(
+      (await project.list({ include_trashed: true })).some((p) => p.path === DEMO_ROOT),
+    ).toBe(false);
+    // Folder still exists in mock seeds so we can re-register
+    expect((await project.register(DEMO_ROOT)).path).toBe(DEMO_ROOT);
+
+    // Now purge with deleteFiles: true
+    const deleted = await project.purgeProject(DEMO_ROOT, true);
+    expect(deleted).toEqual({ purged: true, deleted_files: true });
+    await expect(project.register(DEMO_ROOT)).rejects.toMatchObject({
+      message: expect.stringContaining("not a Manang project"),
+    });
+  });
+
+  it("empties trash removing only trashed projects", async () => {
+    const project = projectApi(createDevKernel());
+    await project.trashProject(DEMO_ROOT);
+    const res = await project.emptyTrash();
+    expect(res.count).toBe(1);
+    expect(
+      (await project.list({ include_trashed: true })).some((p) => p.path === DEMO_ROOT),
+    ).toBe(false);
+  });
 });
