@@ -21,6 +21,16 @@ tauri = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 # 2.8 is the stable line for Tauri 2.12 (the plugin has its own version track).
 tauri-plugin-dialog = "2.8"
+# Each plugin's npm package (@tauri-apps/plugin-*) must stay on the same
+# major.minor as its crate, or `tauri dev` refuses to start.
+tauri-plugin-window-state = "2.5"
+tauri-plugin-os = "2.4"
+tauri-plugin-process = "2.4"
+tauri-plugin-log = "2.10"
+log = "0.4"
+
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+tauri-plugin-single-instance = "2.5"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

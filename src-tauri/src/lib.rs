@@ -383,9 +383,33 @@ fn forward_events(app: tauri::AppHandle, events: &EventBus) -> std::io::Result<(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), tauri::Error> {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // First, so a second launch hands over to the running window and exits
+    // before it builds a second kernel.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        use tauri::Manager;
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }));
+    builder
+        // Logs go to the platform log folder (and the terminal in debug builds);
+        // the web view forwards its uncaught errors here too.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .max_file_size(2_000_000)
+                .build(),
+        )
+        // Size, position and maximised state survive a restart.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             use tauri::Manager;
             let config_dir = app.path().app_config_dir()?;
