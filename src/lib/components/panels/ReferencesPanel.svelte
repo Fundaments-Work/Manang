@@ -487,7 +487,10 @@
                   {#if loadingFormatKeys[entry.key]}
                     <div class="py-1 text-[10px] text-text-muted">Formatting…</div>
                   {:else if formattedCitations[entry.key]}
-                    <div class="text-[11px] leading-snug text-text select-text">
+                    <div
+                      class="text-[11px] leading-snug text-text select-text"
+                      data-formatted-citation
+                    >
                       {formattedCitations[entry.key]}
                     </div>
                   {:else}
