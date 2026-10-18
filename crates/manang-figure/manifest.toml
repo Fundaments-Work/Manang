@@ -3,6 +3,7 @@ name = "figure"
 version = "0.1.0"
 description = "Typed SVG scene graph, deterministic headless renderer and vector studio"
 tier = "native"
+settings_contexts = ["figure"]
 
 [permissions]
 filesystem = ["write:project"]

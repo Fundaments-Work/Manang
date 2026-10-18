@@ -84,11 +84,15 @@ impl Shared {
         if declared == 0 {
             return Ok(SyncOutcome::default());
         }
+        let contexts = manifest.settings_contexts();
         let defs: Vec<SettingDef> = manifest
             .contributes
             .settings
             .iter()
-            .map(SettingDef::from)
+            .map(|spec| SettingDef {
+                contexts: contexts.clone(),
+                ..SettingDef::from(spec)
+            })
             .collect();
         let defs = serde_json::to_value(defs).map_err(|_| SyncError::BadValues)?;
         kernel.invoke(

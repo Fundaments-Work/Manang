@@ -3,6 +3,7 @@ name = "markdown"
 version = "0.1.0"
 description = "Markdown rendering, outline extraction, XSS sanitization, and Typst conversion"
 tier = "native"
+settings_contexts = ["engine:markdown"]
 
 [contributes]
 [[contributes.commands]]

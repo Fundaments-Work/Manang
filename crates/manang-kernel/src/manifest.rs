@@ -59,6 +59,11 @@ pub struct PluginMeta {
     /// Path to the `.wasm` module, relative to the plugin directory.
     #[serde(default)]
     pub entry: Option<String>,
+    /// Where the plugin's section and settings belong in a contextual
+    /// Settings page (see [`SETTINGS_CONTEXTS`]). Empty means `["app"]`:
+    /// shown only when Settings is opened for the whole application.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub settings_contexts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,6 +169,46 @@ pub struct Manifest {
     pub permissions: Permissions,
     #[serde(default)]
     pub contributes: Contributes,
+}
+
+/// The places a settings group can belong to. Settings opened from a place
+/// show only the groups declaring it; opened for the whole application
+/// (`app`) they show everything. `engine:<name>` names a document engine,
+/// such as `engine:typst`.
+pub const SETTINGS_CONTEXTS: &[&str] = &["app", "project", "document", "figure", "diagram", "pdf"];
+
+/// Most contexts one settings group may declare.
+pub const MAX_SETTINGS_CONTEXTS: usize = 8;
+
+/// The context of a group that declares none.
+pub const DEFAULT_SETTINGS_CONTEXT: &str = "app";
+
+/// True for one of [`SETTINGS_CONTEXTS`] or `engine:<kebab-case name>`.
+pub fn valid_settings_context(context: &str) -> bool {
+    SETTINGS_CONTEXTS.contains(&context) || context.strip_prefix("engine:").is_some_and(valid_name)
+}
+
+/// Why a list of settings contexts is invalid, if it is: too many entries,
+/// an unknown value or a repeated one.
+pub fn check_settings_contexts(contexts: &[String]) -> Result<(), String> {
+    if contexts.len() > MAX_SETTINGS_CONTEXTS {
+        return Err(format!(
+            "at most {MAX_SETTINGS_CONTEXTS} settings contexts are allowed"
+        ));
+    }
+    let mut seen = HashSet::new();
+    for context in contexts {
+        if !valid_settings_context(context) {
+            return Err(format!(
+                "unknown settings context `{context}`; expected one of {} or `engine:<name>`",
+                SETTINGS_CONTEXTS.join(", ")
+            ));
+        }
+        if !seen.insert(context.as_str()) {
+            return Err(format!("settings context `{context}` is listed twice"));
+        }
+    }
+    Ok(())
 }
 
 /// Largest manifest the parser will look at.
@@ -325,8 +370,20 @@ impl Manifest {
                 message,
             })?;
         }
+        check_settings_contexts(&self.plugin.settings_contexts)
+            .map_err(ManifestError::BadSettingsContexts)?;
         CapabilitySet::from_permissions(&self.permissions)?;
         Ok(())
+    }
+
+    /// The contexts the plugin's Settings section belongs to: its declared
+    /// `settings_contexts`, or `["app"]` when it declares none.
+    pub fn settings_contexts(&self) -> Vec<String> {
+        if self.plugin.settings_contexts.is_empty() {
+            vec![DEFAULT_SETTINGS_CONTEXT.to_owned()]
+        } else {
+            self.plugin.settings_contexts.clone()
+        }
     }
 
     /// The command through which a plugin that declares settings receives
@@ -592,5 +649,49 @@ description = "Ratio."
     fn hook_modes() {
         assert_eq!(Hook::OnCompilePre.mode(), HookMode::Pipeline);
         assert_eq!(Hook::OnLint.mode(), HookMode::FanOut);
+    }
+
+    #[test]
+    fn settings_contexts_default_to_app() {
+        let m = Manifest::from_toml(LATEX_HEAD).expect("valid");
+        assert!(m.plugin.settings_contexts.is_empty());
+        assert_eq!(m.settings_contexts(), vec!["app".to_owned()]);
+    }
+
+    #[test]
+    fn parses_settings_contexts() {
+        let src = "[plugin]\nname = \"latex\"\nversion = \"1.0.0\"\n\
+                   settings_contexts = [\"document\", \"engine:latex\"]\n";
+        let m = Manifest::from_toml(src).expect("valid");
+        assert_eq!(m.settings_contexts(), vec!["document", "engine:latex"]);
+    }
+
+    #[test]
+    fn rejects_bad_settings_contexts() {
+        let with = |list: &str| {
+            format!("[plugin]\nname = \"a\"\nversion = \"1.0.0\"\nsettings_contexts = {list}\n")
+        };
+        for list in [
+            "[\"editor\"]",
+            "[\"engine:\"]",
+            "[\"engine:Typst\"]",
+            "[\"Document\"]",
+            "[\"\"]",
+            "[\"document\", \"document\"]",
+            "[\"app\", \"project\", \"document\", \"figure\", \"diagram\", \"pdf\", \"engine:a\", \"engine:b\", \"engine:c\"]",
+        ] {
+            assert!(
+                matches!(
+                    Manifest::from_toml(&with(list)),
+                    Err(ManifestError::BadSettingsContexts(_))
+                ),
+                "{list}"
+            );
+        }
+        for good in SETTINGS_CONTEXTS {
+            assert!(valid_settings_context(good), "{good}");
+        }
+        assert!(valid_settings_context("engine:typst"));
+        assert!(Manifest::from_toml(&with("[]")).is_ok());
     }
 }
