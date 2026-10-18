@@ -1,7 +1,7 @@
 /**
  * Workspace onboarding coach lines state.
  *
- * Three short coach lines for the main workspace (editor, preview, figures)
+ * Two short coach lines for the main workspace (editor, preview)
  * that help new users get oriented. When dismissed, each one records its
  * dismissal, and when all are dismissed (or when the user turns off the
  * "appearance.coach-lines" setting), they never return.

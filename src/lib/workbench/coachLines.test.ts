@@ -29,7 +29,6 @@ describe("coachLines workbench helpers", () => {
     const empty = new Set<CoachTarget>();
     expect(isCoachLineVisible("editor", true, empty)).toBe(true);
     expect(isCoachLineVisible("preview", true, empty)).toBe(true);
-    expect(isCoachLineVisible("figures", true, empty)).toBe(true);
 
     // Disabled setting hides all
     expect(isCoachLineVisible("editor", false, empty)).toBe(false);
@@ -42,9 +41,9 @@ describe("coachLines workbench helpers", () => {
   });
 
   it("detects when all coach lines are dismissed", () => {
-    expect(areAllCoachLinesDismissed(new Set(["editor", "preview"]))).toBe(false);
-    expect(
-      areAllCoachLinesDismissed(new Set(["editor", "preview", "figures"])),
-    ).toBe(true);
+    expect(areAllCoachLinesDismissed(new Set<CoachTarget>(["editor"]))).toBe(false);
+    expect(areAllCoachLinesDismissed(new Set<CoachTarget>(["editor", "preview"]))).toBe(
+      true,
+    );
   });
 });

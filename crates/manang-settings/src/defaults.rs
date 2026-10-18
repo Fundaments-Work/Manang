@@ -87,7 +87,7 @@ pub fn definitions() -> Vec<SettingDef> {
             SettingType::Bool,
             json!(true),
             User,
-            "Show onboarding coach lines on the editor, preview, and figures.",
+            "Show onboarding coach lines on the editor and preview.",
         ),
         def(
             "editor.font-size",
