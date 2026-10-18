@@ -2292,6 +2292,10 @@ async function main() {
       !(await tabNames(page)).includes("ideas.typ") &&
         !(await exists(page, '[data-path="ideas.typ"]')),
     );
+    check(
+      "a notice confirms the trash",
+      (await statusText(page)).includes("Moved ideas.typ to the trash"),
+    );
     // New figure asks for a name, starting from "untitled".
     await press(page, "k", { ctrl: true, wait: 300 });
     await insertText(page, "New figure");
@@ -2299,19 +2303,15 @@ async function main() {
     await expectEventually(
       page,
       "New figure asks for a name, suggesting untitled",
-      `document.querySelector('[role="dialog"] input')?.value === "untitled"`,
+      `document.querySelector('[role="alertdialog"] input, [role="dialog"] input')?.value === "untitled"`,
     );
     await press(page, "a", { ctrl: true });
     await insertText(page, "orbit");
     await press(page, "Enter", { wait: 800 });
     check(
       "the figure is created under the name that was typed",
-      (await tabNames(page)).includes("orbit.figure"),
+      (await tabNames(page)).includes("figures/orbit.figure"),
       JSON.stringify(await tabNames(page)),
-    );
-    check(
-      "a notice confirms the trash",
-      (await statusText(page)).includes("Moved ideas.typ to the trash"),
     );
 
     await noStrayEdits(page, "after create, rename and delete");
