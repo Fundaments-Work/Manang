@@ -2,9 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window. The shell is a presentation layer: it gets only what the frontend calls (window controls for its own title bar, the open/save dialogs, revealing a file and opening web links, the OS name, relaunch, and the log). No filesystem, shell or HTTP access: plugins reach those through the kernel's capability checks (AGENTS.md).",
-  "windows": [
-    "main"
-  ],
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",
@@ -15,15 +13,6 @@
     "core:window:allow-is-maximized",
     "opener:allow-reveal-item-in-dir",
     "opener:allow-open-url",
-    {
-      "identifier": "opener:allow-open-path",
-      "allow": [
-        { "path": "$HOME/**" },
-        { "path": "/run/media/**" },
-        { "path": "/media/**" },
-        { "path": "/mnt/**" }
-      ]
-    },
     "dialog:allow-open",
     "dialog:allow-save",
     "os:allow-platform",

@@ -118,8 +118,10 @@ export async function revealInFileManager(path: string): Promise<boolean> {
  */
 export async function openWithSystem(path: string): Promise<boolean> {
   if (!inTauri()) return false;
-  const { openPath } = await import("@tauri-apps/plugin-opener");
-  await openPath(path);
+  // Through the shell, which only opens files inside the open project; the
+  // web view has no permission to open arbitrary paths.
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("open_in_system_app", { path });
   return true;
 }
 
