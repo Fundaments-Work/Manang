@@ -179,6 +179,14 @@ fn build_kernel_parts(
         manang_agent::manifest()?,
         Arc::clone(&agent) as Arc<dyn manang_kernel::Plugin>,
     )?;
+    kernel.register(
+        manang_live_plugin::manifest()?,
+        Arc::new(manang_live_plugin::LivePlugin::new(
+            Arc::clone(editor),
+            events.clone(),
+            dirs.config.to_path_buf(),
+        )),
+    )?;
     // One settings implementation serves three command namespaces.
     let settings = Arc::new(manang_settings::plugin(
         dirs.config.to_path_buf(),
@@ -812,6 +820,10 @@ mod tests {
             "agent.start",
             "agent.key.set",
             "agent.apply-proposal",
+            "live.start",
+            "live.join",
+            "live.leave",
+            "live.push",
         ] {
             assert!(ids.iter().any(|id| id == expected), "missing {expected}");
         }

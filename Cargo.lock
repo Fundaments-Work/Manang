@@ -6168,6 +6168,7 @@ dependencies = [
  "manang-git",
  "manang-kernel",
  "manang-latex",
+ "manang-live-plugin",
  "manang-markdown",
  "manang-plugins",
  "manang-project",
@@ -6460,6 +6461,24 @@ dependencies = [
  "thiserror 2.0.21",
  "yrs",
  "zeroize",
+]
+
+[[package]]
+name = "manang-live-plugin"
+version = "0.1.0"
+dependencies = [
+ "manang-editor",
+ "manang-kernel",
+ "manang-live",
+ "manang-relay",
+ "parking_lot",
+ "ropey",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "url",
 ]
 
 [[package]]
