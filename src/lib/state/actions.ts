@@ -46,6 +46,7 @@ import {
 import { sanitizeSession, toSession } from "$lib/workbench/tabs";
 
 import { build } from "./build.svelte";
+import { diagram } from "./diagram.svelte";
 import { dialog } from "./dialog.svelte";
 import { documents } from "./documents.svelte";
 import { blankFigure } from "./figure.svelte";
@@ -703,6 +704,7 @@ export async function boot(): Promise<void> {
   void guardWindowClose();
   routeExternalLinks();
   documents.onEdit(() => build.schedule("edit"));
+  diagram.start();
   void kernel.onEvent(onKernelEvent);
   await workspace.loadRecent();
   void home.load();

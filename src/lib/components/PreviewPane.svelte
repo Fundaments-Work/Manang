@@ -1,10 +1,12 @@
 <script lang="ts">
   import { untrack } from "svelte";
 
+  import DiagramPreview from "$lib/components/DiagramPreview.svelte";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
   import { exportPdf } from "$lib/state/actions";
   import { build, formatMs } from "$lib/state/build.svelte";
+  import { diagram } from "$lib/state/diagram.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { preview } from "$lib/state/preview.svelte";
   import { jumpToSource } from "$lib/state/sourceJump";
@@ -41,12 +43,15 @@
   });
 
   const kind = $derived(preview.kind);
-  const paged = $derived(kind === "svg" || kind === "pdf");
+  /** A diagram file shows its own picture, not the project's pages. */
+  const isDiagram = $derived(diagram.active);
+  const paged = $derived(!isDiagram && (kind === "svg" || kind === "pdf"));
   const settled = $derived(
     build.status === "ok" || build.status === "failed" || build.status === "compiling",
   );
   const shown = $derived(
-    settled &&
+    !isDiagram &&
+      settled &&
       (kind === "html"
         ? build.html !== ""
         : kind === "pdf"
@@ -121,7 +126,24 @@
     role="toolbar"
     aria-label="Preview controls"
   >
-    {#if paged}
+    {#if isDiagram}
+      <span
+        class="shrink-0 px-1.5 font-mono text-[11px] whitespace-nowrap text-text-60 @max-[240px]:hidden"
+        >{diagram.name}</span
+      >
+      {#if diagram.snapshot.error !== ""}
+        <button
+          type="button"
+          class="flex min-w-0 items-center gap-1.5 px-1.5 font-mono text-[11px] text-text hover:text-text-60"
+          title="{diagram.snapshot.error}. Show problems"
+          data-diagram-error
+          onclick={() => layout.showPanel("problems")}
+        >
+          <Icon name="warning" size={13} />
+          <span class="truncate">{diagram.snapshot.error}</span>
+        </button>
+      {/if}
+    {:else if paged}
       <button
         type="button"
         class="mng-icon-btn @max-[240px]:hidden"
@@ -197,7 +219,7 @@
       </span>
     {/if}
 
-    {#if kind === "pdf" && build.backend !== ""}
+    {#if !isDiagram && kind === "pdf" && build.backend !== ""}
       <span
         class="ml-2 min-w-0 truncate font-mono text-[11px] text-text-muted"
         title="The TeX engine that compiled this document"
@@ -212,9 +234,10 @@
       type="button"
       class="mng-icon-btn @max-[180px]:hidden"
       aria-label="Refresh preview"
-      title="Compile now"
-      disabled={build.status === "unsupported" || build.status === "unavailable"}
-      onclick={() => void build.compile(true)}
+      title={isDiagram ? "Draw the diagram again" : "Compile now"}
+      disabled={!isDiagram &&
+        (build.status === "unsupported" || build.status === "unavailable")}
+      onclick={() => (isDiagram ? diagram.refresh() : void build.compile(true))}
     >
       <Icon name="refresh" size={14} />
     </button>
@@ -222,9 +245,11 @@
       type="button"
       class="mng-icon-btn"
       aria-label="Export PDF"
-      title="Export PDF ({exportHint})"
+      title={isDiagram
+        ? "Export the document that includes this diagram"
+        : `Export PDF (${exportHint})`}
       aria-keyshortcuts="Control+E"
-      disabled={!exportable || preview.exporting}
+      disabled={isDiagram || !exportable || preview.exporting}
       onclick={() => exportPdf()}
     >
       <Icon name="export" size={14} />
@@ -324,6 +349,8 @@
           {/if}
         </div>
       </div>
+    {:else if isDiagram}
+      <DiagramPreview />
     {:else if build.failure !== null}
       <div class="mx-auto max-w-sm px-6 pt-16 text-xs leading-relaxed text-text-60">
         <p class="m-0 text-text">{build.failure.title}</p>

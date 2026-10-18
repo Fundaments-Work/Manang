@@ -9,6 +9,7 @@ import type { Kernel } from "./client";
 import { createMockKernel } from "./mock";
 import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject";
 import { citationsPlugin } from "./mockCitations";
+import { diagramPlugin } from "./mockDiagram";
 import { figurePlugin } from "./mockFigure";
 import { latexPlugin } from "./mockLatex";
 import { markdownPlugin } from "./mockMarkdown";
@@ -194,6 +195,13 @@ const CURVE = {
 
 const FIGURE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540"><rect x="120" y="200" width="190" height="84" fill="none" stroke="#1c1c1c"/><rect x="640" y="200" width="190" height="84" fill="none" stroke="#1c1c1c"/><line x1="310" y1="242" x2="640" y2="242" stroke="#1c1c1c"/></svg>`;
 
+const FLOW = `flowchart TD
+  %% How a measurement becomes a bound.
+  A[Prepare qubit] --> B[Drive protocol]
+  B --> C[Measure heat]
+  C --> D[Compare with bound]
+`;
+
 /**
  * A 240 by 150 PNG (a hairline square and a ring on a dark ground), so the
  * image viewer has a real raster file to open in `pnpm dev`.
@@ -352,6 +360,7 @@ export const DEMO_PROJECTS: readonly SeedProject[] = [
       "figures/state_lattice.figure.json": JSON.stringify(SCENE, null, 2),
       "figures/state_lattice.svg": FIGURE_SVG,
       "figures/dissipation_curve.figure.json": JSON.stringify(CURVE, null, 2),
+      "figures/flow.mmd": FLOW,
       "figures/sketch.png": SKETCH_PNG,
       "data/measurements.csv": MEASUREMENTS_CSV,
       "data/raw.zip": RAW_ZIP,
@@ -443,6 +452,7 @@ export function createDevKernel(
       latexPlugin(host),
       markdownPlugin(),
       citationsPlugin(host),
+      diagramPlugin(),
       figurePlugin(host),
       gitPlugin(host),
       searchPlugin(host),
