@@ -5451,9 +5451,10 @@ async function main() {
       JSON.stringify(latexBox),
     );
     check(
-      "the preview header names the TeX backend",
+      "the Compile button names the TeX backend, and the header stays quiet",
       await doc.evaluate(
-        `document.querySelector('section[aria-label="Preview"]').innerText.includes("pdflatex, system TeX")`,
+        `document.querySelector('section[aria-label="Preview"] [aria-label="Refresh preview"]').title.includes("pdflatex, system TeX") &&
+          !document.querySelector('section[aria-label="Preview"]').innerText.includes("system TeX")`,
       ),
     );
     await shoot(doc, "22-latex-preview");
@@ -5465,7 +5466,7 @@ async function main() {
     await expectEventually(
       doc,
       "a chapter is compiled through main.tex",
-      `document.querySelector('section[aria-label="Preview"]').innerText.includes("via main.tex")`,
+      `document.querySelector('section[aria-label="Preview"] [aria-label="Refresh preview"]').title.includes("via main.tex")`,
     );
 
     // SyncTeX both ways: line 2 of the chapter to the PDF and back.
