@@ -19,7 +19,7 @@ import {
   type TransactionSpec,
 } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
-import { SvelteMap } from "svelte/reactivity";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
 import {
   applyKernelText,
@@ -536,7 +536,7 @@ export class DocumentsStore {
     }
   }
 
-  readonly #silentFailures = new Set<string>();
+  readonly #silentFailures = new SvelteSet<string>();
 
   /** Autosave met a file that changed on disk: show the bar, ask nothing, write nothing. */
   async #markConflict(session: DocSession): Promise<false> {
