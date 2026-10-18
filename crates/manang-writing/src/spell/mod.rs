@@ -115,13 +115,41 @@ pub fn check(
 }
 
 /// Up to `limit` suggestions for `word`.
+///
+/// The dictionary builds its candidates in hash order, so suggestions of equal
+/// quality came back in a different order from run to run. They are ranked by
+/// edit distance, then alphabetically: the same word always gets the same list.
 pub fn suggest(dict: &Dictionary, word: &str, limit: usize) -> Vec<String> {
-    let mut suggestions = Vec::new();
-    if limit > 0 {
-        dict.suggest(&word.replace('\u{2019}', "'"), &mut suggestions);
-        suggestions.truncate(limit);
+    if limit == 0 {
+        return Vec::new();
     }
-    suggestions
+    let word = word.replace('\u{2019}', "'");
+    let mut found = Vec::new();
+    dict.suggest(&word, &mut found);
+    found.sort_by_cached_key(|candidate| (edit_distance(&word, candidate), candidate.clone()));
+    found.dedup();
+    found.truncate(limit);
+    found
+}
+
+/// Levenshtein distance between two words, in characters.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = if ca == *cb {
+                diagonal
+            } else {
+                1 + diagonal.min(above).min(row[j])
+            };
+            diagonal = above;
+        }
+    }
+    row[b.len()]
 }
 
 /// Spelling findings as lint diagnostics (rule `spelling`).
@@ -173,6 +201,14 @@ mod tests {
             .into_iter()
             .map(|m| m.word)
             .collect()
+    }
+
+    #[test]
+    fn edit_distance_counts_character_edits() {
+        assert_eq!(edit_distance("", ""), 0);
+        assert_eq!(edit_distance("quik", "quick"), 1);
+        assert_eq!(edit_distance("kitten", "sitting"), 3);
+        assert_eq!(edit_distance("abc", ""), 3);
     }
 
     #[test]
