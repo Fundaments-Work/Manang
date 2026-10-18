@@ -11,6 +11,7 @@
 import { analyse } from "$lib/editor/diagnostics";
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
+import { textWidth, writePdf, type MockLink, type MockPage } from "./mockPdf";
 import type { MockProjectFs, MockProjectHost } from "./mockProject";
 import { scalarLength } from "./offsets";
 import type { CompileReport, WireDiagnostic } from "./types";
@@ -36,6 +37,8 @@ interface PageLine {
   /** The source line it came from (a paragraph's rows: the paragraph's first line). */
   readonly file?: string;
   readonly line?: number;
+  /** Web links (`#link("url")[label]`) whose label is on this row. */
+  readonly links?: readonly { readonly label: string; readonly url: string }[];
 }
 
 interface Compiled {
@@ -93,10 +96,14 @@ function wrap(text: string): string[] {
   return out;
 }
 
+/** `#link("https://...")[label]`: the label is drawn, the address becomes a link. */
+const LINK = /#link\("([^"]+)"\)\[([^\]]*)\]/g;
+
 /** Strip the markup the mock does not draw, keeping the words. */
 function plain(text: string): string {
   return text
     .replace(/#set [^\n]*/g, "")
+    .replace(LINK, "$2")
     .replace(/\$([^$]+)\$/g, "$1")
     .replace(/#[a-z]+\([^)]*\)/g, "")
     .replace(/@([A-Za-z][\w-]*)/g, "[$1]")
@@ -114,8 +121,20 @@ export function layout(input: string | readonly SourceLine[]): PageLine[] {
   const flush = (): void => {
     if (paragraph.length === 0) return;
     const origin = start === null ? {} : { file: start.file, line: start.line };
-    for (const row of wrap(plain(paragraph.join(" "))))
-      lines.push({ kind: "body", text: row, ...origin });
+    const raw = paragraph.join(" ");
+    const links = [...raw.matchAll(LINK)].map((m) => ({
+      url: m[1] ?? "",
+      label: plain(m[2] ?? ""),
+    }));
+    for (const row of wrap(plain(raw))) {
+      const here = links.filter((l) => l.label !== "" && row.includes(l.label));
+      lines.push({
+        kind: "body",
+        text: row,
+        ...origin,
+        ...(here.length > 0 ? { links: here } : {}),
+      });
+    }
     lines.push({ kind: "rule", text: "" });
     paragraph = [];
     start = null;
@@ -247,6 +266,126 @@ export function pageSvg(
     "</svg>",
   );
   return parts.join("");
+}
+
+const INK = 0.11;
+const INK_60 = 0.42;
+
+/**
+ * The laid-out pages as a real PDF, drawn where `pageSvg` draws them (so
+ * `typst.jump-*` points land on the text): selectable text, an outline of the
+ * headings, citations (`[key]`) linking to the References heading and web
+ * links from `#link`. Lets the PDF viewer run against the mock.
+ */
+export function pagesPdf(pages: readonly (readonly PageLine[])[]): Uint8Array {
+  const outline: { title: string; page: number; y: number }[] = [];
+  let references: { page: number; y: number } | null = null;
+  // First pass: where each heading starts, for the outline and citations.
+  pages.forEach((lines, page) => {
+    lines.forEach((line, i) => {
+      const top = lineBands(lines)[i]?.top ?? MARGIN;
+      if (line.kind === "heading") outline.push({ title: line.text, page, y: top });
+      if (line.kind === "reference") {
+        outline.push({ title: line.text, page, y: top });
+        references = { page, y: top };
+      }
+    });
+  });
+  const target = references as { page: number; y: number } | null;
+  const out: MockPage[] = pages.map((lines, index) => {
+    const texts: MockPage["texts"][number][] = [];
+    const rects: { x: number; y: number; width: number; height: number }[] = [];
+    const links: MockLink[] = [];
+    let y = MARGIN;
+    for (const line of lines) {
+      switch (line.kind) {
+        case "heading":
+          y += 8;
+          texts.push({ x: MARGIN, y: y + 8, size: 20, text: line.text, grey: INK });
+          y += LINE_STEP * COST.heading - 8;
+          break;
+        case "body": {
+          const base = y + 10;
+          texts.push({ x: MARGIN, y: base, size: 10.5, text: line.text, grey: INK });
+          const box = (from: number, label: string) => ({
+            x: MARGIN + textWidth(line.text.slice(0, from), 10.5),
+            y: base - 9,
+            width: textWidth(label, 10.5),
+            height: 12,
+          });
+          for (const link of line.links ?? []) {
+            const at = line.text.indexOf(link.label);
+            if (at >= 0)
+              links.push({ rect: box(at, link.label), to: { url: link.url } });
+          }
+          if (target !== null) {
+            for (const cite of line.text.matchAll(/\[[A-Za-z][\w-]*\]/g)) {
+              links.push({ rect: box(cite.index, cite[0]), to: target });
+            }
+          }
+          y += LINE_STEP;
+          break;
+        }
+        case "math": {
+          const w = textWidth(line.text, 11, "mono");
+          texts.push({
+            x: PAGE_W / 2 - w / 2,
+            y: y + 14,
+            size: 11,
+            text: line.text,
+            font: "mono",
+            grey: INK,
+          });
+          y += LINE_STEP * COST.math;
+          break;
+        }
+        case "figure": {
+          rects.push({
+            x: MARGIN + 40,
+            y,
+            width: PAGE_W - MARGIN * 2 - 80,
+            height: LINE_STEP * 7.5,
+          });
+          const w = textWidth(line.text, 8.5, "mono");
+          texts.push({
+            x: PAGE_W / 2 - w / 2,
+            y: y + LINE_STEP * 3.9,
+            size: 8.5,
+            text: line.text,
+            font: "mono",
+            grey: INK_60,
+          });
+          y += LINE_STEP * COST.figure;
+          break;
+        }
+        case "reference":
+          texts.push({ x: MARGIN, y: y + 12, size: 14, text: line.text, grey: INK });
+          y += LINE_STEP * COST.reference;
+          break;
+        case "rule":
+          y += LINE_STEP * COST.rule;
+          break;
+      }
+    }
+    const footer = `${index + 1} / ${pages.length}`;
+    const fw = textWidth(footer, 8, "mono");
+    texts.push({
+      x: PAGE_W / 2 - fw / 2,
+      y: PAGE_H - 30,
+      size: 8,
+      text: footer,
+      font: "mono",
+      grey: INK_60,
+    });
+    return { texts, rects, links };
+  });
+  return writePdf({
+    width: PAGE_W,
+    height: PAGE_H,
+    paper: [250 / 255, 249 / 255, 247 / 255],
+    pages: out,
+    outline,
+  });
 }
 
 /**
@@ -531,12 +670,9 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
           if (latest === null) {
             throw { message: "nothing has been compiled successfully yet" };
           }
-          // The demo kernel imitates the preview; it cannot produce a real PDF,
-          // so it says so instead of handing over a file that will not open.
-          throw {
-            message:
-              "the browser demo does not compile documents. Run the desktop app (pnpm app:dev) to export a real PDF.",
-          };
+          // Not Typst's PDF, but a real one drawn from the mock layout: text,
+          // outline and links, enough for the preview's PDF viewer.
+          return pagesPdf(latest.pages);
         },
       },
     };

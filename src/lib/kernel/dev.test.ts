@@ -179,17 +179,35 @@ describe("dev kernel: typst plugin", () => {
     });
   });
 
-  it("renders compiled pages as SVG bytes and refuses to fake a PDF", async () => {
+  it("renders compiled pages as SVG bytes and exports a real PDF of them", async () => {
     const { typst } = await opened();
-    await typst.compile({ main: "main.typ" });
+    const report = await typst.compile({ main: "main.typ" });
     const page = await typst.render(0);
     expect(page).toBeInstanceOf(Uint8Array);
     expect(sniffArtifact(page)?.kind).toBe("svg");
     expect(new TextDecoder().decode(page)).toContain("Quantum thermodynamic bounds");
-    // The demo kernel cannot typeset, so it points to the desktop app.
-    await expect(typst.exportPdf()).rejects.toMatchObject({
-      message: expect.stringContaining("desktop app") as unknown,
-    });
+    // Not typeset, but a real PDF of the same pages, for the PDF viewer.
+    const pdf = await typst.exportPdf();
+    expect(sniffArtifact(pdf)?.kind).toBe("pdf");
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loading = pdfjs.getDocument({ data: pdf.slice(), useWorkerFetch: false });
+    const doc = await loading.promise;
+    try {
+      expect(doc.numPages).toBe(report.pages);
+      const text = await (await doc.getPage(1)).getTextContent();
+      const words = text.items.map((i) => ("str" in i ? i.str : "")).join(" ");
+      expect(words).toContain("Quantum thermodynamic bounds");
+      const outline = (await doc.getOutline()) ?? [];
+      expect(outline.map((o) => o.title)).toContain("Quantum thermodynamic bounds");
+      expect(outline.map((o) => o.title)).toContain("References");
+      // Citations link to the References heading.
+      const links = await (await doc.getPage(1)).getAnnotations();
+      expect(links.some((a) => a.subtype === "Link" && Array.isArray(a.dest))).toBe(
+        true,
+      );
+    } finally {
+      await loading.destroy();
+    }
   });
 
   it("refuses to render before a successful compile or past the last page", async () => {
