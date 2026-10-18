@@ -14,7 +14,7 @@ Here is what you should expect:
 1. **Interfaces will evolve:** Based on your feedback, toolbars, shortcuts, and panel layouts will be refined.
 2. **Data safety & backups:** While Manang performs atomic saves and places deleted files in recoverable trash, **you should keep your own backups (such as in Git or your cloud folder) until we declare general availability.**
 3. **Respect for your files:** Manang never overwrites, alters, or moves your files without your explicit action.
-4. **Features in flight:** Some capabilities described in our long-term roadmap (such as the AI writing assistant, real-time live co-editing, and cloud remote sharing) are actively being built and are marked as **coming in a later beta** throughout the interface.
+4. **Features in flight:** Some capabilities described in our long-term roadmap (such as cloud remote sharing) are actively being built and are marked as **coming in a later beta** throughout the interface.
 
 ---
 
@@ -59,7 +59,9 @@ Launch Manang. You will see the **Home** view displaying your project workspace:
 
 5. Try **Save a version** (File menu, or `Ctrl+Alt+S`; `Cmd+Option+S` on macOS): it saves a named snapshot of your project. Open **Versions** (View menu) to see the timeline, compare a version with your files, and restore a file or the whole project. Restore never deletes anything, and it saves your current changes first if you ask it to.
 
-*(Sharing through a git remote, the AI assistant, and live co-editing are coming in a later beta.)*
+6. Try **Share this file live** (File menu). It needs a relay address first (Settings, section Live). Send the invite to a second tester, who chooses **Join a live session**. See [Edit together live](../user/edit-together-live.md).
+
+*(Sharing through a git remote is coming in a later beta.)*
 
 ---
 

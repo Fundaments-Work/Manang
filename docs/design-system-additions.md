@@ -9,7 +9,7 @@ What Manang uses that the Fundaments.work brand page (https://fundaments.work/br
 | 3 | Paper | `#faf9f7` page, `#1c1c1c` ink, `#6b6b6b` secondary ink | A rendered page is identical in every theme, so the screen matches print. |
 | 4 | Problem markers | error: solid dot in text colour; warning: hairline ring in text-60 | No red or amber. Shape, not hue, carries severity. Always paired with a text message. |
 | 5 | Translucent tints | lime at 20-45% (selection, search, PDF highlights); sage at 22% (matching brackets) | Mixes of existing tokens (`color-mix`), never new hues. |
-| 6 | Collaborator cursors | six mixes of sage, text and line | No new hues. Each cursor also carries the person's name label. Needs sign-off, because the system has one accent. |
+| 6 | Collaborator cursors | eight slots, each a mix of sage, text, background and line (`SLOT_COLOURS` in `src/lib/editor/live/remote.ts`) with a 1px stroke style per slot (solid, dashed, dotted, double); selections are the same mix at 20% | No new hues, never lime (that is the one action). Each cursor carries the person's name label and the session bar repeats the mark beside the name, so colour never identifies a person alone. In the light theme sage is ink, so the slots differ by mix and stroke. Needs sign-off, because the system has one accent. |
 | 7 | Motion | ease `cubic-bezier(0.22, 1, 0.36, 1)`; 150 / 220 / 320 ms | Only in response to an action. Removed by `prefers-reduced-motion` and the Reduce motion setting. |
 | 8 | Focus ring | 1px lime outline, 1px offset (inset on dense lists) | Visible on every control. |
 | 9 | Tracking | display -0.03em, headline -0.02em, body -0.01em | Sizes and colour carry hierarchy, never a third weight. |
