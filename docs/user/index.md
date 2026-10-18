@@ -34,6 +34,9 @@ Manang is a fast, local-first scientific authoring and illustration desktop appl
 - **[Version history and restore](version-history.md)**  
   Capture named project milestone snapshots, browse the history timeline, inspect visual diffs, and restore previous drafts safely.
 
+- **[Share and get updates](share-and-get-updates.md)**  
+  Connect a shared address once, share your saved versions with co-authors, and bring their work into yours without losing anything.
+
 - **[The Trash](trash.md)**  
   Manage deleted projects on the Home screen, restore trashed projects, perform permanent purges, and recover deleted workspace files.
 
