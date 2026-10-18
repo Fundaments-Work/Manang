@@ -505,7 +505,12 @@ export class DocumentsStore {
   /* Saving                                                                   */
   /* ----------------------------------------------------------------------- */
 
-  async save(path: string): Promise<boolean> {
+  /**
+   * Write a document. `silent` is for saving by itself (autosave): a file that
+   * changed on disk is marked in the bar above the editor instead of opening
+   * the question dialog, and a failure is reported once, not on every attempt.
+   */
+  async save(path: string, options: { silent?: boolean } = {}): Promise<boolean> {
     const session = this.#sessions.get(path);
     if (session === undefined) return true;
     const doc = session.doc;
@@ -515,12 +520,39 @@ export class DocumentsStore {
         doc.toString(),
         session.diskHash ?? "absent",
       );
+      this.#silentFailures.delete(path);
       return this.#saved(session, doc, written.hash);
     } catch (error) {
-      if (isConflictError(error)) return this.#resolveConflict(session, doc);
-      notice.error(`Could not save ${path}: ${errorMessage(error)}`);
+      if (isConflictError(error)) {
+        return options.silent === true
+          ? this.#markConflict(session)
+          : this.#resolveConflict(session, doc);
+      }
+      if (options.silent !== true || !this.#silentFailures.has(path)) {
+        notice.error(`Could not save ${path}: ${errorMessage(error)}`);
+      }
+      if (options.silent === true) this.#silentFailures.add(path);
       return false;
     }
+  }
+
+  readonly #silentFailures = new Set<string>();
+
+  /** Autosave met a file that changed on disk: show the bar, ask nothing, write nothing. */
+  async #markConflict(session: DocSession): Promise<false> {
+    try {
+      const disk = await workspace.readText(session.path);
+      if (session.external === null) {
+        session.markChanged(disk);
+        notice.error(
+          `${basename(session.path)} changed on disk. Your unsaved edits are kept: choose how to continue in the bar above the editor.`,
+        );
+      }
+    } catch (error) {
+      if (isNotFoundError(error)) session.markDeleted();
+      else reportError("documents.autosave", error);
+    }
+    return false;
   }
 
   #saved(session: DocSession, doc: Text, hash: string): true {

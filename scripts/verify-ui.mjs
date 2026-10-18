@@ -475,6 +475,60 @@ async function caretToEnd(cdp) {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Autosave (`files.autosave`): after a pause in typing the document is written
+ * and its tab is no longer marked unsaved; on-focus-loss writes when the window
+ * loses focus; off leaves it unsaved. Self-contained, like the live section.
+ */
+async function autosaveSection(browser) {
+  section("Autosave");
+  const page = await newPage(browser);
+  current = page;
+  await clickText(page, "[data-project] button", "Entropy paper");
+  await waitFor(
+    page,
+    `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+    { label: "editor shows main.typ" },
+  );
+  const setMode = (value) =>
+    page.evaluate(
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("settings.set", { id: "files.autosave", value: ${JSON.stringify(value)}, scope: "user" }))`,
+    );
+  const unsaved = async () => (await dirtyTabs(page)).length > 0;
+
+  await setMode("off");
+  await focusEditor(page);
+  await caretToEnd(page);
+  await insertText(page, " a");
+  await sleep(1800);
+  check("with autosave off an edit stays unsaved", await unsaved());
+  await press(page, "s", { ctrl: true, wait: 400 });
+
+  await setMode("after-delay");
+  await focusEditor(page);
+  await caretToEnd(page);
+  await insertText(page, " b");
+  check("an edit marks the tab unsaved at first", await unsaved());
+  await expectEventually(
+    page,
+    "after a pause the document is saved by itself",
+    `![...document.querySelectorAll('[role="tab"][data-tab]')].some((t) => t.getAttribute("aria-label").includes("unsaved"))`,
+    { timeout: 6000 },
+  );
+  check("the tab is clean after autosave", !(await unsaved()));
+
+  await setMode("on-focus-loss");
+  await focusEditor(page);
+  await caretToEnd(page);
+  await insertText(page, " c");
+  await sleep(1800);
+  check("on-focus-loss does not save while the window has focus", await unsaved());
+  await page.evaluate(`window.dispatchEvent(new Event("blur"))`);
+  await sleep(600);
+  check("losing focus saves the document", !(await unsaved()));
+  await setMode("off");
+}
+
+/**
  * The live session flow against the in-memory kernel: sharing (with and without
  * a relay), a scripted collaborator typing and moving a caret, a local edit
  * racing a delayed remote one, a dropped link, an error, joining with a
@@ -7231,6 +7285,7 @@ async function main() {
     ext.close();
     current = page;
 
+    await autosaveSection(browser);
     await liveSection(browser);
 
     /* ------------------------------------------------------------------ */
