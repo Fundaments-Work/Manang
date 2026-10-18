@@ -36,7 +36,7 @@ path = "src/bin/manang-latex-worker.rs"
 required-features = ["engine"]
 
 [dev-dependencies]
-criterion = { version = "0.5", default-features = false }
+criterion = { version = "0.8", default-features = false }
 insta = { version = "1", features = ["json"] }
 proptest = "1"
 
