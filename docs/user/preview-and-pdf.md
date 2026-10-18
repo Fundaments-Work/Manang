@@ -1,6 +1,6 @@
 # Preview and PDF
 
-You can preview compiled documents beside your code, switch layout modes, jump bidirectionally between source text and rendered output with SyncTeX, export publication-grade PDFs, and configure your LaTeX TeX environment.
+You can preview compiled documents beside your code, switch layout modes, jump bidirectionally between source text and rendered output with SyncTeX, use the built-in PDF viewer, export publication-grade PDFs, and configure your LaTeX TeX environment.
 
 ## 1. Control preview layouts
 
@@ -13,12 +13,58 @@ The preview pane shows the rendered document output (SVG pages for Typst, PDF re
 2. To cycle between these three layouts:
    - Press `Ctrl+Shift+V` (`Cmd+Shift+V`).
    - Or click the preview layout button located on the right side of the tab bar.
-   - Or open the command palette (`Ctrl+K` (`Cmd+K`)) and run `Cycle preview layout`.
+   - Or choose **View > Cycle preview layout** from the menu bar.
 3. To adjust the split width:
    - Click and drag the vertical divider line between the editor and preview panes.
-4. Additional tools for the PDF preview viewer are coming soon.
 
-## 2. Live recompile
+## 2. Use the built-in PDF viewer
+
+When compiling documents or opening standalone `.pdf` files, Manang uses a fast, continuous PDF viewer:
+
+1. **Select and copy text:**
+   - Click and drag over any text in the preview pane to select it.
+   - Press `Ctrl+C` (`Cmd+C`) to copy the selected text to your clipboard. Manang normalizes whitespace and line breaks cleanly.
+2. **Find text (`Ctrl+F`):**
+   - Press `Ctrl+F` (`Cmd+F`) while focused in the PDF viewer to open the find bar (or click the magnifying glass icon in the preview header).
+   - Type your search query. The viewer highlights all matches and displays the current match index and total match count (e.g. `1 of 14`).
+   - Press `Enter` or click the down arrow to jump to the next match; press `Shift+Enter` or click the up arrow to move to the previous match.
+   - Press `Escape` to close the find bar.
+3. **Follow links:**
+   - Click internal citation references or section links to scroll directly to the target destination.
+   - Click external web links to open them safely in your system browser.
+4. **Navigate with the document outline:**
+   - If the document contains a PDF table of contents, click the **Outline** button in the preview header.
+   - An outline drawer opens displaying all document sections and subsections. Click any heading to jump directly to that page.
+5. **Zoom controls:**
+   - **Zoom in / out:** Press `Ctrl+=` (`Cmd+=`) to zoom in, and `Ctrl+-` (`Cmd+-`) to zoom out (or click the `+` and `−` buttons in the preview header).
+   - **Fit page width:** Press `Ctrl+0` (`Cmd+0`) to adjust zoom so pages fit the width of your preview pane.
+   - **Pointer zoom:** Hold `Ctrl` (or `Cmd`) and scroll your mouse wheel, or pinch on a trackpad. Zoom anchors dynamically at your pointer position.
+   - **Zoom presets:** Click the percentage indicator in the preview header to choose from presets: *Fit page width*, *50%*, *75%*, *100%*, *125%*, *150%*, or *200%*.
+6. **Dark pages for night reading:**
+   - Click the **Dark pages** (invert) button in the preview header.
+   - Manang smoothly inverts the rendered page colors while preserving diagram contrast, reducing eye strain in dark environments.
+7. **Page box navigation:**
+   - The preview header displays your current position and total pages (`<page> / <total>`).
+   - Click the page number input, type a page number, and press `Enter` to jump directly to that page.
+   - Click the previous and next arrow buttons to step through pages.
+
+## 3. Bidirectional SyncTeX navigation
+
+SyncTeX lets you jump seamlessly between lines in your source code and positions in the rendered preview.
+
+### Jump from preview to source (Backward sync)
+1. Double-click anywhere on a paragraph, heading, list item, or equation on the rendered page (or hold `Ctrl`/`Cmd` and click).
+2. The editor immediately focuses and places your caret on the exact source line that generated that content.
+3. *Tip:* To select a word in the PDF without triggering a jump to source, hold `Alt` (or `Option`) and double-click the word.
+
+### Jump from source to preview (Forward sync)
+1. Place your cursor anywhere in the text editor.
+2. Press `Ctrl+Alt+J` (`Cmd+Option+J`).
+   - Or choose **Go > Show in preview** from the menu bar.
+   - Or open the command palette (`Ctrl+K` (`Cmd+K`)), type `Show in preview`, and press `Enter`.
+3. The preview pane scrolls to the corresponding page and highlights the matching position.
+
+## 4. Live recompile
 
 Manang recompiles your document incrementally in the background as you write.
 
@@ -26,40 +72,27 @@ Manang recompiles your document incrementally in the background as you write.
 2. If compilation succeeds, the preview updates immediately without losing your scroll position.
 3. If an error occurs, the preview keeps displaying the last successful build, and diagnostics appear in the **Problems** tab of the bottom panel (`Ctrl+Shift+M` (`Cmd+Shift+M`)).
 4. To trigger a manual rebuild at any time:
-   - Open the command palette (`Ctrl+K` (`Cmd+K`)), type `Compile now`, and press `Enter`.
+   - Press `Ctrl+Shift+B` (`Cmd+Shift+B`).
+   - Or choose **Build > Compile** from the menu bar.
 5. To configure auto-compilation:
    - Open Settings (`Ctrl+,` (`Cmd+,`)).
    - Toggle **Recompile automatically while typing** (`preview.auto-compile`).
    - Adjust the delay in milliseconds under **Compile debounce** (`preview.debounce-ms`, default is `300` ms).
 
-## 3. Bidirectional SyncTeX navigation
-
-SyncTeX lets you jump seamlessly between lines in your source code and positions in the rendered preview.
-
-### Jump from preview to source (Backward sync)
-1. Move your mouse over the preview pane.
-2. Click any paragraph, heading, list item, or equation on the rendered page.
-3. The editor immediately focuses and places your caret on the exact source line that generated that content.
-
-### Jump from source to preview (Forward sync)
-1. Place your cursor anywhere in the text editor.
-2. Press `Ctrl+Alt+J` (`Cmd+Alt+J`).
-   - Or open the command palette (`Ctrl+K` (`Cmd+K`)), type `Show in preview`, and press `Enter`.
-3. The preview pane scrolls to the corresponding page and highlights the matching position.
-
-## 4. Export PDF
+## 5. Export PDF
 
 You can export standalone, publication-ready PDF documents from Typst and LaTeX files.
 
 1. Open the Typst or LaTeX document you want to publish.
 2. Press `Ctrl+E` (`Cmd+E`).
+   - Or choose **File > Export PDF** (or **Build > Export PDF**) from the menu bar.
    - Or open the command palette (`Ctrl+K` (`Cmd+K`)), type `Export PDF`, and press `Enter`.
 3. A native system save dialog appears.
 4. Select the folder location, enter the file name, and click **Save**.
 5. Manang compiles the document and writes the PDF file directly to disk.
-6. *Note for Markdown files:* Markdown files generate HTML previews. To export a paginated PDF from Markdown, run `Convert to Typst` (`Ctrl+K` (`Cmd+K`)) to produce a `.typ` document, then export the PDF.
+6. *Note for Markdown files:* Markdown files generate HTML previews. To export a paginated PDF from Markdown, run `Convert to Typst` (`Edit > Convert to Typst`) to produce a `.typ` document, then export the PDF.
 
-## 5. Install TeX Live for LaTeX
+## 6. Install TeX Live for LaTeX
 
 Typst compiles using Manang's built-in Rust engine and requires no external tools. Compiling LaTeX documents requires a TeX distribution installed on your system.
 
@@ -98,6 +131,3 @@ Typst compiles using Manang's built-in Rust engine and requires no external tool
 2. Scroll to the **LaTeX** section:
    - **Backend:** Keep set to `auto` to use the system TeX installation.
    - **Engine:** Choose `pdflatex`, `xelatex`, or `lualatex` according to your document requirements.
-   - **Use latexmk:** Keep enabled (default `true`) so bibliographies and cross-references resolve automatically over multiple compiler passes.
-   - **Compile timeout:** Adjust the maximum build time in seconds (default `60` seconds) to prevent runaway macros from hanging the process.
-3. An optional built-in Tectonic worker engine can also be compiled locally using `cargo build -p manang-latex --features engine --bin manang-latex-worker`.
