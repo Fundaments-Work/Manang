@@ -5468,9 +5468,9 @@ async function main() {
         (await exists(page, ".cm-editor")),
     );
     check(
-      "Show preview appears at the end of the tab strip once the preview is closed",
+      "Show preview appears in the tab strip, before Share, once the preview is closed",
       await page.evaluate(
-        `(() => { const b = document.querySelector('button[aria-label="Show preview"]'); const strip = document.querySelector('[role="tablist"]')?.parentElement; if (!b || !strip) return false; return strip.contains(b) && Math.abs(b.getBoundingClientRect().right - strip.getBoundingClientRect().right) < 12; })()`,
+        `(() => { const b = document.querySelector('button[aria-label="Show preview"]'); const strip = document.querySelector('[role="tablist"]')?.parentElement; if (!b || !strip) return false; const share = document.querySelector('[data-testid="share-button"]'); return strip.contains(b) && !!share && b.getBoundingClientRect().right <= share.getBoundingClientRect().left && Math.abs(share.getBoundingClientRect().right - strip.getBoundingClientRect().right) < 12; })()`,
       ),
     );
     await shoot(page, "18c-preview-closed");
