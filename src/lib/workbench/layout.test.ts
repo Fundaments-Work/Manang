@@ -91,8 +91,8 @@ describe("sanitizeLayout", () => {
     ).toMatchObject({ sideView: "outline", panelOpen: true, theme: "light" });
   });
 
-  it("drops side views that became pages (plugins, settings)", () => {
-    expect(sanitizeLayout({ sideView: "plugins" }).sideView).toBe("files");
+  it("keeps the Plugins side view but drops views that are pages (settings)", () => {
+    expect(sanitizeLayout({ sideView: "plugins" }).sideView).toBe("plugins");
     expect(sanitizeLayout({ sideView: "settings" }).sideView).toBe("files");
   });
 });
