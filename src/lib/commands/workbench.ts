@@ -9,6 +9,7 @@
  * Commands are rebuilt each time they are needed so `enabled` is current.
  */
 
+import { agent } from "$lib/state/agent.svelte";
 import { build } from "$lib/state/build.svelte";
 import { context } from "$lib/state/context.svelte";
 import { convertToTypst } from "$lib/state/convert";
@@ -68,6 +69,11 @@ const WHEN: Readonly<Record<string, string>> = {
   "view.toggle-panel": "project",
   "view.problems": "project",
   "view.output": "project",
+  "agent.show": "project",
+  "agent.rewrite": "workbench && document",
+  "agent.shorten": "workbench && document",
+  "agent.translate": "workbench && document",
+  "agent.explain": "workbench && document",
   "project.refresh": "project",
   "doc.compile": "project",
   "file.new": "project",
@@ -123,6 +129,11 @@ const BRINGS_WORKBENCH: ReadonlySet<string> = new Set([
   "view.toggle-panel",
   "view.problems",
   "view.output",
+  "agent.show",
+  "agent.rewrite",
+  "agent.shorten",
+  "agent.translate",
+  "agent.explain",
   "file.new",
   "file.new-figure",
   "file.new-diagram",
@@ -297,6 +308,62 @@ function editCommands(): Command[] {
     enabled: focusedSurface.can(spec.action, where),
     run: () => actions.editAction(spec.action),
   }));
+}
+
+/**
+ * The AI commands: the Agent view and the four selection actions (Edit > AI). They only open the
+ * view and attach the selection; the request is sent by the action itself, once, and the result
+ * comes back as an inline diff the person accepts or rejects.
+ */
+function aiCommands(isDocument: boolean): Command[] {
+  const action = (
+    id: string,
+    title: string,
+    feature: "rewrite" | "shorten" | "translate" | "explain",
+    order: number,
+    keywords: string,
+  ): Command => ({
+    id,
+    title,
+    menuTitle: title.replace(/^AI: /, ""),
+    group: "Workbench",
+    keywords: `ai assistant ${keywords}`,
+    enabled: isDocument,
+    menu: at("edit", "5_ai", order),
+    run: () => void agent.runSelection(feature),
+  });
+  return [
+    {
+      id: "agent.show",
+      title: "Show AI agent",
+      menuTitle: "AI agent",
+      group: "Workbench",
+      keywords: "ai assistant chat model",
+      menu: at("build", "3_panels", 2),
+      run: () => {
+        agent.listen();
+        agent.attachSelection();
+        layout.showPanel("agent");
+        void agent.refreshStatus();
+      },
+    },
+    action(
+      "agent.rewrite",
+      "AI: Rewrite selection",
+      "rewrite",
+      0,
+      "improve edit clarity",
+    ),
+    action("agent.shorten", "AI: Shorten selection", "shorten", 1, "condense concise"),
+    action("agent.translate", "AI: Translate selection", "translate", 2, "language"),
+    action(
+      "agent.explain",
+      "AI: Explain selection",
+      "explain",
+      3,
+      "what does this mean",
+    ),
+  ];
 }
 
 export function workbenchCommands(
@@ -821,6 +888,7 @@ export function workbenchCommands(
       menu: at("file", "9_quit", 0),
       run: () => actions.quitApp(),
     },
+    ...aiCommands(isDocument),
   ];
   const wrapped = list.map((command) => ({
     ...command,
