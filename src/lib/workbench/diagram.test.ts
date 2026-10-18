@@ -9,6 +9,7 @@ import {
   includeLine,
   parseDiagramError,
 } from "./diagram";
+import { openAsByName } from "./opener";
 import { fromDiagram, toGutter } from "./problems";
 
 describe("diagram files", () => {
@@ -18,6 +19,12 @@ describe("diagram files", () => {
     expect(diagramLanguageOf("a.pikchr")).toBe("pikchr");
     expect(diagramLanguageOf("a.bob")).toBe("svgbob");
     expect(diagramLanguageOf("main.typ")).toBeNull();
+  });
+
+  it("opens every diagram file as text", () => {
+    for (const path of ["a.mmd", "a.mermaid", "a.pikchr", "a.bob"]) {
+      expect(openAsByName(path)).toBe("text");
+    }
   });
 
   it("names new diagrams under figures/", () => {

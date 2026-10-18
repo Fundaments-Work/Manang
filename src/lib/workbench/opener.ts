@@ -81,7 +81,11 @@ const TEXT = new Set([
   "rb",
   "pl",
   "dot",
+  // Diagram sources, previewed by the `diagram` plugin.
   "mmd",
+  "mermaid",
+  "pikchr",
+  "bob",
   "gitignore",
   "editorconfig",
   "lock",
