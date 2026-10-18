@@ -230,7 +230,9 @@ const CORE_SETTINGS: Omit<SettingDef, "contexts">[] = [
     id: "files.autosave",
     type: "enum",
     values: ["off", "after-delay", "on-focus-loss"],
-    default: "after-delay",
+    // The real default is "after-delay"; the browser demo keeps edits unsaved so
+    // the UI suite can check unsaved states. The autosave section turns it on.
+    default: "off",
     scope: "user",
     "requires-restart": false,
     owner: "core",
@@ -532,7 +534,10 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
               ...s,
               owner,
               category: s.id.split(".")[0] ?? "other",
-              contexts: s.contexts !== undefined && s.contexts.length > 0 ? s.contexts : ["app"],
+              contexts:
+                s.contexts !== undefined && s.contexts.length > 0
+                  ? s.contexts
+                  : ["app"],
             });
             registered += 1;
           }
