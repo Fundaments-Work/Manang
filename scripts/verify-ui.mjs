@@ -2461,6 +2461,21 @@ async function main() {
       ),
     );
 
+    // The reading position survives switching to another document and back.
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 700`);
+    await sleep(400);
+    const readingAt = await viewerTop();
+    await goToFile("notes.md");
+    await waitFor(page, `!!document.querySelector('article[aria-label="Markdown preview"]')`);
+    await clickText(page, '[role="tab"]', "main.typ");
+    await waitFor(page, `document.querySelector("${viewerSel} canvas") !== null`);
+    await sleep(500);
+    check(
+      "switching tabs and back keeps the place in the PDF",
+      Math.abs((await viewerTop()) - readingAt) < 4,
+      `${readingAt} -> ${await viewerTop()}`,
+    );
+
     // At 1024px with the side panel open nothing in the header is cut off.
     await resize(page, 1024, 700);
     await sleep(300);
