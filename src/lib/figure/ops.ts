@@ -18,9 +18,10 @@ import {
   unionRect,
   EMPTY_RECT,
 } from "./geometry";
-import { TOKEN_NAMES, isColour } from "./palette";
+import { TOKEN_NAMES, isColour, isMalformedHex, normalizeColour } from "./palette";
 import {
   STYLE_KEYS,
+  isBindable,
   isConnector,
   isShape,
   mergeStyle,
@@ -88,7 +89,13 @@ export type FigureOp =
       readonly size?: number;
       readonly color?: string;
     }
-  | { readonly op: "set-canvas"; readonly width: number; readonly height: number }
+  | {
+      readonly op: "set-canvas";
+      readonly width: number;
+      readonly height: number;
+      /** A token or `#rrggbb`; `none` clears it; absent leaves it. */
+      readonly background?: string;
+    }
   | { readonly op: "batch"; readonly ops: readonly FigureOp[] }
   | { readonly op: "clear" }
   | { readonly op: "undo" }
@@ -157,6 +164,15 @@ export function normalizeNode(node: FigureNode): FigureNode {
       case "locked":
         if (value === false) continue;
         break;
+      case "language":
+        // Typst is the default and is omitted, as in Rust.
+        if (value === "typst") continue;
+        break;
+      case "width":
+      case "height":
+        // A formula not measured yet has no box of its own.
+        if (node.kind === "math" && value === 0) continue;
+        break;
       case "routing":
         if (value === "straight") continue;
         break;
@@ -195,7 +211,13 @@ export function normalizeNode(node: FigureNode): FigureNode {
 function cleanStyle(style: Style): Style | undefined {
   const out: Json = {};
   for (const key of STYLE_KEYS) {
-    if (style[key] !== undefined) out[key] = style[key];
+    const value = style[key];
+    if (value === undefined) continue;
+    out[key] =
+      (key === "stroke" || key === "fill" || key === "labelColor") &&
+      typeof value === "string"
+        ? normalizeColour(value)
+        : value;
   }
   return Object.keys(out).length === 0 ? undefined : (out as Style);
 }
@@ -242,8 +264,11 @@ const MATH_KEYS = new Set([
   "id",
   "x",
   "y",
-  "tex",
+  "source",
+  "language",
   "size",
+  "width",
+  "height",
   "style",
   "groups",
   "locked",
@@ -295,11 +320,13 @@ function checkStyle(v: unknown): void {
     switch (key) {
       case "stroke":
       case "fill":
+      case "labelColor":
         expectString(value, key);
         break;
       case "strokeWidth":
       case "opacity":
       case "fontSize":
+      case "fillOpacity":
         expectNumber(value, key);
         break;
       case "roughness":
@@ -400,9 +427,18 @@ function checkShape(value: unknown): asserts value is FigureNode {
     value["points"].forEach((p, i) => checkVec(p, `points[${i}]`, true));
     expectNumber(value["size"], "size");
   } else if (kind === "math") {
-    checkFields(value, MATH_KEYS, ["id", "x", "y", "tex", "size"]);
+    checkFields(value, MATH_KEYS, ["id", "x", "y", "source", "size"]);
     for (const k of ["x", "y", "size"]) expectNumber(value[k], k);
-    expectString(value["tex"], "tex");
+    for (const k of ["width", "height"]) {
+      if (value[k] !== undefined) expectNumber(value[k], k);
+    }
+    expectString(value["source"], "source");
+    if (
+      value["language"] !== undefined &&
+      !["typst", "latex"].includes(value["language"] as string)
+    ) {
+      throw new Error(`unknown variant \`${String(value["language"])}\``);
+    }
   } else {
     throw new Error(`unknown variant \`${kind}\``);
   }
@@ -411,7 +447,7 @@ function checkShape(value: unknown): asserts value is FigureNode {
 
 function nodeNumbers(node: FigureNode): number[] {
   const s = node.style ?? {};
-  const out = [s.strokeWidth, s.opacity, s.fontSize].filter(
+  const out = [s.strokeWidth, s.opacity, s.fontSize, s.fillOpacity].filter(
     (n): n is number => n !== undefined,
   );
   switch (node.kind) {
@@ -427,7 +463,7 @@ function nodeNumbers(node: FigureNode): number[] {
       for (const p of node.points) out.push(p.x, p.y, p.pressure);
       break;
     case "math":
-      out.push(node.x, node.y, node.size);
+      out.push(node.x, node.y, node.size, node.width ?? 0, node.height ?? 0);
       break;
     default:
       out.push(node.x, node.y, node.width, node.height, node.angle ?? 0);
@@ -451,17 +487,31 @@ export function validateNode(node: FigureNode): void {
   if (node.kind === "mermaid" && node.source === undefined) {
     throw invalid(`node \`${id}\`: a Mermaid block needs \`source\``);
   }
+  for (const c of [node.style?.stroke, node.style?.fill, node.style?.labelColor]) {
+    if (c !== undefined && isMalformedHex(c)) {
+      throw invalid(`node \`${id}\`: \`${c}\` is not a valid #rrggbb colour`);
+    }
+  }
+  if (node.kind === "math" && !(node.size > 0 && node.size <= 1024)) {
+    throw invalid(`node \`${id}\`: a formula's size must be between 0 and 1024`);
+  }
 }
 
 /** `validate_colours`. */
 export function validateColours(style: Style | undefined): void {
   if (style === undefined) return;
-  for (const value of [style.stroke, style.fill]) {
+  for (const value of [style.stroke, style.fill, style.labelColor]) {
     if (value !== undefined && !isColour(value)) {
       throw invalid(
         `unknown colour \`${value}\`; use none, a palette token (${TOKEN_NAMES.join(", ")}) or #rrggbb`,
       );
     }
+  }
+  if (
+    style.fillOpacity !== undefined &&
+    !(style.fillOpacity >= 0 && style.fillOpacity <= 100)
+  ) {
+    throw invalid("fillOpacity must be between 0 and 100");
   }
   if (style.opacity !== undefined && !(style.opacity >= 0 && style.opacity <= 100)) {
     throw invalid("opacity must be between 0 and 100");
@@ -489,6 +539,7 @@ class Tx {
   nodes: FigureNode[];
   width: number;
   height: number;
+  background: string | undefined;
   readonly before = new Map<string, FigureNode | undefined>();
   orderBefore: string[] | undefined;
   readonly #base: FigureScene;
@@ -498,10 +549,18 @@ class Tx {
     this.nodes = [...scene.nodes];
     this.width = scene.width;
     this.height = scene.height;
+    this.background = scene.background;
   }
 
   get scene(): FigureScene {
-    return { ...this.#base, width: this.width, height: this.height, nodes: this.nodes };
+    const { background: _dropped, ...rest } = this.#base;
+    return {
+      ...rest,
+      width: this.width,
+      height: this.height,
+      ...(this.background === undefined ? {} : { background: this.background }),
+      nodes: this.nodes,
+    };
   }
 
   find(id: string): FigureNode | undefined {
@@ -589,7 +648,10 @@ export function applyOp(scene: FigureScene, op: FigureOp): OpResult {
   const order = tx.nodes.map((n) => n.id);
   const orderChanged =
     tx.orderBefore !== undefined && !deepEqual(tx.orderBefore, order);
-  const canvasChanged = tx.width !== scene.width || tx.height !== scene.height;
+  const canvasChanged =
+    tx.width !== scene.width ||
+    tx.height !== scene.height ||
+    tx.background !== scene.background;
   const applied = changed.length > 0 || orderChanged || canvasChanged;
   return { scene: applied ? tx.scene : scene, changed, applied };
 }
@@ -732,8 +794,16 @@ function run(tx: Tx, op: FigureOp): void {
       )) {
         throw invalid("the page size must be positive and finite");
       }
+      if (op.background !== undefined && !isColour(op.background)) {
+        throw invalid(
+          `the background \`${op.background}\` is not none, a palette token or #rrggbb`,
+        );
+      }
       tx.width = op.width;
       tx.height = op.height;
+      if (op.background === "none") tx.background = undefined;
+      else if (op.background !== undefined)
+        tx.background = normalizeColour(op.background);
       return;
     case "clear":
       for (const id of tx.nodes.map((n) => n.id)) tx.remove(id);
@@ -858,11 +928,18 @@ function resize(tx: Tx, id: string, to: Rect): void {
           }),
         };
       case "math": {
-        const size =
-          from.height > 0 && to.height > 0
-            ? n.size * (to.height / from.height)
-            : n.size;
-        return { ...n, size, x: to.x, y: to.y + size };
+        // A formula scales as a whole: by whichever side moved more.
+        const kw = from.width > 0 && to.width > 0 ? to.width / from.width : 1;
+        const kh = from.height > 0 && to.height > 0 ? to.height / from.height : 1;
+        const k = Math.abs(kw - 1) > Math.abs(kh - 1) ? kw : kh;
+        return {
+          ...n,
+          size: n.size * k,
+          width: from.width * k,
+          height: from.height * k,
+          x: to.x,
+          y: to.y,
+        };
       }
       default:
         return { ...n, x: to.x, y: to.y, width: to.width, height: to.height };
@@ -911,7 +988,7 @@ function bind(
     throw invalid(`\`${id}\` is not an arrow or a line`);
   if (target !== null) {
     const node = tx.require(target);
-    if (!isShape(node) || target === id) {
+    if (!isBindable(node) || target === id) {
       throw invalid(`an arrow cannot attach to \`${target}\` (a ${node.kind})`);
     }
   }

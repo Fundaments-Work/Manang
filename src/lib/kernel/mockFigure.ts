@@ -11,6 +11,9 @@
  */
 
 import { hitTest } from "$lib/figure/geometry";
+import { approxMath, paintApprox } from "$lib/figure/mathApprox";
+import { parseHexColour } from "$lib/figure/palette";
+import type { MathLanguage } from "$lib/figure/scene";
 import { applyOp, type FigureOp } from "$lib/figure/ops";
 import { renderSceneSvg } from "$lib/figure/render";
 import { createScene, migrateScene, type FigureScene } from "$lib/figure/scene";
@@ -34,6 +37,7 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["figure.get", "Get figure scene"],
   ["figure.render-svg", "Render a scene to SVG"],
   ["figure.export-svg", "Export SVG"],
+  ["figure.render-math", "Render a formula to vector SVG"],
   ["figure.hit-test", "Hit test coordinates"],
   ["figure.describe", "Describe a figure (agent tool)"],
   ["figure.add-shapes", "Add shapes (agent tool)"],
@@ -535,6 +539,37 @@ export function figurePlugin(host: MockProjectHost): MockPluginFactory {
         },
         "figure.export-svg": (args) =>
           new TextEncoder().encode(renderSceneSvg(resolve(args).scene)),
+        // The real command is Typst (Typst math) or RaTeX (LaTeX math); the
+        // browser mock answers with an approximation (see mathApprox.ts) and
+        // the same structured `[math_error]` for broken source.
+        "figure.render-math": (args) => {
+          const language = (args["language"] ?? "typst") as MathLanguage;
+          if (language !== "typst" && language !== "latex") {
+            throw fail(
+              `unknown math language \`${String(language)}\`; use typst or latex`,
+            );
+          }
+          const size = typeof args["size"] === "number" ? args["size"] : 24;
+          try {
+            const m = approxMath(language, str(args, "source"), size);
+            const colour = args["color"];
+            if (typeof colour === "string" && colour !== "currentColor") {
+              if (parseHexColour(colour) === undefined) {
+                throw fail(
+                  `[invalid_argument] \`color\` must be currentColor or #rrggbb, not \`${colour}\``,
+                );
+              }
+              return new TextEncoder().encode(paintApprox(m.svg, colour.toLowerCase()));
+            }
+            return new TextEncoder().encode(m.svg);
+          } catch (error) {
+            if (
+              (error as { message?: string }).message?.startsWith("[invalid_argument]")
+            )
+              throw error;
+            throw fail(`[math_error] ${JSON.stringify(error)}`);
+          }
+        },
       },
     };
   };

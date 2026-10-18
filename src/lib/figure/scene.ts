@@ -8,6 +8,8 @@
  * left, like SVG.
  */
 
+import { isMalformedHex, normalizeColour } from "./palette";
+
 export interface Vec {
   readonly x: number;
   readonly y: number;
@@ -46,6 +48,10 @@ export interface Style {
   readonly fontFamily?: FontFamily;
   readonly fontSize?: number;
   readonly textAlign?: TextAlign;
+  /** Label and text colour: a palette token or `#rrggbb`. Default: the stroke. */
+  readonly labelColor?: string;
+  /** 0 to 100, on top of the overall opacity. Default: the token tint. */
+  readonly fillOpacity?: number;
 }
 
 export const DEFAULT_STROKE_WIDTH = 1.5;
@@ -62,6 +68,8 @@ export const STYLE_KEYS = [
   "fontFamily",
   "fontSize",
   "textAlign",
+  "labelColor",
+  "fillOpacity",
 ] as const;
 
 export type ShapeKind =
@@ -128,15 +136,26 @@ export interface FreedrawNode {
   readonly locked?: boolean;
 }
 
-/** A stamped formula. `tex` is the source; rendering happens downstream. */
+export type MathLanguage = "typst" | "latex";
+
+/**
+ * A formula: Typst or LaTeX math source, rendered to vector paths by the
+ * plugin (never text). `width` and `height` are the measured box of the
+ * rendering (0 or absent: estimated until it has been rendered once).
+ */
 export interface MathNode {
   readonly kind: "math";
   readonly id: NodeId;
+  /** Left edge. */
   readonly x: number;
-  /** Baseline. */
+  /** Top edge. */
   readonly y: number;
-  readonly tex: string;
+  readonly source: string;
+  /** Typst when absent. */
+  readonly language?: MathLanguage;
   readonly size: number;
+  readonly width?: number;
+  readonly height?: number;
   readonly style?: Style;
   readonly groups?: readonly string[];
   readonly locked?: boolean;
@@ -150,6 +169,8 @@ export interface FigureScene {
   readonly version: number;
   readonly width: number;
   readonly height: number;
+  /** A palette token or `#rrggbb`; absent: transparent. */
+  readonly background?: string;
   readonly nodes: readonly FigureNode[];
 }
 
@@ -189,7 +210,15 @@ export function connectorOf(node: FigureNode | undefined): ConnectorNode | undef
 
 /** Whether arrows may bind to this node. */
 export function isBindable(node: FigureNode): boolean {
-  return isShape(node);
+  return isShape(node) || node.kind === "math";
+}
+
+/** Default font size of a formula, in scene units. */
+export const FORMULA_SIZE = 24;
+
+/** A formula's language, Typst when absent. */
+export function languageOf(node: MathNode): MathLanguage {
+  return node.language ?? "typst";
 }
 
 /** The visible text: label, text content, frame title or formula. */
@@ -198,7 +227,7 @@ export function labelOf(node: FigureNode): string | undefined {
     case "freedraw":
       return undefined;
     case "math":
-      return node.tex;
+      return node.source;
     default:
       return node.label;
   }
@@ -241,6 +270,8 @@ export const styleDefaults = {
   roughness: (s: Style): number => Math.min(s.roughness ?? 0, 2),
   fontFamily: (s: Style): FontFamily => s.fontFamily ?? "sans",
   fontSize: (s: Style): number => s.fontSize ?? DEFAULT_FONT_SIZE,
+  /** The label colour: `labelColor`, else the stroke. */
+  label: (s: Style): string => s.labelColor ?? s.stroke ?? "ink",
 };
 
 /** `other` merged over `base`: every field `other` sets wins. Key order as Rust. */
@@ -381,6 +412,25 @@ function v1Node(node: unknown): Json {
 }
 
 /**
+ * Formulas written before real math rendering kept `tex` and a baseline `y`;
+ * they become LaTeX `source` in the same box (`migrate_math_nodes`).
+ */
+function migrateMathNodes(nodes: unknown): unknown {
+  if (!Array.isArray(nodes)) return nodes;
+  return nodes.map((node: unknown) => {
+    if (!isObject(node) || node["kind"] !== "math" || node["tex"] === undefined)
+      return node;
+    const { tex, ...rest } = node;
+    return {
+      ...rest,
+      source: tex,
+      language: "latex",
+      y: num(node, "y") - num(node, "size"),
+    };
+  });
+}
+
+/**
  * A parsed scene of any supported version as a v2 scene. Throws (with the
  * Rust plugin's wording) on newer versions, unknown v1 kinds and non-objects.
  */
@@ -412,6 +462,7 @@ export function migrateScene(value: unknown): FigureScene {
     }
     scene = { ...value, version: SCENE_VERSION, nodes: (nodes ?? []).map(v1Node) };
   }
+  scene = { ...scene, nodes: migrateMathNodes(scene["nodes"]) };
   const width = scene["width"];
   const height = scene["height"];
   if (
@@ -424,5 +475,38 @@ export function migrateScene(value: unknown): FigureScene {
   }
   if (!Array.isArray(scene["nodes"]))
     throw new Error("JSON error: missing field `nodes`");
-  return scene as unknown as FigureScene;
+  return normaliseColours(scene as unknown as FigureScene);
+}
+
+const COLOUR_KEYS = ["stroke", "fill", "labelColor"] as const;
+
+/**
+ * Hex colours as lowercase `#rrggbb`; a malformed one is an error rather
+ * than a silent fallback (`FigureScene::normalise_colours` and `validate`).
+ */
+function normaliseColours(scene: FigureScene): FigureScene {
+  const bad = (what: string, value: string) =>
+    new Error(`invalid argument: ${what}\`${value}\` is not a valid #rrggbb colour`);
+  let background = scene.background;
+  if (background !== undefined) {
+    if (isMalformedHex(background)) throw bad("the background ", background);
+    background = normalizeColour(background);
+  }
+  const nodes = scene.nodes.map((node) => {
+    const style = node.style;
+    if (style === undefined) return node;
+    const next: Record<string, unknown> = { ...style };
+    for (const key of COLOUR_KEYS) {
+      const value = style[key];
+      if (value === undefined) continue;
+      if (isMalformedHex(value)) throw bad(`node \`${node.id}\`: `, value);
+      next[key] = normalizeColour(value);
+    }
+    return { ...node, style: next as Style };
+  });
+  return {
+    ...scene,
+    ...(background === undefined ? {} : { background }),
+    nodes,
+  };
 }

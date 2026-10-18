@@ -4,7 +4,7 @@
  * the scene file. Screen coordinates here are relative to the canvas element.
  */
 
-import { nodeBounds, rectsIntersect } from "./geometry";
+import { nodeBounds, rectContainsRect, rectsIntersect } from "./geometry";
 import type { FigureNode, Rect, Vec } from "./scene";
 
 export interface Viewport {
@@ -87,6 +87,31 @@ export function fitRect(
   const cx = rect.x + rect.width / 2;
   const cy = rect.y + rect.height / 2;
   return { x: cx - width / 2 / zoom, y: cy - height / 2 / zoom, zoom };
+}
+
+/**
+ * The view that brings `rect` into sight: unchanged when it is already
+ * inside (with `padding` screen pixels to spare), centred on it at the same
+ * zoom when it fits there, else fitted whole.
+ */
+export function revealRect(
+  v: Viewport,
+  rect: Rect,
+  width: number,
+  height: number,
+  padding = 32,
+): Viewport {
+  if (width <= 0 || height <= 0) return v;
+  if (rectContainsRect(visibleRect(v, width, height, -padding), rect)) return v;
+  const fits =
+    rect.width * v.zoom <= width - 2 * padding &&
+    rect.height * v.zoom <= height - 2 * padding;
+  if (fits) {
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    return { x: cx - width / 2 / v.zoom, y: cy - height / 2 / v.zoom, zoom: v.zoom };
+  }
+  return fitRect(rect, width, height, padding, 1);
 }
 
 /** The scene rectangle the canvas shows, grown by `margin` screen pixels. */
