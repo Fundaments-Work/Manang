@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
 
   import ActivityBar from "./ActivityBar.svelte";
   import BottomPanel from "./BottomPanel.svelte";
@@ -16,18 +16,16 @@
   import Resizer from "./ui/Resizer.svelte";
   import ShortcutOverlay from "./ShortcutOverlay.svelte";
   import SettingsPage from "./settings/SettingsPage.svelte";
-  import { matches } from "$lib/commands/shortcut";
-  import {
-    PALETTE_COMMANDS_SHORTCUTS,
-    PALETTE_FILES_SHORTCUT,
-    shortcutTable,
-    workbenchCommands,
-  } from "$lib/commands/workbench";
-  import { goHome, toggleSlides } from "$lib/state/actions";
+  import { installShellSurfaces } from "./menu/surfaces";
+  import { resolveKey, typesText } from "$lib/commands/keymap";
+  import { keymap } from "$lib/commands/keymap.svelte";
+  import type { Command } from "$lib/commands/registry";
+  import { workbenchCommands } from "$lib/commands/workbench";
   import { build } from "$lib/state/build.svelte";
   import { dialog } from "$lib/state/dialog.svelte";
   import { home } from "$lib/state/home.svelte";
   import { layout } from "$lib/state/layout.svelte";
+  import { notice } from "$lib/state/notice.svelte";
   import { context } from "$lib/state/context.svelte";
   import { palette } from "$lib/state/palette.svelte";
   import { settings } from "$lib/state/settings.svelte";
@@ -37,7 +35,6 @@
   import { captureThumbnail } from "$lib/state/thumbnails";
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
-  import { engineOf } from "$lib/workbench/paths";
   import {
     DEFAULT_LAYOUT,
     PANEL_MAX,
@@ -48,8 +45,7 @@
   /**
    * The workbench: top bar, activity bar, side panel, tabs and editor area,
    * bottom panel and status bar. This component composes them and owns the
-   * global keyboard map; every shortcut comes from the command list, so what the
-   * palette shows is what runs.
+   * global keyboard map.
    */
 
   // Re-compile when the active file changes, since the preview target may too.
@@ -90,6 +86,23 @@
       sidePanelVisible(layout.sideView, workspace.project !== null),
   );
 
+  onMount(() => {
+    keymap.start();
+    installShellSurfaces();
+  });
+
+  /** Readable names for a conflict notice: the commands' titles. */
+  function titles(commands: readonly Command[]): string {
+    return commands.map((c) => c.title).join(" and ");
+  }
+
+  /**
+   * The global keyboard map. Every shortcut comes from the keybindings
+   * registry (defaults plus the person's changes, see `keymap`), resolved
+   * against the command list, so what the palette and menus show is what
+   * runs. Escape stays here: it dismisses whatever is on top (zen, Settings,
+   * Home over a project, the floating side panel), which is not one command.
+   */
   function onkeydown(event: KeyboardEvent): void {
     if (
       event.defaultPrevented ||
@@ -99,23 +112,6 @@
       slides.presenting
     )
       return;
-    const mod = event.ctrlKey || event.metaKey;
-
-    // Project switcher and Home. Shortcuts live here, not in the command list,
-    // because they act on the workbench as a whole.
-    if (mod && !event.altKey && event.key.toLowerCase() === "o" && !event.shiftKey) {
-      event.preventDefault();
-      void switcher.show();
-      return;
-    }
-    if (mod && !event.altKey && event.key.toLowerCase() === "h" && event.shiftKey) {
-      event.preventDefault();
-      if (workspace.project !== null) {
-        if (home.visible) home.hide();
-        else goHome();
-      }
-      return;
-    }
 
     if (event.key === "Escape") {
       if (layout.zen) {
@@ -134,43 +130,25 @@
       return;
     }
 
+    // A bare key typed into a field is text, whatever it is bound to.
+    const target = event.target as HTMLElement | null;
     if (
-      event.key === "F5" &&
-      tabs.active !== undefined &&
-      engineOf(tabs.active.path) === "typst"
-    ) {
-      event.preventDefault();
-      if (tabs.active.view !== "slides") toggleSlides();
-      slides.present();
+      typesText(event) &&
+      target?.closest("input, textarea, select, [contenteditable]") != null
+    )
       return;
-    }
 
-    if (!mod) return;
-
-    if (PALETTE_COMMANDS_SHORTCUTS.some((s) => matches(event, s))) {
-      event.preventDefault();
-      palette.show("commands");
-      return;
-    }
-    if (workspace.project !== null && matches(event, PALETTE_FILES_SHORTCUT)) {
-      event.preventDefault();
-      palette.show("files");
-      return;
-    }
-    if (!event.shiftKey && !event.altKey && /^[1-9]$/.test(event.key)) {
-      event.preventDefault();
-      tabs.byShortcut(Number(event.key));
-      return;
-    }
-
-    const hit = shortcutTable(
-      workbenchCommands((mode) => palette.show(mode)),
-      (when) => context.when(when),
-    ).find((entry) => matches(event, entry.shortcut));
-    if (hit !== undefined) {
-      event.preventDefault();
-      hit.run();
-    }
+    const commands = workbenchCommands((mode) => palette.show(mode));
+    const hit = resolveKey(event, keymap.bindings, commands, (when) =>
+      context.when(when),
+    );
+    if (hit === null) return;
+    event.preventDefault();
+    if (hit.kind === "run") hit.command.run();
+    else if (hit.kind === "conflict")
+      notice.error(
+        `This shortcut is bound to both ${titles(hit.commands)}. Change one in Settings > Keyboard shortcuts.`,
+      );
   }
 </script>
 

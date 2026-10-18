@@ -1,6 +1,9 @@
 <script lang="ts">
   import Icon from "$lib/components/ui/Icon.svelte";
+  import { keymap } from "$lib/commands/keymap.svelte";
+  import { formatShortcut } from "$lib/commands/shortcut";
   import { workbenchCommands } from "$lib/commands/workbench";
+  import { shortcutOverlay } from "$lib/state/shortcutOverlay.svelte";
   import { detectPlatform } from "$lib/util/keyboard";
   import {
     extractShortcutGroups,
@@ -9,45 +12,45 @@
   } from "$lib/workbench/shortcuts";
 
   /**
-   * Shortcut reference overlay (Ctrl+/):
-   * Cheat-sheet listing all workbench shortcuts organized by category.
-   * Read-only; does not modify command definitions.
+   * Shortcut reference overlay (Help > Keyboard shortcuts, `help.shortcuts`):
+   * every workbench shortcut by category, as the keybindings registry has
+   * them now. Read-only; changing one is Settings > Keyboard shortcuts.
    */
 
-  let open = $state(false);
   let filterText = $state("");
   let inputEl = $state<HTMLInputElement | null>(null);
 
   const platform = detectPlatform();
+  const open = $derived(shortcutOverlay.open);
 
-  // Read workbench commands without performing any actions
-  const allCommands = workbenchCommands(() => {});
-  const groups: readonly ShortcutGroup[] = extractShortcutGroups(allCommands, platform);
+  // Commands are read for their titles and shortcuts only; nothing runs.
+  const groups: readonly ShortcutGroup[] = $derived(
+    open
+      ? extractShortcutGroups(
+          workbenchCommands(() => undefined),
+          platform,
+        )
+      : [],
+  );
   const filteredGroups = $derived(filterShortcutGroups(groups, filterText));
+  const ownKey = $derived.by(() => {
+    const first = keymap.shortcuts("help.shortcuts")[0];
+    return first === undefined ? null : formatShortcut(first, platform);
+  });
 
-  export function show(): void {
-    open = true;
+  $effect(() => {
+    if (!open) return;
     filterText = "";
-    setTimeout(() => inputEl?.focus(), 50);
+    const timer = setTimeout(() => inputEl?.focus(), 50);
+    return () => clearTimeout(timer);
+  });
+
+  function hide(): void {
+    shortcutOverlay.hide();
   }
 
-  export function hide(): void {
-    open = false;
-  }
-
+  // Escape closes this modal; it is local because it only means "close me".
   function onkeydown(event: KeyboardEvent): void {
-    // Ctrl+/ or Cmd+/ or Ctrl+? toggles the cheat sheet
-    const isMod = event.ctrlKey || event.metaKey;
-    if (isMod && (event.key === "/" || event.key === "?")) {
-      event.preventDefault();
-      if (open) {
-        hide();
-      } else {
-        show();
-      }
-      return;
-    }
-
     if (open && event.key === "Escape") {
       event.preventDefault();
       hide();
@@ -75,11 +78,13 @@
       <div class="flex items-center justify-between border-b border-line px-4 py-3">
         <div class="flex items-center gap-2">
           <h2 class="m-0 text-sm text-text">Keyboard Shortcuts</h2>
-          <span
-            class="font-mono text-[10px] text-text-muted bg-surface-hi px-1.5 py-0.5 border border-line"
-          >
-            {platform.isMac ? "⌘/" : "Ctrl+/"}
-          </span>
+          {#if ownKey !== null}
+            <span
+              class="font-mono text-[10px] text-text-muted bg-surface-hi px-1.5 py-0.5 border border-line"
+            >
+              {ownKey}
+            </span>
+          {/if}
         </div>
         <button
           type="button"
@@ -145,7 +150,7 @@
       <div
         class="flex items-center justify-between border-t border-line px-4 py-2.5 bg-surface text-[11px] text-text-muted"
       >
-        <span>Customise keybindings in Settings → Keybindings</span>
+        <span>Change them in Settings → Keyboard shortcuts</span>
         <button type="button" class="mng-btn px-2 py-1 text-xs" onclick={hide}>
           Close (Esc)
         </button>
