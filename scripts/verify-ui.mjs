@@ -481,9 +481,10 @@ async function main() {
         `[...document.querySelectorAll("[data-project]")].map((c) => c.dataset.project.split("/").pop())`,
       );
     const searchHome = async (cdp, text) => {
-      await click(cdp, 'input[aria-label="Search projects"]');
+      // One search for the whole shell: on Home the top bar searches projects.
+      await click(cdp, 'header input[aria-label="Search projects"]');
       await cdp.evaluate(
-        `(() => { const i = document.querySelector('input[aria-label="Search projects"]'); i.select(); })()`,
+        `(() => { const i = document.querySelector('header input[aria-label="Search projects"]'); i.select(); })()`,
       );
       if (text === "") await press(cdp, "Delete");
       else await insertText(cdp, text);
@@ -491,10 +492,10 @@ async function main() {
     };
 
     check(
-      "home is the no-project surface, with Open folder and New project",
+      "home is the no-project surface; the top bar carries Open folder and New project",
       await page.evaluate(`(() => {
       const t = [...document.querySelectorAll("button")].map((b) => b.textContent.trim());
-      return !!document.querySelector('section[aria-label="Home"]') && t.includes("Open folder") && t.includes("New project");
+      return !!document.querySelector('section[aria-label="Home"]') && t.includes("Open folder") && t.includes("New project") && !document.querySelector('nav[aria-label="Workbench views"]') && document.querySelectorAll('input[type="search"]').length === 1;
     })()`),
     );
     check(
@@ -706,8 +707,6 @@ async function main() {
       ["Search", 'aside[aria-label="Search panel"]'],
       ["Figures", 'aside[aria-label="Figures panel"]'],
       ["References", 'aside[aria-label="References panel"]'],
-      ["Plugins", 'aside[aria-label="Plugins panel"]'],
-      ["Settings", 'aside[aria-label="Settings panel"]'],
       ["Files", 'aside[aria-label="Files panel"]'],
     ];
     for (const [label, panel] of views) {
@@ -771,22 +770,57 @@ async function main() {
     );
 
     await noStrayEdits(page, "after references");
-    // Plugins
-    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Plugins"]');
-    check(
-      "plugins panel lists the kernel's real plugins",
-      await page.evaluate(
-        `(() => { const t = document.querySelector("#side-panel").innerText; return t.includes("editor") && t.includes("project") && t.includes("typst") && !t.includes("Vale") && !t.includes("Curated"); })()`,
-      ),
+    // Settings: a page, with every plugin and its manifest settings in it.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
     );
-    await clickText(page, "#side-panel button[aria-expanded]", "typst");
+    await expectEventually(
+      page,
+      "settings open as a page over the editor",
+      `!!document.querySelector('section[aria-label="Settings"]') && document.querySelector('nav[aria-label="Workbench views"] button[aria-label="Settings"]').getAttribute("aria-pressed") === "true"`,
+    );
+    check(
+      "the top bar search now searches settings",
+      await exists(page, 'header input[aria-label="Search settings and plugins"]'),
+    );
+    await expectEventually(
+      page,
+      "settings list every registered plugin, with its access",
+      `(() => { const t = document.querySelector('section[aria-label="Settings"]').innerText; return ["Editor", "Project", "Typst", "LaTeX", "Citations"].every((n) => t.includes(n)) && t.includes("Connects to api.crossref.org"); })()`,
+    );
+    check(
+      "a plugin's manifest settings appear in its section",
+      await exists(page, '[data-plugin="latex"] [data-setting="latex.engine"]'),
+    );
+    await click(page, 'header input[aria-label="Search settings and plugins"]');
+    await insertText(page, "engine");
+    await expectEventually(
+      page,
+      "searching narrows settings and plugins together",
+      `(() => { const ids = [...document.querySelectorAll("[data-setting]")].map((e) => e.dataset.setting).sort().join(); return ids === "compile.engine,latex.engine"; })()`,
+    );
+    await clickText(page, '[data-plugin="latex"] [role="radio"]', "XeLaTeX");
+    await expectEventually(
+      page,
+      "changing a plugin setting writes it and marks it changed",
+      `document.querySelector('[data-setting="latex.engine"]').innerText.includes("Changed")`,
+    );
+    await clickText(page, '[data-plugin="latex"] button[aria-expanded]', "commands");
     check(
       "a plugin expands to its commands",
       await page.evaluate(
-        `document.querySelector("#side-panel").innerText.includes("typst.export-pdf")`,
+        `document.querySelector('[data-plugin="latex"]').innerText.includes("latex.compile")`,
       ),
     );
-    await shoot(page, "07-plugins");
+    await shoot(page, "07-settings-plugins");
+    await press(page, "Escape");
+    await press(page, "Escape");
+    await expectEventually(
+      page,
+      "Escape clears the search, then closes settings",
+      `!document.querySelector('section[aria-label="Settings"]')`,
+    );
 
     /* ------------------------------------------------------------------ */
     section("Files tree");
@@ -852,19 +886,10 @@ async function main() {
     await shoot(page, "08-files-keyboard");
 
     await noStrayEdits(page, "after tree navigation");
-    // Filter
-    await click(page, 'input[aria-label="Filter files"]');
-    await insertText(page, "lattice");
-    await expectEventually(
-      page,
-      "filter lists matching files across folders",
-      `[...document.querySelectorAll('[role="treeitem"]')].map((r) => r.dataset.path).sort().join() === "figures/state_lattice.figure.json,figures/state_lattice.svg"`,
-    );
-    await press(page, "Escape");
-    await expectEventually(
-      page,
-      "Escape clears the filter",
-      `document.querySelector('input[aria-label="Filter files"]').value === ""`,
+    // Files are found through the one search (Ctrl+P), not a second field.
+    check(
+      "the files panel has no filter field of its own",
+      !(await exists(page, 'input[aria-label="Filter files"]')),
     );
 
     await noStrayEdits(page, "after filtering");
@@ -1620,7 +1645,7 @@ async function main() {
     check(
       "the top bar keeps the palette reachable at 640px",
       await page.evaluate(
-        `(() => { const b = document.querySelector('button[aria-label="Search commands"]'); const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= window.innerWidth; })()`,
+        `(() => { const b = document.querySelector('button[aria-label="Search files and commands"]'); const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= window.innerWidth; })()`,
       ),
     );
     await resize(page, 1280, 820);
@@ -1631,11 +1656,11 @@ async function main() {
       cdp.evaluate(
         `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.replace(/\\s+/g, " ") ?? ""`,
       );
-    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Home"]');
+    await click(page, 'header button[aria-label="Home"]');
     await expectEventually(
       page,
-      "the Home button shows Home over the open project",
-      `!!document.querySelector('section[aria-label="Home"]') && document.querySelector('button[aria-label="Home"]').getAttribute("aria-pressed") === "true"`,
+      "the Home button shows Home over the open project, without the workbench rail",
+      `!!document.querySelector('section[aria-label="Home"]') && !document.querySelector('nav[aria-label="Workbench views"]')`,
     );
     check(
       "the project stays open underneath, out of reach",
@@ -1665,7 +1690,7 @@ async function main() {
     );
 
     // Switch from Home.
-    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Home"]');
+    await click(page, 'header button[aria-label="Home"]');
     await clickText(page, "[data-project] button", "Lecture notes");
     await waitFor(
       page,

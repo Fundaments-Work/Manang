@@ -8,6 +8,7 @@ import {
   formatShortcutDisplay,
   groupSettings,
   isSettingModified,
+  settingTitle,
   recordShortcutFromEvent,
   validateSettingValue,
 } from "./settings";
@@ -59,25 +60,51 @@ const SAMPLE_SETTINGS: SettingDef[] = [
 ];
 
 describe("settings workbench helpers", () => {
-  it("formats setting titles into plain title case", () => {
-    expect(formatSettingTitle("editor.font-size")).toBe("Font Size");
-    expect(formatSettingTitle("files.trash-on-delete")).toBe("Trash On Delete");
-    expect(formatSettingTitle("word-wrap")).toBe("Word Wrap");
+  it("formats setting titles in sentence case", () => {
+    expect(formatSettingTitle("editor.font-size")).toBe("Font size");
+    expect(formatSettingTitle("files.trash-on-delete")).toBe("Trash on delete");
+    expect(formatSettingTitle("word-wrap")).toBe("Word wrap");
+    expect(formatSettingTitle("appearance.ui-scale")).toBe("UI scale");
+    expect(formatSettingTitle("latex.latexmk")).toBe("latexmk");
   });
 
   it("formats category labels", () => {
     expect(formatCategoryLabel("editor")).toBe("Editor");
     expect(formatCategoryLabel("git")).toBe("Git");
-    expect(formatCategoryLabel("custom-plugin")).toBe("Custom-plugin");
+    expect(formatCategoryLabel("latex")).toBe("LaTeX");
+    expect(formatCategoryLabel("custom-plugin")).toBe("Custom plugin");
   });
 
-  it("groups settings in specified category order", () => {
+  it("groups core categories first, then one group per plugin", () => {
     const groups = groupSettings(SAMPLE_SETTINGS);
-    expect(groups.map((g) => g.id)).toEqual(["editor", "appearance", "git"]);
-    expect(groups[0]?.settings.map((s) => s.id)).toEqual([
+    expect(groups.map((g) => g.id)).toEqual(["appearance", "editor", "git"]);
+    expect(groups.map((g) => g.owner)).toEqual(["core", "core", "git"]);
+    expect(groups[1]?.settings.map((s) => s.id)).toEqual([
       "editor.font-size",
       "editor.word-wrap",
     ]);
+  });
+
+  it("prefers the manifest title and groups by owning plugin", () => {
+    const def: SettingDef = {
+      id: "latex.engine",
+      title: "Engine",
+      type: "enum",
+      values: ["pdflatex", "xelatex"],
+      default: "pdflatex",
+      description: "TeX engine.",
+      scope: "project",
+      requires_restart: false,
+      owner: "latex",
+      category: "latex",
+    };
+    expect(settingTitle(def)).toBe("Engine");
+    expect(settingTitle({ ...def, id: "latex.use-latexmk", title: undefined })).toBe(
+      "Use latexmk",
+    );
+    const groups = groupSettings([def, ...SAMPLE_SETTINGS]);
+    expect(groups.map((g) => g.id)).toEqual(["appearance", "editor", "git", "latex"]);
+    expect(groups[3]?.label).toBe("LaTeX");
   });
 
   it("filters settings by search query", () => {

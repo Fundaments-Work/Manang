@@ -8,7 +8,10 @@
 
 import { build } from "$lib/state/build.svelte";
 import { documents } from "$lib/state/documents.svelte";
+import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
+import { settings } from "$lib/state/settings.svelte";
+import { settingsPage } from "$lib/state/settingsPage.svelte";
 import { tabs } from "$lib/state/tabs.svelte";
 import { workspace } from "$lib/state/workspace.svelte";
 import * as actions from "$lib/state/actions";
@@ -29,6 +32,64 @@ export const PALETTE_COMMANDS_SHORTCUTS: readonly Shortcut[] = [
   mod("p", { shift: true }),
 ];
 export const PALETTE_FILES_SHORTCUT: Shortcut = mod("p");
+
+/**
+ * Where each command applies (`when` over the UI context keys, see
+ * `workbench/context.ts`). Commands not listed apply everywhere.
+ */
+const WHEN: Readonly<Record<string, string>> = {
+  "goto.file": "project",
+  "view.files": "project",
+  "view.search": "project",
+  "view.figures": "project",
+  "view.references": "project",
+  "view.toggle-side": "project",
+  "view.toggle-panel": "project",
+  "view.problems": "project",
+  "view.output": "project",
+  "project.refresh": "project",
+  "doc.compile": "project",
+  "file.new": "project",
+  "file.new-figure": "project",
+  "view.preview-split": "workbench && document",
+  "view.preview-editor": "workbench && document",
+  "view.preview-preview": "workbench && document",
+  "view.cycle-preview": "workbench && document",
+  "view.zen": "workbench && document",
+  "tab.next": "workbench",
+  "tab.previous": "workbench",
+  "tab.close": "workbench",
+  "tab.close-others": "workbench",
+  "file.save": "workbench",
+  "file.save-all": "project",
+  "doc.export-pdf": "workbench && document",
+  "doc.format": "workbench && document",
+  "doc.slides": "workbench && typst",
+  "project.close": "project",
+};
+
+/**
+ * Commands that act on the workbench bring it forward first, so running
+ * "Show files" from Home or Settings shows the files rather than nothing.
+ */
+const BRINGS_WORKBENCH: ReadonlySet<string> = new Set([
+  "goto.file",
+  "view.files",
+  "view.search",
+  "view.figures",
+  "view.references",
+  "view.toggle-side",
+  "view.toggle-panel",
+  "view.problems",
+  "view.output",
+  "file.new",
+  "file.new-figure",
+]);
+
+function toWorkbench(): void {
+  settingsPage.hide();
+  if (workspace.project !== null) home.hide();
+}
 
 export function workbenchCommands(
   openPalette: (mode: "commands" | "files") => void,
@@ -83,7 +144,7 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "extensions commands permissions",
       shortcuts: [mod("x", { shift: true })],
-      run: () => layout.showSide("plugins"),
+      run: () => settingsPage.show("plugins"),
     },
     {
       id: "view.settings",
@@ -91,7 +152,7 @@ export function workbenchCommands(
       group: "Workbench",
       keywords: "theme preferences",
       shortcuts: [mod(",")],
-      run: () => layout.showSide("settings"),
+      run: () => settingsPage.show(),
     },
     {
       id: "view.toggle-side",
@@ -164,7 +225,12 @@ export function workbenchCommands(
       title: layout.theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
       group: "Workbench",
       keywords: "dark light appearance",
-      run: () => layout.setTheme(layout.theme === "dark" ? "light" : "dark"),
+      run: () =>
+        void settings.set(
+          "appearance.theme",
+          layout.theme === "dark" ? "light" : "dark",
+          "user",
+        ),
     },
     {
       id: "tab.next",
@@ -286,17 +352,48 @@ export function workbenchCommands(
       enabled: isTypst,
       run: () => actions.toggleSlides(),
     },
+    {
+      id: "home.show",
+      title: "Go to Home",
+      group: "Workbench",
+      keywords: "projects recent welcome",
+      run: () => {
+        settingsPage.hide();
+        home.show();
+      },
+    },
+    {
+      id: "home.new-project",
+      title: "New project",
+      group: "Workbench",
+      keywords: "create start template",
+      run: () => {
+        settingsPage.hide();
+        home.show();
+        home.openNew();
+      },
+    },
   ];
-  return list;
+  return list.map((command) => ({
+    ...command,
+    when: WHEN[command.id],
+    run: BRINGS_WORKBENCH.has(command.id)
+      ? () => {
+          toWorkbench();
+          command.run();
+        }
+      : command.run,
+  }));
 }
 
 /** Every shortcut, with the command it runs, for the global key handler. */
 export function shortcutTable(
   commands: readonly Command[],
+  applies: (when: string | undefined) => boolean = () => true,
 ): { shortcut: Shortcut; run: () => void }[] {
   const table: { shortcut: Shortcut; run: () => void }[] = [];
   for (const command of commands) {
-    if (command.enabled === false) continue;
+    if (command.enabled === false || !applies(command.when)) continue;
     for (const shortcut of command.shortcuts ?? [])
       table.push({ shortcut, run: command.run });
   }

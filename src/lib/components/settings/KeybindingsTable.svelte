@@ -7,18 +7,26 @@
     recordShortcutFromEvent,
   } from "$lib/workbench/settings";
 
+  /**
+   * Keyboard shortcuts: every binding the keybindings registry knows, with
+   * its source and conflicts. "Change" records the next key combination;
+   * Enter applies it and Escape cancels.
+   */
+
   interface Props {
     bindings: readonly KeybindingItem[];
     conflicts: readonly KeybindingConflict[];
+    /** Command titles by id, so rows read as actions rather than ids. */
+    titles: ReadonlyMap<string, string>;
+    query: string;
     onchange: (command: string, key: string) => Promise<void>;
     onreset: (command: string) => Promise<void>;
   }
 
-  const { bindings, conflicts, onchange, onreset }: Props = $props();
+  const { bindings, conflicts, titles, query, onchange, onreset }: Props = $props();
 
-  let query = $state("");
-  let recordingCommand = $state<string | null>(null);
-  let recordedKey = $state("");
+  let recording = $state<string | null>(null);
+  let recorded = $state("");
 
   const filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
@@ -26,150 +34,121 @@
     return bindings.filter(
       (b) =>
         b.command.toLowerCase().includes(q) ||
-        b.key.toLowerCase().includes(q) ||
+        (titles.get(b.command) ?? "").toLowerCase().includes(q) ||
         b.display.toLowerCase().includes(q),
     );
   });
 
-  function startRecording(b: KeybindingItem): void {
-    recordingCommand = b.command;
-    recordedKey = "";
+  function start(item: KeybindingItem): void {
+    recording = item.command;
+    recorded = "";
   }
 
-  function handleKeydown(event: KeyboardEvent): void {
-    if (!recordingCommand) return;
-
+  function onkeydown(event: KeyboardEvent): void {
+    if (recording === null) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      recordingCommand = null;
+      event.stopPropagation();
+      recording = null;
       return;
     }
-
-    if (event.key === "Enter" && recordedKey !== "") {
+    if (event.key === "Enter" && recorded !== "") {
       event.preventDefault();
-      const cmd = recordingCommand;
-      const key = recordedKey;
-      recordingCommand = null;
-      void onchange(cmd, key);
+      const command = recording;
+      recording = null;
+      void onchange(command, recorded);
       return;
     }
-
     const shortcut = recordShortcutFromEvent(event);
-    if (shortcut) {
+    if (shortcut !== null) {
       event.preventDefault();
-      recordedKey = shortcut;
+      recorded = shortcut;
     }
   }
 </script>
 
-<svelte:window onkeydown={recordingCommand ? handleKeydown : undefined} />
+<svelte:window onkeydowncapture={recording !== null ? onkeydown : undefined} />
 
-<div class="space-y-3">
-  <!-- Search input -->
-  <div class="relative">
-    <input
-      type="search"
-      bind:value={query}
-      placeholder="Filter keybindings..."
-      class="mng-input w-full pl-8 text-xs"
-      aria-label="Filter keybindings"
-    />
-    <div class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-text-muted">
-      <Icon name="search" size={13} />
-    </div>
-  </div>
+{#if filtered.length === 0}
+  <p class="m-0 py-6 text-xs text-text-60">
+    {query.trim() === ""
+      ? "No shortcuts are registered."
+      : `No shortcut matches “${query.trim()}”.`}
+  </p>
+{:else}
+  <ul class="m-0 list-none p-0" aria-label="Keyboard shortcuts">
+    {#each filtered as item (item.command)}
+      {@const clashes = findCommandConflicts(item.command, conflicts)}
+      {@const title = titles.get(item.command)}
+      <li
+        class="grid items-center gap-x-6 gap-y-2 border-b border-line-subtle py-3 @xl:grid-cols-[minmax(0,1fr)_12rem_auto]"
+      >
+        <div class="min-w-0">
+          <p class="m-0 truncate text-[13px] text-text">{title ?? item.command}</p>
+          <p
+            class="selectable m-0 mt-0.5 truncate font-mono text-[11px] text-text-muted"
+          >
+            {item.command}{item.when !== "" ? `, when ${item.when}` : ""}
+          </p>
+          {#if clashes.length > 0}
+            {@const clash = clashes[0]}
+            <p class="m-0 mt-1 flex items-center gap-1.5 text-xs text-text">
+              <Icon name="warning" size={12} class="shrink-0" />
+              Also bound to {clash?.commands
+                .filter((c) => c !== item.command)
+                .join(", ")}
+            </p>
+          {/if}
+        </div>
 
-  <!-- Keybindings Table -->
-  <div class="border border-line overflow-hidden">
-    <div class="grid grid-cols-12 border-b border-line bg-surface-hi/40 px-3 py-1.5 font-mono text-[10px] text-text-muted">
-      <div class="col-span-5">COMMAND</div>
-      <div class="col-span-3">KEYBINDING</div>
-      <div class="col-span-2">SOURCE</div>
-      <div class="col-span-2 text-right">ACTIONS</div>
-    </div>
+        <div class="flex items-center gap-2">
+          {#if recording === item.command}
+            <span
+              class="inline-flex h-7 items-center border border-accent px-2 font-mono text-xs text-text"
+              role="status"
+            >
+              {recorded !== "" ? formatShortcutDisplay(recorded) : "Press keys"}
+            </span>
+          {:else}
+            <span class="font-mono text-xs text-text"
+              >{formatShortcutDisplay(item.key)}</span
+            >
+            {#if item.source === "user"}
+              <span class="text-[11px] text-text-60">Changed</span>
+            {/if}
+          {/if}
+        </div>
 
-    {#if filtered.length === 0}
-      <div class="p-4 text-center text-xs text-text-muted">
-        No keybindings match "{query}".
-      </div>
-    {:else}
-      <div class="max-h-[460px] overflow-y-auto divide-y divide-line/40">
-        {#each filtered as item (item.command)}
-          {@const cmdConflicts = findCommandConflicts(item.command, conflicts)}
-          <div class="grid grid-cols-12 items-center px-3 py-2 text-xs hover:bg-surface-hi/30">
-            <div class="col-span-5 min-w-0 pr-2">
-              <div class="truncate font-medium text-text">{item.command}</div>
-              {#if item.when}
-                <div class="truncate font-mono text-[9px] text-text-muted">{item.when}</div>
-              {/if}
-              {#if cmdConflicts.length > 0}
-                <div class="mt-0.5 text-[10px] text-red-400">
-                  Conflict: shares {cmdConflicts[0]?.key} with {cmdConflicts[0]?.commands.filter((c) => c !== item.command).join(", ")}
-                </div>
-              {/if}
-            </div>
-
-            <div class="col-span-3 min-w-0">
-              {#if recordingCommand === item.command}
-                <div class="inline-flex items-center gap-1.5 border border-accent bg-accent/10 px-2 py-0.5 font-mono text-[11px] text-accent animate-pulse">
-                  <span>{recordedKey !== "" ? formatShortcutDisplay(recordedKey) : "Press keys..."}</span>
-                </div>
-              {:else}
-                <span class="mng-kbd">
-                  {formatShortcutDisplay(item.key)}
-                </span>
-              {/if}
-            </div>
-
-            <div class="col-span-2 font-mono text-[10px]">
-              {#if item.source === "user"}
-                <span class="text-accent">User</span>
-              {:else}
-                <span class="text-text-muted">Default</span>
-              {/if}
-            </div>
-
-            <div class="col-span-2 flex items-center justify-end gap-1">
-              {#if recordingCommand === item.command}
-                <button
-                  type="button"
-                  class="mng-btn px-2 py-0.5 text-[10px]"
-                  onclick={() => (recordingCommand = null)}
-                >
-                  Cancel
-                </button>
-              {:else}
-                <button
-                  type="button"
-                  class="mng-icon-btn text-text-60 hover:text-text"
-                  title="Change shortcut"
-                  aria-label={`Change shortcut for ${item.command}`}
-                  onclick={() => startRecording(item)}
-                >
-                  <Icon name="command" size={13} />
-                </button>
-                {#if item.source === "user"}
-                  <button
-                    type="button"
-                    class="mng-icon-btn text-text-60 hover:text-text"
-                    title="Reset to default"
-                    aria-label={`Reset shortcut for ${item.command}`}
-                    onclick={() => void onreset(item.command)}
-                  >
-                    <Icon name="refresh" size={13} />
-                  </button>
-                {/if}
-              {/if}
-            </div>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-
-  {#if recordingCommand}
-    <div class="p-2 border border-accent/40 bg-accent/5 text-[11px] text-text-60">
-      Press key combination, then press <span class="font-mono font-bold text-text">Enter</span> to apply, or <span class="font-mono font-bold text-text">Esc</span> to cancel.
-    </div>
-  {/if}
-</div>
+        <div class="flex items-center gap-1 @xl:justify-end">
+          {#if recording === item.command}
+            <span class="mr-2 text-[11px] text-text-60"
+              >Enter to apply, Esc to cancel</span
+            >
+            <button type="button" class="mng-btn" onclick={() => (recording = null)}>
+              Cancel
+            </button>
+          {:else}
+            <button
+              type="button"
+              class="mng-btn"
+              aria-label="Change shortcut for {title ?? item.command}"
+              onclick={() => start(item)}
+            >
+              Change
+            </button>
+            <button
+              type="button"
+              class="mng-icon-btn {item.source === 'user' ? '' : 'invisible'}"
+              title="Reset to default"
+              aria-label="Reset shortcut for {title ?? item.command}"
+              tabindex={item.source === "user" ? 0 : -1}
+              onclick={() => void onreset(item.command)}
+            >
+              <Icon name="undo" size={14} />
+            </button>
+          {/if}
+        </div>
+      </li>
+    {/each}
+  </ul>
+{/if}

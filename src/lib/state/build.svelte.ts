@@ -107,6 +107,9 @@ export class BuildState {
   #disk = 0;
   #network = false;
   #mainText: { path: string; disk: number; text: string } | null = null;
+  /** From the preview.* settings; see `setPreviewPrefs`. */
+  #autoCompile = true;
+  #debounceMs: number | null = null;
   readonly #scheduler = createScheduler(() => this.compile(), DEBOUNCE_MS.typst);
 
   /** The file the preview shows, or null when nothing previews. */
@@ -155,11 +158,24 @@ export class BuildState {
   schedule(reason: BuildReason = "edit"): void {
     const target = this.#resolve();
     const engine = target?.engine ?? workspace.engine;
-    if (reason === "edit" && engine === "latex") {
-      // Disk-based: nothing new to compile until the save lands.
+    if (reason === "edit" && (engine === "latex" || !this.#autoCompile)) {
+      // LaTeX is disk-based: nothing new to compile until the save lands.
+      // With auto-compile off, every engine waits for the save.
       return;
     }
-    this.#scheduler.request(reason === "switch" ? 0 : DEBOUNCE_MS[engine]);
+    const delay =
+      reason === "switch"
+        ? 0
+        : engine !== "latex" && this.#debounceMs !== null
+          ? this.#debounceMs
+          : DEBOUNCE_MS[engine];
+    this.#scheduler.request(delay);
+  }
+
+  /** Apply the preview.auto-compile and preview.debounce-ms settings. */
+  setPreviewPrefs(prefs: { autoCompile: boolean; debounceMs: number }): void {
+    this.#autoCompile = prefs.autoCompile;
+    this.#debounceMs = prefs.debounceMs;
   }
 
   /** Files changed on disk (a save, git, another editor). */

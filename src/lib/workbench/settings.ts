@@ -7,85 +7,133 @@ import type { KeybindingConflict, SettingDef } from "$lib/kernel/api";
 export interface SettingsGroup {
   readonly id: string;
   readonly label: string;
+  /** `core` for the app's own settings, otherwise the plugin that declared them. */
+  readonly owner: string;
   readonly settings: readonly SettingDef[];
 }
 
 const CATEGORY_ORDER: readonly string[] = [
+  "appearance",
   "editor",
   "preview",
   "compile",
   "files",
-  "appearance",
 ];
 
-const CATEGORY_LABELS: Record<string, string> = {
-  editor: "Editor",
-  preview: "Preview",
-  compile: "Compile",
-  files: "Files",
-  appearance: "Appearance",
-  git: "Git",
-  search: "Search",
+/** The app's own settings in reading order; others follow by id. */
+const SETTING_ORDER: readonly string[] = [
+  "appearance.theme",
+  "appearance.ui-scale",
+  "appearance.reduced-motion",
+  "appearance.custom-theme",
+  "editor.font-size",
+  "editor.line-height",
+  "editor.word-wrap",
+  "editor.line-numbers",
+  "editor.tab-size",
+  "preview.auto-compile",
+  "preview.debounce-ms",
+];
+
+function settingRank(id: string): number {
+  const at = SETTING_ORDER.indexOf(id);
+  return at === -1 ? SETTING_ORDER.length : at;
+}
+
+/** Names whose capitalisation a plain rule gets wrong. */
+const PROPER_NAMES: Record<string, string> = {
+  latex: "LaTeX",
+  bibtex: "BibTeX",
   typst: "Typst",
-  citations: "Citations",
-  markdown: "Markdown",
-  figure: "Figure",
+  git: "Git",
+  ui: "UI",
+  pdf: "PDF",
+  csl: "CSL",
+  tex: "TeX",
+  pdflatex: "pdfLaTeX",
+  xelatex: "XeLaTeX",
+  lualatex: "LuaLaTeX",
+  latexmk: "latexmk",
 };
 
-/**
- * Capitalizes kebab-case identifier into Title Case.
- * e.g. "font-size" -> "Font Size", "editor.font-size" -> "Font Size".
- */
-export function formatSettingTitle(id: string): string {
-  const leaf = id.includes(".") ? id.split(".").slice(1).join(" ") : id;
-  return leaf
+function word(w: string, first: boolean): string {
+  const lower = w.toLowerCase();
+  const proper = PROPER_NAMES[lower];
+  if (proper !== undefined) return proper;
+  return first ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
+}
+
+/** Sentence case from kebab-case: "font-size" -> "Font size". */
+function sentence(text: string): string {
+  return text
     .split(/[-_ ]+/)
     .filter((w) => w.length > 0)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .map((w, i) => word(w, i === 0))
     .join(" ");
 }
 
 /**
- * Returns human-readable category name.
+ * A setting's label from its id, in sentence case.
+ * e.g. "editor.font-size" -> "Font size", "latex.latexmk" -> "latexmk".
  */
+export function formatSettingTitle(id: string): string {
+  const leaf = id.includes(".") ? id.split(".").slice(1).join(" ") : id;
+  return sentence(leaf);
+}
+
+/** The label a row shows: the manifest's title when it has one. */
+export function settingTitle(def: SettingDef): string {
+  return def.title !== undefined && def.title !== ""
+    ? def.title
+    : formatSettingTitle(def.id);
+}
+
+/** Human-readable group name: "editor" -> "Editor", "latex" -> "LaTeX". */
 export function formatCategoryLabel(category: string): string {
-  if (category in CATEGORY_LABELS) {
-    return CATEGORY_LABELS[category]!;
-  }
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  return sentence(category);
+}
+
+/** The group a setting belongs to: its plugin, or its category for core settings. */
+function groupOf(def: SettingDef): { id: string; owner: string } {
+  const plugin = def.owner !== "" && def.owner !== "core";
+  if (plugin) return { id: def.owner, owner: def.owner };
+  return { id: def.category || def.id.split(".")[0] || "general", owner: "core" };
 }
 
 /**
- * Groups settings by id prefix / category according to design order:
- * editor, preview, compile, files, appearance, then plugins alphabetically.
+ * Groups settings for display: the app's own categories in a fixed order
+ * (appearance, editor, preview, compile, files, then any other), followed by
+ * one group per plugin in alphabetical order.
  */
 export function groupSettings(settings: readonly SettingDef[]): SettingsGroup[] {
-  const map = new Map<string, SettingDef[]>();
-
+  const map = new Map<string, { owner: string; list: SettingDef[] }>();
   for (const s of settings) {
-    const cat = s.category || s.id.split(".")[0] || "general";
-    const list = map.get(cat) ?? [];
-    list.push(s);
-    map.set(cat, list);
+    const { id, owner } = groupOf(s);
+    const entry = map.get(id) ?? { owner, list: [] };
+    entry.list.push(s);
+    map.set(id, entry);
   }
 
-  const allCategories = [...map.keys()];
+  const rank = (id: string, owner: string): [number, number] => {
+    const core = owner === "core" ? 0 : 1;
+    const at = CATEGORY_ORDER.indexOf(id);
+    return [core, at === -1 ? CATEGORY_ORDER.length : at];
+  };
 
-  // Sort categories: known order first, then alphabetical
-  allCategories.sort((a, b) => {
-    const idxA = CATEGORY_ORDER.indexOf(a);
-    const idxB = CATEGORY_ORDER.indexOf(b);
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    return a.localeCompare(b);
-  });
-
-  return allCategories.map((cat) => ({
-    id: cat,
-    label: formatCategoryLabel(cat),
-    settings: (map.get(cat) ?? []).sort((a, b) => a.id.localeCompare(b.id)),
-  }));
+  return [...map.entries()]
+    .sort(([a, ea], [b, eb]) => {
+      const [ca, ia] = rank(a, ea.owner);
+      const [cb, ib] = rank(b, eb.owner);
+      return ca - cb || ia - ib || a.localeCompare(b);
+    })
+    .map(([id, entry]) => ({
+      id,
+      label: formatCategoryLabel(id),
+      owner: entry.owner,
+      settings: entry.list.sort(
+        (a, b) => settingRank(a.id) - settingRank(b.id) || a.id.localeCompare(b.id),
+      ),
+    }));
 }
 
 /**
@@ -99,11 +147,18 @@ export function filterSettings(
   if (q === "") return [...settings];
 
   return settings.filter((s) => {
-    const title = formatSettingTitle(s.id).toLowerCase();
+    const title = settingTitle(s).toLowerCase();
     const id = s.id.toLowerCase();
     const desc = s.description.toLowerCase();
     const cat = s.category.toLowerCase();
-    return id.includes(q) || title.includes(q) || desc.includes(q) || cat.includes(q);
+    const owner = s.owner.toLowerCase();
+    return (
+      id.includes(q) ||
+      title.includes(q) ||
+      desc.includes(q) ||
+      cat.includes(q) ||
+      owner.includes(q)
+    );
   });
 }
 
@@ -208,12 +263,7 @@ export function recordShortcutFromEvent(
   platform = "linux",
 ): string | null {
   const key = event.key;
-  if (
-    key === "Control" ||
-    key === "Shift" ||
-    key === "Alt" ||
-    key === "Meta"
-  ) {
+  if (key === "Control" || key === "Shift" || key === "Alt" || key === "Meta") {
     return null;
   }
 

@@ -17,6 +17,26 @@ export interface KernelCommand {
   readonly plugin: string;
 }
 
+/** Access a plugin's manifest declares. */
+export interface PluginPermissions {
+  readonly filesystem?: readonly string[] | undefined;
+  readonly network?: readonly string[] | undefined;
+  readonly buffer?: readonly string[] | undefined;
+}
+
+/** One registered plugin, summarised from its manifest (`kernel_plugins`). */
+export interface PluginInfo {
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly tier: "native" | "wasm";
+  readonly permissions: PluginPermissions;
+  /** Number of commands it contributes. */
+  readonly commands: number;
+  /** Ids of the settings it declares in its manifest. */
+  readonly settings: readonly string[];
+}
+
 /**
  * An event published on the kernel bus and forwarded by the shell as the
  * `kernel://event` Tauri event, e.g. `project.changed`.
@@ -56,6 +76,8 @@ export type Args = Record<string, unknown>;
  */
 export interface Kernel {
   commands(): Promise<KernelCommand[]>;
+  /** Manifest summaries; optional because older shells and test kernels lack it. */
+  plugins?(): Promise<PluginInfo[]>;
   run<T = unknown>(command: string, args?: Args): Promise<T>;
   runBinary(command: string, args?: Args): Promise<Uint8Array>;
   /**
@@ -69,6 +91,10 @@ export interface Kernel {
 export const kernel: Kernel = {
   commands(): Promise<KernelCommand[]> {
     return invoke<KernelCommand[]>("kernel_commands");
+  },
+
+  plugins(): Promise<PluginInfo[]> {
+    return invoke<PluginInfo[]>("kernel_plugins");
   },
 
   /** Run a command that returns structured data. */

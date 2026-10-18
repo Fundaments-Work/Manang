@@ -22,6 +22,12 @@ export interface Command {
   readonly hint?: string;
   /** False greys the entry out and stops it running. */
   readonly enabled?: boolean;
+  /**
+   * Where the command applies, as a `when` clause over the UI context keys
+   * (`workbench && document`, `home`, `!settings`). Outside it the command is
+   * left out of the palette and its shortcut does nothing.
+   */
+  readonly when?: string | undefined;
   readonly run: () => void;
 }
 

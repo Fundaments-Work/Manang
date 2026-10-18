@@ -602,6 +602,8 @@ export type SettingScope = "user" | "project";
 
 export interface SettingDef {
   readonly id: string;
+  /** Short label from the declaring manifest; derived from the id when absent. */
+  readonly title?: string | undefined;
   readonly type: "bool" | "int" | "float" | "enum" | "string" | "path" | "list";
   readonly min?: number | undefined;
   readonly max?: number | undefined;
