@@ -25,6 +25,7 @@ import type {
 } from "./api";
 
 const COMMANDS: readonly (readonly [string, string])[] = [
+  ["citations.configure", "Apply citation settings"],
   ["citations.extract-keys", "Extract citation keys from source text"],
   ["citations.format", "Format citation entry"],
   ["citations.get", "Get entry by key"],
@@ -180,7 +181,9 @@ function parseBibtexEntries(source: string): CitationEntry[] {
       authors: authors.length > 0 ? authors : undefined,
       year,
       month,
-      journal_or_publisher: journalOrPublisher ? cleanText(journalOrPublisher) : undefined,
+      journal_or_publisher: journalOrPublisher
+        ? cleanText(journalOrPublisher)
+        : undefined,
       volume: rawFields["volume"],
       number: rawFields["number"] || rawFields["issue"],
       pages: rawFields["pages"],
@@ -207,7 +210,11 @@ function parseCslEntries(source: string, filename?: string): CitationEntry[] {
     };
   }
 
-  const items = Array.isArray(parsed) ? parsed : typeof parsed === "object" && parsed !== null ? [parsed] : [];
+  const items = Array.isArray(parsed)
+    ? parsed
+    : typeof parsed === "object" && parsed !== null
+      ? [parsed]
+      : [];
   const entries: CitationEntry[] = [];
 
   for (let idx = 0; idx < items.length; idx += 1) {
@@ -216,7 +223,8 @@ function parseCslEntries(source: string, filename?: string): CitationEntry[] {
 
     const key = String(item["id"] ?? `csl_${idx}`);
     const entryType = String(item["type"] ?? "article");
-    const title = typeof item["title"] === "string" ? cleanText(item["title"]) : undefined;
+    const title =
+      typeof item["title"] === "string" ? cleanText(item["title"]) : undefined;
 
     const rawAuthors = item["author"];
     const authors: CitationAuthor[] = [];
@@ -259,7 +267,9 @@ function parseCslEntries(source: string, filename?: string): CitationEntry[] {
       title,
       authors: authors.length > 0 ? authors : undefined,
       year,
-      journal_or_publisher: journalOrPublisher ? cleanText(journalOrPublisher) : undefined,
+      journal_or_publisher: journalOrPublisher
+        ? cleanText(journalOrPublisher)
+        : undefined,
       volume: typeof item["volume"] === "string" ? item["volume"] : undefined,
       number: typeof item["issue"] === "string" ? item["issue"] : undefined,
       pages: typeof item["page"] === "string" ? item["page"] : undefined,
@@ -406,7 +416,8 @@ export function extractKeysFromSource(
       m = regex.exec(source);
     }
   } else if (syntax === "latex") {
-    const regex = /\\(?:cite[a-z*]*|autocite|textcite|parencite|citet|citep)\{([^}]+)\}/gi;
+    const regex =
+      /\\(?:cite[a-z*]*|autocite|textcite|parencite|citet|citep)\{([^}]+)\}/gi;
     let m = regex.exec(source);
     while (m !== null) {
       if (m[1]) {
@@ -431,8 +442,15 @@ export function extractKeysFromSource(
   return keys;
 }
 
+/** The styles `format.rs` knows (`is_supported_style`). */
+function isSupportedStyle(style: string): boolean {
+  return ["apa", "apa-like", "numeric", "ieee"].includes(style.trim().toLowerCase());
+}
+
 export function citationsPlugin(host: MockProjectHost): MockPluginFactory {
   const index = new Map<string, CitationEntry>();
+  /** `citations.style`, applied by `citations.configure`. */
+  let configuredStyle = "apa";
 
   return (_emit): MockPlugin => {
     return {
@@ -513,7 +531,8 @@ export function citationsPlugin(host: MockProjectHost): MockPluginFactory {
 
         "citations.search": (args) => {
           const query = str(args, "query").trim().toLowerCase();
-          const limit = typeof args["limit"] === "number" ? Math.max(0, args["limit"]) : 100;
+          const limit =
+            typeof args["limit"] === "number" ? Math.max(0, args["limit"]) : 100;
 
           const allEntries = [...index.values()];
           if (query === "") {
@@ -531,7 +550,8 @@ export function citationsPlugin(host: MockProjectHost): MockPluginFactory {
 
           for (const entry of allEntries) {
             const authorsStr = (entry.authors ?? []).map((a) => a.name).join(" ");
-            const haystack = `${entry.key} ${entry.title ?? ""} ${authorsStr} ${entry.year ?? ""} ${entry.journal_or_publisher ?? ""} ${entry.doi ?? ""}`.toLowerCase();
+            const haystack =
+              `${entry.key} ${entry.title ?? ""} ${authorsStr} ${entry.year ?? ""} ${entry.journal_or_publisher ?? ""} ${entry.doi ?? ""}`.toLowerCase();
 
             let matchedWords = 0;
             let score = 0;
@@ -567,9 +587,27 @@ export function citationsPlugin(host: MockProjectHost): MockPluginFactory {
           return entry;
         },
 
+        // Like `plugin.rs`: all-or-nothing, unknown ids are ignored.
+        "citations.configure": (args) => {
+          const values = args["values"];
+          if (typeof values !== "object" || values === null || Array.isArray(values)) {
+            throw { message: "bad arguments: `values` must be an object" };
+          }
+          const given = (values as Record<string, unknown>)["citations.style"];
+          if (given !== undefined) {
+            if (typeof given !== "string" || !isSupportedStyle(given)) {
+              throw {
+                message: `\`citations.style\`: unsupported citation style \`${String(given)}\``,
+              };
+            }
+            configuredStyle = given;
+          }
+          return { "citations.style": configuredStyle };
+        },
+
         "citations.format": (args) => {
           const key = str(args, "key");
-          const style = optString(args, "style") ?? "apa";
+          const style = optString(args, "style") ?? configuredStyle;
           const entry = index.get(key);
           if (!entry) {
             throw { message: `entry \`${key}\` not found` };
@@ -625,12 +663,16 @@ export function citationsPlugin(host: MockProjectHost): MockPluginFactory {
             return result;
           }
 
-          if (entry.key.includes("notfound") || (!entry.doi && !entry.arxiv_id && !entry.title)) {
+          if (
+            entry.key.includes("notfound") ||
+            (!entry.doi && !entry.arxiv_id && !entry.title)
+          ) {
             const result: CitationVerificationResult = {
               status: "not_found",
               matched: null,
               differences: [],
-              message: "no identifier (DOI, arXiv ID) or title matched in remote registries",
+              message:
+                "no identifier (DOI, arXiv ID) or title matched in remote registries",
             };
             return result;
           }
