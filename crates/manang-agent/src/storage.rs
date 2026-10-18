@@ -116,7 +116,10 @@ impl SessionStore {
 
     pub fn write_meta(&self, meta: &SessionMeta) -> Result<(), AgentError> {
         let text = toml::to_string(meta).map_err(|e| AgentError::storage(e.to_string()))?;
-        fs::write(self.dir.join("meta.toml"), text).map_err(|e| io("writing meta.toml", &e))
+        // Write beside, then rename: a reader never sees a half-written file.
+        let tmp = self.dir.join("meta.toml.tmp");
+        fs::write(&tmp, text).map_err(|e| io("writing meta.toml", &e))?;
+        fs::rename(&tmp, self.dir.join("meta.toml")).map_err(|e| io("writing meta.toml", &e))
     }
 
     pub fn read_meta(&self) -> Option<SessionMeta> {
