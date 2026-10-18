@@ -8,7 +8,11 @@
 #   scripts/ui-slot.sh env MANANG_ORIGIN=http://127.0.0.1:1431 node scripts/verify-ui.mjs
 set -u
 slots="${MANANG_UI_SLOTS:-2}"
-dir="$(cd "$(dirname "$0")/.." && pwd)/.claude"
+# The slot files live in the repository's shared git directory, so every
+# worktree (the lead's checkout and each agent's) counts against the same slots.
+here="$(cd "$(dirname "$0")/.." && pwd)"
+common="$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+dir="${MANANG_UI_SLOT_DIR:-${common:-$here/.claude}/manang-ui-slots}"
 mkdir -p "$dir"
 while true; do
   for i in $(seq 1 "$slots"); do
