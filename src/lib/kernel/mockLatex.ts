@@ -25,8 +25,8 @@ const COMMANDS: readonly (readonly [string, string])[] = [
 ];
 
 /** What the demo "downloads": made-up numbers in the shape of the real manifest. */
-const ENGINE_SIZE = 14_413_048;
-const ENGINE_SHA = "b166f52634ec5d484615f8d1cc8872eeee6a3322dd0b1aac2ea122368640b68c";
+const ENGINE_SIZE = 14_413_816;
+const ENGINE_SHA = "d15d3cb6391be939dd56dcd5cfb264207b3d927d8434e713a8fbf9bffd317f6e";
 const ENGINE_VERSION = "0.17.0";
 const ENGINE_DIR =
   "/home/author/.local/share/work.fundaments.manang/engines/tectonic-0.17.0";
