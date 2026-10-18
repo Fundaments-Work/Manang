@@ -59,9 +59,20 @@ export class FiguresStore {
     return figure;
   }
 
-  async open(path: string): Promise<FigureState | null> {
+  /** Opens in flight, so a tab and a click asking at once share one load. */
+  readonly #loading = new SvelteMap<string, Promise<FigureState | null>>();
+
+  open(path: string): Promise<FigureState | null> {
     const existing = this.#open.get(path);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) return Promise.resolve(existing);
+    const pending = this.#loading.get(path);
+    if (pending !== undefined) return pending;
+    const load = this.#load(path).finally(() => this.#loading.delete(path));
+    this.#loading.set(path, load);
+    return load;
+  }
+
+  async #load(path: string): Promise<FigureState | null> {
     try {
       const { id } = await api.open(absolute(path));
       return await this.#adopt(path, id);
