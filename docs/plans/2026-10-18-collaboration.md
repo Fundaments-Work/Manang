@@ -15,6 +15,11 @@ host fails under BatchMode (the UI needs a one-time "trust this host" step).
 
 ## Phase A: git-based collaboration (build first)
 
+**Confirmed by the owner, 2026-10-18:** the default vocabulary for
+non-developers is "Save a version / Share / Get updates / Versions", with the
+full Source Control view as an advanced mode; build starts with WP1 (Versions
+and restore).
+
 **Two layers over the same git commands.** Simple layer for non-developers:
 Save a version (stage all non-ignored files and commit with a name), Share
 (push the current branch), Get updates (fetch then merge), Versions (history
