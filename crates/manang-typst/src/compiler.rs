@@ -252,6 +252,47 @@ impl Compiler {
         Ok(report)
     }
 
+    /// Compile `req` on a scratch session and return only its diagnostics. Nothing the preview
+    /// shows changes: the cached document, its generation and the last diagnostics stay as they
+    /// are. The agent uses this to check a fix before the author accepts it.
+    pub fn check(&self, req: &CompileRequest) -> Result<Vec<Diagnostic>, TypstError> {
+        if req.sources.len() > MAX_SOURCES {
+            return Err(TypstError::TooManySources(req.sources.len(), MAX_SOURCES));
+        }
+        let root = self.resolve_root(req)?;
+        let main = project_file_id(&root, &req.main)?;
+        let mut overrides = std::collections::HashMap::with_capacity(req.sources.len());
+        for (path, text) in &req.sources {
+            overrides.insert(
+                project_file_id(&root, path)?,
+                Arc::<str>::from(text.as_str()),
+            );
+        }
+        let mut files = FileStore::new(Loader::new(root, package_roots(&self.config.env)));
+        files.loader_mut().overrides = overrides;
+        let files = &files;
+        let outcome = self.pool.install(|| {
+            catch_unwind(AssertUnwindSafe(|| {
+                let world = ProjectWorld {
+                    library: &self.library,
+                    fonts: &self.fonts,
+                    files,
+                    main,
+                };
+                let warned = typst::compile::<PagedDocument>(&world);
+                let diagnostics = match &warned.output {
+                    Ok(_) => diagnostics::collect(&world, [], warned.warnings.iter()),
+                    Err(errors) => {
+                        diagnostics::collect(&world, errors.iter(), warned.warnings.iter())
+                    }
+                };
+                typst::comemo::evict(MEMO_MAX_AGE);
+                diagnostics
+            }))
+        });
+        outcome.map_err(|_| TypstError::WorkerPanicked)
+    }
+
     fn latest(&self) -> Result<Arc<Artifact>, TypstError> {
         self.latest.read().clone().ok_or(TypstError::NoDocument)
     }

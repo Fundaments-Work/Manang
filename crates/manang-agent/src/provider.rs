@@ -23,6 +23,8 @@ pub struct ProviderSpec {
     pub api_key: Option<SecretString>,
     pub offline: bool,
     pub engine: Engine,
+    /// `reasoning_effort` for providers that take it (DeepSeek), fixed per session.
+    pub effort: Option<String>,
 }
 
 /// The request as it would go on the wire. Header values of keys are masked.
@@ -68,8 +70,15 @@ fn rig_provider(spec: &ProviderSpec) -> Result<rig::RigProvider, AgentError> {
     let http = rig::native::build_client(&rig::native::NativeConfig::default(), &policy)
         .map_err(|e| AgentError::new("provider_setup", e.to_string()))?;
     // The key header of a preset without a key is simply absent.
-    let backend = rig::Backend::from_preset(&spec.preset, Some(&spec.base_url), rig_key(spec))
+    let mut backend = rig::Backend::from_preset(&spec.preset, Some(&spec.base_url), rig_key(spec))
         .map_err(|m| AgentError::new("provider_setup", m))?;
+    if let (rig::Backend::OpenAiCompat(settings), Some(effort)) = (&mut backend, &spec.effort)
+        && settings.reasoning_passback
+    {
+        settings
+            .extra_body
+            .insert("reasoning_effort".to_owned(), serde_json::json!(effort));
+    }
     Ok(rig::RigProvider::new(backend, http))
 }
 
@@ -109,6 +118,13 @@ fn builtin_provider(spec: &ProviderSpec) -> Result<Builtin, AgentError> {
             )
             .map_err(|m| AgentError::new("provider_setup", m))?;
             config.offline = spec.offline;
+            if let Some(effort) = &spec.effort
+                && config.reasoning_passback
+            {
+                config
+                    .extra_body
+                    .insert("reasoning_effort".to_owned(), serde_json::json!(effort));
+            }
             Ok(Builtin::OpenAi(builtin::OpenAiCompatProvider::new(
                 config, transport,
             )))

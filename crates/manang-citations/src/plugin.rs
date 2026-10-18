@@ -1,6 +1,6 @@
 //! Kernel plugin interface for the citations engine.
 
-use manang_kernel::{Context, Manifest, Payload, Plugin, PluginError};
+use manang_kernel::{Context, Hook, Manifest, Payload, Plugin, PluginError};
 use parking_lot::RwLock;
 use serde_json::{Map, Value, json};
 use std::path::Path;
@@ -10,6 +10,7 @@ use crate::extract::extract_keys;
 use crate::format::{format_entry, is_supported_style};
 use crate::http::{BlockingHttpClient, HttpClient};
 use crate::index::CitationIndex;
+use crate::models::{Author, Entry, VerificationStatus};
 use crate::parser::parse_file;
 use crate::verify::verify_entry;
 
@@ -121,6 +122,101 @@ impl CitationsPlugin {
         Ok(json!({ SETTING_STYLE: style }))
     }
 
+    /// `citations.verify-reference {doi?, title?, first_author?, key?}`: checks one reference
+    /// against the registries and answers in plain words (the agent's `verify_citation` tool).
+    /// It never creates a bibliography entry.
+    fn verify_reference(&self, obj: &Map<String, Value>) -> Result<Value, PluginError> {
+        check_allowed_keys(obj, &["doi", "title", "first_author", "key"])?;
+        let text = |k: &str| {
+            obj.get(k)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned)
+        };
+        let local = match text("key") {
+            Some(key) => self.index.get(&key).ok_or_else(|| {
+                PluginError::Failed(format!(
+                    "No bibliography entry has the key `{key}`. Use bib_search to find keys, or pass doi or title."
+                ))
+            })?,
+            None => {
+                let (doi, title, author) = (text("doi"), text("title"), text("first_author"));
+                if doi.is_none() && title.is_none() {
+                    return Err(PluginError::Failed(
+                        "Give a doi, or a title (with first_author if you know it).".to_owned(),
+                    ));
+                }
+                Entry {
+                    key: "query".to_owned(),
+                    entry_type: "misc".to_owned(),
+                    title,
+                    authors: author
+                        .map(|name| {
+                            vec![Author {
+                                family: Some(name.clone()),
+                                name,
+                                given: None,
+                            }]
+                        })
+                        .unwrap_or_default(),
+                    year: None,
+                    month: None,
+                    journal_or_publisher: None,
+                    volume: None,
+                    number: None,
+                    pages: None,
+                    doi,
+                    url: None,
+                    arxiv_id: None,
+                    abstract_text: None,
+                    raw_fields: Default::default(),
+                }
+            }
+        };
+        let result = verify_entry(&local, &*self.http_client);
+        let describe = |e: &Entry| {
+            let who = e.authors.first().map_or_else(
+                || "unknown authors".to_owned(),
+                |a| a.family.clone().unwrap_or_else(|| a.name.clone()),
+            );
+            format!(
+                "\"{}\" ({who}{}){}",
+                e.title.as_deref().unwrap_or("untitled"),
+                e.year.map_or(String::new(), |y| format!(", {y}")),
+                e.doi
+                    .as_ref()
+                    .map_or(String::new(), |d| format!(", DOI {d}"))
+            )
+        };
+        let answer = match result.status {
+            VerificationStatus::Verified => format!(
+                "Verified: the registries list {}. No bibliography entry was created.",
+                result.matched.as_ref().map_or_else(|| "it".to_owned(), describe)
+            ),
+            VerificationStatus::Mismatch => {
+                let diffs: Vec<String> = result
+                    .differences
+                    .iter()
+                    .map(|d| format!("{}: given \"{}\", registry \"{}\"", d.field, d.local, d.remote))
+                    .collect();
+                format!(
+                    "Found, but different: {}. Differences: {}. Do not change the bibliography without the author.",
+                    result.matched.as_ref().map_or_else(|| "a record".to_owned(), describe),
+                    diffs.join("; ")
+                )
+            }
+            VerificationStatus::NotFound => {
+                "Not found in Crossref or OpenAlex. That does not prove the reference is wrong; check the DOI or the spelling of the title, and tell the author.".to_owned()
+            }
+            VerificationStatus::Error => format!(
+                "The check could not finish: {}",
+                result.message.unwrap_or_else(|| "the registries did not answer".to_owned())
+            ),
+        };
+        Ok(Value::String(answer))
+    }
+
     /// Returns the underlying index.
     pub fn index(&self) -> &Arc<CitationIndex> {
         &self.index
@@ -154,6 +250,25 @@ fn failed(error: impl std::fmt::Display) -> PluginError {
 }
 
 impl Plugin for CitationsPlugin {
+    fn on_hook(
+        &self,
+        _ctx: &Context<'_>,
+        hook: Hook,
+        input: Payload,
+    ) -> Result<Payload, PluginError> {
+        if hook != Hook::RegisterAgentTool {
+            return Ok(input);
+        }
+        Ok(Payload::Json(json!({"tools": [{
+            "name": "verify_citation",
+            "title": "Verify a citation",
+            "description": "Check one reference against Crossref (by DOI, or title and first author) and report whether it exists and its canonical metadata. Never creates a bibliography entry. Asks the author's permission the first time per session.",
+            "input_schema": {"type":"object","properties":{"doi":{"type":"string"},"title":{"type":"string"},"first_author":{"type":"string"}},"additionalProperties":false},
+            "output_schema": {"type":"string"},
+            "command": "citations.verify-reference"
+        }]})))
+    }
+
     fn invoke(
         &self,
         _ctx: &Context<'_>,
@@ -167,6 +282,7 @@ impl Plugin for CitationsPlugin {
 
         match command {
             "citations.configure" => self.configure(obj).map(Payload::Json),
+            "citations.verify-reference" => self.verify_reference(obj).map(Payload::Json),
             "citations.load" => {
                 check_allowed_keys(obj, &["paths", "path"])?;
 

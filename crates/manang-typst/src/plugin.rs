@@ -150,6 +150,15 @@ impl Plugin for TypstPlugin {
                     .map(Payload::Json)
                     .map_err(failed)
             }
+            "typst.check" => {
+                let diagnostics = self
+                    .compiler
+                    .check(&parse_request(&args)?)
+                    .map_err(failed)?;
+                serde_json::to_value(diagnostics)
+                    .map(|d| Payload::Json(json!({ "diagnostics": d })))
+                    .map_err(failed)
+            }
             "typst.render" => {
                 let page = match args.get("page") {
                     None | Some(Value::Null) => 0,

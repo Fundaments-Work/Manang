@@ -3,33 +3,41 @@
  *
  * Events carry a `session_id`; the reducer ignores any other session, so a late event of a
  * stopped conversation never lands in the new one. State is immutable.
+ *
+ * Seven kinds of event drive it: `text` (answer deltas, or a `thinking` signal), `tool` (a call
+ * and its result are one updating row), `approval`, `proposal`, `usage` (once per message),
+ * `error` and `done` (cancellation is a field), plus `started`, which only names the session.
  */
 
 import type { TextEdit } from "./types";
 
 export type ItemState = "running" | "done" | "error";
 
+/** One tool call as a row; consecutive rows fold into one group in the transcript. */
+export interface ToolRow {
+  readonly id: string;
+  readonly name: string;
+  readonly risk: string;
+  readonly status: ItemState;
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly summary: string;
+}
+
 export type TranscriptItem =
-  | { readonly kind: "user"; readonly text: string; readonly chips: readonly string[] }
+  | { readonly kind: "user"; readonly text: string; readonly context: string }
+  | { readonly kind: "assistant"; readonly text: string; readonly open: boolean }
+  | { readonly kind: "tools"; readonly rows: readonly ToolRow[] }
   | {
-      readonly kind: "assistant";
-      readonly text: string;
-      readonly thinking: string;
-      readonly open: boolean;
-    }
-  | {
-      readonly kind: "tool";
-      readonly id: string;
-      readonly name: string;
-      readonly risk: string;
-      readonly state: ItemState;
-      readonly summary: string;
+      readonly kind: "ask";
+      readonly question: string;
+      readonly choices: readonly string[];
+      readonly answer: string | null;
     }
   | {
       readonly kind: "approval";
       readonly callId: string;
       readonly tool: string;
-      readonly risk: string;
+      readonly host: string | null;
       readonly scope: string;
       readonly afterUntrusted: boolean;
       readonly answer: "pending" | "allowed" | "denied";
@@ -37,7 +45,6 @@ export type TranscriptItem =
   | {
       readonly kind: "proposal";
       readonly proposalId: string;
-      readonly proposalKind: string;
       readonly edit: TextEdit | null;
       readonly state: "pending" | "accepted" | "rejected" | "stale" | "undone";
     }
@@ -51,12 +58,18 @@ export type TranscriptItem =
   | { readonly kind: "notice"; readonly text: string };
 
 export interface Usage {
+  /** Tokens of the whole session so far (not cached input, output). */
   readonly input: number;
   readonly output: number;
   readonly cacheRead: number;
   readonly cacheWrite: number;
   /** Micro-USD; null when the model has no price. Always an estimate. */
   readonly costMicroUsd: number | null;
+  /** Prompt tokens of the last request, and the working window they are measured against. */
+  readonly fill: number;
+  readonly window: number;
+  /** Share of the last message's prompt that came from the provider's cache. */
+  readonly cacheHitPercent: number;
 }
 
 export interface AgentViewState {
@@ -64,6 +77,8 @@ export interface AgentViewState {
   /** `agent.start` was sent and its first event has not arrived: adopt that session. */
   readonly starting: boolean;
   readonly running: boolean;
+  /** The model is reasoning (shown as a quiet "Thinking" line, never as text). */
+  readonly thinking: boolean;
   readonly items: readonly TranscriptItem[];
   readonly usage: Usage;
   readonly provider: string;
@@ -77,6 +92,9 @@ export const EMPTY_USAGE: Usage = {
   cacheRead: 0,
   cacheWrite: 0,
   costMicroUsd: 0,
+  fill: 0,
+  window: 0,
+  cacheHitPercent: 0,
 };
 
 export function initialState(): AgentViewState {
@@ -84,6 +102,7 @@ export function initialState(): AgentViewState {
     sessionId: null,
     starting: false,
     running: false,
+    thinking: false,
     items: [],
     usage: EMPTY_USAGE,
     provider: "",
@@ -92,18 +111,19 @@ export function initialState(): AgentViewState {
   };
 }
 
-/** The user sent a message: show it and wait for the session. */
+/** The author sent a message: show it and wait for the session. */
 export function begin(
   state: AgentViewState,
   text: string,
-  chips: readonly string[],
+  context: string,
 ): AgentViewState {
   return {
     ...state,
     starting: true,
     running: true,
+    thinking: false,
     stopReason: null,
-    items: [...state.items, { kind: "user", text, chips }],
+    items: [...state.items, { kind: "user", text, context }],
   };
 }
 
@@ -135,28 +155,16 @@ function last(items: readonly TranscriptItem[]): TranscriptItem | undefined {
   return items[items.length - 1];
 }
 
-function appendAssistant(
-  items: readonly TranscriptItem[],
-  field: "text" | "thinking",
-  delta: string,
-): readonly TranscriptItem[] {
+function appendAnswer(items: readonly TranscriptItem[], delta: string) {
   const tail = last(items);
   if (tail?.kind === "assistant" && tail.open) {
-    return [...items.slice(0, -1), { ...tail, [field]: tail[field] + delta }];
+    return [...items.slice(0, -1), { ...tail, text: tail.text + delta }];
   }
-  return [
-    ...items,
-    {
-      kind: "assistant",
-      text: field === "text" ? delta : "",
-      thinking: field === "thinking" ? delta : "",
-      open: true,
-    },
-  ];
+  return [...items, { kind: "assistant" as const, text: delta, open: true }];
 }
 
-/** A tool call or proposal ends the current assistant paragraph. */
-function closeAssistant(items: readonly TranscriptItem[]): readonly TranscriptItem[] {
+/** A tool call, approval or proposal ends the current answer paragraph. */
+function closeAnswer(items: readonly TranscriptItem[]): readonly TranscriptItem[] {
   const tail = last(items);
   if (tail?.kind === "assistant" && tail.open) {
     return [...items.slice(0, -1), { ...tail, open: false }];
@@ -175,23 +183,62 @@ function num(value: unknown): number {
 function asEdit(value: unknown): TextEdit | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
-  if (
-    typeof v["path"] !== "string" ||
-    typeof v["from"] !== "number" ||
-    typeof v["to"] !== "number" ||
-    typeof v["before"] !== "string" ||
-    typeof v["after"] !== "string"
-  ) {
-    return null;
+  if (typeof v["path"] !== "string" || !Array.isArray(v["edits"])) return null;
+  const edits = [];
+  for (const raw of v["edits"] as unknown[]) {
+    if (typeof raw !== "object" || raw === null) return null;
+    const e = raw as Record<string, unknown>;
+    if (
+      typeof e["from"] !== "number" ||
+      typeof e["to"] !== "number" ||
+      typeof e["before"] !== "string" ||
+      typeof e["after"] !== "string"
+    ) {
+      return null;
+    }
+    edits.push({
+      from: e["from"],
+      to: e["to"],
+      before: e["before"],
+      after: e["after"],
+    });
   }
-  return {
-    path: v["path"],
-    from: v["from"],
-    to: v["to"],
-    before: v["before"],
-    after: v["after"],
-    explanation: str(v["explanation"]),
-  };
+  if (edits.length === 0) return null;
+  return { path: v["path"], note: str(v["note"]), edits };
+}
+
+function asArgs(value: unknown): Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/** Puts a tool row into the trailing group (or starts one); a row with the same id is updated. */
+function upsertRow(
+  items: readonly TranscriptItem[],
+  row: ToolRow,
+): readonly TranscriptItem[] {
+  const tail = last(items);
+  if (tail?.kind === "tools") {
+    const at = tail.rows.findIndex((r) => r.id === row.id);
+    const rows =
+      at >= 0 ? tail.rows.map((r, i) => (i === at ? row : r)) : [...tail.rows, row];
+    return [...items.slice(0, -1), { kind: "tools", rows }];
+  }
+  return [...closeAnswer(items), { kind: "tools", rows: [row] }];
+}
+
+function stopNotice(reason: string, p: Record<string, unknown>): string | null {
+  switch (reason) {
+    case "iteration_cap":
+      return `Stopped after ${num(p["steps"]) || 12} steps. Say continue to go on.`;
+    case "context_full":
+      return "This chat has grown too long to continue. Start a new chat.";
+    case "max_tokens":
+      return "The answer was cut at the length limit. Say continue to go on.";
+    default:
+      return null;
+  }
 }
 
 /** Applies one `agent.*` event. */
@@ -212,54 +259,71 @@ export function reduce(
 
   switch (topic) {
     case "agent.started":
-      return { ...state, provider: str(p["provider"]), model: str(p["model"]) };
-    case "agent.text-delta":
-      return { ...state, items: appendAssistant(state.items, "text", str(p["text"])) };
-    case "agent.thinking-delta":
       return {
         ...state,
-        items: appendAssistant(state.items, "thinking", str(p["text"])),
+        provider: str(p["provider"]),
+        model: str(p["model"]),
+        usage: { ...state.usage, window: num(p["window"]) || state.usage.window },
       };
-    case "agent.tool-call":
+    case "agent.text":
+      if (p["thinking"] === true) return { ...state, thinking: true };
       return {
         ...state,
-        items: [
-          ...closeAssistant(state.items),
-          {
-            kind: "tool",
-            id: str(p["id"]),
-            name: str(p["name"]),
-            risk: str(p["risk"]),
-            state: "running",
-            summary: "",
-          },
-        ],
+        thinking: false,
+        items: appendAnswer(state.items, str(p["text"])),
       };
-    case "agent.tool-result": {
-      const id = str(p["id"]);
+    case "agent.tool": {
+      const name = str(p["name"]);
+      const status = str(p["status"]) as ItemState;
+      const ask = p["ask"];
+      if (typeof ask === "object" && ask !== null && status !== "running") {
+        const a = ask as Record<string, unknown>;
+        return {
+          ...state,
+          thinking: false,
+          items: [
+            ...closeAnswer(state.items),
+            {
+              kind: "ask",
+              question: str(a["question"]),
+              choices: Array.isArray(a["choices"])
+                ? (a["choices"] as unknown[]).filter(
+                    (c): c is string => typeof c === "string",
+                  )
+                : [],
+              answer: null,
+            },
+          ],
+        };
+      }
+      // A queued proposal shows as its own row and ask_user as a question; only an edit the
+      // host refused is a (visible) failed tool row.
+      if (name === "ask_user" || (name === "edit_text" && status !== "error"))
+        return { ...state, thinking: false };
       return {
         ...state,
-        items: state.items.map((item) =>
-          item.kind === "tool" && item.id === id
-            ? {
-                ...item,
-                state: p["is_error"] === true ? "error" : "done",
-                summary: str(p["summary"]),
-              }
-            : item,
-        ),
+        thinking: false,
+        items: upsertRow(state.items, {
+          id: str(p["id"]),
+          name,
+          risk: str(p["risk"]),
+          status,
+          args: asArgs(p["args"]),
+          summary: str(p["summary"]),
+        }),
       };
     }
-    case "agent.approval-requested":
+    case "agent.approval":
       return {
         ...state,
+        thinking: false,
         items: [
-          ...closeAssistant(state.items),
+          ...closeAnswer(state.items),
           {
             kind: "approval",
             callId: str(p["call_id"]),
             tool: str(p["tool"]),
-            risk: str(p["risk"]),
+            host: typeof p["host"] === "string" ? p["host"] : null,
             scope: str(p["scope"]),
             afterUntrusted: p["after_untrusted_content"] === true,
             answer: "pending",
@@ -269,12 +333,12 @@ export function reduce(
     case "agent.proposal":
       return {
         ...state,
+        thinking: false,
         items: [
-          ...closeAssistant(state.items),
+          ...closeAnswer(state.items),
           {
             kind: "proposal",
             proposalId: str(p["proposal_id"]),
-            proposalKind: str(p["kind"], "text_edit"),
             edit: asEdit(p["payload"]),
             state: "pending",
           },
@@ -291,14 +355,18 @@ export function reduce(
           cacheRead: num(total["cache_read"]),
           cacheWrite: num(total["cache_write"]),
           costMicroUsd: typeof cost === "number" ? cost : null,
+          fill: num(p["fill"]),
+          window: num(p["window"]) || state.usage.window,
+          cacheHitPercent: num(p["cache_hit_percent"]),
         },
       };
     }
     case "agent.error":
       return {
         ...state,
+        thinking: false,
         items: [
-          ...closeAssistant(state.items),
+          ...closeAnswer(state.items),
           {
             kind: "error",
             code: str(p["code"], "error"),
@@ -308,18 +376,18 @@ export function reduce(
           },
         ],
       };
-    case "agent.cancelled":
-      return {
-        ...state,
-        items: [...closeAssistant(state.items), { kind: "notice", text: "Stopped." }],
-      };
-    case "agent.done":
+    case "agent.done": {
+      const reason = str(p["stop_reason"]);
+      const notice = p["cancelled"] === true ? "Stopped." : stopNotice(reason, p);
+      const items = closeAnswer(state.items);
       return {
         ...state,
         running: false,
-        stopReason: str(p["stop_reason"]),
-        items: closeAssistant(state.items),
+        thinking: false,
+        stopReason: reason,
+        items: notice === null ? items : [...items, { kind: "notice", text: notice }],
       };
+    }
     default:
       return state;
   }
@@ -341,6 +409,20 @@ export function answerApproval(
   };
 }
 
+/** Marks the question at `index` answered with `answer` (a choice or typed text). */
+export function answerAsk(
+  state: AgentViewState,
+  index: number,
+  answer: string,
+): AgentViewState {
+  return {
+    ...state,
+    items: state.items.map((item, i) =>
+      item.kind === "ask" && i === index ? { ...item, answer } : item,
+    ),
+  };
+}
+
 /** Marks a proposal decided (or found stale when the text moved on). */
 export function decideProposal(
   state: AgentViewState,
@@ -357,7 +439,7 @@ export function decideProposal(
   };
 }
 
-/** The proposal waiting for the user, if any (the Accept button belongs to it). */
+/** The proposal waiting for the author, if any (the Accept button belongs to it). */
 export function pendingProposal(
   state: AgentViewState,
 ): Extract<TranscriptItem, { kind: "proposal" }> | undefined {
@@ -373,4 +455,11 @@ export function formatCost(micro: number | null): string {
   if (micro === null) return "cost unknown";
   const usd = micro / 1_000_000;
   return `~$${usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2)}`;
+}
+
+/** The working window's fill as a whole percent (0 when unknown). */
+export function fillPercent(usage: Usage): number {
+  return usage.window === 0
+    ? 0
+    : Math.min(100, Math.round((usage.fill * 100) / usage.window));
 }

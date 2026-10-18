@@ -21,19 +21,3 @@ export const READINESS_LABEL: Readonly<Record<Readiness, string>> = {
   "not-set-up": "AI: not set up",
   off: "AI: off",
 };
-
-const TOOL_VERBS: Readonly<Record<string, string>> = {
-  doc_read: "Read",
-  doc_diagnostics: "Checked the problems",
-  doc_outline: "Read the outline",
-  doc_propose_edit: "Proposed an edit",
-  project_search: "Searched the project",
-};
-
-/** A tool call as one short line ("Read main.typ"), never the internal command id. */
-export function toolLine(name: string, summary: string, state: string): string {
-  const bare = name.replace(/^agent\./, "");
-  const verb = TOOL_VERBS[bare] ?? bare.replace(/[-_.]/g, " ");
-  const head = state === "error" ? `Could not run: ${verb.toLowerCase()}` : verb;
-  return summary === "" ? head : `${head} ${summary}`;
-}

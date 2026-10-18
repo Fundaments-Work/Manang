@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatCost } from "$lib/agent/reducer";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { agent } from "$lib/state/agent.svelte";
   import { layout } from "$lib/state/layout.svelte";
@@ -6,9 +7,9 @@
   import DropMenu from "./DropMenu.svelte";
 
   /**
-   * The header of the Agent column: its name, "New chat", History (earlier chats of this
-   * project) and the model picker (provider and model, compact). Everything here is local: no
-   * menu sends anything.
+   * The header of the Agent column: its name, the model (a menu to change model or provider),
+   * New chat, and one "more" menu with earlier chats, "Show what will be sent" and the session's
+   * numbers (cost estimate, cache hits). Everything here is local: no menu sends anything.
    */
 
   const status = $derived(agent.status);
@@ -19,12 +20,9 @@
       : (status?.model ?? ""),
   );
   const pickerText = $derived(
-    status === null
-      ? "Model"
-      : modelName !== ""
-        ? `${status.provider_name} / ${modelName}`
-        : status.provider_name,
+    status === null ? "Model" : modelName !== "" ? modelName : status.provider_name,
   );
+  const usage = $derived(agent.view.usage);
 
   const item =
     "inset-focus flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-xs text-text-60 hover:bg-surface-muted hover:text-text";
@@ -107,7 +105,7 @@
     <Icon name="plus" size={14} />
   </button>
   <DropMenu
-    label="History: earlier chats"
+    label="More: earlier chats, what will be sent"
     align="right"
     triggerClass="w-7 justify-center"
     onopen={() => void agent.loadHistory()}
@@ -116,8 +114,32 @@
       <Icon name="recent" size={14} />
     {/snippet}
     {#snippet children(close)}
+      <button
+        type="button"
+        role="menuitem"
+        class={item}
+        data-agent-preview
+        onclick={() => {
+          close();
+          void agent.previewRequest();
+        }}>Show what will be sent</button
+      >
+      {#if usage.input + usage.output > 0}
+        <p
+          class="m-0 border-t border-line px-3 py-1.5 font-mono text-[10px] text-text-60"
+          data-agent-usage
+        >
+          {usage.input + usage.output} tokens · {formatCost(usage.costMicroUsd)} (estimate)
+          {#if usage.cacheHitPercent > 0}· {usage.cacheHitPercent}% from cache{/if}
+        </p>
+      {/if}
+      <p
+        class="m-0 border-t border-line px-3 pt-1.5 pb-0.5 text-[11px] text-text-muted"
+      >
+        Earlier chats
+      </p>
       {#if agent.history.length === 0}
-        <p class="m-0 px-3 py-2 text-xs text-text-60">
+        <p class="m-0 px-3 py-1.5 text-xs text-text-60">
           No earlier chats in this project.
         </p>
       {/if}

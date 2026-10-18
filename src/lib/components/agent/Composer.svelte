@@ -1,20 +1,19 @@
 <script lang="ts">
   import { tick } from "svelte";
 
-  import { tokenLabel } from "$lib/agent/chips";
-  import { formatCost } from "$lib/agent/reducer";
-  import type { ChipKind } from "$lib/agent/types";
+  import { mentionLabel } from "$lib/agent/context";
+  import { fillPercent } from "$lib/agent/reducer";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { agent } from "$lib/state/agent.svelte";
+  import { build } from "$lib/state/build.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
 
-  import DropMenu from "./DropMenu.svelte";
-
   /**
-   * The composer, pinned to the bottom of the Agent column: the context chips that will be sent,
-   * a text box that grows with what you type (Enter sends, Shift+Enter adds a line), Send that
-   * becomes Stop while the agent works, and one quiet line with the size and cost estimate and
-   * "Preview what will be sent". "@" or the + button attaches more context.
+   * The one composer, pinned to the bottom of the Agent column: a text box that grows with what
+   * you type (Enter sends, Shift+Enter adds a line), Send that becomes Stop while the agent
+   * works, and one quiet line under it with what travels along ("main.typ, selection (38
+   * words)"). "/" lists the slash commands, "@" mentions a file, the problems or the figure.
+   * The fill of the working window shows only once it is past half.
    */
 
   interface Props {
@@ -27,52 +26,51 @@
   interface Choice {
     readonly id: string;
     readonly label: string;
+    readonly hint?: string;
     readonly run: () => void;
   }
 
-  const KINDS: readonly { kind: ChipKind; label: string }[] = [
-    { kind: "selection", label: "Selection" },
-    { kind: "file", label: "Current file" },
-    { kind: "diagnostics", label: "Problems" },
-    { kind: "outline", label: "Outline" },
-    { kind: "bibliography-keys", label: "Bibliography keys" },
-    { kind: "figure", label: "Figure" },
-    { kind: "pinned", label: "Pinned note" },
-  ];
-
-  /** Everything that can be attached: the kinds, then the other open documents. */
-  const choices = $derived<readonly Choice[]>([
-    ...KINDS.map((k) => ({
-      id: k.kind,
-      label: k.label,
-      run: () => void agent.addChip(k.kind),
-    })),
+  /** What `@` can mention: the other open documents, the problems, the figure. */
+  const mentionChoices = $derived<readonly Choice[]>([
     ...tabs.tabs
-      .filter((t) => t.kind === "document" && t.path !== tabs.active?.path)
+      .filter((t) => t.kind === "document")
       .map((t) => ({
         id: `file:${t.path}`,
         label: t.path,
-        run: () => agent.addFile(t.path),
+        run: () => agent.mentionFile(t.path),
       })),
+    ...(build.problems.some((p) => p.file !== "")
+      ? [{ id: "problems", label: "problems", run: () => agent.mentionProblems() }]
+      : []),
+    ...(tabs.active?.kind === "figure"
+      ? [{ id: "figure", label: "figure", run: () => agent.mentionFigure() }]
+      : []),
   ]);
 
   let box: HTMLTextAreaElement | undefined = $state();
   let mention = $state<{ start: number; query: string } | null>(null);
-  let mentionAt = $state(0);
+  let at = $state(0);
 
-  const matches = $derived(
+  const mentionMatches = $derived(
     mention === null
       ? []
-      : choices.filter((c) =>
+      : mentionChoices.filter((c) =>
           c.label.toLowerCase().includes(mention!.query.toLowerCase()),
         ),
   );
-  const limit = $derived(agent.status?.max_context_tokens ?? 32000);
-  const over = $derived(agent.trayTokens > limit);
-  const view = $derived(agent.view);
-  const modelLine = $derived(
-    view.model !== "" ? view.model : (agent.status?.model ?? ""),
+  const slashChoices = $derived<readonly Choice[]>(
+    agent.slashMenu.map((c) => ({
+      id: c.name,
+      label: `/${c.name}`,
+      hint: c.hint === "" ? c.description : `${c.hint}  ${c.description}`,
+      run: () => agent.fillCommand(c.name),
+    })),
   );
+  const menu = $derived<readonly Choice[]>(
+    slashChoices.length > 0 ? slashChoices : mentionMatches,
+  );
+  const view = $derived(agent.view);
+  const fill = $derived(fillPercent(view.usage));
 
   // The box grows with its text, up to about eight lines.
   $effect(() => {
@@ -90,11 +88,11 @@
       m === null
         ? null
         : { start: before.length - m[1]!.length - 1, query: m[1] ?? "" };
-    mentionAt = 0;
+    at = 0;
   }
 
   async function pick(choice: Choice): Promise<void> {
-    if (box !== undefined && mention !== null) {
+    if (box !== undefined && mention !== null && slashChoices.length === 0) {
       const end = box.selectionStart;
       agent.input = agent.input.slice(0, mention.start) + agent.input.slice(end);
       const caret = mention.start;
@@ -108,16 +106,22 @@
 
   function onkeydown(event: KeyboardEvent): void {
     if (event.isComposing) return;
-    if (mention !== null && matches.length > 0) {
+    if (menu.length > 0) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         const step = event.key === "ArrowDown" ? 1 : -1;
-        mentionAt = (mentionAt + step + matches.length) % matches.length;
+        at = (at + step + menu.length) % menu.length;
         return;
       }
-      if (event.key === "Enter" || event.key === "Tab") {
+      if (event.key === "Tab" || (event.key === "Enter" && slashChoices.length > 0)) {
         event.preventDefault();
-        const choice = matches[mentionAt];
+        const choice = menu[at];
+        if (choice !== undefined) void pick(choice);
+        return;
+      }
+      if (event.key === "Enter" && mention !== null) {
+        event.preventDefault();
+        const choice = menu[at];
         if (choice !== undefined) void pick(choice);
         return;
       }
@@ -135,93 +139,36 @@
 </script>
 
 <div class="shrink-0 border-t border-line bg-surface">
-  <div
-    class="flex flex-wrap items-center gap-1.5 px-3 pt-2"
-    role="group"
-    aria-label="Context to send"
-  >
-    {#each agent.tray as chip (chip.id)}
-      <span
-        class="inline-flex h-6 max-w-full items-center border border-line text-[11px]"
-        data-chip={chip.kind}
-      >
-        <span class="min-w-0 truncate pl-2 text-text" title={chip.label}
-          >{chip.label}</span
-        >
-        <span
-          class="px-1.5 font-mono text-[10px] text-text-60"
-          aria-label="{chip.tokens} tokens">{tokenLabel(chip.tokens)}</span
-        >
-        <button
-          type="button"
-          class="mng-icon-btn h-6 w-6"
-          aria-label={chip.pinned === true
-            ? `Unpin ${chip.label}`
-            : `Pin ${chip.label}`}
-          aria-pressed={chip.pinned === true}
-          title={chip.pinned === true ? "Pinned: kept between chats" : "Pin"}
-          onclick={() => agent.togglePin(chip.id)}
-        >
-          <Icon name={chip.pinned === true ? "pin-filled" : "pin"} size={11} />
-        </button>
-        <button
-          type="button"
-          class="mng-icon-btn h-6 w-6"
-          aria-label="Remove {chip.label}"
-          onclick={() => agent.removeChip(chip.id)}
-        >
-          <Icon name="close" size={10} />
-        </button>
-      </span>
-    {/each}
-    <DropMenu
-      label="Add context"
-      up
-      triggerClass="h-6 w-6 justify-center border border-line"
-    >
-      {#snippet trigger()}<Icon name="plus" size={11} />{/snippet}
-      {#snippet children(close)}
-        {#each choices as choice (choice.id)}
-          <button
-            type="button"
-            role="menuitem"
-            class="inset-focus block w-full truncate px-3 py-1.5 text-left text-xs text-text-60 hover:bg-surface-muted hover:text-text"
-            onclick={() => {
-              close();
-              choice.run();
-            }}>{choice.label}</button
-          >
-        {/each}
-      {/snippet}
-    </DropMenu>
-    {#if agent.tray.length === 0}
-      <span class="text-[11px] text-text-muted" data-empty-tray
-        >Nothing attached: only your message is sent. Type @ to attach.</span
-      >
-    {/if}
-  </div>
-
-  <div class="relative flex items-end gap-2 px-3 pt-2 pb-1">
-    {#if mention !== null && matches.length > 0}
+  <div class="relative flex items-end gap-2 px-3 pt-2.5 pb-1">
+    {#if menu.length > 0}
       <div
         role="listbox"
-        aria-label="Attach context"
-        class="absolute bottom-full left-3 z-30 mb-1 max-h-56 min-w-48 overflow-y-auto border border-line bg-surface-hi py-1"
+        aria-label={slashChoices.length > 0 ? "Commands" : "Mention"}
+        class="absolute bottom-full left-3 z-30 mb-1 max-h-56 min-w-56 max-w-[calc(100%-1.5rem)] overflow-y-auto border border-line bg-surface-hi py-1"
+        data-agent-menu
       >
-        {#each matches as choice, i (choice.id)}
+        {#each menu as choice, i (choice.id)}
           <button
             type="button"
             role="option"
-            aria-selected={i === mentionAt}
+            aria-selected={i === at}
             tabindex="-1"
-            class="block w-full truncate px-3 py-1.5 text-left text-xs {i === mentionAt
+            class="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-xs {i ===
+            at
               ? 'bg-surface-muted text-text'
               : 'text-text-60'}"
             onmousedown={(e) => {
               e.preventDefault();
               void pick(choice);
-            }}>@{choice.label}</button
+            }}
           >
+            <span class="truncate {slashChoices.length > 0 ? 'font-mono' : ''}"
+              >{slashChoices.length > 0 ? "" : "@"}{choice.label}</span
+            >
+            {#if choice.hint !== undefined}
+              <span class="truncate text-[11px] text-text-muted">{choice.hint}</span>
+            {/if}
+          </button>
         {/each}
       </div>
     {/if}
@@ -232,7 +179,7 @@
       aria-label="Message to the agent"
       placeholder={blocked
         ? "Set up the agent to start chatting"
-        : "Ask about your document"}
+        : "Ask about your document, or type / for commands"}
       bind:value={agent.input}
       {onkeydown}
       oninput={trackMention}
@@ -260,24 +207,31 @@
     {/if}
   </div>
   <p
-    class="m-0 flex flex-wrap items-baseline gap-x-3 px-3 pb-2 font-mono text-[10px] text-text-60"
-    data-agent-usage
+    class="m-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 pb-2 text-[11px] text-text-muted"
+    data-agent-context
   >
-    <span class="min-w-0 truncate"
-      >{modelLine !== "" ? modelLine : "no model"} · {view.usage.input +
-        view.usage.output} tokens · {formatCost(view.usage.costMicroUsd)} (estimate)</span
-    >
-    <span
-      class={over ? "text-text" : ""}
-      data-tray-tokens
-      title="About 3.5 characters per token; the provider's count and bill are the truth"
-      >~{tokenLabel(agent.trayTokens)} / {tokenLabel(limit)} tokens</span
-    >
-    <button
-      type="button"
-      class="mng-lime-hover inset-focus font-sans text-[11px] text-text-60"
-      data-agent-preview
-      onclick={() => void agent.previewRequest()}>Preview what will be sent</button
-    >
+    <span class="min-w-0 truncate" data-agent-context-text>
+      {agent.contextLine === "" ? "Only your message is sent" : agent.contextLine}
+    </span>
+    {#each agent.mentions as m, i (i)}
+      <button
+        type="button"
+        class="mng-lime-hover inset-focus inline-flex items-center gap-0.5 text-text-60"
+        aria-label="Remove {mentionLabel(m)}"
+        data-agent-mention={m.kind}
+        onclick={() => agent.removeMention(i)}
+      >
+        {mentionLabel(m)}
+        <Icon name="close" size={9} />
+      </button>
+    {/each}
+    {#if fill >= 50}
+      <span
+        class="ml-auto font-mono text-[10px] {fill >= 85 ? 'text-text' : ''}"
+        data-agent-fill
+        title="How much of the working window this chat fills. Old tool results are cleared at 60% and the early part is summarised at 85%."
+        >{fill}% of the window</span
+      >
+    {/if}
   </p>
 </div>
