@@ -5,9 +5,9 @@ expression: "parse_tex_log(log, \"main.tex\")"
 [
   {
     "severity": "error",
-    "message": "Undefined control sequence.",
+    "message": "Undefined control sequence: \\foo",
     "file": "main.tex",
     "line": 7,
-    "hint": "check the spelling or load the package that provides this command"
+    "hint": "`\\foo` is not defined: check the spelling or load the package that provides it"
   }
 ]

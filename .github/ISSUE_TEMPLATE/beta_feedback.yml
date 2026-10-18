@@ -1,0 +1,55 @@
+name: Beta Feedback ("Felt Slow or Confusing")
+description: Share subjective friction, confusing UX, latency impressions, or moments of delight.
+title: "[Feedback]: "
+labels: ["feedback", "beta", "ux"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We want to hear about moments where Manang felt sluggish, confusing, unintuitive, or surprisingly smooth.
+        No bug reproduction needed here—just your honest experience as a researcher or student.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Which area of Manang did you touch?
+      options:
+        - Editor typing & keystroke response
+        - Preview pane redraw or SyncTeX click jump
+        - PDF viewer scrolling, zoom, or search
+        - Vector Figure Studio drawing & arrows
+        - References search & citation insertion
+        - Command palette or menu navigation
+        - Settings or shortcut customization
+        - Home view, templates, or project creation
+        - App startup or memory footprint
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: sentiment
+    attributes:
+      label: How did it feel?
+      options:
+        - "This felt slow / sluggish"
+        - "This was confusing / unintuitive"
+        - "Something was missing from my workflow"
+        - "This worked surprisingly well / delightful"
+        - "General comment"
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Describe your experience
+      description: Short free text explaining what happened and how you expected it to feel.
+      placeholder: "e.g. When editing a document with 15 figures, scrolling the preview felt like it dropped frames. I expected it to stay pinned at 60 FPS."
+    validations:
+      required: true
+  - type: input
+    id: specs
+    attributes:
+      label: Your Machine Specs (Optional)
+      description: Helps us correlate performance observations with hardware.
+      placeholder: "e.g. Arch Linux, AMD Ryzen 7, 32GB RAM, Wayland / Hyprland"
+    validations:
+      required: false
