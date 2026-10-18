@@ -4,12 +4,7 @@
  */
 
 export type AgentFeature =
-  | "chat"
-  | "rewrite"
-  | "shorten"
-  | "translate"
-  | "explain"
-  | "fix-diagnostic";
+  "chat" | "rewrite" | "shorten" | "translate" | "explain" | "fix-diagnostic";
 
 export type ChipKind =
   | "selection"

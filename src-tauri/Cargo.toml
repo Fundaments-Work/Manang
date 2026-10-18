@@ -47,6 +47,7 @@ manang-writing = { path = "../crates/manang-writing" }
 manang-markdown = { path = "../crates/manang-markdown" }
 manang-diagram = { path = "../crates/manang-diagram" }
 manang-citations = { path = "../crates/manang-citations" }
+manang-agent = { path = "../crates/manang-agent" }
 manang-plugins = { path = "../crates/manang-plugins" }
 manang-wasm-host = { path = "../crates/manang-wasm-host" }
 

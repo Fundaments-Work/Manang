@@ -8,6 +8,7 @@
 import type { Kernel } from "./client";
 import { createMockKernel } from "./mock";
 import { MockProjectHost, projectPlugin, type SeedProject } from "./mockProject";
+import { agentPlugin } from "./mockAgent";
 import { citationsPlugin } from "./mockCitations";
 import { diagramPlugin } from "./mockDiagram";
 import { figurePlugin } from "./mockFigure";
@@ -460,6 +461,7 @@ export function createDevKernel(
       pluginsPlugin(),
       settingsPlugin(host),
       writingPlugin(),
+      agentPlugin,
     ],
   });
   return Object.assign(kernel, { host });

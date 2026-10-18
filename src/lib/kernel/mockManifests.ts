@@ -17,6 +17,136 @@ export interface MockManifest {
 }
 
 export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
+  agent: {
+    description:
+      "AI agent: chat, rewrite, explain and fix with your own provider key. Writes are proposals you accept.",
+    permissions: {},
+    settingsContexts: ["app", "project", "document"],
+    settings: [
+      {
+        id: "agent.enabled",
+        type: "bool",
+        default: true,
+        title: "Enable the AI agent",
+        description:
+          "Nothing is sent anywhere until you pick a provider, give your consent and press Send. A project can switch the agent off for itself.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.provider",
+        type: "enum",
+        values: [
+          "anthropic",
+          "openai",
+          "deepseek",
+          "openrouter",
+          "groq",
+          "ollama",
+          "llama_cpp",
+          "lm_studio",
+          "custom",
+        ],
+        default: "anthropic",
+        title: "Provider",
+        description: "Who answers your requests. Set the key under Provider and key.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.model",
+        type: "string",
+        default: "",
+        title: "Model",
+        description: "Model id. Empty uses the provider's first listed model.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.base-url",
+        type: "string",
+        default: "",
+        title: "Base URL",
+        description:
+          "Empty uses the provider's address. Set it for a custom or local server.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.engine",
+        type: "enum",
+        values: ["rig", "builtin"],
+        default: "rig",
+        title: "Provider engine",
+        description:
+          "rig is the default client layer; builtin is Manang's own, kept as a fallback.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.offline",
+        type: "bool",
+        default: false,
+        title: "Offline mode",
+        description: "Only providers on this machine (localhost) may be contacted.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.include-thinking",
+        type: "bool",
+        default: false,
+        title: "Show the model's reasoning",
+        description:
+          "Shows the model's reasoning text dimmed in the Agent view when the provider streams it.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.max-context-tokens",
+        type: "int",
+        min: 1000,
+        max: 1000000,
+        default: 32000,
+        title: "Context limit (tokens)",
+        description:
+          "A request whose attached context is larger than this is refused before it is sent. About 3.5 characters per token.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.redact-emails",
+        type: "bool",
+        default: false,
+        title: "Redact email addresses",
+        description:
+          "Replace email addresses in what is sent. Secret-like strings are always redacted.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.redact-paths",
+        type: "bool",
+        default: false,
+        title: "Redact user names in paths",
+        description: "Replace the user name in home-directory paths in what is sent.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "agent.retention-days",
+        type: "int",
+        min: 0,
+        max: 3650,
+        default: 30,
+        title: "Keep sessions (days)",
+        description:
+          "Sessions older than this are deleted when a new one starts. 0 keeps them.",
+        scope: "user",
+        "requires-restart": false,
+      },
+    ],
+  },
   citations: {
     description:
       "Bibliography management, CSL-JSON & BibTeX index, formatting, and Crossref/OpenAlex/arXiv verification",

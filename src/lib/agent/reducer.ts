@@ -120,7 +120,13 @@ export function failStart(state: AgentViewState, message: string): AgentViewStat
     running: false,
     items: [
       ...state.items,
-      { kind: "error", code: "start_failed", message, requestId: null, retryable: false },
+      {
+        kind: "error",
+        code: "start_failed",
+        message,
+        requestId: null,
+        retryable: false,
+      },
     ],
   };
 }
@@ -210,7 +216,10 @@ export function reduce(
     case "agent.text-delta":
       return { ...state, items: appendAssistant(state.items, "text", str(p["text"])) };
     case "agent.thinking-delta":
-      return { ...state, items: appendAssistant(state.items, "thinking", str(p["text"])) };
+      return {
+        ...state,
+        items: appendAssistant(state.items, "thinking", str(p["text"])),
+      };
     case "agent.tool-call":
       return {
         ...state,
