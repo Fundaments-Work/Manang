@@ -160,7 +160,10 @@ impl Shared {
             Value::Object(map) => map,
             _ => Map::new(),
         };
-        map.insert("session_id".to_owned(), Value::String(session_id.to_owned()));
+        map.insert(
+            "session_id".to_owned(),
+            Value::String(session_id.to_owned()),
+        );
         self.events.emit(topic, Payload::Json(Value::Object(map)));
     }
 

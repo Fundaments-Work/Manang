@@ -96,7 +96,7 @@ impl Feature {
         match self {
             Self::Explain => read || tool == "figure_describe" && figure,
             Self::Rewrite | Self::Shorten | Self::Translate => read || edit,
-            Self::Chat | Self::FixDiagnostic => read || edit || (figure_tool && figure),
+            Self::Chat | Self::FixDiagnostic => !figure_tool || figure,
         }
     }
 }

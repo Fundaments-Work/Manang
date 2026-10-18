@@ -78,10 +78,9 @@ fn builtin_transport(spec: &ProviderSpec) -> Result<Arc<dyn builtin::HttpTranspo
         loopback_only: spec.offline,
         ..builtin::TransportConfig::default()
     };
-    Ok(Arc::new(
-        builtin::ReqwestTransport::new(&config)
-            .map_err(|e| AgentError::new("provider_setup", e.to_string()))?,
-    ))
+    Ok(Arc::new(builtin::ReqwestTransport::new(&config).map_err(
+        |e| AgentError::new("provider_setup", e.to_string()),
+    )?))
 }
 
 enum Builtin {
@@ -103,9 +102,12 @@ fn builtin_provider(spec: &ProviderSpec) -> Result<Builtin, AgentError> {
             )))
         }
         ProviderKind::OpenAiCompat => {
-            let mut config =
-                builtin::OpenAiCompatConfig::from_preset(&spec.preset, Some(&spec.base_url), builtin_key(spec))
-                    .map_err(|m| AgentError::new("provider_setup", m))?;
+            let mut config = builtin::OpenAiCompatConfig::from_preset(
+                &spec.preset,
+                Some(&spec.base_url),
+                builtin_key(spec),
+            )
+            .map_err(|m| AgentError::new("provider_setup", m))?;
             config.offline = spec.offline;
             Ok(Builtin::OpenAi(builtin::OpenAiCompatProvider::new(
                 config, transport,

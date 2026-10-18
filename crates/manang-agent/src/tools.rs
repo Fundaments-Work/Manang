@@ -10,9 +10,7 @@
 
 use crate::context::Diagnostic;
 use crate::error::AgentError;
-use crate::text::{
-    byte_to_utf16, clip_chars, markup_problem, outline, utf16_len, utf16_to_byte,
-};
+use crate::text::{byte_to_utf16, clip_chars, markup_problem, outline, utf16_len, utf16_to_byte};
 use manang_kernel::{Context, Payload};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -154,7 +152,9 @@ fn file_text(ctx: &Context<'_>, tc: &ToolContext, path: &str) -> Result<String, 
     }
     match ctx.invoke("project.read-file", Payload::Json(json!({ "path": path }))) {
         Ok(Payload::Json(Value::String(text))) => Ok(text),
-        Ok(_) => Err(AgentError::unavailable("the file could not be read as text")),
+        Ok(_) => Err(AgentError::unavailable(
+            "the file could not be read as text",
+        )),
         Err(e) => Err(AgentError::not_found(format!(
             "{path} could not be read ({e}). Check the path with project_search or doc_outline."
         ))),
@@ -344,7 +344,9 @@ pub fn doc_propose_edit(
     {
         return Err(AgentError::new(
             "markup_broken",
-            format!("{problem}. Keep citations, references, labels and math exactly and try again."),
+            format!(
+                "{problem}. Keep citations, references, labels and math exactly and try again."
+            ),
         ));
     }
     Ok(json!({
