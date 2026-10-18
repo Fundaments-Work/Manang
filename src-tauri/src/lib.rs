@@ -98,9 +98,10 @@ fn sibling_worker(exe: &std::path::Path) -> Option<std::path::PathBuf> {
     candidate.is_file().then_some(candidate)
 }
 
-/// Build the kernel with every first-party plugin registered.
+/// Build the kernel with every first-party plugin registered (tests that need no agent handle).
 ///
 /// Everything in Manang is a plugin; the shell only dispatches commands.
+#[cfg(test)]
 fn build_kernel(
     dirs: &Dirs<'_>,
     events: &EventBus,
