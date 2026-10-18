@@ -328,13 +328,37 @@
     openMenu(null, event.clientX, event.clientY);
   }}
 >
-  {#if rows.length === 0 && editing === null}
+  {#if workspace.error !== "" && rows.length === 0 && editing === null}
+    <div class="m-3 border border-line bg-surface p-3 text-xs text-text" role="alert">
+      <div class="flex items-center gap-1.5 text-text">
+        <Icon name="error" size={13} />
+        <span>Could not read files</span>
+      </div>
+      <p class="mt-1 mb-2 leading-relaxed text-text-60">{workspace.error}</p>
+      <button
+        type="button"
+        class="mng-btn text-xs"
+        onclick={() => void workspace.refresh()}
+      >
+        Retry
+      </button>
+    </div>
+  {:else if rows.length === 0 && editing === null}
     <div class="px-4 pt-4 text-xs leading-relaxed text-text-60">
       {#if filtering}
         <p class="m-0">
           No files match "{workspace.filter.trim()}". Clear the filter to see
           everything.
         </p>
+        <button
+          type="button"
+          class="mng-btn mt-2 text-xs"
+          onclick={() => {
+            workspace.filter = "";
+          }}
+        >
+          Clear filter
+        </button>
       {:else}
         <p class="m-0">This folder is empty. Create a file to start writing.</p>
         <button

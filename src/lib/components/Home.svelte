@@ -7,7 +7,7 @@
   import TemplateCard from "./home/TemplateCard.svelte";
   import ContextMenu, { type MenuItem } from "./ui/ContextMenu.svelte";
   import Icon, { type IconName } from "./ui/Icon.svelte";
-  import { closeProject, openFolder, openProject } from "$lib/state/actions";
+  import { closeProject, openFolder, openProject, openSampleProject } from "$lib/state/actions";
   import { dialog } from "$lib/state/dialog.svelte";
   import { home } from "$lib/state/home.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
@@ -434,7 +434,23 @@
           <div class="flex max-w-[46ch] flex-col items-start gap-3" role="status">
             <p class="m-0 text-[13px] text-text">{empty.title}</p>
             <p class="m-0 text-xs leading-relaxed text-text-60">{empty.hint}</p>
-            {#if empty.action === "new"}
+            {#if empty.action === "sample"}
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="mng-btn border-accent bg-accent text-accent-ink"
+                  onclick={() => void openSampleProject()}
+                >
+                  Open the sample project
+                </button>
+                <button type="button" class="mng-btn" onclick={() => home.openNew()}>
+                  New project
+                </button>
+                <button type="button" class="mng-btn" onclick={() => void openFolder()}>
+                  Open folder
+                </button>
+              </div>
+            {:else if empty.action === "new"}
               <button type="button" class="mng-btn" onclick={() => home.openNew()}
                 >New project</button
               >

@@ -184,7 +184,7 @@ export interface EmptyState {
   readonly title: string;
   readonly hint: string;
   /** The one action worth offering. */
-  readonly action: "new" | "open" | "clear" | null;
+  readonly action: "sample" | "new" | "open" | "clear" | null;
 }
 
 /** What to say when a section has nothing to show, and what to offer. */
@@ -203,8 +203,8 @@ export function emptyState(
   if (total === 0) {
     return {
       title: "No projects yet",
-      hint: "Create a project, or open a folder that already has a manang.toml.",
-      action: "new",
+      hint: "Explore Manang with a live sample project, or start from scratch.",
+      action: "sample",
     };
   }
   switch (section) {

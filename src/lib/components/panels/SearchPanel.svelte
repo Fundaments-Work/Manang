@@ -380,19 +380,61 @@
 
 <!-- Results stream -->
 <div class="min-h-0 flex-1 overflow-y-auto pb-4">
-  <!-- Status line -->
-  <p class="m-0 px-4 py-2 text-[11px] text-text-muted" role="status" aria-live="polite">
-    {#if projectRoot === ""}
+  {#if projectRoot === ""}
+    <p class="m-0 px-4 py-4 text-xs text-text-60" role="status">
       Open a folder to search its files.
-    {:else if query.trim() === ""}
-      Type to search file names and text.
-    {:else if searching}
+    </p>
+  {:else if query.trim() === ""}
+    <p class="m-0 px-4 py-4 text-xs text-text-60" role="status">
+      Type to search file names and text across the project.
+    </p>
+  {:else if searching}
+    <p class="m-0 px-4 py-2 text-[11px] text-text-muted" role="status">
       Searching…
-    {:else if searchError !== ""}
-      {searchError}. Check regex pattern or syntax.
-    {:else if nameHits.length === 0 && totalMatches === 0}
-      No results for "{ranQuery}". Check the spelling, or try another query.
-    {:else}
+    </p>
+  {:else if searchError !== ""}
+    <div class="m-3 border border-line bg-surface p-3 text-xs text-text" role="alert">
+      <div class="flex items-center gap-1.5 text-text">
+        <Icon name="error" size={13} />
+        <span>Search syntax error</span>
+      </div>
+      <p class="mt-1 mb-2 leading-relaxed text-text-60">{searchError}</p>
+      {#if useRegex}
+        <button
+          type="button"
+          class="mng-btn text-xs"
+          onclick={() => {
+            useRegex = false;
+          }}
+        >
+          Turn off regex
+        </button>
+      {/if}
+    </div>
+  {:else if nameHits.length === 0 && totalMatches === 0}
+    <div class="px-4 py-4 text-xs leading-relaxed text-text-60" role="status">
+      <p class="m-0 text-text">No results for "{ranQuery}"</p>
+      <p class="mt-1 mb-3 text-text-60">
+        Check the spelling, try another query, or adjust include/exclude filters.
+      </p>
+      {#if matchCase || wholeWord || useRegex || includePattern !== "" || excludePattern !== ""}
+        <button
+          type="button"
+          class="mng-btn text-xs"
+          onclick={() => {
+            matchCase = false;
+            wholeWord = false;
+            useRegex = false;
+            includePattern = "";
+            excludePattern = "";
+          }}
+        >
+          Reset search filters
+        </button>
+      {/if}
+    </div>
+  {:else}
+    <p class="m-0 px-4 py-2 text-[11px] text-text-muted" role="status" aria-live="polite">
       {formatMatchCount(totalMatches, fileHits.length)}
       {#if nameHits.length > 0}
         and {nameHits.length} matching {nameHits.length === 1 ? "name" : "names"}
@@ -400,8 +442,8 @@
       {#if truncated}
         <span class="text-text-60"> (results truncated)</span>
       {/if}
-    {/if}
-  </p>
+    </p>
+  {/if}
 
   {#if replaceMessage !== ""}
     <p class="m-0 border-b border-line px-4 pb-2 text-[11px] text-text-60">

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack, type Component } from "svelte";
 
+  import CoachLine from "./CoachLine.svelte";
   import EditorPane from "./EditorPane.svelte";
   import ExternalChangeBar from "./ExternalChangeBar.svelte";
   import FileViewer from "./FileViewer.svelte";
@@ -135,6 +136,7 @@
     {#if figure !== undefined && Figure !== undefined}
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
         <ExternalChangeBar path={tab.path} kind="figure" />
+        <CoachLine target="figures" />
         <Figure {figure} />
       </div>
     {:else if loadError !== ""}
@@ -161,6 +163,7 @@
       >
         <ExternalChangeBar path={tab.path} kind="document" />
         <LiveBar path={tab.path} />
+        <CoachLine target="editor" />
         <div class="min-h-0 flex-1">
           <EditorPane path={tab.path} zen={layout.zen} />
         </div>
@@ -181,16 +184,19 @@
     {/if}
     {#if mode !== "editor"}
       <div
-        class="min-h-0 min-w-0"
+        class="flex min-h-0 min-w-0 flex-col"
         style="flex: {mode === 'split' ? 1 - layout.splitRatio : 1} 1 0"
       >
-        {#if Preview !== undefined}
-          <Preview />
-        {:else}
-          <p class="m-auto p-6 text-xs text-text-muted" role="status">
-            Opening preview
-          </p>
-        {/if}
+        <CoachLine target="preview" />
+        <div class="min-h-0 flex-1">
+          {#if Preview !== undefined}
+            <Preview />
+          {:else}
+            <p class="m-auto p-6 text-xs text-text-muted" role="status">
+              Opening preview
+            </p>
+          {/if}
+        </div>
       </div>
     {/if}
   {/if}

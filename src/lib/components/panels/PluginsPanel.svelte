@@ -116,7 +116,7 @@
 
   {#if plugins.error !== ""}
     <div
-      class="m-3 border border-text-60 bg-surface p-3 text-xs text-text"
+      class="m-3 border border-line bg-surface p-3 text-xs text-text"
       role="alert"
     >
       <div class="flex items-center gap-1.5">
@@ -146,13 +146,23 @@
       {/if}
     </p>
     {#if shown.length === 0}
-      <p class="m-0 px-4 pt-1 text-xs leading-relaxed text-text-60">
+      <div class="px-4 pt-1 text-xs leading-relaxed text-text-60">
         {#if plugins.filter === "attention" && plugins.query.trim() === ""}
-          Every plugin is running or switched off on purpose.
+          <p class="m-0">Every plugin is running or switched off on purpose.</p>
         {:else}
-          No plugin matches. Clear the filter to see them all.
+          <p class="m-0">No plugin matches. Clear the filter to see them all.</p>
+          <button
+            type="button"
+            class="mng-btn mt-2 text-xs"
+            onclick={() => {
+              plugins.filter = "all";
+              plugins.query = "";
+            }}
+          >
+            Clear filter
+          </button>
         {/if}
-      </p>
+      </div>
     {/if}
     <ul class="m-0 list-none p-0" aria-label="Plugins">
       {#each shown as plugin (plugin.name)}

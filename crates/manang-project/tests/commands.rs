@@ -85,8 +85,9 @@ fn templates_command_returns_available_templates() {
     let h = harness();
     let res = h.ok("project.templates", json!({}));
     let arr = res.as_array().expect("array of templates");
-    assert_eq!(arr.len(), 11);
+    assert_eq!(arr.len(), 12);
     let ids: Vec<&str> = arr.iter().filter_map(|t| t["id"].as_str()).collect();
+    assert!(ids.contains(&"welcome"));
     assert!(ids.contains(&"article-typst"));
     assert!(ids.contains(&"blank-latex"));
     assert!(ids.contains(&"notes-markdown"));

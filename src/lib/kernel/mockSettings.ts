@@ -96,6 +96,16 @@ const CORE_SETTINGS: Omit<SettingDef, "contexts">[] = [
       "Replace transitions with instant changes. `system` follows the operating system.",
   },
   {
+    id: "appearance.coach-lines",
+    type: "bool",
+    default: true,
+    scope: "user",
+    "requires-restart": false,
+    owner: "core",
+    category: "appearance",
+    description: "Show onboarding coach lines on the editor, preview, and figures.",
+  },
+  {
     id: "editor.font-size",
     type: "int",
     min: 8,

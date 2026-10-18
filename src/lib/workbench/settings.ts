@@ -29,6 +29,7 @@ const SETTING_ORDER: readonly string[] = [
   "appearance.ui-scale",
   "appearance.reduced-motion",
   "appearance.custom-theme",
+  "appearance.coach-lines",
   "editor.font-size",
   "editor.line-height",
   "editor.word-wrap",
