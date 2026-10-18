@@ -136,7 +136,6 @@
     {#if figure !== undefined && Figure !== undefined}
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
         <ExternalChangeBar path={tab.path} kind="figure" />
-        <CoachLine target="figures" />
         <Figure {figure} />
       </div>
     {:else if loadError !== ""}
