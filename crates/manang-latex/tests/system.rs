@@ -392,3 +392,51 @@ fn list(root: &Path) -> Vec<String> {
     out.sort();
     out
 }
+
+/// What the preview does: a project on disk compiled by absolute path, then
+/// SyncTeX both ways with paths relative to the main file's directory.
+#[test]
+fn synctex_round_trips_through_an_input_file() {
+    let Some(tools) = system_tex() else { return };
+    let cache = tempfile::tempdir().expect("tmp");
+    let project = tempfile::tempdir().expect("project");
+    fs::create_dir_all(project.path().join("chapters")).expect("mkdir");
+    fs::write(
+        project.path().join("main.tex"),
+        "\\documentclass{article}\n\\begin{document}\nOpening words of the main file.\n\n\\input{chapters/intro}\n\\end{document}\n",
+    )
+    .expect("write main");
+    fs::write(
+        project.path().join("chapters/intro.tex"),
+        "Words from the chapter file.\n",
+    )
+    .expect("write chapter");
+    let main = project.path().join("main.tex");
+    let main = main.to_str().expect("utf8");
+    let k = kernel_with(tools, cache.path());
+    let report = compile(&k, json!({"main": main}));
+    assert_eq!(report["ok"], true, "{report}");
+
+    for (file, line) in [("chapters/intro.tex", 1), ("main.tex", 3)] {
+        let forward = json_of(
+            k.invoke(
+                "latex.synctex",
+                Payload::Json(json!({"main": main, "file": file, "line": line})),
+            )
+            .expect("forward"),
+        );
+        let at = &forward["positions"][0];
+        assert_eq!(at["page"], 1, "{forward}");
+        let x = at["x"].as_f64().expect("x") + 2.0;
+        let y = at["y"].as_f64().expect("y") + at["height"].as_f64().expect("h") / 2.0;
+        let reverse = json_of(
+            k.invoke(
+                "latex.synctex",
+                Payload::Json(json!({"main": main, "page": 1, "x": x, "y": y})),
+            )
+            .expect("reverse"),
+        );
+        assert_eq!(reverse["file"], file, "{reverse}");
+        assert_eq!(reverse["line"], line, "{reverse}");
+    }
+}

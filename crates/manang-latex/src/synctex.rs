@@ -157,10 +157,10 @@ impl Synctex {
     }
 
     fn tag_for(&self, file: &str, root: &str) -> Option<u32> {
-        let wanted = file.trim_start_matches("./");
+        let wanted = clean(file);
         self.inputs.iter().find_map(|(tag, path)| {
             let relative = relative_to(path, root);
-            (relative == wanted || path == wanted).then_some(*tag)
+            (relative == wanted || clean(path) == wanted).then_some(*tag)
         })
     }
 
@@ -262,7 +262,7 @@ impl Synctex {
             .get(&record.tag)
             .ok_or_else(|| LatexError::BadSynctex(format!("unknown input tag {}", record.tag)))?;
         Ok(SourcePosition {
-            file: relative_to(path, root).to_owned(),
+            file: relative_to(path, root),
             line: record.line,
         })
     }
@@ -292,11 +292,30 @@ fn distance(r: &Record, x: f32, y: f32) -> f32 {
     dx * dx + dy * dy
 }
 
-fn relative_to<'a>(path: &'a str, root: &str) -> &'a str {
-    let root = root.trim_end_matches('/');
-    path.strip_prefix(root)
-        .map(|p| p.trim_start_matches('/'))
-        .unwrap_or_else(|| path.trim_start_matches("./"))
+/// `path` without `.` segments and repeated separators. TeX records inputs
+/// as `<cwd>/./chapters/intro.tex`, which must match `chapters/intro.tex`.
+fn clean(path: &str) -> String {
+    let absolute = path.starts_with('/');
+    let parts: Vec<&str> = path
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != ".")
+        .collect();
+    let joined = parts.join("/");
+    if absolute {
+        format!("/{joined}")
+    } else {
+        joined
+    }
+}
+
+/// `path` relative to `root` when it lies inside it, else `path` cleaned.
+fn relative_to(path: &str, root: &str) -> String {
+    let path = clean(path);
+    let root = clean(root);
+    match path.strip_prefix(root.as_str()) {
+        Some(rest) if rest.starts_with('/') => rest.trim_start_matches('/').to_owned(),
+        _ => path,
+    }
 }
 
 fn parse_record(first: char, rest: &str, page: u32, scale: f64) -> Option<Record> {
@@ -341,6 +360,23 @@ fn parse_record(first: char, rest: &str, page: u32, scale: f64) -> Option<Record
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn paths_with_dot_segments_resolve_against_the_root() {
+        assert_eq!(
+            relative_to("/p/./chapters/intro.tex", "/p"),
+            "chapters/intro.tex"
+        );
+        assert_eq!(relative_to("/p/main.tex", "/p/"), "main.tex");
+        assert_eq!(relative_to("./main.tex", "/p"), "main.tex");
+        // A sibling that merely shares the prefix is not inside the root.
+        assert_eq!(relative_to("/pq/main.tex", "/p"), "/pq/main.tex");
+        assert_eq!(
+            relative_to("/usr/share/texmf/article.cls", "/p"),
+            "/usr/share/texmf/article.cls"
+        );
+        assert_eq!(clean("a//./b/"), "a/b");
+    }
 
     /// Real output from Tectonic for a one-paragraph article.
     const SAMPLE: &str = "SyncTeX Version:1
