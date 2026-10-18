@@ -507,7 +507,7 @@ impl PluginManager {
         // The plugin runs with what was approved, never with more.
         manifest.permissions = grant;
 
-        let wasm = read_entry(dir, &manifest).map_err(&fail)?;
+        let wasm = read_entry(dir, &manifest).map_err(fail)?;
         let mut hasher = blake3::Hasher::new();
         hasher.update(&(manifest_bytes.len() as u64).to_le_bytes());
         hasher.update(&manifest_bytes);
