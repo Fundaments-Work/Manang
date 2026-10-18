@@ -1,0 +1,166 @@
+[plugin]
+name = "visual"
+version = "0.1.0"
+description = "Visual editing for source formats: live preview of headings, emphasis, lists, links, math and images over the real text, with a toolbar. The source stays the only truth."
+tier = "native"
+
+[permissions]
+buffer = ["read:active"]
+
+[contributes]
+
+# Session commands (ADR 0015 section 4).
+[[contributes.commands]]
+id = "visual.adapters"
+title = "List the formats the visual editor understands"
+
+[[contributes.commands]]
+id = "visual.open"
+title = "Open a visual session on a document"
+
+[[contributes.commands]]
+id = "visual.reset"
+title = "Resynchronise a visual session with its document"
+
+[[contributes.commands]]
+id = "visual.close"
+title = "Close a visual session"
+
+[[contributes.commands]]
+id = "visual.edit"
+title = "Apply text changes to a visual session"
+
+[[contributes.commands]]
+id = "visual.blocks"
+title = "Read the span table of a viewport"
+
+[[contributes.commands]]
+id = "visual.outline"
+title = "Read the headings of a visual session"
+
+[[contributes.commands]]
+id = "visual.command-state"
+title = "Read which formatting commands are enabled and active"
+
+[[contributes.commands]]
+id = "visual.run-command"
+title = "Plan the edits of a formatting command"
+
+# Toolbar commands: each is `visual.run-command` with the adapter command fixed.
+[[contributes.commands]]
+id = "visual.bold"
+title = "Bold"
+
+[[contributes.commands]]
+id = "visual.italic"
+title = "Italic"
+
+[[contributes.commands]]
+id = "visual.code"
+title = "Code"
+
+[[contributes.commands]]
+id = "visual.strike"
+title = "Strikethrough"
+
+[[contributes.commands]]
+id = "visual.heading"
+title = "Heading"
+
+[[contributes.commands]]
+id = "visual.list"
+title = "List"
+
+[[contributes.commands]]
+id = "visual.quote"
+title = "Quote"
+
+[[contributes.commands]]
+id = "visual.link"
+title = "Link"
+
+[[contributes.commands]]
+id = "visual.image"
+title = "Image"
+
+[[contributes.commands]]
+id = "visual.figure"
+title = "Figure"
+
+[[contributes.commands]]
+id = "visual.math"
+title = "Formula"
+
+[[contributes.commands]]
+id = "visual.rule"
+title = "Horizontal rule"
+
+[[contributes.editors]]
+id = "visual"
+kind = "visual"
+document-types = ["*"]
+title = "Visual"
+priority = "optional"
+
+[[contributes.toolbars]]
+editor = "visual"
+
+[[contributes.toolbars.items]]
+command = "visual.bold"
+icon = "bold"
+when = "adapter.has(bold)"
+
+[[contributes.toolbars.items]]
+command = "visual.italic"
+icon = "italic"
+when = "adapter.has(italic)"
+
+[[contributes.toolbars.items]]
+command = "visual.code"
+icon = "code"
+when = "adapter.has(code)"
+
+[[contributes.toolbars.items]]
+command = "visual.strike"
+icon = "strikethrough"
+when = "adapter.has(strike)"
+
+[[contributes.toolbars.items]]
+command = "visual.heading"
+icon = "heading"
+when = "adapter.has(heading)"
+
+[[contributes.toolbars.items]]
+command = "visual.list"
+icon = "list"
+when = "adapter.has(list)"
+
+[[contributes.toolbars.items]]
+command = "visual.quote"
+icon = "quote"
+when = "adapter.has(quote)"
+
+[[contributes.toolbars.items]]
+command = "visual.link"
+icon = "link"
+when = "adapter.has(link)"
+
+[[contributes.toolbars.items]]
+command = "visual.image"
+icon = "image"
+when = "adapter.has(image)"
+
+[[contributes.toolbars.items]]
+command = "visual.figure"
+icon = "figure"
+when = "adapter.has(figure)"
+
+[[contributes.toolbars.items]]
+command = "visual.math"
+icon = "sigma"
+when = "adapter.has(math)"
+
+[[contributes.toolbars.items]]
+command = "visual.rule"
+icon = "minus"
+when = "adapter.has(rule)"

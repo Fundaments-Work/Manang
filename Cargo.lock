@@ -6177,6 +6177,8 @@ dependencies = [
  "manang-search",
  "manang-settings",
  "manang-typst",
+ "manang-visual",
+ "manang-visual-plugin",
  "manang-wasm-host",
  "manang-writing",
  "serde",
@@ -6506,6 +6508,7 @@ dependencies = [
  "manang-diagram",
  "manang-kernel",
  "manang-project",
+ "manang-visual",
  "proptest",
  "pulldown-cmark",
  "serde",
@@ -6650,6 +6653,7 @@ dependencies = [
  "criterion 0.5.1",
  "insta",
  "manang-kernel",
+ "manang-visual",
  "parking_lot",
  "proptest",
  "quick-xml 0.42.0",
@@ -6664,6 +6668,35 @@ dependencies = [
  "typst-layout",
  "typst-pdf",
  "typst-svg",
+]
+
+[[package]]
+name = "manang-visual"
+version = "0.1.0"
+dependencies = [
+ "criterion 0.5.1",
+ "manang-markdown",
+ "manang-typst",
+ "parking_lot",
+ "proptest",
+ "ropey",
+ "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "manang-visual-plugin"
+version = "0.1.0"
+dependencies = [
+ "manang-editor",
+ "manang-kernel",
+ "manang-markdown",
+ "manang-typst",
+ "manang-visual",
+ "rayon",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

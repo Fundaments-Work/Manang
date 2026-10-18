@@ -38,3 +38,11 @@ title = "Convert an SVG to a one-page PDF"
 [[contributes.commands]]
 id = "typst.math-to-svg"
 title = "Render a formula to vector SVG"
+
+[[contributes.format-adapters]]
+id = "typst"
+title = "Typst"
+extensions = ["typ"]
+document-type = "typst"
+kinds = ["heading", "strong", "emph", "code", "code-block", "list-item", "link", "image", "math", "ref", "label", "comment", "marker", "opaque"]
+commands = ["bold", "italic", "code", "heading", "list", "link", "image", "figure", "math"]

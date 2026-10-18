@@ -40,6 +40,12 @@ pub enum ManifestError {
     BadSetting { id: String, message: String },
     #[error("menu item for `{command}`: {message}")]
     BadMenu { command: String, message: String },
+    #[error("{what} `{id}`: {message}")]
+    BadContribution {
+        what: &'static str,
+        id: String,
+        message: String,
+    },
     #[error("plugin `settings_contexts`: {0}")]
     BadSettingsContexts(String),
     #[error(transparent)]
@@ -64,6 +70,12 @@ pub enum KernelError {
     DuplicatePlugin(String),
     #[error("command `{command}` is already provided by `{owner}`")]
     CommandTaken { command: String, owner: String },
+    #[error("{what} `{id}` is already provided by `{owner}`")]
+    ContributionTaken {
+        what: &'static str,
+        id: String,
+        owner: String,
+    },
     #[error("no plugin provides command `{0}`")]
     UnknownCommand(String),
     #[error("no plugin named `{0}` is registered")]

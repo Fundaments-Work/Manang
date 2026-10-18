@@ -1,0 +1,22 @@
+[package]
+name = "manang-visual-plugin"
+description = "Manang's first-party visual plugin: the Visual editor's session commands over format adapters (ADR 0015)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-kernel = { path = "../manang-kernel" }
+manang-editor = { path = "../manang-editor" }
+manang-visual = { path = "../manang-visual" }
+rayon = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+manang-markdown = { path = "../manang-markdown" }
+manang-typst = { path = "../manang-typst" }

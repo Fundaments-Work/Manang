@@ -65,6 +65,7 @@ fn the_manifest_declares_every_command() {
         "plugins.reload",
         "plugins.permissions",
         "plugins.use-project",
+        "plugins.contributions",
     ] {
         assert!(ids.contains(&expected), "missing {expected}");
     }
@@ -177,4 +178,61 @@ fn errors_are_coded_and_arguments_are_strict() {
     )
     .expect_err("traversal");
     assert!(err.starts_with("[archive]"), "{err}");
+}
+
+const ADAPTER_TAIL: &str = "[[contributes.format-adapters]]\nid = \"asciidoc\"\ntitle = \"AsciiDoc\"\nextensions = [\"adoc\"]\nkinds = [\"heading\"]\ncommands = [\"bold\"]\n";
+
+fn adapter_plugin(rig: &Rig, name: &str) -> String {
+    let manifest = format!("{}{ADAPTER_TAIL}", manifest_with(name, "0.1.0", &[]));
+    let src = folder(
+        &rig.tmp.path().join("src"),
+        name,
+        &manifest,
+        &component('1', 1),
+    );
+    src.to_string_lossy().into_owned()
+}
+
+#[test]
+fn contributions_follow_installed_plugins() {
+    let rig = rig();
+    let empty = call(&rig, "plugins.contributions", json!({})).expect("contributions");
+    assert_eq!(empty["format_adapters"], json!([]));
+
+    let path = adapter_plugin(&rig, "adoc-format");
+    let installed = call(&rig, "plugins.install", json!({ "path": path })).expect("install");
+    assert_eq!(installed["status"], "needs_approval");
+    let approved = call(
+        &rig,
+        "plugins.approve",
+        json!({ "name": "adoc-format", "permissions": {} }),
+    )
+    .expect("approve");
+    assert_eq!(approved["status"], "loaded");
+    let listed = call(&rig, "plugins.contributions", json!({})).expect("contributions");
+    assert_eq!(listed["format_adapters"][0]["id"], "asciidoc");
+    assert_eq!(listed["format_adapters"][0]["plugin"], "adoc-format");
+    assert_eq!(listed["format_adapters"][0]["extensions"], json!(["adoc"]));
+
+    // A second plugin cannot take the same adapter id.
+    let clash = adapter_plugin(&rig, "other-format");
+    call(&rig, "plugins.install", json!({ "path": clash })).expect("install");
+    let refused = call(
+        &rig,
+        "plugins.approve",
+        json!({ "name": "other-format", "permissions": {} }),
+    )
+    .expect("approve answers");
+    assert_eq!(
+        refused["status"], "failed",
+        "the clashing adapter id must not load"
+    );
+    let reason = refused["error"].as_str().unwrap_or_default();
+    assert!(reason.contains("asciidoc"), "{reason}");
+    let still = call(&rig, "plugins.contributions", json!({})).expect("contributions");
+    assert_eq!(still["format_adapters"].as_array().map(Vec::len), Some(1));
+
+    call(&rig, "plugins.uninstall", json!({ "name": "adoc-format" })).expect("uninstall");
+    let gone = call(&rig, "plugins.contributions", json!({})).expect("contributions");
+    assert_eq!(gone["format_adapters"], json!([]));
 }

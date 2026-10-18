@@ -10,6 +10,7 @@ rust-version.workspace = true
 
 [dependencies]
 manang-kernel = { path = "../manang-kernel" }
+manang-visual = { path = "../manang-visual" }
 typst = "=0.15.1"
 typst-kit = { version = "=0.15.1", features = ["embedded-fonts", "scan-fonts", "system-packages"] }
 typst-layout = "=0.15.1"

@@ -136,6 +136,15 @@ impl Plugin for PluginsPlugin {
                 let a: NameArgs = parse(input)?;
                 json_out(&manager.permissions(&a.name).map_err(failed)?)
             }
+            "plugins.contributions" => {
+                parse::<NoArgs>(input)?;
+                let kernel = &manager.kernel;
+                Ok(Payload::Json(json!({
+                    "format_adapters": kernel.format_adapters(),
+                    "editors": kernel.editors(),
+                    "toolbars": kernel.toolbars(),
+                })))
+            }
             "plugins.use-project" => {
                 let a: ProjectArgs = parse(input)?;
                 let changed = manager

@@ -1,0 +1,56 @@
+---
+source: crates/manang-typst/src/visual/tests.rs
+expression: "dump(&TypstSession::new(SAMPLE)).join(\"\\n\")"
+---
+0..35 opaque[0] "#set text(font: \"Libertinus Serif\")" set
+36..59 opaque[0] "#show heading: it => it" show
+61..75 heading[1] "= Introduction" 
+61..63 marker[0] "= " 
+76..83 label[0] "<intro>" intro
+90..96 strong[0] "*bold*" 
+90..91 marker[0] "*" 
+95..96 marker[0] "*" 
+101..111 emph[0] "_emphasis_" 
+101..102 marker[0] "_" 
+110..111 marker[0] "_" 
+117..123 code[0] "`code`" 
+117..118 marker[0] "`" 
+122..123 marker[0] "`" 
+128..133 math[0] "$x^2$" typst
+128..129 marker[0] "$" 
+132..133 marker[0] "$" 
+139..145 ref[0] "@intro" intro
+150..155 label[0] "<lbl>" lbl
+163..180 link[0] "https://typst.app" https://typst.app
+184..224 link[0] "#link(\"https://example.org\")[the *site*]" https://example.org
+184..213 marker[0] "#link(\"https://example.org\")[" 
+217..223 strong[0] "*site*" 
+217..218 marker[0] "*" 
+222..223 marker[0] "*" 
+223..224 marker[0] "]" 
+227..235 heading[2] "== Lists" 
+227..230 marker[0] "== " 
+236..243 list-item[0] "- first" 
+236..238 marker[0] "- " 
+244..263 list-item[0] "- second\n  - nested" 
+244..246 marker[0] "- " 
+255..263 list-item[0] "- nested" 
+255..257 marker[0] "- " 
+264..269 list-item[1] "+ one" 
+264..266 marker[0] "+ " 
+270..275 list-item[1] "+ two" 
+270..272 marker[0] "+ " 
+277..290 math[1] "$ E = m c^2 $" typst
+277..278 marker[0] "$" 
+289..290 marker[0] "$" 
+292..360 image[1] "#figure(\n  image(\"figs/a.svg\", width: 80%),\n  caption: [A figure],\n)" figs/a.svg
+361..366 label[0] "<fig>" fig
+368..383 image[0] "#image(\"b.png\")" b.png
+385..407 code-block[0] "```rust\nlet x = 1;\n```" rust
+385..388 marker[0] "```" 
+404..407 marker[0] "```" 
+409..421 comment[0] "// a comment" 
+422..432 opaque[0] "#let n = 3" let
+438..445 strong[0] "*boxed*" 
+438..439 marker[0] "*" 
+444..445 marker[0] "*"

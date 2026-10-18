@@ -9,7 +9,9 @@ use serde::Serialize;
 use crate::capability::CapabilitySet;
 use crate::error::KernelError;
 use crate::error::PluginError;
-use crate::manifest::{Hook, HookMode, Manifest, MenuPlacement};
+use crate::manifest::{
+    EditorSpec, FormatAdapterSpec, Hook, HookMode, Manifest, MenuPlacement, ToolbarSpec,
+};
 use crate::payload::Payload;
 use crate::plugin::{Context, Plugin};
 
@@ -26,6 +28,83 @@ struct Registry {
     plugins: HashMap<String, Arc<Entry>>,
     /// command id -> owning plugin name.
     commands: HashMap<String, String>,
+    /// format adapter id -> owning plugin name.
+    adapters: HashMap<String, String>,
+    /// editor id -> owning plugin name.
+    editors: HashMap<String, String>,
+}
+
+impl Registry {
+    /// Fail if `manifest` contributes a format adapter or editor id another
+    /// plugin (other than `except`) already owns.
+    fn check_contributions(
+        &self,
+        manifest: &Manifest,
+        except: Option<&str>,
+    ) -> Result<(), KernelError> {
+        let taken = |map: &HashMap<String, String>, what: &'static str, id: &str| match map.get(id)
+        {
+            Some(owner) if Some(owner.as_str()) != except => Err(KernelError::ContributionTaken {
+                what,
+                id: id.to_owned(),
+                owner: owner.clone(),
+            }),
+            _ => Ok(()),
+        };
+        for a in &manifest.contributes.format_adapters {
+            taken(&self.adapters, "format adapter", &a.id)?;
+        }
+        for e in &manifest.contributes.editors {
+            taken(&self.editors, "editor", &e.id)?;
+        }
+        Ok(())
+    }
+
+    fn claim_contributions(&mut self, manifest: &Manifest) {
+        let name = &manifest.plugin.name;
+        for a in &manifest.contributes.format_adapters {
+            self.adapters.insert(a.id.clone(), name.clone());
+        }
+        for e in &manifest.contributes.editors {
+            self.editors.insert(e.id.clone(), name.clone());
+        }
+    }
+
+    fn release_contributions(&mut self, manifest: &Manifest) {
+        for a in &manifest.contributes.format_adapters {
+            self.adapters.remove(&a.id);
+        }
+        for e in &manifest.contributes.editors {
+            self.editors.remove(&e.id);
+        }
+    }
+}
+
+/// A format adapter as the shell lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FormatAdapterInfo {
+    /// The plugin that contributes it.
+    pub plugin: String,
+    #[serde(flatten)]
+    pub adapter: FormatAdapterSpec,
+}
+
+/// An editor as the shell lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EditorInfo {
+    /// The plugin that contributes it.
+    pub plugin: String,
+    #[serde(flatten)]
+    pub editor: EditorSpec,
+}
+
+/// A toolbar as the shell lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ToolbarInfo {
+    /// The plugin that contributes it.
+    pub plugin: String,
+    #[serde(flatten)]
+    pub toolbar: ToolbarSpec,
 }
 
 /// A command as shown in the command palette.
@@ -69,9 +148,11 @@ impl Kernel {
                 });
             }
         }
+        reg.check_contributions(&manifest, None)?;
         for command in &manifest.contributes.commands {
             reg.commands.insert(command.id.clone(), name.clone());
         }
+        reg.claim_contributions(&manifest);
         reg.order.push(name.clone());
         reg.plugins.insert(
             name,
@@ -111,12 +192,15 @@ impl Kernel {
                 });
             }
         }
+        reg.check_contributions(&manifest, Some(&name))?;
         for command in &old.manifest.contributes.commands {
             reg.commands.remove(&command.id);
         }
         for command in &manifest.contributes.commands {
             reg.commands.insert(command.id.clone(), name.clone());
         }
+        reg.release_contributions(&old.manifest);
+        reg.claim_contributions(&manifest);
         reg.plugins.insert(
             name,
             Arc::new(Entry {
@@ -165,6 +249,7 @@ impl Kernel {
         for command in &entry.manifest.contributes.commands {
             reg.commands.remove(&command.id);
         }
+        reg.release_contributions(&entry.manifest);
         reg.order.retain(|n| n != name);
         Ok(())
     }
@@ -186,6 +271,67 @@ impl Kernel {
             .collect();
         out.sort_by(|a, b| a.id.cmp(&b.id));
         out
+    }
+
+    /// Every format adapter plugins contribute, sorted by id.
+    pub fn format_adapters(&self) -> Vec<FormatAdapterInfo> {
+        let reg = self.registry.read();
+        let mut out: Vec<FormatAdapterInfo> = reg
+            .plugins
+            .values()
+            .flat_map(|e| {
+                e.manifest
+                    .contributes
+                    .format_adapters
+                    .iter()
+                    .map(|a| FormatAdapterInfo {
+                        plugin: e.manifest.plugin.name.clone(),
+                        adapter: a.clone(),
+                    })
+            })
+            .collect();
+        out.sort_by(|a, b| a.adapter.id.cmp(&b.adapter.id));
+        out
+    }
+
+    /// The format adapter with `id`.
+    pub fn format_adapter(&self, id: &str) -> Option<FormatAdapterInfo> {
+        self.format_adapters()
+            .into_iter()
+            .find(|a| a.adapter.id == id)
+    }
+
+    /// Every editor plugins contribute, sorted by id.
+    pub fn editors(&self) -> Vec<EditorInfo> {
+        let reg = self.registry.read();
+        let mut out: Vec<EditorInfo> = reg
+            .plugins
+            .values()
+            .flat_map(|e| {
+                e.manifest.contributes.editors.iter().map(|x| EditorInfo {
+                    plugin: e.manifest.plugin.name.clone(),
+                    editor: x.clone(),
+                })
+            })
+            .collect();
+        out.sort_by(|a, b| a.editor.id.cmp(&b.editor.id));
+        out
+    }
+
+    /// Every toolbar, in plugin registration order. Several plugins may add
+    /// buttons to the same editor's toolbar.
+    pub fn toolbars(&self) -> Vec<ToolbarInfo> {
+        let reg = self.registry.read();
+        reg.order
+            .iter()
+            .filter_map(|n| reg.plugins.get(n))
+            .flat_map(|e| {
+                e.manifest.contributes.toolbars.iter().map(|t| ToolbarInfo {
+                    plugin: e.manifest.plugin.name.clone(),
+                    toolbar: t.clone(),
+                })
+            })
+            .collect()
     }
 
     /// Run a command. No kernel lock is held while the plugin executes.

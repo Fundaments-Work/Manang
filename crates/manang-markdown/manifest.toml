@@ -21,3 +21,11 @@ title = "Convert Markdown to Typst markup"
 [[contributes.commands]]
 id = "markdown.diagrams"
 title = "List the diagram fences of a Markdown document"
+
+[[contributes.format-adapters]]
+id = "markdown"
+title = "Markdown"
+extensions = ["md", "markdown", "mdx"]
+document-type = "markdown"
+kinds = ["heading", "strong", "emph", "strike", "code", "code-block", "list-item", "link", "image", "quote", "math", "rule", "frontmatter", "table", "marker", "opaque"]
+commands = ["bold", "italic", "code", "strike", "heading", "list", "quote", "link", "image", "math", "rule"]

@@ -103,3 +103,11 @@ make the host copy up to `Limits::memory_bytes`, never more.
 - Revisit WASI 0.3 async once the guest toolchain ships its final WIT.
 - Fuzz the `fs` path validator and the manifest-to-capability path with
   structure-aware inputs.
+
+## Addendum 2026-10-18: stateful adapter sessions
+
+Format adapters (ADR 0015) may hold one long-lived instance per open
+document; commands and hooks stay stateless. See ADR 0015 section 6 for the
+limits (memory cap, per-call deadline, 64 sessions per plugin), rebuild-on-trap
+from the host rope, and the stateless fallback. `wit/format.wit` is the
+interface.
