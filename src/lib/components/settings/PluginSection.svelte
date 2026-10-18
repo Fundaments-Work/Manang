@@ -5,6 +5,7 @@
   import type { PluginEntry } from "$lib/workbench/plugins";
   import { formatCategoryLabel } from "$lib/workbench/settings";
 
+  import LatexEngine from "./LatexEngine.svelte";
   import PersonalDictionary from "./PersonalDictionary.svelte";
 
   /**
@@ -23,6 +24,7 @@
   /** Settings a plugin keeps outside its manifest, shown after its rows. */
   const EXTRAS: Readonly<Record<string, Component>> = {
     writing: PersonalDictionary,
+    latex: LatexEngine,
   };
   const Extra = $derived(EXTRAS[entry.name]);
 

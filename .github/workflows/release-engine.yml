@@ -1,0 +1,170 @@
+name: release-engine
+
+# Builds the optional built-in LaTeX engine (the `manang-latex-worker` sidecar,
+# Tectonic inside) for the platforms we ship, hashes it, and uploads it as a
+# workflow artifact. It does NOT publish anything: the lead downloads the
+# artifact, uploads it to the engine host, pastes the printed manifest lines
+# into engines/manifest.json and cuts an app release. See
+# docs/ops/engine-release.md.
+#
+# Run it by hand (Actions > release-engine > Run workflow) or push a tag like
+# `engine-v0.17.0`.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "engine-v*"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Tectonic's C dependencies are found through pkg-config. Asking for static
+  # linking makes the worker carry ICU, FreeType, fontconfig and friends inside
+  # itself, so it runs on any Linux with a recent glibc instead of only on a
+  # machine with the same ICU version as the build machine.
+  PKG_CONFIG_ALL_STATIC: "1"
+
+jobs:
+  build:
+    name: build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-24.04
+            file: manang-latex-worker-linux-x86_64
+          # Cost and notes for the platforms that are declared in
+          # engines/manifest.json but not built yet. Enable one by removing the
+          # leading "#", then add its system-library step below.
+          #
+          # linux-aarch64: GitHub's arm runner is free for public repos
+          # (ubuntu-24.04-arm), same steps as x86_64. Cheap; do it first.
+          # - platform: linux-aarch64
+          #   os: ubuntu-24.04-arm
+          #   file: manang-latex-worker-linux-aarch64
+          #
+          # windows-x86_64: needs vcpkg (freetype, icu, harfbuzz, graphite2,
+          # fontconfig) with the x64-windows-static-md triplet and
+          # VCPKG_ROOT/RUSTFLAGS=-Ctarget-feature=+crt-static; the C++ ICU build
+          # is slow (about 40 minutes cold; cache the vcpkg binary cache).
+          # - platform: windows-x86_64
+          #   os: windows-2025
+          #   file: manang-latex-worker-windows-x86_64.exe
+          #
+          # macos-aarch64 / macos-x86_64: `brew install icu4c freetype
+          # fontconfig harfbuzz graphite2` plus PKG_CONFIG_PATH for keg-only
+          # icu4c; static linking against Homebrew bottles works but is
+          # fiddly. macOS minutes cost 10x Linux minutes on private repos, and
+          # the binaries need signing and notarisation before users can run
+          # them (see the ops guide).
+          # - platform: macos-aarch64
+          #   os: macos-15
+          #   file: manang-latex-worker-macos-aarch64
+          # - platform: macos-x86_64
+          #   os: macos-15-intel
+          #   file: manang-latex-worker-macos-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # -dev packages ship the static .a files PKG_CONFIG_ALL_STATIC needs.
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libicu-dev libfreetype-dev libfontconfig-dev \
+            libgraphite2-dev libpng-dev libexpat1-dev libbz2-dev \
+            libbrotli-dev zlib1g-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: engine-${{ matrix.platform }}
+
+      - name: Build the worker
+        shell: bash
+        # No default features: the sidecar must not carry the app's HTTP stack.
+        run: >
+          cargo build --release --locked -p manang-latex
+          --no-default-features --features engine
+          --bin manang-latex-worker
+
+      - name: Stage the file under its release name
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          bin=target/release/manang-latex-worker
+          [ "${{ runner.os }}" = "Windows" ] && bin="$bin.exe"
+          cp "$bin" "dist/${{ matrix.file }}"
+
+      - name: Check it is self-contained and runs (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          f="dist/${{ matrix.file }}"
+          ldd "$f" || true
+          # Only the C library and the compiler runtime may be dynamic. Anything
+          # else (libicu, libfreetype, ...) means a user without it cannot run
+          # the engine; fail here rather than at their first compile.
+          bad=$(ldd "$f" | awk '{print $1}' | grep -vE '^(linux-vdso|libc\.so|libm\.so|libgcc_s\.so|libstdc\+\+\.so|libpthread\.so|libdl\.so|librt\.so|/lib64/ld-linux|ld-linux)' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::dynamic libraries that users may not have:"; echo "$bad"; exit 1
+          fi
+          "$f" --version
+
+      - name: Compile a document with it (needs the network once)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          cp testdata/corpus/latex-article/main.tex "$work/"
+          cp testdata/corpus/latex-article/references.bib "$work/"
+          mkdir -p "$work/out" "$work/cache"
+          cat > "$work/request.json" <<EOF
+          {"main":"$work/main.tex","root":"$work","out_dir":"$work/out","bundle":null,"cache_dir":"$work/cache","only_cached":false,"synctex":true,"build_epoch":1700000000}
+          EOF
+          "dist/${{ matrix.file }}" "$work/request.json"
+          cat "$work/out/outcome.json"; echo
+          grep -q '"failure":null' "$work/out/outcome.json"
+          test -s "$work/out/main.pdf"
+
+      - name: Hash and print the manifest lines
+        shell: bash
+        run: |
+          set -euo pipefail
+          f="dist/${{ matrix.file }}"
+          size=$(wc -c < "$f" | tr -d ' ')
+          if command -v sha256sum >/dev/null; then sum=$(sha256sum "$f" | cut -d' ' -f1); else sum=$(shasum -a 256 "$f" | cut -d' ' -f1); fi
+          printf '%s  %s\n' "$sum" "${{ matrix.file }}" > "dist/${{ matrix.file }}.sha256"
+          {
+            echo "### ${{ matrix.platform }}"
+            echo
+            echo "Paste into \`engines/manifest.json\` under \`platforms\`:"
+            echo
+            echo '```json'
+            echo "\"${{ matrix.platform }}\": {"
+            echo "  \"status\": \"built\","
+            echo "  \"file\": \"${{ matrix.file }}\","
+            echo "  \"size\": $size,"
+            echo "  \"sha256\": \"$sum\""
+            echo "},"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.platform }}
+          path: |
+            dist/${{ matrix.file }}
+            dist/${{ matrix.file }}.sha256
+          if-no-files-found: error
+          retention-days: 30

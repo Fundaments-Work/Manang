@@ -51,10 +51,15 @@ Manang compiles LaTeX using your operating system's TeX distribution (`latexmk`,
    - **Windows:** Install TeX Live from [tug.org/texlive](https://tug.org/texlive/) or MiKTeX from [miktex.org](https://miktex.org/). Ensure the installer option to add binaries to `PATH` is enabled.
 2. Restart Manang after installation so the desktop app inherits the updated `PATH` environment variable.
 3. In Manang Settings (`Ctrl+,` (`Cmd+,`)), verify under **LaTeX** that **Backend** is set to `auto` or `system`.
-4. *Alternative:* You can build the optional built-in Tectonic worker engine by running:
-   ```bash
-   cargo build -p manang-latex --features engine --bin manang-latex-worker
-   ```
+4. *Alternative, no TeX needed:* press **Download the built-in engine** in the preview pane, the Problems tab or Settings > **LaTeX**. See "No TeX installed? Use the built-in engine" in [Preview and PDF](preview-and-pdf.md).
+
+### The built-in engine will not download or run
+- **"Could not reach the download server":** check your internet connection and any firewall or proxy, then press **Try again**. The download continues where it stopped.
+- **"The downloaded file did not match its checksum":** nothing was installed. Try again later; if it repeats, tell us (Help > Send feedback).
+- **"The downloaded engine cannot start on this computer":** the engine needs a few system libraries that your Linux does not have. Install TeX Live instead, or tell us which distribution you use.
+- **The option is not shown:** this version of Manang has no built-in engine for your platform yet. Install TeX Live or MiKTeX.
+- **A package is "not found" with the built-in engine, or "The built-in engine's TeX files are not downloaded yet":** the engine fetches packages on first use. Check your connection, and that **Fetch LaTeX packages on demand** is on in Settings > **LaTeX**; then compile again.
+- **Reset everything:** Settings > **LaTeX** > **Remove the built-in engine**, then download it again.
 
 ## 4. Blank or stuttering window on Linux Wayland with NVIDIA
 

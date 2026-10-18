@@ -241,7 +241,10 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
   latex: {
     description:
       "LaTeX compilation with the system TeX (optional Tectonic), structured diagnostics and SyncTeX",
-    permissions: { filesystem: ["read:project", "write:cache"] },
+    permissions: {
+      filesystem: ["read:project", "write:cache"],
+      network: ["relay.fullyjustified.net", "data1b.fullyjustified.net"],
+    },
     settingsContexts: ["engine:latex"],
     settings: [
       {
@@ -249,7 +252,7 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
         type: "enum",
         values: ["auto", "system", "tectonic"],
         default: "auto",
-        title: "Backend",
+        title: "LaTeX engine",
         description:
           "What compiles LaTeX. `auto` uses the system TeX installation when one is found, otherwise the optional built-in Tectonic engine.",
         scope: "user",
@@ -285,6 +288,16 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
         title: "Compile timeout (seconds)",
         description:
           "Wall-clock limit for one compile; a runaway document is stopped after this many seconds.",
+        scope: "user",
+        "requires-restart": false,
+      },
+      {
+        id: "latex.fetch-packages",
+        type: "bool",
+        default: true,
+        title: "Fetch LaTeX packages on demand",
+        description:
+          "The built-in engine downloads the packages a document needs the first time it uses them, then keeps them. Turn off to work fully offline; packages never fetched are then reported as missing.",
         scope: "user",
         "requires-restart": false,
       },

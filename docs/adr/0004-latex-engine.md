@@ -137,3 +137,52 @@ parts above.
 * **Typst stays embedded** (a Rust library: no install, in-process
   incremental preview). The project records the Typst version and Manang warns
   co-authors on a mismatch.
+
+## Amendment, 2026-10-18 (later): the optional engine is a consented, verified download
+
+Status of the Tectonic parts: **implemented** (branch `agent/tectonic-sidecar`).
+Supersedes "Tectonic is optional: offered as an on-demand download" above, which
+was intent only.
+
+* **Delivery.** The worker is a prebuilt `manang-latex-worker` per platform,
+  downloaded on request, never bundled in the installer and never linked into
+  the app (`cargo tree -p manang` stays free of tectonic, harfbuzz, ICU,
+  FreeType and OpenSSL). It still runs one process per compile.
+* **Trust.** `engines/manifest.json` is embedded in the app and lists, per
+  platform, the engine version, file name, size and SHA-256. The app trusts only
+  those numbers. The host (build-time constant `MANANG_ENGINE_BASE_URL`, https
+  only) serves bytes; a download whose size or digest differs is deleted and
+  nothing is installed. A new engine version ships with a new app release; a
+  signed runtime manifest is the later option.
+* **Consent.** `latex.engine-install {consent: true}` is the only way a download
+  starts; any other value is refused before a request is made or a file is
+  written (`Consent` is constructible only from `true`). The UI shows the host,
+  size, SHA-256, install folder and the package host before the button that
+  sends it.
+* **Install.** Streams to `engines/.partial/` (resumable with `Range`, restarts
+  if the server ignores it, refuses bodies longer than the manifest size),
+  verifies, runs `--version` once so a binary that cannot start (missing system
+  libraries) is rejected with a plain message, then renames a staging folder to
+  `engines/tectonic-<version>/`. A failure or cancel never leaves a partial
+  install. `latex.engine-status`, `-cancel` and `-remove` complete the API;
+  progress is the `latex.engine-progress` event.
+* **Selection.** Backend `auto` is the system TeX first, then the installed
+  engine; `system` and `tectonic` (shown as "System TeX" and "Built-in engine")
+  force one. The compile report names it: `backend: "tectonic"`,
+  `engine: "xelatex"`, `tex_version: "Tectonic 0.17.0"`.
+* **Packages.** The worker fetches TeX packages on demand from Tectonic's bundle
+  (`relay.fullyjustified.net`, redirecting to `data1b.fullyjustified.net`), a
+  ranged read per file, about 20 MB for a typical article, cached under the
+  plugin cache. `latex.fetch-packages` (default on, since the user consented)
+  turns it off for offline work; a seeded cache works offline.
+* **Measured 2026-10-18** (release, Arch, `--no-default-features --features
+  engine`): 14,413,816 bytes; **dynamically linked to the system ICU 78,
+  FreeType, fontconfig, graphite2, libpng, expat, bzip2, brotli, zlib and
+  libstdc++**. A binary built that way only runs where those exact sonames
+  exist, so the release workflow links them statically and fails the build if any
+  library other than the C runtime remains (written, not yet run). Corpus:
+  `latex-article` and `latex-report` compile with the network; `latex-broken`
+  fails as intended; with a warm cache and no network the article compiles.
+* **Still true:** XeTeX only, no `biber`, no pdfLaTeX or LuaLaTeX packages.
+
+See `docs/ops/engine-release.md` for building, hashing, hosting and publishing.

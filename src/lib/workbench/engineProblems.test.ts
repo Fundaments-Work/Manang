@@ -75,7 +75,7 @@ describe("explainLatexFailure", () => {
     expect(explainLatexFailure("latexmk: command not found").code).toBe("no_tex");
     const worker = explainLatexFailure("[worker_missing] manang-latex-worker");
     expect(worker.code).toBe("no_tex");
-    expect(worker.fix).toContain("cargo build -p manang-latex --features engine");
+    expect(worker.fix).toContain("built-in engine");
     expect(explainLatexFailure("[bundle_unavailable] offline").code).toBe(
       "bundle_unavailable",
     );

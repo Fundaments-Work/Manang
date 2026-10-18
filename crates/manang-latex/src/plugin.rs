@@ -1,13 +1,20 @@
 use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use manang_kernel::{Access, Capability, Context, Hook, Manifest, Payload, Plugin, PluginError};
+use manang_kernel::{
+    Access, Capability, Context, EventBus, Hook, Manifest, Payload, Plugin, PluginError,
+};
 use parking_lot::{Mutex, RwLock};
 use serde_json::{Value, json};
 
+use crate::builtin::{Consent, EngineError, EnginePlan, Fetcher, HttpFetcher, Progress};
 use crate::diagnostics::{Diagnostic, parse_bibtex_log, parse_tex_log};
-use crate::driver::{BackendChoice, Build, CompileSpec, LatexConfig, compile_with};
+use crate::driver::{
+    BackendChoice, Build, CompileSpec, LatexConfig, compile_with, engine_source, engine_store,
+    installed_builtin,
+};
 use crate::error::LatexError;
 use crate::system::{Engine, TexTools};
 
@@ -23,6 +30,15 @@ pub fn manifest() -> Result<Manifest, manang_kernel::ManifestError> {
 pub fn plugin(config: LatexConfig) -> impl Plugin {
     LatexPlugin::new(config)
 }
+
+/// [`plugin`] that also publishes `latex.engine-progress` events while the
+/// built-in engine downloads.
+pub fn plugin_with_events(config: LatexConfig, events: EventBus) -> impl Plugin {
+    LatexPlugin::new(config).with_events(events)
+}
+
+/// Topic of the events emitted while the built-in engine downloads.
+pub const ENGINE_PROGRESS_TOPIC: &str = "latex.engine-progress";
 
 /// Builds kept for `latex.export-pdf` and `latex.synctex`.
 #[derive(Default)]
@@ -40,6 +56,21 @@ pub struct LatexPlugin {
     /// Detected once, on first use: the installed TeX does not change while
     /// the app runs (a restart picks up a new installation).
     tools: OnceLock<TexTools>,
+    events: Option<EventBus>,
+    fetcher: Arc<dyn Fetcher>,
+    /// Set by `latex.engine-cancel`, cleared when an install starts.
+    cancel: AtomicBool,
+    /// One engine download at a time.
+    installing: AtomicBool,
+}
+
+/// Clears the "install running" flag however the install ends.
+struct InstallGuard<'a>(&'a AtomicBool);
+
+impl Drop for InstallGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 impl LatexPlugin {
@@ -48,7 +79,23 @@ impl LatexPlugin {
             config: RwLock::new(config),
             builds: Mutex::new(Builds::default()),
             tools: OnceLock::new(),
+            events: None,
+            fetcher: Arc::new(HttpFetcher),
+            cancel: AtomicBool::new(false),
+            installing: AtomicBool::new(false),
         }
+    }
+
+    /// Publish engine download progress on `events`.
+    pub fn with_events(mut self, events: EventBus) -> Self {
+        self.events = Some(events);
+        self
+    }
+
+    /// Replace the HTTP client (tests use a local server).
+    pub fn with_fetcher(mut self, fetcher: Arc<dyn Fetcher>) -> Self {
+        self.fetcher = fetcher;
+        self
     }
 
     /// Use already-detected tools (tests inject a fixed set).
@@ -99,6 +146,11 @@ impl LatexPlugin {
                         LatexError::BadArgument(SETTING_LATEXMK, "must be a boolean".to_owned())
                     })?;
                 }
+                SETTING_FETCH => {
+                    next.allow_network = value.as_bool().ok_or_else(|| {
+                        LatexError::BadArgument(SETTING_FETCH, "must be a boolean".to_owned())
+                    })?;
+                }
                 SETTING_TIMEOUT => {
                     let secs = value
                         .as_u64()
@@ -127,6 +179,8 @@ impl LatexPlugin {
         let tools = self.tools();
         let engines: Vec<&str> = tools.engines.keys().map(|e| e.program()).collect();
         let tectonic = crate::driver::worker_available(&config);
+        let tectonic_version =
+            installed_builtin(&config).map(|(_, m)| format!("Tectonic {}", m.version));
         let default = match config.backend {
             BackendChoice::System => "system",
             BackendChoice::Tectonic => "tectonic",
@@ -148,7 +202,7 @@ impl LatexPlugin {
                 {
                     "id": "tectonic",
                     "available": tectonic,
-                    "version": Value::Null,
+                    "version": tectonic_version,
                     "engines": ["xelatex"],
                     "latexmk": false,
                     "bibtex": tectonic,
@@ -158,7 +212,107 @@ impl LatexPlugin {
             "default": default,
             "default_engine": config.engine.program(),
             "settings": settings_json(&config),
+            "builtin": self.engine_status_json(),
         })
+    }
+
+    /// `latex.engine-status`: what the consented download would fetch and
+    /// whether it is already installed.
+    fn engine_status_json(&self) -> Value {
+        let config = self.config();
+        let installing = self.installing.load(Ordering::SeqCst);
+        let store = engine_store(&config);
+        let Some(source) = engine_source(&config) else {
+            return json!({ "installed": false, "downloadable": false,
+                "reason": "engine_manifest", "installing": installing });
+        };
+        let platform = source.platform.clone();
+        let version = source.version().to_owned();
+        let stored_in = store.as_ref().map(|s| s.version_dir(&version));
+        match source.plan() {
+            Ok(plan) => {
+                let installed = store.as_ref().and_then(|s| s.installed(&plan));
+                json!({
+                    "installed": installed.is_some(),
+                    "downloadable": store.is_some(),
+                    "reason": Value::Null,
+                    "version": plan.version,
+                    "platform": plan.platform,
+                    "size": plan.size,
+                    "sha256": plan.sha256,
+                    "url_host": plan.host,
+                    "package_host": plan.package_host,
+                    "stored_in": stored_in,
+                    "installing": installing,
+                })
+            }
+            Err(e) => json!({
+                "installed": false,
+                "downloadable": false,
+                "reason": e.code(),
+                "message": e.to_string(),
+                "version": version,
+                "platform": platform,
+                "stored_in": stored_in,
+                "installing": installing,
+            }),
+        }
+    }
+
+    fn emit_progress(&self, progress: Progress) {
+        if let Some(events) = &self.events {
+            events.emit(
+                ENGINE_PROGRESS_TOPIC,
+                Payload::Json(json!({
+                    "phase": progress.phase,
+                    "received": progress.received,
+                    "total": progress.total,
+                })),
+            );
+        }
+    }
+
+    /// `latex.engine-install {consent: true}`. Without an explicit `true`
+    /// nothing happens: no request is made, no file is written.
+    fn engine_install(&self, args: &Value) -> Result<Value, EngineError> {
+        let granted = args.get("consent").and_then(Value::as_bool) == Some(true);
+        let consent = Consent::from_flag(granted)?;
+        let config = self.config();
+        let source = engine_source(&config)
+            .ok_or_else(|| EngineError::BadManifest("no manifest".to_owned()))?;
+        let plan: EnginePlan = source.plan()?;
+        let store = engine_store(&config).ok_or_else(|| {
+            EngineError::BadManifest("no folder is set for the built-in engine".to_owned())
+        })?;
+        if self
+            .installing
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err(EngineError::Busy);
+        }
+        let _guard = InstallGuard(&self.installing);
+        self.cancel.store(false, Ordering::SeqCst);
+        store.install(
+            &plan,
+            consent,
+            self.fetcher.as_ref(),
+            &self.cancel,
+            &mut |p| {
+                self.emit_progress(p);
+            },
+        )?;
+        Ok(self.engine_status_json())
+    }
+
+    fn engine_remove(&self) -> Result<Value, EngineError> {
+        if self.installing.load(Ordering::SeqCst) {
+            return Err(EngineError::Busy);
+        }
+        if let Some(store) = engine_store(&self.config()) {
+            store.remove()?;
+        }
+        Ok(self.engine_status_json())
     }
 
     fn remember(&self, main: &str, build: Build) -> Arc<Build> {
@@ -193,6 +347,7 @@ const SETTING_BACKEND: &str = "latex.backend";
 const SETTING_ENGINE: &str = "latex.engine";
 const SETTING_LATEXMK: &str = "latex.latexmk";
 const SETTING_TIMEOUT: &str = "latex.timeout-seconds";
+const SETTING_FETCH: &str = "latex.fetch-packages";
 /// Bounds of `latex.timeout-seconds`; keep in step with `manifest.toml`.
 const MIN_TIMEOUT_SECS: u64 = 5;
 const MAX_TIMEOUT_SECS: u64 = 3600;
@@ -221,6 +376,7 @@ fn settings_json(config: &LatexConfig) -> Value {
         SETTING_ENGINE: config.engine.program(),
         SETTING_LATEXMK: config.latexmk,
         SETTING_TIMEOUT: config.timeout.as_secs(),
+        SETTING_FETCH: config.allow_network,
     })
 }
 
@@ -291,6 +447,10 @@ fn json_args(input: Payload) -> Result<Value, PluginError> {
 
 /// `[code] message`: the code is stable, the message is for people.
 fn failed(error: &LatexError) -> PluginError {
+    PluginError::Failed(format!("[{}] {error}", error.code()))
+}
+
+fn engine_failed(error: &EngineError) -> PluginError {
     PluginError::Failed(format!("[{}] {error}", error.code()))
 }
 
@@ -388,6 +548,19 @@ impl Plugin for LatexPlugin {
         };
         match command {
             "latex.status" => Ok(Payload::Json(self.status_json())),
+            "latex.engine-status" => Ok(Payload::Json(self.engine_status_json())),
+            "latex.engine-install" => self
+                .engine_install(&args)
+                .map(Payload::Json)
+                .map_err(|e| engine_failed(&e)),
+            "latex.engine-cancel" => {
+                self.cancel.store(true, Ordering::SeqCst);
+                Ok(Payload::Json(json!({ "ok": true })))
+            }
+            "latex.engine-remove" => self
+                .engine_remove()
+                .map(Payload::Json)
+                .map_err(|e| engine_failed(&e)),
             "latex.configure" => self
                 .configure(&args)
                 .map(Payload::Json)
