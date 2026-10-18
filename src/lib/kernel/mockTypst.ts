@@ -9,6 +9,7 @@
  */
 
 import { analyse } from "$lib/editor/diagnostics";
+import { approxMath } from "$lib/figure/mathApprox";
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
 import { textWidth, writePdf, type MockLink, type MockPage } from "./mockPdf";
@@ -479,6 +480,7 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["typst.jump-from-click", "Jump from preview to source"],
   ["typst.jump-from-cursor", "Jump from source to preview"],
   ["typst.svg-to-pdf", "Convert an SVG to a one-page PDF"],
+  ["typst.math-to-svg", "Render a formula to vector SVG"],
 ];
 
 function uint(args: Record<string, unknown>, key: string): number {
@@ -636,6 +638,20 @@ export function typstPlugin(host: MockProjectHost): MockPluginFactory {
         },
       },
       binaryHandlers: {
+        // The real command renders Typst math with the Typst compiler (glyph
+        // outlines); the browser mock answers with an approximation, marked as
+        // such in the SVG (see figure/mathApprox.ts).
+        "typst.math-to-svg": (args) => {
+          const source = args["source"];
+          if (typeof source !== "string")
+            throw { message: "`source` must be a string" };
+          const size = typeof args["size"] === "number" ? args["size"] : 16;
+          try {
+            return new TextEncoder().encode(approxMath("typst", source, size).svg);
+          } catch (error) {
+            throw { message: `[math_error] ${JSON.stringify(error)}` };
+          }
+        },
         // A PDF header around nothing: the demo cannot lay out an SVG.
         "typst.svg-to-pdf": (args) => {
           const svg = args["svg"];

@@ -1198,6 +1198,24 @@ export function figureApi(kernel: Kernel) {
       kernel.run<FigureHit>("figure.hit-test", { id, x, y }),
     /** The open figure as SVG bytes. */
     exportSvg: (id: number) => kernel.runBinary("figure.export-svg", { id }),
+    /**
+     * One formula as vector SVG bytes (Typst math through Typst, LaTeX math
+     * through RaTeX). `color` bakes a `#rrggbb` paint in (an `<image>` cannot
+     * inherit `currentColor`). A broken formula rejects with
+     * `[math_error] {json}` (`parseMathError`).
+     */
+    renderMath: (
+      language: "typst" | "latex",
+      source: string,
+      size: number,
+      color?: string,
+    ) =>
+      kernel.runBinary("figure.render-math", {
+        language,
+        source,
+        size,
+        ...(color === undefined ? {} : { color }),
+      }),
   };
 }
 

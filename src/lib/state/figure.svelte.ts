@@ -16,7 +16,9 @@
  * and pointer moves never cross the IPC boundary.
  */
 
-import { normalizeRect } from "$lib/figure/geometry";
+import { nodeRect, normalizeRect } from "$lib/figure/geometry";
+import { strokeColour } from "$lib/figure/palette";
+import { scaleSelection } from "$lib/figure/scale";
 import { applyEdit, type FigureEdit } from "$lib/figure/edit";
 import { route } from "$lib/figure/binding";
 import {
@@ -37,19 +39,29 @@ import {
   type ResizeHandle,
 } from "$lib/figure/handles";
 import { actionFor, type KeyEventLike, type Tool } from "$lib/figure/keymap";
-import { nextGroupId, type AlignEdge, type Axis, type ZOrder } from "$lib/figure/ops";
+import {
+  applyOp,
+  nextGroupId,
+  type AlignEdge,
+  type Axis,
+  type ZOrder,
+} from "$lib/figure/ops";
 import { naturalSize } from "$lib/figure/text";
 import {
+  FORMULA_SIZE,
   createScene,
   formatNodeId,
   highestCounter,
   isBindable,
   isConnector,
   isShape,
+  languageOf,
   nodeById,
+  styleDefaults,
   type ConnectorNode,
   type FigureNode,
   type FigureScene,
+  type MathLanguage,
   type Rect,
   type ShapeNode,
   type StrokeSample,
@@ -74,6 +86,7 @@ import {
   cachedBounds,
   fitRect,
   pan,
+  revealRect,
   stepZoom,
   toScene,
   wheelZoomFactor,
@@ -83,7 +96,10 @@ import {
 import { errorMessage, reportError } from "$lib/kernel";
 import type { FigureApplyResult, FigureOp, FigureSaved } from "$lib/kernel/api";
 
+import { layout } from "./layout.svelte";
+import { mathRenders } from "./mathRenders.svelte";
 import { notice } from "./notice.svelte";
+import { workspace } from "./workspace.svelte";
 
 export type { Tool };
 
@@ -160,6 +176,16 @@ type Gesture =
       box: Rect;
     }
   | {
+      /** Scaling a multi-selection (or a formula) by its bounding-box handles. */
+      readonly kind: "scale";
+      readonly handle: ResizeHandle;
+      readonly ids: readonly string[];
+      readonly from: Rect;
+      /** Formulas always scale proportionally. */
+      readonly proportional: boolean;
+      box: Rect;
+    }
+  | {
       readonly kind: "rotate";
       readonly id: string;
       readonly node: ShapeNode;
@@ -192,6 +218,35 @@ export interface LabelEdit {
   readonly angle: number;
   readonly text: string;
 }
+
+/** The formula editor: an inline panel over a formula node. */
+export interface FormulaEdit {
+  readonly id: string;
+  readonly source: string;
+  readonly language: MathLanguage;
+  /** Just stamped: an empty commit removes it instead of keeping it. */
+  readonly fresh: boolean;
+}
+
+/** What the canvas draws for a formula while it is typed into. */
+export interface FormulaShown {
+  readonly id: string;
+  readonly source: string;
+  readonly language: MathLanguage;
+}
+
+const PANEL_KEY = "manang.figure.properties";
+
+function readPanelOpen(): boolean {
+  try {
+    return localStorage.getItem(PANEL_KEY) !== "closed";
+  } catch {
+    return true;
+  }
+}
+
+/** Milliseconds typing pauses before the canvas re-renders the formula. */
+export const FORMULA_DEBOUNCE_MS = 150;
 
 /** Pixels (screen) a press must travel before it counts as a drag. */
 const DRAG_SLOP = 3;
@@ -242,12 +297,19 @@ export class FigureState {
   laser = $state.raw<readonly { x: number; y: number; t: number }[]>([]);
   /** The inline label editor, when open. */
   editing = $state.raw<LabelEdit | null>(null);
+  /** The formula editor, when open. */
+  formula = $state.raw<FormulaEdit | null>(null);
+  /** The formula as the canvas shows it while the editor is open (debounced). */
+  formulaShown = $state.raw<FormulaShown | null>(null);
+  /** The properties column: open, or collapsed to its toggle (remembered per user). */
+  panelOpen = $state(readPanelOpen());
   /** Pasted text that looks like Mermaid, waiting for a choice. */
   mermaidPrompt = $state<string | null>(null);
   /** The Insert Mermaid dialog. */
   mermaidDialog = $state(false);
 
   #counter = 0;
+  #formulaTimer: ReturnType<typeof setTimeout> | undefined;
   #press: { readonly screen: Vec; readonly point: Vec; moved: boolean } | null = null;
   #fitted = false;
 
@@ -504,9 +566,22 @@ export class FigureState {
 
   /** The handle of the single selection under `screen`, if any. */
   handleUnder(point: Vec): Handle | "start" | "end" | undefined {
+    const tol = HANDLE_PX / this.view.zoom;
+    if (this.selection.length > 1) {
+      const nodes = this.selectedNodes;
+      if (nodes.every((n) => n.locked === true)) return undefined;
+      const h = handleAt(
+        handlePositions(selectionBounds(this.scene, this.selection), 0, this.view.zoom),
+        point,
+        tol,
+      );
+      return h === "rotate" ? undefined : h;
+    }
     const node = this.selected;
     if (node === undefined || node.locked === true) return undefined;
-    const tol = HANDLE_PX / this.view.zoom;
+    if (node.kind === "math") {
+      return handleAt(handlePositions(nodeRect(node), 0, this.view.zoom), point, tol);
+    }
     if (isConnector(node)) {
       const first = node.points[0];
       const last = node.points[node.points.length - 1];
@@ -546,6 +621,7 @@ export class FigureState {
   pointerDown(p: PointerInfo): void {
     this.mermaidPrompt = null;
     if (this.editing !== null) this.commitLabel();
+    if (this.formula !== null) this.commitFormula();
     this.#press = { screen: p.screen, point: p.point, moved: false };
     if (p.button === 1 || this.tool === "hand" || (this.spaceHeld && p.button === 0)) {
       this.gesture = { kind: "pan", start: p.screen, view: this.view };
@@ -595,6 +671,26 @@ export class FigureState {
   #pressSelect(p: PointerInfo): void {
     const handle = this.handleUnder(p.point);
     const single = this.selected;
+    if (handle !== undefined && handle !== "start" && handle !== "end") {
+      if (this.selection.length > 1 || single?.kind === "math") {
+        const ids = this.selection.filter(
+          (id) => nodeById(this.scene, id)?.locked !== true,
+        );
+        const from =
+          single?.kind === "math" ? nodeRect(single) : selectionBounds(this.scene, ids);
+        if (handle !== "rotate") {
+          this.gesture = {
+            kind: "scale",
+            handle,
+            ids,
+            from,
+            proportional: single?.kind === "math",
+            box: from,
+          };
+        }
+        return;
+      }
+    }
     if (handle !== undefined && single !== undefined) {
       if ((handle === "start" || handle === "end") && isConnector(single)) {
         this.gesture = {
@@ -753,6 +849,13 @@ export class FigureState {
         this.preview = previewReplace(this.scene, g.plan, [{ ...g.node, ...box }]);
         return;
       }
+      case "scale": {
+        const box = resizeBox(g.from, 0, g.handle, p.point, p.shift || g.proportional);
+        this.gesture = { ...g, box };
+        const op = scaleSelection(this.scene, g.ids, g.from, box);
+        this.preview = op === undefined ? null : applyOp(this.scene, op).scene;
+        return;
+      }
       case "rotate": {
         const c = { x: g.node.x + g.node.width / 2, y: g.node.y + g.node.height / 2 };
         const angle = rotationFor(c, p.point, p.shift);
@@ -867,6 +970,11 @@ export class FigureState {
           });
         return;
       }
+      case "scale": {
+        const op = scaleSelection(this.scene, g.ids, g.from, g.box);
+        if (op !== undefined) this.edit(op);
+        return;
+      }
       case "rotate":
         if (g.angle !== (g.node.angle ?? 0))
           this.edit({ op: "rotate", ids: [g.id], angle: g.angle });
@@ -954,18 +1062,7 @@ export class FigureState {
     const node = nodeById(this.scene, id);
     if (node === undefined || node.locked === true) return;
     if (node.kind === "math") {
-      this.editing = {
-        id,
-        kind: "math",
-        box: {
-          x: node.x,
-          y: node.y - node.size,
-          width: Math.max(node.tex.length * node.size * 0.6, 80),
-          height: node.size * 1.4,
-        },
-        angle: 0,
-        text: node.tex,
-      };
+      this.openFormula(id, false);
       return;
     }
     if (isConnector(node)) {
@@ -1029,11 +1126,7 @@ export class FigureState {
     }
     const node = nodeById(this.scene, e.id);
     if (node === undefined) return;
-    if (node.kind === "math") {
-      if (text.trim() !== "" && text !== node.tex)
-        this.edit({ op: "update", id: e.id, set: { tex: text } });
-      return;
-    }
+    if (node.kind === "math") return;
     if (node.kind === "text") {
       if (text.trim() === "") {
         this.edit({ op: "remove", ids: [e.id] });
@@ -1080,8 +1173,13 @@ export class FigureState {
     return ok;
   }
 
-  /** Places a formula and opens its text for editing. */
-  stampMath(point: Vec, tex = "x"): void {
+  /** The language a new formula gets: the project's engine decides. */
+  get defaultLanguage(): MathLanguage {
+    return workspace.engine === "latex" ? "latex" : "typst";
+  }
+
+  /** Places a formula and opens the formula editor on it. */
+  stampMath(point: Vec, source = "x"): void {
     const id = this.nextId();
     if (
       !this.add([
@@ -1090,22 +1188,118 @@ export class FigureState {
           id,
           x: point.x,
           y: point.y,
-          tex,
-          size: 26,
-          style: { stroke: "sage" },
+          source,
+          ...(this.defaultLanguage === "typst"
+            ? {}
+            : { language: this.defaultLanguage }),
+          size: FORMULA_SIZE,
         },
       ])
     ) {
       return;
     }
-    this.startLabelEdit(id);
+    this.openFormula(id, true);
   }
 
-  /** Change a formula's text. Empty text is refused so a formula cannot vanish invisibly. */
-  setMathText(id: string, tex: string): void {
+  /** The colour a formula draws in, as the canvas resolves it. */
+  #formulaColour(node: FigureNode): string {
+    return strokeColour(styleDefaults.stroke(node.style ?? {}), layout.theme);
+  }
+
+  /** Opens the formula editor over `id`. */
+  openFormula(id: string, fresh: boolean): void {
     const node = nodeById(this.scene, id);
-    if (node?.kind !== "math" || tex.trim() === "" || node.tex === tex) return;
-    this.edit({ op: "update", id, set: { tex } });
+    if (node?.kind !== "math" || node.locked === true) return;
+    this.cancelLabel();
+    clearTimeout(this.#formulaTimer);
+    const language = languageOf(node);
+    this.formula = { id, source: node.source, language, fresh };
+    this.formulaShown = { id, source: node.source, language };
+  }
+
+  /** Typing in the formula editor: the draft is immediate, the canvas follows after a pause. */
+  setFormulaSource(source: string): void {
+    const f = this.formula;
+    if (f === null) return;
+    this.formula = { ...f, source };
+    clearTimeout(this.#formulaTimer);
+    this.#formulaTimer = setTimeout(() => {
+      const now = this.formula;
+      if (now !== null) {
+        this.formulaShown = { id: now.id, source: now.source, language: now.language };
+      }
+    }, FORMULA_DEBOUNCE_MS);
+  }
+
+  /** The language switch re-renders at once. */
+  setFormulaLanguage(language: MathLanguage): void {
+    const f = this.formula;
+    if (f === null || f.language === language) return;
+    clearTimeout(this.#formulaTimer);
+    this.formula = { ...f, language };
+    this.formulaShown = { id: f.id, source: f.source, language };
+  }
+
+  /** Closes the formula editor, keeping what was typed. */
+  commitFormula(): void {
+    const f = this.formula;
+    clearTimeout(this.#formulaTimer);
+    this.formula = null;
+    this.formulaShown = null;
+    if (f === null) return;
+    const node = nodeById(this.scene, f.id);
+    if (node?.kind !== "math") return;
+    if (f.source.trim() === "") {
+      if (f.fresh) this.edit({ op: "remove", ids: [f.id] });
+      return;
+    }
+    // A stamped formula is measured even when its text did not change.
+    if (f.source === node.source && f.language === languageOf(node) && !f.fresh) return;
+    void this.setFormula(f.id, { source: f.source, language: f.language });
+  }
+
+  /** Closes the formula editor and drops the draft (a fresh formula is removed). */
+  cancelFormula(): void {
+    const f = this.formula;
+    clearTimeout(this.#formulaTimer);
+    this.formula = null;
+    this.formulaShown = null;
+    if (f?.fresh === true) this.edit({ op: "remove", ids: [f.id] });
+  }
+
+  /**
+   * Changes a formula's source, language or size as one update that also
+   * records its measured box, so selection, alignment and arrow binding see
+   * the size of the rendering. A formula that does not compile is stored
+   * as typed and keeps its old box; the properties panel shows the error.
+   */
+  async setFormula(
+    id: string,
+    patch: {
+      readonly source?: string;
+      readonly language?: MathLanguage;
+      readonly size?: number;
+    },
+  ): Promise<void> {
+    const node = nodeById(this.scene, id);
+    if (node?.kind !== "math") return;
+    const next = {
+      source: patch.source ?? node.source,
+      language: patch.language ?? languageOf(node),
+      size: patch.size ?? node.size,
+    };
+    const render = await mathRenders.load(
+      next.language,
+      next.source,
+      next.size,
+      this.#formulaColour(node),
+    );
+    const set: Record<string, unknown> = { ...next };
+    if (render.width !== undefined && render.height !== undefined) {
+      set["width"] = render.width;
+      set["height"] = render.height;
+    }
+    this.edit({ op: "update", id, set });
   }
 
   setLabel(id: string, label: string): void {
@@ -1123,6 +1317,43 @@ export class FigureState {
   setStyle(patch: Style): void {
     if (this.selection.length === 0) return;
     this.edit({ op: "set-style", ids: [...this.selection], style: patch });
+  }
+
+  /** Text and label colour follows the stroke again. */
+  clearLabelColour(): void {
+    if (this.selection.length === 0) return;
+    this.edit({
+      op: "batch",
+      ops: this.selection.map((id) => ({
+        op: "update" as const,
+        id,
+        set: { style: { labelColor: null } },
+      })),
+    });
+  }
+
+  setPanelOpen(open: boolean): void {
+    this.panelOpen = open;
+    try {
+      localStorage.setItem(PANEL_KEY, open ? "open" : "closed");
+    } catch {
+      // Blocked storage: the choice just is not remembered.
+    }
+  }
+
+  /** The page background: a token or `#rrggbb`, or undefined for transparent. */
+  setBackground(background: string | undefined): void {
+    this.edit({
+      op: "set-canvas",
+      width: this.scene.width,
+      height: this.scene.height,
+      background: background ?? "none",
+    });
+  }
+
+  /** Brings `rect` into view when it is not. */
+  reveal(rect: Rect): void {
+    this.view = revealRect(this.view, rect, this.width, this.height);
   }
 
   deleteSelected(): void {
@@ -1289,16 +1520,32 @@ export class FigureState {
   /* Mermaid                                                                */
   /* ---------------------------------------------------------------------- */
 
+  /**
+   * Where inserted content goes so it overlaps nothing: the middle of an
+   * empty view, else just right of what is on the page, top aligned.
+   */
+  freeSpot(): Vec {
+    if (this.scene.nodes.length === 0) {
+      const c = this.centre;
+      return { x: Math.max(c.x - 160, 40), y: Math.max(c.y - 100, 40) };
+    }
+    const b = selectionBounds(
+      this.scene,
+      this.scene.nodes.map((n) => n.id),
+    );
+    return { x: b.x + b.width + 60, y: b.y };
+  }
+
   /** Insert Mermaid through the plugin, then follow its scene and select the result. */
   insertMermaid(source: string, mode: "shapes" | "block"): Promise<boolean> {
     this.mermaidPrompt = null;
-    const c = this.centre;
+    const at = this.freeSpot();
     return this.#run(async () => {
       try {
         const result = await this.#backend.fromMermaid({
           source,
-          x: c.x,
-          y: c.y,
+          x: at.x,
+          y: at.y,
           mode,
         });
         const revision = result.figure?.revision;
@@ -1309,6 +1556,9 @@ export class FigureState {
         await this.#resync();
         this.selection = [...result.ids];
         this.tool = "select";
+        if (result.ids.length > 0) {
+          this.reveal(selectionBounds(this.scene, result.ids));
+        }
         if (result.fallback)
           notice.show(`Inserted as a Mermaid block: ${result.fallback}`);
         return true;

@@ -90,6 +90,33 @@ fn finite(args: &Value, key: &str) -> Result<f64, PluginError> {
         .ok_or_else(|| failed(format!("`{key}` must be a finite number")))
 }
 
+impl TypstPlugin {
+    /// `typst.math-to-svg { source, size?, color? }`: binary SVG out.
+    fn math_to_svg(&self, args: &Value) -> Result<Payload, PluginError> {
+        let source = args
+            .get("source")
+            .and_then(Value::as_str)
+            .ok_or_else(|| failed("`source` must be a string"))?;
+        let size = match args.get("size") {
+            None | Some(Value::Null) => 16.0,
+            Some(v) => v
+                .as_f64()
+                .ok_or_else(|| failed("`size` must be a number"))?,
+        };
+        let color = match args.get("color") {
+            None | Some(Value::Null) => "currentColor",
+            Some(v) => v
+                .as_str()
+                .ok_or_else(|| failed("`color` must be a string"))?,
+        };
+        let math = self
+            .compiler
+            .math_to_svg(source, size, color)
+            .map_err(failed)?;
+        Ok(Payload::Binary(Arc::from(math.svg.into_bytes())))
+    }
+}
+
 impl Plugin for TypstPlugin {
     fn invoke(
         &self,
@@ -108,6 +135,9 @@ impl Plugin for TypstPlugin {
                 _ => return Err(failed("expected the SVG as binary or as `{ svg }`")),
             };
             return pdf.map(Payload::Binary).map_err(failed);
+        }
+        if command == "typst.math-to-svg" {
+            return self.math_to_svg(&json_args(input)?);
         }
         let args = json_args(input)?;
         match command {

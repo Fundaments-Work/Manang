@@ -13,8 +13,8 @@ use crate::geometry::{node_bounds, node_rect, scene_bounds};
 use crate::layout::{Direction, layout_moves};
 use crate::ops::FigureOp;
 use crate::scene::{
-    Binding, ConnectorNode, FigureNode, FigureScene, FontFamily, Heads, Routing, ShapeNode,
-    StrokeStyle, Style, Vec2, format_node_id,
+    Binding, ConnectorNode, FigureNode, FigureScene, FontFamily, Heads, MathLanguage, MathNode,
+    Routing, ShapeNode, StrokeStyle, Style, Vec2, format_node_id,
 };
 use crate::svg::{LABEL_PADDING, label_width};
 use crate::text::{self, LINE_HEIGHT};
@@ -176,6 +176,17 @@ pub struct NewShape {
     preset: Option<String>,
     #[serde(default)]
     source: Option<String>,
+    #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
+    size: Option<f64>,
+}
+
+/// Default font size of a formula, in scene units.
+pub const FORMULA_SIZE: f64 = 24.0;
+
+fn math_language(name: Option<&str>) -> Result<MathLanguage, ToolError> {
+    name.map_or(Ok(MathLanguage::Typst), |n| n.parse().map_err(invalid))
 }
 
 const SHAPE_KINDS: [&str; 6] = ["rect", "diamond", "ellipse", "text", "frame", "mermaid"];
@@ -269,7 +280,11 @@ pub fn shape_summary(node: &FigureNode) -> Value {
         "x": round2(r.x), "y": round2(r.y),
         "width": round2(r.width), "height": round2(r.height),
     });
-    if let Some(l) = node.label() {
+    if let FigureNode::Math(m) = node {
+        v["source"] = json!(m.source);
+        v["language"] = json!(m.language.as_str());
+        v["size"] = json!(m.size);
+    } else if let Some(l) = node.label() {
         v["label"] = json!(l);
     }
     if !node.groups().is_empty() {
@@ -309,9 +324,48 @@ pub fn add_shapes(scene: &FigureScene, args: &Value) -> Result<(FigureOp, Vec<St
     let mut ids = Vec::new();
     for shape in input.shapes {
         let kind = shape.kind.as_deref().unwrap_or("rect");
+        if kind == "formula" {
+            let source = shape
+                .source
+                .clone()
+                .filter(|s| !s.trim().is_empty())
+                .ok_or_else(|| {
+                    invalid("a formula needs `source` (Typst or LaTeX math, without $ signs)")
+                })?;
+            let language = math_language(shape.language.as_deref())?;
+            let size = shape.size.unwrap_or(FORMULA_SIZE);
+            let mut m = MathNode::new(String::new(), 0.0, 0.0, source, language, size);
+            if let Some(extra) = &shape.style {
+                m.style = m.style.merged(extra);
+            }
+            let (w, h) = m.box_size();
+            let (sx, sy) = match (shape.x, shape.y) {
+                (Some(px), Some(py)) => (px, py),
+                (px, py) => {
+                    if in_row == 5 {
+                        x = row_x;
+                        y += row_h + 60.0;
+                        row_h = 0.0;
+                        in_row = 0;
+                    }
+                    let at = (px.unwrap_or(x), py.unwrap_or(y));
+                    x += w + 60.0;
+                    row_h = row_h.max(h);
+                    in_row += 1;
+                    at
+                }
+            };
+            counter += 1;
+            m.id = format_node_id(counter);
+            m.x = sx;
+            m.y = sy;
+            ids.push(m.id.clone());
+            nodes.push(FigureNode::Math(m));
+            continue;
+        }
         if !SHAPE_KINDS.contains(&kind) {
             return Err(invalid(format!(
-                "unknown shape kind `{kind}`; use {}",
+                "unknown shape kind `{kind}`; use {}, formula",
                 SHAPE_KINDS.join(", ")
             )));
         }
@@ -492,6 +546,10 @@ pub fn update(scene: &FigureScene, args: &Value) -> Result<(FigureOp, Vec<String
         routing: Option<Routing>,
         #[serde(default)]
         source: Option<String>,
+        #[serde(default)]
+        language: Option<String>,
+        #[serde(default)]
+        size: Option<f64>,
     }
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -528,6 +586,22 @@ pub fn update(scene: &FigureScene, args: &Value) -> Result<(FigureOp, Vec<String
         if let Some(s) = c.source {
             set.insert("source".to_owned(), json!(s));
         }
+        if c.language.is_some() || c.size.is_some() {
+            if !matches!(node, FigureNode::Math(_)) {
+                return Err(invalid(format!(
+                    "`{id}` is not a formula; only formulas have `language` and `size`"
+                )));
+            }
+            if let Some(l) = &c.language {
+                set.insert(
+                    "language".to_owned(),
+                    json!(math_language(Some(l))?.as_str()),
+                );
+            }
+            if let Some(size) = c.size {
+                set.insert("size".to_owned(), json!(size));
+            }
+        }
         if let Some(style) = c.style {
             set.insert("style".to_owned(), serde_json::to_value(style)?);
         }
@@ -551,7 +625,7 @@ pub fn update(scene: &FigureScene, args: &Value) -> Result<(FigureOp, Vec<String
     }
     if ops.is_empty() {
         return Err(invalid(
-            "nothing to change: give label, kind, x, y, width, height, angle, style, routing or source",
+            "nothing to change: give label, kind, x, y, width, height, angle, style, routing, source, language or size",
         ));
     }
     Ok((FigureOp::Batch { ops }, ids))

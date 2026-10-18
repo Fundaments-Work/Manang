@@ -15,6 +15,8 @@ import {
   EMPTY_RECT,
   rectContainsRect,
 } from "./geometry";
+import { approxMath, paintApprox } from "./mathApprox";
+import { mathBox } from "./mathRender";
 import { fillPaint, strokeColour, type FigureTheme } from "./palette";
 import {
   Rng,
@@ -24,7 +26,7 @@ import {
   polygon,
   rectPoints,
 } from "./sketch";
-import { LINE_HEIGHT, wrap } from "./text";
+import { LINE_HEIGHT, fitLabel, wrap } from "./text";
 import {
   styleDefaults as sd,
   type ConnectorNode,
@@ -32,6 +34,7 @@ import {
   type FigureScene,
   type FontFamily,
   type Head,
+  type MathLanguage,
   type Rect,
   type ShapeNode,
   type Style,
@@ -40,6 +43,8 @@ import {
 
 export const CONNECTOR_FONT_SIZE = 14;
 export const LABEL_PADDING = 8;
+/** The share of a diamond's width and height its text box uses. */
+export const DIAMOND_TEXT_BOX = 0.6;
 
 export type Primitive =
   | {
@@ -99,6 +104,19 @@ export type Primitive =
       readonly y: number;
       readonly width: number;
       readonly height: number;
+    }
+  | {
+      /** A formula: the plugin's vector rendering, in `colour`. */
+      readonly type: "math";
+      readonly id: string;
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+      readonly language: MathLanguage;
+      readonly source: string;
+      readonly size: number;
+      readonly colour: string;
     };
 
 export interface Visual {
@@ -119,12 +137,8 @@ export function fontStack(family: FontFamily): string {
 /** Width a label may use inside a box of `width` (`label_width`). */
 export function labelWidth(kind: string, width: number): number {
   if (kind === "text") return Math.abs(width);
-  const usable =
-    kind === "diamond"
-      ? width * 0.55
-      : kind === "ellipse"
-        ? width * 0.72
-        : Math.abs(width);
+  if (kind === "diamond") return Math.max(Math.abs(width) * DIAMOND_TEXT_BOX, 1);
+  const usable = kind === "ellipse" ? width * 0.72 : Math.abs(width);
   return Math.max(usable - 2 * LABEL_PADDING, 1);
 }
 
@@ -145,8 +159,12 @@ function fillOf(
   theme: FigureTheme,
 ): { fill: string; fillOpacity?: number } {
   const paint = fillPaint(sd.fill(style), theme);
-  return paint.alpha < 1
-    ? { fill: paint.colour, fillOpacity: paint.alpha }
+  const alpha =
+    style.fillOpacity === undefined
+      ? paint.alpha
+      : Math.min(Math.max(style.fillOpacity / 100, 0), 1);
+  return alpha < 1
+    ? { fill: paint.colour, fillOpacity: alpha }
     : { fill: paint.colour };
 }
 
@@ -201,9 +219,22 @@ function label(
 ): Primitive {
   const r = normalizeRect(s.x, s.y, s.width, s.height);
   const style = s.style ?? {};
-  const size = sd.fontSize(style);
   const family = sd.fontFamily(style);
-  const lines = wrap(text, labelWidth(kind, r.width), size, family);
+  let size = sd.fontSize(style);
+  let lines: readonly string[];
+  if (kind === "diamond") {
+    const fit = fitLabel(
+      text,
+      labelWidth(kind, r.width),
+      r.height * DIAMOND_TEXT_BOX,
+      size,
+      family,
+    );
+    lines = fit.lines;
+    size = fit.size;
+  } else {
+    lines = wrap(text, labelWidth(kind, r.width), size, family);
+  }
   const total = size * LINE_HEIGHT * lines.length;
   const top = kind === "text" ? r.y : r.y + r.height / 2 - total / 2;
   const align = style.textAlign ?? (kind === "text" ? "left" : "center");
@@ -221,7 +252,7 @@ function label(
     size,
     family,
     anchor,
-    strokeColour(sd.stroke(style), theme),
+    strokeColour(sd.label(style), theme),
   );
 }
 
@@ -418,7 +449,7 @@ function connectorVisual(
         size,
         family,
         "middle",
-        stroke,
+        strokeColour(sd.label(style), theme),
         strokeColour("paper", theme),
       ),
     );
@@ -457,7 +488,10 @@ export function nodeVisual(
       if (node.label !== undefined) {
         items.push({
           type: "text",
-          fill: stroke,
+          fill:
+            style.labelColor === undefined
+              ? stroke
+              : strokeColour(style.labelColor, theme),
           family: fontStack("mono"),
           size: 12,
           anchor: "start",
@@ -493,17 +527,23 @@ export function nodeVisual(
         { type: "path", d, fill: strokeColour(sd.stroke(style), theme) },
       ]);
     }
-    case "math":
+    case "math": {
+      const box = mathBox(node);
       return group(node.id, style, [
         {
-          type: "text",
-          fill: strokeColour(sd.stroke(style), theme),
-          family: fontStack("mono"),
+          type: "math",
+          id: node.id,
+          x: node.x,
+          y: node.y,
+          width: box.width,
+          height: box.height,
+          language: node.language ?? "typst",
+          source: node.source,
           size: node.size,
-          anchor: "start",
-          lines: [{ x: node.x, y: node.y, text: node.tex }],
+          colour: strokeColour(sd.stroke(style), theme),
         },
       ]);
+    }
   }
 }
 
@@ -577,6 +617,21 @@ function primitiveSvg(p: Primitive): string {
         .join("");
       return `<text fill="${p.fill}" font-family="${p.family}" font-size="${f(p.size)}" text-anchor="${p.anchor}"${halo}>${spans}</text>`;
     }
+    case "math": {
+      // The browser mock draws an approximation (mathApprox.ts); the Rust
+      // export nests the real vector rendering here instead.
+      try {
+        const m = approxMath(p.language, p.source, p.size);
+        return `<svg x="${f(p.x)}" y="${f(p.y)}" width="${f(m.width)}" height="${f(m.height)}" viewBox="0 0 ${m.width} ${m.height}" color="${p.colour}" fill="${p.colour}">${paintApprox(
+          m.svg,
+          p.colour,
+        )
+          .replace(/^<svg[^>]*>/, "")
+          .replace(/<\/svg>$/, "")}</svg>`;
+      } catch {
+        return `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.width)}" height="${f(p.height)}" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4"/>`;
+      }
+    }
     case "embed":
       return `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.width)}" height="${f(p.height)}" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4"/>`;
   }
@@ -592,6 +647,9 @@ export function renderSceneSvg(
     formatCoord,
   );
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}" width="${w}" height="${h}">\n`;
+  if (scene.background !== undefined) {
+    svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${strokeColour(scene.background, theme)}"/>\n`;
+  }
   for (const node of scene.nodes) {
     const v = nodeVisual(scene, node, theme);
     if (v === undefined) continue;

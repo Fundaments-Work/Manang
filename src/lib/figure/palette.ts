@@ -35,9 +35,42 @@ function isHex(value: string): boolean {
   return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
 }
 
+/**
+ * A colour as the scene stores it: `#rgb` and `#rrggbb` literals become
+ * lowercase `#rrggbb`; `none`, tokens and everything else stay as given
+ * (`normalize_colour`).
+ */
+export function normalizeColour(value: string): string {
+  if (!isHex(value)) return value;
+  const digits = value.slice(1).toLowerCase();
+  return digits.length === 3
+    ? `#${[...digits].map((c) => c + c).join("")}`
+    : `#${digits}`;
+}
+
+/** Whether `value` starts with `#` but is not a valid hex literal. */
+export function isMalformedHex(value: string): boolean {
+  return value.startsWith("#") && !isHex(value);
+}
+
+/** `#rrggbb` (lowercase) when `value` is a hex literal, else undefined. */
+export function parseHexColour(value: string): string | undefined {
+  return isHex(value) ? normalizeColour(value) : undefined;
+}
+
+/** Whether `value` is a literal colour (a custom one) rather than a token. */
+export function isCustomColour(value: string): boolean {
+  return isHex(value);
+}
+
 /** `none`, a token or a `#rgb`/`#rrggbb` literal. */
 export function isColour(value: string): boolean {
   return value === "none" || isToken(value) || isHex(value);
+}
+
+/** The token name a stored value stands for, for tooltips; else the hex. */
+export function colourName(value: string): string {
+  return isToken(value) || value === "none" ? value : normalizeColour(value);
 }
 
 function resolve(value: string, theme: FigureTheme): string | undefined {

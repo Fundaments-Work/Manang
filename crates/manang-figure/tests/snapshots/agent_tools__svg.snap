@@ -12,7 +12,7 @@ expression: svg
     <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="216" y="207.6">Load data</tspan></text>
   </g>
   <g id="n3">
-    <path d="M136 304L232 352L136 400L40 352Z" fill="#c9bc00" fill-opacity="0.2" stroke="#1c1c1c" stroke-width="1.5"/>
+    <path d="M136 304L232 352L136 400L40 352Z" fill="#9a8f00" fill-opacity="0.2" stroke="#1c1c1c" stroke-width="1.5"/>
     <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="136" y="357.6">Valid?</tspan></text>
   </g>
   <g id="n4">

@@ -1,14 +1,18 @@
 //! ADR 0012 performance targets: one operation on a 2,000-shape scene in
 //! well under a millisecond, 1,000 operations with undo history, and the
-//! SVG export of 2,000 shapes.
+//! SVG export of 2,000 shapes, and one formula rendered in each language.
 
 use std::hint::black_box;
+
+use std::sync::Arc;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use manang_figure::{
     Binding, ConnectorNode, FigureDocument, FigureNode, FigureOp, FigureScene, ShapeNode, Style,
-    SvgExportOptions, Vec2, render_svg,
+    SvgExportOptions, Vec2, math::render_latex, render_svg,
 };
+use manang_kernel::{Kernel, Payload};
+use serde_json::json;
 
 /// A grid of `n` labelled shapes, every second one linked to the next by a
 /// bound arrow (so moves re-route).
@@ -97,5 +101,30 @@ fn bench(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench);
+/// A typical formula: an integral with a fraction and a sum.
+const TYPST: &str = "integral_0^1 x^2 dif x = sum_(k=1)^n k/(n+1)";
+const LATEX: &str = r"\int_0^1 x^2\,dx = \sum_{k=1}^{n} \frac{k}{n+1}";
+
+fn formulas(c: &mut Criterion) {
+    let kernel = Kernel::new();
+    let registered = manang_typst::manifest().ok().and_then(|m| {
+        let plugin = manang_typst::plugin(manang_typst::CompilerConfig::default()).ok()?;
+        kernel.register(m, Arc::new(plugin)).ok()
+    });
+    c.bench_function("render one formula: LaTeX (RaTeX)", |b| {
+        b.iter(|| black_box(render_latex(black_box(LATEX), 24.0)));
+    });
+    if registered.is_some() {
+        c.bench_function("render one formula: Typst (typst.math-to-svg)", |b| {
+            b.iter(|| {
+                black_box(kernel.invoke(
+                    "typst.math-to-svg",
+                    Payload::Json(json!({ "source": TYPST, "size": 24 })),
+                ))
+            });
+        });
+    }
+}
+
+criterion_group!(benches, bench, formulas);
 criterion_main!(benches);
