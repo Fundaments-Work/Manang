@@ -1,36 +1,36 @@
 <script lang="ts">
   /**
-   * The Manang mark `[⩓]` — DESIGN.md §2.1.
-   *
-   * Two upright pilasters bridged by an apex chevron: an open book and an ink
-   * nib. Built on a strict 24-unit grid with zero corner radius, drawn as
-   * geometry rather than typeset as a glyph so it stays crisp at any size.
+   * The Manang mark: a mountain range stepping down into terraces, one
+   * round-capped line (master file: branding/logo.svg). Drawn as geometry in
+   * the current text colour, so it follows the theme and stays crisp at any
+   * size. `size` is the height; the width follows the drawing's proportions.
    */
   interface Props {
     size?: number;
     class?: string;
   }
 
-  const { size = 15, class: className = "" }: Props = $props();
+  const { size = 16, class: className = "" }: Props = $props();
+
+  // The drawing's bounds with its 14-unit stroke overhang: 565 x 285.5.
+  const WIDTH = 565;
+  const HEIGHT = 285.5;
 </script>
 
 <svg
-  viewBox="0 0 24 24"
-  width={size}
+  viewBox="229 125.5 {WIDTH} {HEIGHT}"
+  width={(size * WIDTH) / HEIGHT}
   height={size}
   fill="none"
   stroke="currentColor"
-  stroke-width="1.5"
-  stroke-linecap="butt"
+  stroke-width="28"
+  stroke-linecap="round"
+  stroke-linejoin="round"
   class={className}
   aria-hidden="true"
   focusable="false"
 >
-  <!-- Apex chevron -->
-  <path d="M4 10.5 L12 4.5 L20 10.5" />
-  <!-- Pilasters -->
-  <path d="M6 10.5 V19.5" />
-  <path d="M18 10.5 V19.5" />
-  <!-- Ink nib -->
-  <path d="M12 4.5 V19.5" />
+  <path
+    d="M243 394 L338 258 Q360 226 382 250 L404 276 Q426 294 442 270 L505 162 Q535 118 566 160 L600 214 Q612 232 636 240 L685 240 L685 285 L735 285 L735 327 L780 327 L780 397 L560 397"
+  />
 </svg>
