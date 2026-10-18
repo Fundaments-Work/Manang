@@ -115,7 +115,8 @@ diff:
 }
 ```
 
-* `width`/`height` are the page: the export region when there is no frame.
+* `width`/`height` are the page: the export region when there is no frame
+  and everything fits on it (otherwise the content's bounds plus a margin).
 * `nodes` are in paint order (first is bottom). Ids are `n<base36>`, from a
   counter, so replaying a session gives byte-identical files.
 * Common optional fields: `angle` (degrees, clockwise, about the bounding

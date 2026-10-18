@@ -13,6 +13,8 @@
 
 mod error;
 mod geometry;
+mod layout;
+mod mermaid;
 mod migrate;
 mod ops;
 pub mod palette;
@@ -23,6 +25,7 @@ pub mod sketch;
 mod store;
 mod svg;
 pub mod text;
+pub mod tools;
 
 pub use error::FigureError;
 pub use geometry::{
@@ -30,9 +33,11 @@ pub use geometry::{
     hit_test, hits, node_bounds, node_rect, nodes_in_rect, normalize_rect, outline_point,
     points_bounds, polygon_to_path, rotate_point, round_coord, scene_bounds, union_rect,
 };
+pub use layout::{Direction, layout_moves};
+pub use mermaid::{nodes_from_layout, to_mermaid};
 pub use ops::{AlignEdge, Axis, Delta, End, FigureOp, ZOrder, apply as apply_op, next_group_id};
 pub use palette::Theme;
-pub use plugin::{FigurePlugin, manifest, plugin, plugin_with_store};
+pub use plugin::{FigurePlugin, manifest, plugin, plugin_with_events, plugin_with_store};
 pub use route::{BIND_GAP, elbow, route};
 pub use scene::{
     Binding, ConnectorNode, FigureNode, FigureScene, FontFamily, FreedrawNode, Head, Heads,

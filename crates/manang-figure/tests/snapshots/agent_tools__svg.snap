@@ -1,0 +1,56 @@
+---
+source: crates/manang-figure/tests/agent_tools.rs
+expression: svg
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 24 358 656" width="358" height="656">
+  <g id="n1">
+    <path d="M138 70A78 30 0 1 0 294 70A78 30 0 1 0 138 70Z" fill="#f4f3f0" stroke="#1c1c1c" stroke-width="1.5"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="216" y="75.6">Start</tspan></text>
+  </g>
+  <g id="n2">
+    <path d="M156 172L276 172L276 232L156 232Z" fill="#f4f3f0" stroke="#1c1c1c" stroke-width="1.5"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="216" y="207.6">Load data</tspan></text>
+  </g>
+  <g id="n3">
+    <path d="M136 304L232 352L136 400L40 352Z" fill="#c9bc00" fill-opacity="0.2" stroke="#1c1c1c" stroke-width="1.5"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="136" y="357.6">Valid?</tspan></text>
+  </g>
+  <g id="n4">
+    <path d="M246 472L366 472L366 532L246 532Z" fill="#f4f3f0" stroke="#1c1c1c" stroke-width="1.5"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="306" y="507.6">Clean data</tspan></text>
+  </g>
+  <g id="n5">
+    <path d="M66 472L186 472L186 532L66 532Z" fill="#f4f3f0" stroke="#1c1c1c" stroke-width="1.5"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="126" y="507.6">Fit model</tspan></text>
+  </g>
+  <g id="n6">
+    <path d="M48 634A78 30 0 1 0 204 634A78 30 0 1 0 48 634Z" fill="#f4f3f0" stroke="#4f5f20" stroke-width="2.5"/>
+    <text fill="#4f5f20" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="126" y="639.6">Report</tspan></text>
+  </g>
+  <g id="n7">
+    <path d="M216 104L216 168" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M220.3 159L216 168L211.7 159" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g id="n8">
+    <path d="M198.1 235.5L198.1 273.1L158.1 273.1L158.1 310.6" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M162.4 301.6L158.1 310.6L153.8 301.6" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g id="n9">
+    <path d="M132.6 402.4L132.6 435.2L128.3 435.2L128.3 468" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M132.6 459L128.3 468L123.9 459" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="14" text-anchor="middle" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke"><tspan x="130.5" y="440.1">yes</tspan></text>
+  </g>
+  <g id="na">
+    <path d="M173.7 385.3L173.7 427.3L269 427.3L269 469.4" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6.5"/>
+    <path d="M273.3 460.3L269 469.4L264.7 460.3" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="14" text-anchor="middle" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke"><tspan x="221.4" y="432.2">no</tspan></text>
+  </g>
+  <g id="nb">
+    <path d="M295.9 468.2L295.9 352L226.1 352L226.1 235.8" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M221.8 244.8L226.1 235.8L230.5 244.8" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g id="nc">
+    <path d="M126 536L126 600" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M130.3 591L126 600L121.7 591" fill="none" stroke="#1c1c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -61,8 +61,8 @@ pub fn escape_xml(input: &str) -> String {
     out
 }
 
-/// The region an export covers: a frame, else the page grown to hold every
-/// node that lies outside it.
+/// The region an export covers: a frame; else the page when everything
+/// fits on it; else the content's bounds with a 16-unit margin.
 pub fn export_region(scene: &FigureScene, frame: Option<&str>) -> Rect {
     if let Some(id) = frame
         && let Some(node) = scene.node_by_id(id)
@@ -77,13 +77,12 @@ pub fn export_region(scene: &FigureScene, frame: Option<&str>) -> Rect {
     if content.width == 0.0 && content.height == 0.0 || page.contains_rect(&content) {
         return page;
     }
-    let padded = Rect::new(
+    Rect::new(
         content.x - 16.0,
         content.y - 16.0,
         content.width + 32.0,
         content.height + 32.0,
-    );
-    union_rect(&page, &padded)
+    )
 }
 
 /// Renders with default options and no embeds.

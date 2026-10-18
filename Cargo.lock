@@ -5661,7 +5661,9 @@ name = "manang-figure"
 version = "0.1.0"
 dependencies = [
  "criterion 0.8.2",
+ "dugong",
  "insta",
+ "manang-diagram",
  "manang-kernel",
  "manang-project",
  "manang-typst",

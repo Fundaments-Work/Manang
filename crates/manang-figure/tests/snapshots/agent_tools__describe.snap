@@ -1,0 +1,126 @@
+---
+source: crates/manang-figure/tests/agent_tools.rs
+expression: snapshot
+---
+{
+  "page": {
+    "width": 960.0,
+    "height": 540.0
+  },
+  "bounds": {
+    "x": 40.0,
+    "y": 40.0,
+    "width": 326.0,
+    "height": 624.0
+  },
+  "shapes": [
+    {
+      "id": "n1",
+      "kind": "ellipse",
+      "x": 138.0,
+      "y": 40.0,
+      "width": 156.0,
+      "height": 60.0,
+      "label": "Start"
+    },
+    {
+      "id": "n2",
+      "kind": "rect",
+      "x": 156.0,
+      "y": 172.0,
+      "width": 120.0,
+      "height": 60.0,
+      "label": "Load data"
+    },
+    {
+      "id": "n3",
+      "kind": "diamond",
+      "x": 40.0,
+      "y": 304.0,
+      "width": 192.0,
+      "height": 96.0,
+      "label": "Valid?"
+    },
+    {
+      "id": "n4",
+      "kind": "rect",
+      "x": 246.0,
+      "y": 472.0,
+      "width": 120.0,
+      "height": 60.0,
+      "label": "Clean data"
+    },
+    {
+      "id": "n5",
+      "kind": "rect",
+      "x": 66.0,
+      "y": 472.0,
+      "width": 120.0,
+      "height": 60.0,
+      "label": "Fit model"
+    },
+    {
+      "id": "n6",
+      "kind": "ellipse",
+      "x": 48.0,
+      "y": 604.0,
+      "width": 156.0,
+      "height": 60.0,
+      "label": "Report"
+    }
+  ],
+  "connections": [
+    {
+      "id": "n7",
+      "kind": "arrow",
+      "from": "n1",
+      "to": "n2",
+      "routing": "elbow"
+    },
+    {
+      "id": "n8",
+      "kind": "arrow",
+      "from": "n2",
+      "to": "n3",
+      "routing": "elbow"
+    },
+    {
+      "id": "n9",
+      "kind": "arrow",
+      "from": "n3",
+      "to": "n5",
+      "label": "yes",
+      "routing": "elbow"
+    },
+    {
+      "id": "na",
+      "kind": "arrow",
+      "from": "n3",
+      "to": "n4",
+      "label": "no",
+      "routing": "elbow"
+    },
+    {
+      "id": "nb",
+      "kind": "arrow",
+      "from": "n4",
+      "to": "n2",
+      "routing": "elbow"
+    },
+    {
+      "id": "nc",
+      "kind": "arrow",
+      "from": "n5",
+      "to": "n6",
+      "routing": "elbow"
+    }
+  ],
+  "frames": [],
+  "other": [],
+  "summary": "6 shapes, 6 connections, 0 frames, 0 other elements. Connections: \"Start\" (n1) -> \"Load data\" (n2); \"Load data\" (n2) -> \"Valid?\" (n3); \"Valid?\" (n3) -> \"Fit model\" (n5) labelled \"yes\"; \"Valid?\" (n3) -> \"Clean data\" (n4) labelled \"no\"; \"Clean data\" (n4) -> \"Load data\" (n2); \"Fit model\" (n5) -> \"Report\" (n6).",
+  "figure": {
+    "id": 1,
+    "path": "[path]",
+    "revision": 4
+  }
+}
