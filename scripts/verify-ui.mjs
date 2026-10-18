@@ -523,6 +523,8 @@ async function liveSection(browser) {
 
   // -- No relay: sharing explains itself and points at Settings. ----------
   await palette("Share this file live");
+  // The palette opens late on a page that has just loaded in a long run.
+  await sleep(1200);
   await expectEventually(
     page,
     "sharing without a relay says so and offers the Settings",
