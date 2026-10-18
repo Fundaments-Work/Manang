@@ -7,6 +7,7 @@
 
 import type { Command } from "$lib/commands/registry";
 import { formatShortcut, type Platform, type Shortcut } from "$lib/commands/shortcut";
+import { FIGURE_SHORTCUTS } from "$lib/figure/keymap";
 
 export interface ShortcutEntry {
   readonly id: string;
@@ -79,6 +80,8 @@ export const GLOBAL_WORKBENCH_SHORTCUTS: readonly {
     shortcut: { key: "Escape" },
     description: "Restore normal workbench chrome",
   },
+  // Active while a figure canvas has focus.
+  ...FIGURE_SHORTCUTS.map((f) => ({ ...f, category: "Figure editor" })),
 ];
 
 /**
