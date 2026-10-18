@@ -1,0 +1,24 @@
+[plugin]
+name = "diagram"
+version = "0.1.0"
+description = "Text diagrams (Mermaid, Pikchr, ASCII) to deterministic SVG. Diagnostics use 1-based lines and 1-based columns counted in characters, end exclusive, like the Typst plugin."
+tier = "native"
+
+# No permissions: every command is a pure function of its arguments.
+
+[contributes]
+[[contributes.commands]]
+id = "diagram.languages"
+title = "List supported diagram languages"
+
+[[contributes.commands]]
+id = "diagram.check"
+title = "Check a diagram source for errors"
+
+[[contributes.commands]]
+id = "diagram.render"
+title = "Render a diagram to SVG"
+
+[[contributes.commands]]
+id = "diagram.key"
+title = "Cache key for a rendered diagram"
