@@ -1,0 +1,6 @@
+id = "blank-typst"
+name = "Blank Typst"
+engine = "typst"
+description = "A minimal Typst project with clean defaults."
+tags = ["blank", "minimal", "typst"]
+main = "main.typ"
