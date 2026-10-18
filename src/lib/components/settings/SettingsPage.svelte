@@ -367,7 +367,8 @@
           ? "About"
           : "Settings"}
     </h1>
-    {#if view === "settings"}
+    <!-- With no project open there is only one place to write to, so no choice is shown. -->
+    {#if view === "settings" && hasProject}
       <div
         class="flex shrink-0 border border-line"
         role="radiogroup"
