@@ -5751,17 +5751,22 @@ name = "manang-plugins"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "insta",
  "manang-kernel",
  "manang-wasm-host",
  "notify",
  "parking_lot",
+ "proptest",
  "rayon",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "toml 0.8.2",
  "wat",
  "wit-component 0.262.0",
  "wit-parser 0.262.0",
+ "zip",
 ]
 
 [[package]]
