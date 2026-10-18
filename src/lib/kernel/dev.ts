@@ -26,6 +26,7 @@ import { pluginsPlugin } from "./mockPlugins";
 import { searchPlugin } from "./mockSearch";
 import { settingsPlugin } from "./mockSettings";
 import { typstPlugin } from "./mockTypst";
+import { visualPlugin } from "./mockVisual";
 import { healPlugin } from "./mockHeal";
 import { writingPlugin } from "./mockWriting";
 
@@ -474,6 +475,7 @@ export function createDevKernel(
       healPlugin(),
       agentPlugin,
       livePlugin,
+      visualPlugin,
     ],
   });
   return Object.assign(kernel, { host });

@@ -355,6 +355,11 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
     permissions: { filesystem: ["read:project"] },
     settingsContexts: ["engine:typst"],
   },
+  visual: {
+    description:
+      "Visual editing for source formats: live preview of headings, emphasis, lists, links, math and images over the real text, with a toolbar. The source stays the only truth.",
+    permissions: { buffer: ["read:active"] },
+  },
   writing: {
     description:
       "Writing tools: formatting, spell check, prose lint, symbols, snippets and statistics",
