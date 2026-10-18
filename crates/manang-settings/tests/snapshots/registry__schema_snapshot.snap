@@ -1,6 +1,5 @@
 ---
 source: crates/manang-settings/tests/registry.rs
-assertion_line: 101
 expression: "Registry::with_core().schema()"
 ---
 {
@@ -214,7 +213,8 @@ expression: "Registry::with_core().schema()"
       "category": "files",
       "contexts": [
         "app",
-        "project"
+        "project",
+        "document"
       ]
     },
     {
@@ -228,7 +228,8 @@ expression: "Registry::with_core().schema()"
       "category": "files",
       "contexts": [
         "app",
-        "project"
+        "project",
+        "document"
       ]
     },
     {

@@ -6,7 +6,7 @@ Your file on disk stays an ordinary text file. The shared state lives only in me
 
 ## What you need
 
-- **A relay address**, once, to start a session. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). Whoever runs the relay for your group gives you its address, for example `wss://relay.example.org`. The Manang project's hosted relay, once it is running, is at `wss://<RELAY-NAME>.<SUBDOMAIN>.workers.dev` (placeholder: to be filled in when it is deployed).
+- **A relay address**, once, to start a session. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). Whoever runs the relay for your group gives you its address, for example `wss://relay.example.org`. During the beta you can use the Manang team's relay at `wss://manang-relay.fundamentswork.workers.dev`: paste it into Settings, Collaboration, Relay address. It only sees encrypted data.
 - **An invite**, to join a session. The person who shares the file sends it to you. It already contains the relay address, so you do not need to set one to join.
 
 ## The Share button

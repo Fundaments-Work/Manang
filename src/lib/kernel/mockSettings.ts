@@ -45,7 +45,7 @@ export const CATEGORY_CONTEXTS: Readonly<Record<string, readonly string[]>> = {
   editor: ["document", "diagram"],
   preview: ["document", "pdf"],
   compile: ["document"],
-  files: ["app", "project"],
+  files: ["app", "project", "document"],
 };
 
 const CORE_SETTINGS: Omit<SettingDef, "contexts">[] = [

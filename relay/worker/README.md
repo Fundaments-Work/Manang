@@ -76,6 +76,8 @@ want another `<name>.<subdomain>.workers.dev` address. The relay address for
 the app is `wss://<name>.<subdomain>.workers.dev`. Check it:
 `curl https://<name>.<subdomain>.workers.dev/health` prints `ok`.
 
+The Manang team's instance (deployed 2026-10-18) is `wss://manang-relay.fundamentswork.workers.dev`; it passes `crates/manang-relay/tests/conformance.rs` over `wss://`.
+
 ## Costs (read from Cloudflare's documentation on 2026-10-18)
 
 From <https://developers.cloudflare.com/durable-objects/platform/pricing/>:
