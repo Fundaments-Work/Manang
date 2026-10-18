@@ -1,0 +1,14 @@
+: keep-alive
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":""},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"content":null,"reasoning_content":"The user says "},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"content":null,"reasoning_content":"hi."},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"content":"Hi!","reasoning_content":null},"finish_reason":null}],"usage":null}
+
+data: {"id":"cmpl-1","object":"chat.completion.chunk","model":"deepseek-flash","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"prompt_cache_hit_tokens":60,"prompt_cache_miss_tokens":40,"prompt_tokens_details":{"cached_tokens":60},"completion_tokens_details":{"reasoning_tokens":12}}}
+
+data: [DONE]
+

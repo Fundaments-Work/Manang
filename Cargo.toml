@@ -19,6 +19,7 @@ members = [
     "crates/manang-citations",
     "crates/manang-diagram",
     "crates/manang-agent-core",
+    "crates/manang-agent-providers",
 ]
 exclude = [
     "crates/manang-wasm-host/tests/fixtures/echo-guest",

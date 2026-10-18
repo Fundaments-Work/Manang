@@ -1,0 +1,34 @@
+[package]
+name = "manang-agent-providers"
+description = "Manang AI agent providers: Anthropic and OpenAI-compatible streaming adapters over an in-house HTTP transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+manang-agent-core = { path = "../manang-agent-core" }
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# rustls through ring (already in the app via ureq); no aws-lc, no OpenSSL.
+# `rustls-no-provider`: we install the ring provider ourselves.
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls-no-provider",
+    "stream",
+    "json",
+] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+secrecy = "0.10"
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
+thiserror = { workspace = true }
+# Tokio is for network I/O only (AGENTS.md section 2.3).
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "time", "sync", "net"] }
+tokio-util = { version = "0.7", default-features = false }
+url = "2"
+
+[dev-dependencies]
+insta = { version = "1", features = ["json"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "time", "sync", "net", "io-util"] }
