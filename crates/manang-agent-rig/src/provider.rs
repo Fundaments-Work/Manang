@@ -257,7 +257,10 @@ impl RigProvider {
 /// gateway (optional bearer, `x-request-id`).
 fn openai_dialect(settings: &OpenAiSettings) -> Dialect {
     if settings.reasoning_passback {
-        DEEPSEEK
+        let mut dialect = DEEPSEEK;
+        // Rig's DeepSeek dialect names no request-id header; DeepSeek sends `x-request-id`.
+        dialect.request_id_header = Some("x-request-id");
+        dialect
     } else if settings.base_url.contains("api.openai.com") {
         OPENAI
     } else {
@@ -277,7 +280,9 @@ impl Provider for RigProvider {
 
     fn stream<'a>(&'a self, request: &'a ChatRequest) -> EventStream<'a> {
         match self.open(request, self.http.0.clone()) {
-            Ok((streamed, names)) => drive(streamed, names, self.backend.wire()),
+            Ok((streamed, names)) => {
+                drive(streamed, names, self.backend.wire(), request.model.clone())
+            }
             Err(message) => Box::pin(futures_util::stream::iter([ProviderEvent::Error {
                 error: ProviderError {
                     code: "invalid_request".to_owned(),

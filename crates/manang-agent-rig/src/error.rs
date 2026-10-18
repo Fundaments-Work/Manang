@@ -64,12 +64,14 @@ fn from_body(status: Option<u16>, body: &str, request_id: Option<String>) -> Our
         Some(s) => matches!(s, 429 | 500 | 502 | 503 | 504 | 529),
         None => error_retryable(&code),
     };
-    let request_id = parsed
-        .as_ref()
-        .and_then(|v| v.get("request_id"))
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .or(request_id);
+    // The response header wins over the body's copy.
+    let request_id = request_id.or_else(|| {
+        parsed
+            .as_ref()
+            .and_then(|v| v.get("request_id"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    });
     OurError {
         code,
         message,
