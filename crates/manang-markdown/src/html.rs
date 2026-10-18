@@ -4,6 +4,7 @@ use pulldown_cmark::{CowStr, Event, MetadataBlockKind, Options, Parser, Tag, Tag
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::Diagnostic;
+use crate::diagrams::{DiagramFence, OpenFence};
 
 /// Configuration options for markdown HTML rendering.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -130,9 +131,9 @@ fn sanitize_raw_html_tag(
     raw.to_string()
 }
 
-/// Renders markdown source into sanitized HTML with preserved math formulas.
-pub fn render_to_html(source: &str, options: &RenderOptions) -> (String, Vec<Diagnostic>) {
-    let parse_opts = Options::ENABLE_TABLES
+/// The parser options shared by every pass over a document.
+pub(crate) fn parse_options() -> Options {
+    Options::ENABLE_TABLES
         | Options::ENABLE_FOOTNOTES
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_TASKLISTS
@@ -140,16 +141,62 @@ pub fn render_to_html(source: &str, options: &RenderOptions) -> (String, Vec<Dia
         | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
         | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS
         | Options::ENABLE_MATH
-        | Options::ENABLE_GFM;
+        | Options::ENABLE_GFM
+}
 
-    let parser = Parser::new_ext(source, parse_opts).into_offset_iter();
+/// The empty element that stands for a diagram fence in the preview. Every
+/// attribute value is generated here (a hex key, a fixed language id, a
+/// number), never copied from the document, and raw HTML in the document is
+/// escaped, so a document cannot forge one.
+pub fn diagram_placeholder(fence: &DiagramFence) -> String {
+    format!(
+        "<figure class=\"mng-diagram\" data-diagram=\"{}\" data-language=\"{}\" data-line=\"{}\"></figure>\n",
+        fence.key, fence.language, fence.line
+    )
+}
+
+/// Renders markdown source into sanitized HTML with preserved math formulas.
+/// Diagram fences become [`diagram_placeholder`]s.
+pub fn render_to_html(source: &str, options: &RenderOptions) -> (String, Vec<Diagnostic>) {
+    render_to_html_at(source, options, 0)
+}
+
+/// [`render_to_html`] for text that starts after `line_offset` lines of its
+/// file (the frontmatter), so diagnostics and placeholders name file lines.
+pub fn render_to_html_at(
+    source: &str,
+    options: &RenderOptions,
+    line_offset: usize,
+) -> (String, Vec<Diagnostic>) {
+    let parser = Parser::new_ext(source, parse_options()).into_offset_iter();
     let mut diagnostics = Vec::new();
     let mut sanitized_events: Vec<Event<'static>> = Vec::new();
 
     let mut in_metadata_block = false;
+    let mut diagram: Option<OpenFence> = None;
 
     for (event, range) in parser {
-        let line = source[..range.start].chars().filter(|&c| c == '\n').count() + 1;
+        let line = line_offset + source[..range.start].chars().filter(|&c| c == '\n').count() + 1;
+
+        if let Some(fence) = diagram.as_mut() {
+            match event {
+                Event::Text(text) => fence.source.push_str(&text),
+                Event::End(TagEnd::CodeBlock) => {
+                    if let Some(fence) = diagram.take() {
+                        let html = diagram_placeholder(&fence.finish());
+                        sanitized_events.push(Event::Html(CowStr::Boxed(html.into_boxed_str())));
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+        if !in_metadata_block {
+            diagram = OpenFence::start(&event, source, &range, line_offset);
+            if diagram.is_some() {
+                continue;
+            }
+        }
 
         match event {
             Event::Start(Tag::MetadataBlock(MetadataBlockKind::YamlStyle))
