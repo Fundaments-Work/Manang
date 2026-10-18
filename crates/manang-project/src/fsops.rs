@@ -96,6 +96,44 @@ pub fn read_text(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> 
     String::from_utf8(bytes).map_err(|_| ProjectError::NotUtf8(display(raw)))
 }
 
+/// A content fingerprint: `b3:` and 32 hex digits of the BLAKE3 hash. The
+/// frontend treats it as opaque; it is what `project.write-file`'s `expected`
+/// argument and recovery snapshots compare.
+pub fn hash_bytes(bytes: &[u8]) -> String {
+    let digest = blake3::hash(bytes).to_hex();
+    format!("b3:{}", &digest.as_str()[..32])
+}
+
+/// Text read with the fingerprint of exactly the bytes returned.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TextRead {
+    pub content: String,
+    pub hash: String,
+    pub size: u64,
+    /// Milliseconds since the Unix epoch, when the platform reports it.
+    pub modified: Option<u64>,
+}
+
+/// Read a UTF-8 text file with its hash and modification time, from one read.
+pub fn read_text_hashed(root: &ProjectRoot, raw: &str) -> Result<TextRead, ProjectError> {
+    let bytes = read_limited(root, raw)?;
+    let hash = hash_bytes(&bytes);
+    let size = bytes.len() as u64;
+    let modified = stat(root, raw).ok().and_then(|s| s.modified);
+    let content = String::from_utf8(bytes).map_err(|_| ProjectError::NotUtf8(display(raw)))?;
+    Ok(TextRead {
+        content,
+        hash,
+        size,
+        modified,
+    })
+}
+
+/// The fingerprint of a project file as it is on disk now.
+pub fn file_hash(root: &ProjectRoot, raw: &str) -> Result<String, ProjectError> {
+    Ok(hash_bytes(&read_limited(root, raw)?))
+}
+
 /// Read a file's raw bytes (images, PDFs).
 pub fn read_bytes(root: &ProjectRoot, raw: &str) -> Result<Vec<u8>, ProjectError> {
     read_limited(root, raw)

@@ -5747,6 +5747,7 @@ dependencies = [
  "manang-markdown",
  "manang-plugins",
  "manang-project",
+ "manang-recovery",
  "manang-search",
  "manang-settings",
  "manang-typst",
@@ -5912,6 +5913,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "manang-formats"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml 1.1.8+spec-1.1.0",
+]
+
+[[package]]
 name = "manang-git"
 version = "0.1.0"
 dependencies = [
@@ -6024,6 +6036,7 @@ dependencies = [
 name = "manang-project"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "chrono",
  "criterion 0.8.2",
  "gix",
@@ -6042,6 +6055,22 @@ dependencies = [
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",
  "trash",
+]
+
+[[package]]
+name = "manang-recovery"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "log",
+ "manang-formats",
+ "manang-kernel",
+ "manang-project",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
