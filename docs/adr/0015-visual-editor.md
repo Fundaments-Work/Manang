@@ -261,3 +261,40 @@ Reference implementation: `wit/format.wit`, `manang_visual::adapter`.
 * Risk: staleness for a frame after an edit; mitigated by mapping and revision
   tags. If measurement shows it is visible, the escape hatch is compiling the
   same adapter crate to wasm for the web view (also needed for the web version).
+
+## Implementation notes (2026-10-18)
+
+* **Crates.** `manang-visual` (core, `cargo check --target wasm32-unknown-unknown`
+  clean), `manang-visual-plugin` (kernel glue and the Rayon pool),
+  `manang_markdown::visual`, `manang_typst::visual`. The wire format above is
+  implemented in `manang-visual/src/table.rs` and decoded again there for tests.
+* **Toolbar commands.** `visual.bold`, `visual.italic`, `visual.code`,
+  `visual.strike`, `visual.heading`, `visual.list`, `visual.quote`,
+  `visual.link`, `visual.image`, `visual.figure`, `visual.math`, `visual.rule`
+  are `visual.run-command` with the adapter command fixed; args are
+  `{session, from, to, args?}`. The toolbar contribution of the `visual`
+  manifest lists them with `when = "adapter.has(<command>)"`.
+* **Registries.** `Kernel::format_adapters()`, `editors()`, `toolbars()` and the
+  `plugins.contributions` command (`{format_adapters, editors, toolbars}`).
+  The first-party editor registers its own `source` editor (`kind = "source"`).
+* **Markdown** keeps a list of top-level blocks with spans relative to each
+  block. An edit reparses a window of whole lines: the block before the edit
+  (and further back while it is open or not preceded by a blank line) up to a
+  block boundary that follows a blank line. Frontmatter is detected by the
+  adapter (the parser's own option accepts it at any block start). Reference
+  style links and images (`[a][r]`, `[r]`) are left as source text because
+  their meaning depends on definitions the window cannot see. Tables are
+  reported as a `table` leaf.
+* **Typst** relies on `Source::edit`, which rescans the text after the edit to
+  rebuild line starts (about 1.6 ms median on a 1 MB document, typst-syntax
+  internals). For a document with a syntax error somewhere, Typst's incremental
+  tree may keep an older recovery; for valid markup it equals a fresh parse
+  (proptested).
+* **Measured** (criterion, `cargo bench -p manang-visual`, 1 MB document, 40 KB
+  viewport, one edit plus the encoded span table): Markdown p50 0.29 ms, p99
+  0.39 ms; Typst p50 2.8 ms, p99 4.2 ms. Opening a 1 MB document (full parse):
+  Markdown 21 ms, Typst 52 ms, on the Rayon pool.
+* **Not done yet:** the WASM host binding for `manang:format` (native adapters
+  only), the stateless `spans-in-slice` fallback adapter, `visual.blocks`
+  streaming straight from the encoder into the IPC buffer (one copy of a
+  table of tens of KB remains in `kernel_invoke_binary`), table cells, citations.

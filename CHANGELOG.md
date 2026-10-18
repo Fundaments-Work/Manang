@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Visual editor foundation (Rust side):** `manang-visual` (adapter traits, a frozen binary span-table wire format, stateful session host with incremental updates, UTF-16 offsets, wasm32-capable), Markdown and Typst format adapters with toolbar edit plans (bold, italic, code, strike, heading, list, quote, link, image, figure, math, rule), the first-party `visual` plugin (`visual.open/edit/blocks/outline/command-state/run-command` plus toolbar commands; span tables cross IPC as raw bytes), and the `format-adapters`, `editors` and `toolbars` manifest contribution points with kernel registries and `plugins.contributions`. Keystroke p99 on a 1 MB document is 0.4 ms (Markdown) and 4.2 ms (Typst). See ADR 0015 and `docs/plugins.md`.
 - **Vector Figure Studio:** In-house typed SVG scene graph (v2) supporting freehand ink (`perfect-freehand`), geometric shapes (Rect, Ellipse, Diamond, Line), bound arrows with auto-snapping to shape anchors, container frames, selection scaling, and deterministic headless SVG export.
 - **Mathematical Formulas in Figures:** Dedicated Typst and LaTeX formula nodes in the Figure Studio with docked properties and custom color palette.
 - **Text Diagram Support:** Integrated compilers for Mermaid (`.mmd`), Pikchr, and ASCII art (`svgbob`) generating standalone SVGs; automatic diagram rendering in Markdown code fences.
