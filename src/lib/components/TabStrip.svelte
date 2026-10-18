@@ -51,9 +51,9 @@
   });
 
   // Presence: at most four marks, the rest folded into "+N" (names in its tooltip).
-  const MAX_MARKS = 4;
-  const shownPeers = $derived(live.peers.slice(0, MAX_MARKS));
-  const hiddenPeers = $derived(live.peers.slice(MAX_MARKS));
+  const maxMarks = $derived(layout.narrow ? 2 : 4);
+  const shownPeers = $derived(live.peers.slice(0, maxMarks));
+  const hiddenPeers = $derived(live.peers.slice(maxMarks));
   const slotOf = (n: number): number => ((n % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
 
   const labels = $derived(tabLabels(tabs.tabs));
@@ -340,7 +340,7 @@
         </li>
       {/if}
       {#if live.peers.length === 0}
-        <li class="px-1 text-[11px] text-text-muted">Only you</li>
+        <li class="px-1 text-[11px] text-text-muted max-md:hidden">Only you</li>
       {/if}
     </ul>
   {/if}

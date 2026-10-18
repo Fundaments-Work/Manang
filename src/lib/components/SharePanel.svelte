@@ -79,7 +79,9 @@
     <label class="block text-text-60" for="share-address{embedded ? '-pop' : ''}">
       {share.remote?.url != null
         ? "Address of the shared project"
-        : "Share this project with others"}
+        : embedded
+          ? "Address of the shared project"
+          : "Share this project with others"}
     </label>
     <div class="flex items-center gap-1">
       <input
