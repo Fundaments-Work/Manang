@@ -20,6 +20,7 @@ members = [
     "crates/manang-diagram",
     "crates/manang-agent-core",
     "crates/manang-agent-providers",
+    "crates/manang-keystore",
 ]
 exclude = [
     "crates/manang-wasm-host/tests/fixtures/echo-guest",
