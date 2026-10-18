@@ -8,6 +8,7 @@ tier = "native"
 filesystem = ["write:project"]
 
 [contributes]
+hooks = ["register_agent_tool"]
 [[contributes.commands]]
 id = "figure.create"
 title = "New figure"
@@ -47,3 +48,43 @@ title = "Export SVG"
 [[contributes.commands]]
 id = "figure.hit-test"
 title = "Hit test coordinates"
+
+[[contributes.commands]]
+id = "figure.describe"
+title = "Describe a figure (agent tool)"
+
+[[contributes.commands]]
+id = "figure.add-shapes"
+title = "Add shapes (agent tool)"
+
+[[contributes.commands]]
+id = "figure.connect"
+title = "Connect shapes (agent tool)"
+
+[[contributes.commands]]
+id = "figure.update"
+title = "Change shapes (agent tool)"
+
+[[contributes.commands]]
+id = "figure.remove"
+title = "Remove shapes (agent tool)"
+
+[[contributes.commands]]
+id = "figure.layout"
+title = "Lay out a figure"
+
+[[contributes.commands]]
+id = "figure.from-mermaid"
+title = "Insert Mermaid as shapes"
+
+[[contributes.commands]]
+id = "figure.to-mermaid"
+title = "Figure as Mermaid"
+
+[[contributes.commands]]
+id = "figure.style"
+title = "Apply a style preset"
+
+[[contributes.commands]]
+id = "figure.export"
+title = "Save and export a figure"

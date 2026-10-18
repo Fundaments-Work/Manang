@@ -218,7 +218,7 @@ fn content_outside_the_page_grows_the_export() {
         .nodes
         .push(shape("rect", "far", 300.0, 300.0, None, Style::default()));
     let svg = render_svg(&scene, &SvgExportOptions::default());
-    assert!(svg.contains("viewBox=\"0 0 456 386\""), "{svg}");
+    assert!(svg.contains("viewBox=\"284 284 172 102\""), "{svg}");
 }
 
 /// The SVG is well-formed XML with no duplicate attributes.

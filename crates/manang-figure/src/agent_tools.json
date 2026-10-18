@@ -1,0 +1,319 @@
+[
+  {
+    "name": "figure_describe",
+    "title": "Describe a figure",
+    "description": "Summarise a figure: every shape with its id, kind, label and box, every arrow with the shapes it connects, frames and what they contain, and a one-paragraph summary. Call this first to learn ids before changing a figure. Shapes can also be addressed by their label in the other figure tools.",
+    "command": "figure.describe",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Absolute path of a .figure.json file; opened if it is not open. Omit to use the figure open in the editor." },
+        "figure": { "type": "integer", "minimum": 1, "description": "Id of an open figure (from figure.list)." }
+      },
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "figure": { "$ref": "#/$defs/figureRef" },
+        "page": { "type": "object" },
+        "bounds": { "type": "object" },
+        "shapes": { "type": "array", "items": { "$ref": "#/$defs/shape" } },
+        "connections": { "type": "array", "items": { "type": "object" } },
+        "frames": { "type": "array" },
+        "other": { "type": "array" },
+        "summary": { "type": "string" }
+      },
+      "$defs": {
+        "figureRef": { "type": "object", "properties": { "id": { "type": "integer" }, "path": { "type": ["string", "null"] }, "revision": { "type": "integer" } } },
+        "shape": { "type": "object", "properties": { "id": { "type": "string" }, "kind": { "type": "string" }, "label": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" }, "width": { "type": "number" }, "height": { "type": "number" } } }
+      }
+    }
+  },
+  {
+    "name": "figure_add_shapes",
+    "title": "Add shapes to a figure",
+    "description": "Add one or more shapes (boxes, diamonds, ellipses, text, frames or Mermaid blocks) with labels. Positions are optional: shapes without x/y are placed in a row next to the existing content, and figure_layout can arrange them afterwards. Sizes are optional and fit the label. Returns the new ids, in order. One undo step.",
+    "command": "figure.add-shapes",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 },
+        "shapes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": { "enum": ["rect", "diamond", "ellipse", "text", "frame", "mermaid"], "description": "Default rect. Use diamond for decisions, ellipse for start/end, text for free text, frame for a titled region." },
+              "label": { "type": "string", "description": "Text inside the shape (the text itself for kind text, the title for a frame)." },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "width": { "type": "number", "minimum": 1 },
+              "height": { "type": "number", "minimum": 1 },
+              "preset": { "$ref": "#/$defs/preset" },
+              "style": { "$ref": "#/$defs/style" },
+              "source": { "type": "string", "description": "Mermaid text, for kind mermaid." }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["shapes"],
+      "additionalProperties": false,
+      "$defs": {
+        "preset": { "enum": ["clean", "sketch", "emphasis", "muted", "dashed", "blueprint", "warning", "success"] },
+        "style": {
+          "type": "object",
+          "properties": {
+            "stroke": { "type": "string", "description": "Palette token (ink, muted, line, surface, paper, accent, sage, orange, sky, green, yellow, blue, vermillion, purple) or #rrggbb." },
+            "fill": { "type": "string", "description": "none, a palette token (hues paint as a light tint) or #rrggbb." },
+            "strokeWidth": { "type": "number", "minimum": 0.1, "maximum": 64 },
+            "strokeStyle": { "enum": ["solid", "dashed", "dotted"] },
+            "opacity": { "type": "number", "minimum": 0, "maximum": 100 },
+            "roughness": { "type": "integer", "minimum": 0, "maximum": 2, "description": "0 clean, 1 hand-drawn, 2 very hand-drawn." },
+            "fontFamily": { "enum": ["sans", "mono"] },
+            "fontSize": { "type": "number", "minimum": 1, "maximum": 512 },
+            "textAlign": { "enum": ["left", "center", "right"] }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "figure": { "type": "object" },
+        "ids": { "type": "array", "items": { "type": "string" } },
+        "shapes": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  },
+  {
+    "name": "figure_connect",
+    "title": "Connect shapes with arrows",
+    "description": "Draw arrows (or lines) between shapes, addressed by id or by label. The arrows are bound: they follow the shapes when they move. Optional label, routing (straight, elbow for right angles, curved), heads and style. One undo step.",
+    "command": "figure.connect",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 },
+        "connections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "string", "description": "Id or label of the start shape." },
+              "to": { "type": "string", "description": "Id or label of the end shape." },
+              "label": { "type": "string" },
+              "kind": { "enum": ["arrow", "line"] },
+              "routing": { "enum": ["straight", "elbow", "curved"] },
+              "heads": {
+                "type": "object",
+                "properties": {
+                  "start": { "$ref": "#/$defs/head" },
+                  "end": { "$ref": "#/$defs/head" }
+                },
+                "additionalProperties": false
+              },
+              "preset": { "enum": ["clean", "sketch", "emphasis", "muted", "dashed", "blueprint", "warning", "success"] },
+              "style": { "type": "object" }
+            },
+            "required": ["from", "to"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["connections"],
+      "additionalProperties": false,
+      "$defs": { "head": { "enum": ["none", "arrow", "triangle", "dot", "bar"] } }
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": { "figure": { "type": "object" }, "ids": { "type": "array", "items": { "type": "string" } } }
+    }
+  },
+  {
+    "name": "figure_update",
+    "title": "Change shapes",
+    "description": "Change shapes or arrows addressed by id or label: label, kind (rect, diamond, ellipse, text, frame), position, size, rotation, style, routing or Mermaid source. Arrows bound to a moved shape follow. One undo step for the whole call.",
+    "command": "figure.update",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 },
+        "updates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "ref": { "type": "string", "description": "Id or label of the shape." },
+              "label": { "type": "string" },
+              "kind": { "enum": ["rect", "diamond", "ellipse", "text", "frame", "mermaid"] },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "width": { "type": "number", "minimum": 0 },
+              "height": { "type": "number", "minimum": 0 },
+              "angle": { "type": "number" },
+              "routing": { "enum": ["straight", "elbow", "curved"] },
+              "source": { "type": "string" },
+              "style": { "type": "object" }
+            },
+            "required": ["ref"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["updates"],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": { "figure": { "type": "object" }, "ids": { "type": "array", "items": { "type": "string" } } }
+    }
+  },
+  {
+    "name": "figure_remove",
+    "title": "Remove shapes",
+    "description": "Remove shapes or arrows addressed by id or label. Arrows attached to a removed shape stay and let go of it. One undo step.",
+    "command": "figure.remove",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 },
+        "refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      },
+      "required": ["refs"],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": { "figure": { "type": "object" }, "ids": { "type": "array", "items": { "type": "string" } } }
+    }
+  },
+  {
+    "name": "figure_layout",
+    "title": "Lay out a figure",
+    "description": "Arrange the shapes as a layered graph following their arrows (dagre): direction TB (top-down, default), LR (left-right), BT or RL. Optionally only some shapes, a spacing, and a routing for the arrows. The arrangement keeps the shapes' top-left corner. One undo step.",
+    "command": "figure.layout",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 },
+        "direction": { "enum": ["TB", "LR", "BT", "RL"] },
+        "refs": { "type": "array", "items": { "type": "string" } },
+        "spacing": { "type": "number", "minimum": 4, "maximum": 1000 },
+        "routing": { "enum": ["straight", "elbow", "curved"] }
+      },
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": { "figure": { "type": "object" }, "ids": { "type": "array", "items": { "type": "string" } } }
+    }
+  },
+  {
+    "name": "figure_from_mermaid",
+    "title": "Insert Mermaid as shapes",
+    "description": "Turn Mermaid text into editable native shapes and bound arrows (flowchart, state, class and sequence diagrams), placed at x/y or below the existing content. Other diagram types, or mode block, insert a Mermaid block that keeps the source and renders it. One undo step.",
+    "command": "figure.from-mermaid",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "mode": { "enum": ["auto", "shapes", "block"], "description": "auto (default) converts when it can and falls back to a block; shapes fails instead of falling back." }
+      },
+      "required": ["source"],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "figure": { "type": "object" },
+        "ids": { "type": "array", "items": { "type": "string" } },
+        "mode": { "enum": ["shapes", "block"] },
+        "family": { "type": ["string", "null"] },
+        "fallback": { "type": ["string", "null"] }
+      }
+    }
+  },
+  {
+    "name": "figure_to_mermaid",
+    "title": "Figure as Mermaid",
+    "description": "Write the figure's boxes, diamonds and ellipses and the arrows between them as a Mermaid flowchart (best effort). Lists the ids of what could not be expressed.",
+    "command": "figure.to-mermaid",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": { "figure": { "type": "object" }, "source": { "type": "string" }, "skipped": { "type": "array", "items": { "type": "string" } } }
+    }
+  },
+  {
+    "name": "figure_style",
+    "title": "Style shapes",
+    "description": "Apply a named style preset (clean, sketch, emphasis, muted, dashed, blueprint, warning, success) and/or explicit style fields to shapes addressed by id or label, or to everything when refs is omitted. One undo step.",
+    "command": "figure.style",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 },
+        "refs": { "type": "array", "items": { "type": "string" } },
+        "preset": { "enum": ["clean", "sketch", "emphasis", "muted", "dashed", "blueprint", "warning", "success"] },
+        "style": { "type": "object" }
+      },
+      "anyOf": [{ "required": ["preset"] }, { "required": ["style"] }],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": { "figure": { "type": "object" }, "ids": { "type": "array", "items": { "type": "string" } } }
+    }
+  },
+  {
+    "name": "figure_export",
+    "title": "Save and export a figure",
+    "description": "Save the figure (<name>.figure.json) and write its SVG next to it; with format pdf also the PDF LaTeX documents include. With frame, also writes <name>-<frame id>.svg holding just that frame. The figure must have a path.",
+    "command": "figure.export",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "figure": { "type": "integer", "minimum": 1 },
+        "format": { "enum": ["svg", "pdf"] },
+        "frame": { "type": "string", "description": "Id or label of a frame to export on its own." }
+      },
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "figure": { "type": "object" },
+        "json": { "type": "string" },
+        "svg": { "type": "string" },
+        "pdf": { "type": ["string", "null"] },
+        "frame_svg": { "type": ["string", "null"] }
+      }
+    }
+  }
+]
