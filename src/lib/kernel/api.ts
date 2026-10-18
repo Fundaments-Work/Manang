@@ -68,6 +68,28 @@ export function projectApi(kernel: Kernel) {
   };
 }
 
+/** A point on a rendered page: 0-based page, points from the top-left corner. */
+export interface PagePoint {
+  readonly page: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * Where a click on a Typst page leads (`crates/manang-typst` `SourceJump`).
+ * `path` is project-relative, or `@ns/name:version/path` inside a package;
+ * line and column are 1-based, the column counted in characters.
+ */
+export type TypstJump =
+  | {
+      readonly kind: "file";
+      readonly path: string;
+      readonly line: number;
+      readonly column: number;
+    }
+  | { readonly kind: "url"; readonly url: string }
+  | ({ readonly kind: "position" } & PagePoint);
+
 export function typstApi(kernel: Kernel) {
   return {
     compile: (request: CompileRequest) =>
@@ -75,6 +97,12 @@ export function typstApi(kernel: Kernel) {
     /** One page as SVG bytes. */
     render: (page: number) => kernel.runBinary("typst.render", { page }),
     exportPdf: () => kernel.runBinary("typst.export-pdf"),
+    /** What produced the point `(x, y)` (pt) on 0-based `page`; null for blank space. */
+    jumpFromClick: (page: number, x: number, y: number) =>
+      kernel.run<TypstJump | null>("typst.jump-from-click", { page, x, y }),
+    /** Where the text at a 1-based line and column landed on the pages. */
+    jumpFromCursor: (path: string, line: number, column: number) =>
+      kernel.run<PagePoint[]>("typst.jump-from-cursor", { path, line, column }),
   };
 }
 
@@ -248,12 +276,57 @@ export interface LatexCompileRequest {
   readonly allow_network?: boolean;
 }
 
+/** One backend in `latex.status`. */
+export interface LatexBackendStatus {
+  readonly id: "system" | "tectonic";
+  readonly available: boolean;
+  readonly version: string | null;
+  readonly engines: readonly string[];
+}
+
+/** What `latex.status` answers with; `default` is `none` when nothing can compile. */
+export interface LatexStatus {
+  readonly backends: readonly LatexBackendStatus[];
+  readonly default: "system" | "tectonic" | "none";
+  readonly default_engine: string;
+}
+
+/** A box in the PDF from SyncTeX: 1-based page, points from the top-left corner. */
+export interface SynctexBox {
+  readonly page: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export function latexApi(kernel: Kernel) {
   return {
     compile: (request: LatexCompileRequest) =>
       kernel.run<LatexReport>("latex.compile", { ...request }),
     /** The PDF of the latest build of `main`, as raw bytes. */
     exportPdf: (main: string) => kernel.runBinary("latex.export-pdf", { main }),
+    /** Which TeX backends this machine has. */
+    status: () => kernel.run<LatexStatus>("latex.status"),
+    /**
+     * Source line behind a point on 1-based `page` of the latest build of `main`
+     * (absolute). `file` is relative to the main file's directory, unless it lies
+     * outside it.
+     */
+    synctexReverse: (main: string, page: number, x: number, y: number) =>
+      kernel.run<{ readonly file: string; readonly line: number }>("latex.synctex", {
+        main,
+        page,
+        x,
+        y,
+      }),
+    /** Where a 1-based line of `file` (relative to the main file's directory) landed. */
+    synctexForward: (main: string, file: string, line: number) =>
+      kernel.run<{ readonly positions: readonly SynctexBox[] }>("latex.synctex", {
+        main,
+        file,
+        line,
+      }),
   };
 }
 

@@ -1,7 +1,7 @@
 [plugin]
 name = "typst"
 version = "0.1.0"
-description = "Typst compiler: incremental compile, SVG page render and PDF export"
+description = "Typst compiler: incremental compile, SVG page render, PDF export and source/preview jumps"
 tier = "native"
 
 [permissions]
@@ -21,3 +21,11 @@ title = "Render page as SVG"
 [[contributes.commands]]
 id = "typst.export-pdf"
 title = "Export PDF"
+
+[[contributes.commands]]
+id = "typst.jump-from-click"
+title = "Jump from preview to source"
+
+[[contributes.commands]]
+id = "typst.jump-from-cursor"
+title = "Jump from source to preview"
