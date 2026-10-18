@@ -2,6 +2,8 @@
 
 Share your project with co-authors and bring their work into yours, without a terminal. Both actions live in the **Versions** view (Source control, then **Versions**), in the group above the timeline.
 
+You can also reach the same controls without opening the Versions view: the **Share** button at the right end of the tab strip (`Ctrl+Alt+L`, `Cmd+Option+L`) opens a popover with a **Share versions** section. It shows the same status line, **Share** and **Get updates** buttons, and when updates from your co-authors are waiting the Share button itself turns lime.
+
 Sharing sends your *saved versions*. Save a version first for anything you want others to see; the group reminds you when files have unsaved changes.
 
 ## Connect once

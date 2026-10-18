@@ -9,24 +9,69 @@ Your file on disk stays an ordinary text file. The shared state lives only in me
 - **A relay address**, once, to start a session. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). Whoever runs the relay for your group gives you its address, for example `wss://relay.example.org`.
 - **An invite**, to join a session. The person who shares the file sends it to you. It already contains the relay address, so you do not need to set one to join.
 
+## The Share button
+
+Everything about working with other people is behind one button: **Share**, at the right end of the tab strip (`Ctrl+Alt+L`, `Cmd+Option+L`; on narrow windows it shows only its icon). It opens a small panel with:
+
+- **Edit together live**: share the open file, or join with an invite.
+- **Invite link** and **Leave live session**, while a session is running.
+- **Share versions**: send your saved versions to co-authors and get theirs (see [Share and get updates](share-and-get-updates.md)).
+
+The same actions are in the **File** menu and the command palette. Escape closes the panel and puts you back where you were.
+
+While you are in a session you also see:
+
+- the other people as small marks (their initials and a coloured underline) at the right of the tab strip, with the full name when you hover;
+- a **Live: 2 people** item in the status bar, which opens the Share panel (it says *connecting*, *reconnecting* or *stopped* when the connection is not up);
+- the session bar above the editor.
+
+When you are not in a session, none of these is shown.
+
 ## Set the relay (to share)
 
-1. Open **Settings** (`Ctrl+,`) and find the **Live** section, or choose **Share this file live** once: if no relay is set, a bar above the editor says so and has an **Open settings** button.
+The first time, the Share panel shows what you need: a relay address and a name. If no relay is set it says *Ask whoever runs your team's relay for its address* and has an **Open Settings** button.
+
+1. Open **Settings** (`Ctrl+,`) and go to **Collaboration** (or press **Open Settings** in the Share panel).
 2. Enter the address under **Relay address**. Use `wss://` for a relay behind TLS, or `ws://` for one you run on your own network.
 3. Optionally set **Name shown to collaborators**. If you leave it empty, your system user name is used.
+
+The Collaboration page also explains what the relay can and cannot see.
 
 ## Share a file
 
 1. Open the text file you want to work on together.
-2. Open the **File** menu and choose **Share this file live…** (or run it from the command palette, `Ctrl+K`).
+2. Press **Share**, then **Share this file**. (Or use **File > Share this file live…**, or the command palette, `Ctrl+K`.)
 3. A bar appears above the editor. It says **Connecting**, then **Live**. The invite has been copied to your clipboard. If the clipboard is not available, the invite appears in a field in the bar, already selected.
 4. Send the invite to the people you want to work with. Use **Copy invite** in the bar to copy it again.
 
 An invite is a long link that starts with `manang-live://`. **Anyone who has it can edit the file with you**, so send it only to the people you mean, through a channel you trust.
 
+## Use a local relay for testing
+
+To try live editing yourself before your team has a relay, run one on your own computer. The relay is the `manang-relay` program in this repository; it needs no accounts and no internet.
+
+1. In a terminal, from the Manang repository, start it:
+
+   ```
+   cargo run --release -p manang-relay -- --listen 127.0.0.1:8787
+   ```
+
+   It prints a log line and keeps running; stop it with `Ctrl+C`. Use `0.0.0.0:8787` instead to let other computers on your network connect, and give them `ws://YOUR-IP:8787`.
+2. In Settings > Collaboration, set **Relay address** to `ws://127.0.0.1:8787`.
+3. Share a file as above and copy the invite.
+4. To join from a second copy of Manang on the same computer, start it with its own settings folder, and allow a second instance (normally a second launch just brings the first window forward):
+
+   ```
+   MANANG_MULTI_INSTANCE=1 XDG_CONFIG_HOME=$HOME/.manang-second/config XDG_DATA_HOME=$HOME/.manang-second/data XDG_CACHE_HOME=$HOME/.manang-second/cache manang
+   ```
+
+   Open a copy of the project in it (a different folder, or the same file opened there), choose **Share > Join with an invite** and paste the invite. Joining needs no relay setting: the address is in the invite. Both windows now show each other's cursors.
+
+On two computers, run the relay on one, use `ws://ITS-IP:8787` as the relay address on the host, and send the invite as usual.
+
 ## Join a session
 
-1. Open the **File** menu and choose **Join a live session…**.
+1. Press **Share** and choose **Join with an invite** (or use **File > Join a live session…**).
 2. Paste the invite and press `Enter`.
 3. Manang opens the file the invite names if your project has it; otherwise it uses the file in front of you.
 

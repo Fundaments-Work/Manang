@@ -622,15 +622,21 @@ pub fn run() -> Result<(), tauri::Error> {
     let builder = tauri::Builder::default();
     // First, so a second launch hands over to the running window and exits
     // before it builds a second kernel.
+    // `MANANG_MULTI_INSTANCE=1` skips it, so one person can run two copies on
+    // one machine (each with its own config folder) to try live editing.
     #[cfg(desktop)]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-        use tauri::Manager;
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
-    }));
+    let builder = if std::env::var_os("MANANG_MULTI_INSTANCE").is_some() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            use tauri::Manager;
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
+    };
     builder
         // Logs go to the terminal and the platform log folder. The web view
         // forwards its errors and warnings here too (src/lib/kernel/log.ts).

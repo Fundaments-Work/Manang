@@ -43,6 +43,9 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 | **Save** | `file.save` | `Ctrl+S` (`Cmd+S`) | Saves modifications in the active editor tab. |
 | **Save all** | `file.save-all` | `Ctrl+Shift+S` (`Cmd+Shift+S`) | Saves all modified documents across the project. |
 | *— Separator —* | | | |
+| **Share…** | `share.open` | `Ctrl+Alt+L` (`Cmd+Option+L`) | Opens the Share popover at the end of the tab strip: edit together live, share versions, invite link. |
+| **Share this file live…**, **Join a live session…**, **Copy live invite**, **Leave live session** | `live.*` | — | The same live actions, straight from the menu. See [Edit together live](edit-together-live.md). |
+| *— Separator —* | | | |
 | **Export PDF** | `doc.export-pdf` | `Ctrl+E` (`Cmd+E`) | Compiles and exports a PDF from Typst or LaTeX. |
 | *— Separator —* | | | |
 | **Close project** | `project.close` | — | Closes the active project and returns to Home. |
