@@ -153,6 +153,10 @@ fn build_kernel(
         manang_citations::manifest()?,
         Arc::new(manang_citations::plugin()),
     )?;
+    kernel.register(
+        manang_diagram::manifest()?,
+        Arc::new(manang_diagram::plugin()),
+    )?;
     // One settings implementation serves three command namespaces.
     let settings = Arc::new(manang_settings::plugin(
         dirs.config.to_path_buf(),
@@ -683,6 +687,40 @@ mod tests {
             .invoke("editor.new", Payload::Empty)
             .expect("editor.new runs");
         assert_eq!(out, Payload::Json(json!({ "id": 1 })));
+    }
+
+    #[test]
+    fn diagram_plugin_registers_and_renders_svg() {
+        let tmp = std::env::temp_dir();
+        let dirs = Dirs {
+            config: &tmp,
+            cache: &tmp,
+        };
+        let kernel = build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
+            .expect("first-party plugins register");
+        let ids: Vec<_> = kernel.commands().into_iter().map(|c| c.id).collect();
+        for expected in [
+            "diagram.languages",
+            "diagram.check",
+            "diagram.render",
+            "diagram.key",
+        ] {
+            assert!(ids.iter().any(|id| id == expected), "missing {expected}");
+        }
+        let out = kernel
+            .invoke(
+                "diagram.render",
+                Payload::Json(json!({
+                    "language": "mermaid",
+                    "source": "flowchart LR\n  A --> B\n",
+                    "theme": "dark",
+                })),
+            )
+            .expect("diagram.render runs");
+        let Payload::Binary(svg) = out else {
+            panic!("diagram.render returns binary SVG");
+        };
+        assert!(svg.starts_with(b"<svg"));
     }
 
     #[test]
