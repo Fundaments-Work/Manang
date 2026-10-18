@@ -64,7 +64,7 @@ impl DiagnosticIn {
         }
     }
 
-    pub(crate) fn is_error(&self) -> bool {
+    pub fn is_error(&self) -> bool {
         self.severity.as_deref().is_none_or(|s| s == "error")
     }
 }
