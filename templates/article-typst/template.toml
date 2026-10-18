@@ -1,0 +1,6 @@
+id = "article-typst"
+name = "Article (Typst)"
+engine = "typst"
+description = "Academic article with title, abstract, sections, and bibliography."
+tags = ["article", "academic", "typst"]
+main = "main.typ"

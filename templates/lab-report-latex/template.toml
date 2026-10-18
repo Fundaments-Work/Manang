@@ -1,0 +1,6 @@
+id = "lab-report-latex"
+name = "Lab Report (LaTeX)"
+engine = "latex"
+description = "Scientific laboratory report with objective, procedure, data, analysis, and citations."
+tags = ["lab-report", "science", "latex"]
+main = "main.tex"

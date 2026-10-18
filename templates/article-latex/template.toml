@@ -1,0 +1,6 @@
+id = "article-latex"
+name = "Article (LaTeX)"
+engine = "latex"
+description = "Standard academic LaTeX article with title, abstract, sections, and BibTeX citations."
+tags = ["article", "academic", "latex"]
+main = "main.tex"
