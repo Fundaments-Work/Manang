@@ -8,6 +8,7 @@
   import { formatShortcut } from "$lib/commands/shortcut";
   import { goHome, openFolder } from "$lib/state/actions";
   import { context } from "$lib/state/context.svelte";
+  import { helpPage } from "$lib/state/helpPage.svelte";
   import { home } from "$lib/state/home.svelte";
   import { layout } from "$lib/state/layout.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
@@ -36,6 +37,7 @@
   const surface: Surface = $derived(context.surface);
   const PLACEHOLDER: Record<Surface, string> = {
     settings: "Search settings and plugins",
+    help: "Search user guide",
     home: "Search projects",
     workbench: "Search files and commands",
   };
@@ -59,11 +61,14 @@
   const foldMenus = $derived(layout.width < 900);
 
   function inlineQuery(): string {
-    return surface === "settings" ? settingsPage.query : home.query;
+    if (surface === "settings") return settingsPage.query;
+    if (surface === "help") return helpPage.query;
+    return home.query;
   }
 
   function setInlineQuery(value: string): void {
     if (surface === "settings") settingsPage.query = value;
+    else if (surface === "help") helpPage.query = value;
     else home.query = value;
   }
 
@@ -113,6 +118,7 @@
     title="Home ({homeHint})"
     aria-keyshortcuts="Control+Shift+H"
     onclick={() => {
+      helpPage.hide();
       settingsPage.hide();
       goHome();
     }}

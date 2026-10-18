@@ -147,7 +147,13 @@ pub fn create(dir: &Path, new: &NewProject<'_>) -> Result<ProjectConfig, Project
     }
 
     for (name, content) in &files_to_write {
-        atomic_write(&dir.join(name), content.as_bytes())?;
+        let dest = dir.join(name);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                ProjectError::io(format!("creating directories for {}", dest.display()), e)
+            })?;
+        }
+        atomic_write(&dest, content.as_bytes())?;
     }
     Ok(config)
 }

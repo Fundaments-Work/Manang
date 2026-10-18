@@ -499,6 +499,209 @@ graph TD
 `,
     },
   },
+  {
+    id: "welcome",
+    name: "Welcome to Manang",
+    engine: "typst",
+    description:
+      "Interactive onboarding project teaching Manang's editor, preview, figures, citations, and shortcuts.",
+    tags: ["welcome", "onboarding", "tutorial", "typst"],
+    main: "main.typ",
+    files: {
+      "main.typ": `#set document(title: "{{title_string}}")
+#set page(paper: "a4", margin: (x: 2.5cm, y: 2.5cm))
+#set text(size: 10.5pt)
+#set par(justify: true)
+#set heading(numbering: "1.1")
+
+#align(center)[
+  #text(size: 20pt, weight: "bold")[{{title}}]
+
+  #v(0.4em)
+  #text(size: 10.5pt, fill: rgb("#71717a"))[An Interactive Onboarding Tour of the Manang Authoring Suite]
+]
+
+#v(1em)
+
+#block(
+  fill: rgb("#f4f4f5"),
+  inset: 12pt,
+  radius: 0pt,
+  stroke: 1pt + rgb("#e4e4e7"),
+  [
+    *Welcome to Manang!* This document teaches you the core authoring workflow by letting you interact with it directly. Follow the numbered steps below.
+  ]
+)
+
+= The First 5 Minutes: Try This
+
++ *Edit text live:* Edit this line of text right now. Notice that the preview updates instantly with sub-50ms latency.
++ *SyncTeX navigation:* In the preview panel on the right, double-click or \`Ctrl\`-click (\`Cmd\`-click on macOS) any text or heading to jump straight back to its exact source line in this editor. Press \`Ctrl+Alt+J\` (\`Cmd+Alt+J\`) to jump forward to preview.
++ *Command palette:* Press \`Ctrl+K\` (\`Cmd+K\` on macOS) to open the palette. Filter available actions by typing \`export\`, \`settings\`, or \`/\`.
++ *Settings & scope:* Press \`Ctrl+,\` (\`Cmd+,\` on macOS) to open Settings. Switch between global User preferences and project-specific configuration.
++ *Save a version:* Local history snapshots and git-backed versioning ("Save a version") are coming soon in a later beta release.
+
+#include "sections/tour.typ"
+
+= Mathematical Typesetting
+
+Equations in Typst are concise, legible, and compiled with publication precision @shannon1948:
+
+$ Delta S >= integral_0^t (delta Q) / T $
+
+$ e^(i pi) + 1 = 0 $
+
+= Vector Figures
+
+Vector illustrations and diagrams integrate directly into documents without rasterization:
+
+#align(center)[
+  #figure(
+    image("figures/welcome.svg", width: 85%),
+    caption: [Architecture of the Manang authoring engine: zero-copy IPC and instant live preview.],
+  )
+]
+
+= Keyboard Shortcuts Reference
+
+#table(
+  columns: (auto, auto, 1fr),
+  stroke: 0.5pt + rgb("#d4d4d8"),
+  inset: 7pt,
+  table.header([*Action*], [*Shortcut*], [*Description*]),
+  [Command Palette], [\`Ctrl+K\` (\`Cmd+K\`)], [Fuzzy search all commands and tools],
+  [Settings], [\`Ctrl+,\` (\`Cmd+,\`)], [View and modify user or project options],
+  [Export PDF], [\`Ctrl+E\` (\`Cmd+E\`)], [Compile and save publication-ready PDF],
+  [Toggle Preview], [\`Ctrl+Shift+V\` (\`Cmd+Shift+V\`)], [Show, hide, or split preview pane],
+  [Shortcut Sheet], [\`Ctrl+/\` (\`Cmd+/\`)], [Browse the complete workbench shortcut list],
+)
+
+= References
+
+Literature citations reference \`references.bib\` using standard citation keys @knuth1984.
+
+#bibliography("references.bib")
+`,
+      "references.bib": `@article{knuth1984,
+  author  = {Donald E. Knuth},
+  title   = {Literate Programming},
+  journal = {The Computer Journal},
+  volume  = {27},
+  number  = {2},
+  pages   = {97--111},
+  year    = {1984},
+}
+
+@article{turing1936,
+  author  = {Alan M. Turing},
+  title   = {On Computable Numbers, with an Application to the {Entscheidungsproblem}},
+  journal = {Proceedings of the London Mathematical Society},
+  volume  = {42},
+  pages   = {230--265},
+  year    = {1936},
+}
+
+@article{shannon1948,
+  author  = {Claude E. Shannon},
+  title   = {A Mathematical Theory of Communication},
+  journal = {Bell System Technical Journal},
+  volume  = {27},
+  number  = {3},
+  pages   = {379--423},
+  year    = {1948},
+}
+`,
+      "notes.md": `# Welcome Notes & Quick Tips
+
+This markdown document accompanies your onboarding project and illustrates Manang's multi-format capabilities.
+
+## What You Can Try in Manang
+
+1. **Typst Editing:** Open \`main.typ\` to explore real-time mathematical typesetting and instant compilation.
+2. **SyncTeX Bidirectional Navigation:** In the preview panel, double-click or \`Ctrl\`-click (\`Cmd\`-click) text to jump directly to its source line. Press \`Ctrl+Alt+J\` (\`Cmd+Alt+J\`) to return to preview.
+3. **Command Palette:** Press \`Ctrl+K\` (\`Cmd+K\`) to fuzzy search commands, recent files, and export options.
+4. **Diagrams:** Inspect \`figures/flow.mmd\` to see how Mermaid flowcharts compile to standalone SVGs.
+5. **Settings Scoping:** Open Settings (\`Ctrl+,\`) to toggle between global User preferences and project-specific configuration.
+6. **Version Snapshots:** Git-backed versioning and local snapshots ("Save a version") are coming soon in a later beta release.
+`,
+      "sections/tour.typ": `= Key Capabilities
+
+Manang combines sub-millisecond responsive editing with deterministic compilation across scientific document formats.
+
+== Multi-Engine Core
+Whether authoring in Typst for instant feedback, LaTeX for legacy journal submissions, or Markdown for rapid technical notes, your documents remain human-readable UTF-8 files on disk.
+
+== Vector Figures & Text Diagrams
+Embed hand-drawn or precise vector figures (\`.svg\` and \`.figure.json\`) and text diagrams (such as Mermaid flowcharts in \`figures/flow.mmd\`) directly into your documents without rasterization artifacts.
+
+== Citation Integrity
+Cite literature using standard BibTeX keys (@knuth1984, @turing1936). The References panel indexes your bibliography files in memory, provides instant search, and formats references in APA and IEEE styles.
+`,
+      "figures/welcome.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 180" width="540" height="180">
+  <defs>
+    <style>
+      .bg { fill: #141416; }
+      .box { fill: #1c1c1f; stroke: #3d3d42; stroke-width: 1; }
+      .box-active { fill: #1c1c1f; stroke: #c6f135; stroke-width: 1.5; }
+      .text-title { font-family: 'DM Sans', -apple-system, sans-serif; font-size: 13px; font-weight: 500; fill: #faf9f7; }
+      .text-sub { font-family: 'DM Mono', monospace; font-size: 10px; fill: #9e9ea0; }
+      .text-accent { font-family: 'DM Mono', monospace; font-size: 10px; fill: #c6f135; }
+      .arrow { stroke: #b3d17a; stroke-width: 1.5; fill: none; stroke-linecap: round; }
+      .arrow-head { fill: #b3d17a; }
+    </style>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="540" height="180" class="bg" />
+
+  <!-- Node 1: Text Editor -->
+  <g transform="translate(20, 30)">
+    <rect width="140" height="120" class="box" />
+    <text x="16" y="32" class="text-title">Text Editor</text>
+    <text x="16" y="54" class="text-sub">CodeMirror 6</text>
+    <text x="16" y="74" class="text-sub">Rope Buffer</text>
+    <text x="16" y="94" class="text-sub">Tree-sitter AST</text>
+    <rect x="16" y="108" width="6" height="6" fill="#c6f135" />
+    <text x="28" y="114" class="text-accent">&lt; 8ms latency</text>
+  </g>
+
+  <!-- Arrow 1 -> 2 -->
+  <path d="M 160 90 L 190 90" class="arrow" />
+  <polygon points="190,87 198,90 190,93" class="arrow-head" />
+
+  <!-- Node 2: Kernel Engine -->
+  <g transform="translate(200, 30)">
+    <rect width="140" height="120" class="box-active" />
+    <text x="16" y="32" class="text-title">Kernel Engine</text>
+    <text x="16" y="54" class="text-sub">Typst Compiler</text>
+    <text x="16" y="74" class="text-sub">LaTeX Tectonic</text>
+    <text x="16" y="94" class="text-sub">Rayon Pool</text>
+    <rect x="16" y="108" width="6" height="6" fill="#b3d17a" />
+    <text x="28" y="114" class="text-sub" fill="#b3d17a">zero-copy IPC</text>
+  </g>
+
+  <!-- Arrow 2 -> 3 -->
+  <path d="M 340 90 L 370 90" class="arrow" />
+  <polygon points="370,87 378,90 370,93" class="arrow-head" />
+
+  <!-- Node 3: Live Preview -->
+  <g transform="translate(380, 30)">
+    <rect width="140" height="120" class="box" />
+    <text x="16" y="32" class="text-title">Live Preview</text>
+    <text x="16" y="54" class="text-sub">Streaming SVG</text>
+    <text x="16" y="74" class="text-sub">PDF Text Layer</text>
+    <text x="16" y="94" class="text-sub">SyncTeX Jumps</text>
+    <rect x="16" y="108" width="6" height="6" fill="#c6f135" />
+    <text x="28" y="114" class="text-accent">60 / 120 FPS</text>
+  </g>
+</svg>
+`,
+      "figures/flow.mmd": `flowchart LR
+    A["Write (Typst / LaTeX / MD)"] --> B["Instant Live Preview"]
+    B --> C["Export PDF / SVG"]
+`,
+    },
+  },
 ];
 
 export function listMockTemplates(): TemplateSummary[] {

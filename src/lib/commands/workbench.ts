@@ -16,6 +16,7 @@ import { convertToTypst } from "$lib/state/convert";
 import { copyIncludeLine, diagramIsActive, newDiagram } from "$lib/state/diagramFiles";
 import { documents } from "$lib/state/documents.svelte";
 import { figures } from "$lib/state/figures.svelte";
+import { helpPage } from "$lib/state/helpPage.svelte";
 import { home } from "$lib/state/home.svelte";
 import { layout } from "$lib/state/layout.svelte";
 import { live } from "$lib/state/live.svelte";
@@ -873,11 +874,19 @@ export function workbenchCommands(
       run: () => actions.toggleHome(),
     },
     {
+      id: "help.user-guide",
+      title: "User guide",
+      group: "Workbench",
+      keywords: "help docs manual documentation guide",
+      menu: at("help", "1_reference", 0),
+      run: () => helpPage.show("index"),
+    },
+    {
       id: "help.shortcuts",
       title: "Keyboard shortcuts",
       group: "Workbench",
       keywords: "keys cheat sheet reference bindings",
-      menu: at("help", "1_reference", 0),
+      menu: at("help", "1_reference", 1),
       run: () => shortcutOverlay.toggle(),
     },
     {
@@ -885,7 +894,7 @@ export function workbenchCommands(
       title: "Change keyboard shortcuts",
       group: "Workbench",
       keywords: "keybindings rebind customise",
-      menu: at("help", "1_reference", 1),
+      menu: at("help", "1_reference", 2),
       run: () => settingsPage.show("keyboard"),
     },
     {

@@ -20,6 +20,7 @@ const REQUIRED_TEMPLATES: &[&str] = &[
     "poster-typst",
     "lab-report-latex",
     "notes-markdown",
+    "welcome",
 ];
 
 #[test]
@@ -114,7 +115,7 @@ fn every_template_manifest_is_valid() {
 #[test]
 fn built_in_templates_match_required_list() {
     let list = list_templates();
-    assert_eq!(list.len(), 11);
+    assert_eq!(list.len(), 12);
 
     for required in REQUIRED_TEMPLATES {
         let found = list.iter().find(|t| t.id == *required);

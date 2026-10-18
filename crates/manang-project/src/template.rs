@@ -28,6 +28,35 @@ pub struct Template {
 
 const TEMPLATES_RAW: &[(&str, &[(&str, &str)])] = &[
     (
+        include_str!("../../../templates/welcome/template.toml"),
+        &[
+            (
+                "main.typ",
+                include_str!("../../../templates/welcome/main.typ"),
+            ),
+            (
+                "references.bib",
+                include_str!("../../../templates/welcome/references.bib"),
+            ),
+            (
+                "notes.md",
+                include_str!("../../../templates/welcome/notes.md"),
+            ),
+            (
+                "sections/tour.typ",
+                include_str!("../../../templates/welcome/sections/tour.typ"),
+            ),
+            (
+                "figures/welcome.svg",
+                include_str!("../../../templates/welcome/figures/welcome.svg"),
+            ),
+            (
+                "figures/flow.mmd",
+                include_str!("../../../templates/welcome/figures/flow.mmd"),
+            ),
+        ],
+    ),
+    (
         include_str!("../../../templates/blank-typst/template.toml"),
         &[(
             "main.typ",
