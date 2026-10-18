@@ -66,7 +66,10 @@ fn value_of(block: &ContentBlock) -> Option<Value> {
 pub fn brief(name: &str, input: &Value) -> String {
     let text = |key: &str| input.get(key).and_then(Value::as_str);
     let mut out = String::new();
-    if let Some(v) = text("path").or_else(|| text("query")).or_else(|| text("dir")) {
+    if let Some(v) = text("path")
+        .or_else(|| text("query"))
+        .or_else(|| text("dir"))
+    {
         let v: String = v.chars().take(60).collect();
         out.push_str(&v);
     }
@@ -115,7 +118,11 @@ pub fn clear_old_results(messages: &[Message], keep: usize) -> (Vec<Message>, us
                 }
                 BlockKind::ToolResult => {
                     let id = value_of(block)
-                        .and_then(|v| v.get("tool_use_id").and_then(Value::as_str).map(str::to_owned))
+                        .and_then(|v| {
+                            v.get("tool_use_id")
+                                .and_then(Value::as_str)
+                                .map(str::to_owned)
+                        })
                         .unwrap_or_default();
                     slots.push(Slot {
                         message: mi,
@@ -152,7 +159,10 @@ pub fn clear_old_results(messages: &[Message], keep: usize) -> (Vec<Message>, us
         if current == text || current.chars().count() <= text.chars().count() {
             continue;
         }
-        let is_error = value.get("is_error").and_then(Value::as_bool).unwrap_or(false);
+        let is_error = value
+            .get("is_error")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let Ok(block) = ContentBlock::tool_result(&slot.id, &text, is_error) else {
             continue;
         };
@@ -214,7 +224,11 @@ pub fn render_for_summary(messages: &[Message], cap: usize) -> String {
                 }
                 BlockKind::ToolUse => {
                     if let Some(call) = block.as_tool_use() {
-                        out.push_str(&format!("Tool call: {} {}\n", call.name, brief(&call.name, &call.input)));
+                        out.push_str(&format!(
+                            "Tool call: {} {}\n",
+                            call.name,
+                            brief(&call.name, &call.input)
+                        ));
                         names.insert(call.id, call.name);
                     }
                 }
@@ -223,7 +237,13 @@ pub fn render_for_summary(messages: &[Message], cap: usize) -> String {
                         let id = v.get("tool_use_id").and_then(Value::as_str).unwrap_or("");
                         let name = names.get(id).map_or("tool", String::as_str);
                         let content = v.get("content").and_then(Value::as_str).unwrap_or("");
-                        let first: String = content.lines().next().unwrap_or("").chars().take(200).collect();
+                        let first: String = content
+                            .lines()
+                            .next()
+                            .unwrap_or("")
+                            .chars()
+                            .take(200)
+                            .collect();
                         out.push_str(&format!("Result of {name}: {first}\n"));
                     }
                 }
@@ -258,12 +278,10 @@ pub fn rebuild_after_summary(
     };
     let mut out = Vec::with_capacity(recent.len() + 2);
     out.push(Message::user_text(&first).ok()?);
-    out.push(
-        Message::new(
-            Role::Assistant,
-            vec![ContentBlock::text("Understood. I have the summary.").ok()?],
-        ),
-    );
+    out.push(Message::new(
+        Role::Assistant,
+        vec![ContentBlock::text("Understood. I have the summary.").ok()?],
+    ));
     out.extend_from_slice(recent);
     Some(out)
 }
@@ -291,7 +309,11 @@ mod tests {
         let mut v = vec![Message::user_text("start").expect("msg")];
         for i in 0..reads {
             let id = format!("t{i}");
-            v.push(call(&id, "read_file", json!({"path": format!("f{i}.typ"), "from_line": 1, "to_line": 400})));
+            v.push(call(
+                &id,
+                "read_file",
+                json!({"path": format!("f{i}.typ"), "from_line": 1, "to_line": 400}),
+            ));
             v.push(result(&id, &"line of text\n".repeat(200)));
         }
         v
@@ -315,7 +337,10 @@ mod tests {
         assert_eq!(cleared, 3);
         assert_eq!(view.len(), messages.len());
         let first = view[2].content[0].raw_json();
-        assert!(first.contains("[read_file f0.typ 1-400: cleared]"), "{first}");
+        assert!(
+            first.contains("[read_file f0.typ 1-400: cleared]"),
+            "{first}"
+        );
         let last = view[view.len() - 1].content[0].raw_json();
         assert!(last.contains("line of text"));
         // A second pass finds nothing more to clear.
@@ -337,7 +362,10 @@ mod tests {
     fn the_summary_split_keeps_the_last_two_author_turns() {
         let mut messages = convo(2);
         messages.push(Message::user_text("second").expect("msg"));
-        messages.push(Message::new(Role::Assistant, vec![ContentBlock::text("ok").expect("b")]));
+        messages.push(Message::new(
+            Role::Assistant,
+            vec![ContentBlock::text("ok").expect("b")],
+        ));
         messages.push(Message::user_text("third").expect("msg"));
         let (old, recent) = split_for_summary(&messages, KEEP_TURNS).expect("split");
         assert_eq!(old.len(), 5);

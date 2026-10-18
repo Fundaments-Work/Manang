@@ -176,17 +176,17 @@ impl CitationsPlugin {
         };
         let result = verify_entry(&local, &*self.http_client);
         let describe = |e: &Entry| {
-            let who = e
-                .authors
-                .first()
-                .map_or_else(|| "unknown authors".to_owned(), |a| {
-                    a.family.clone().unwrap_or_else(|| a.name.clone())
-                });
+            let who = e.authors.first().map_or_else(
+                || "unknown authors".to_owned(),
+                |a| a.family.clone().unwrap_or_else(|| a.name.clone()),
+            );
             format!(
                 "\"{}\" ({who}{}){}",
                 e.title.as_deref().unwrap_or("untitled"),
                 e.year.map_or(String::new(), |y| format!(", {y}")),
-                e.doi.as_ref().map_or(String::new(), |d| format!(", DOI {d}"))
+                e.doi
+                    .as_ref()
+                    .map_or(String::new(), |d| format!(", DOI {d}"))
             )
         };
         let answer = match result.status {
