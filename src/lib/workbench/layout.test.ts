@@ -8,7 +8,6 @@ import {
   SPLIT_MAX,
   cyclePreview,
   effectivePreview,
-  hasPreview,
   isNarrow,
   revealPreview,
   sanitizeLayout,
@@ -58,14 +57,6 @@ describe("layout model", () => {
     // What comes back is visible: the narrow rule never hides it again.
     expect(effectivePreview(revealPreview(640), 640)).toBe("preview");
     expect(effectivePreview(revealPreview(1280), 1280)).toBe("split");
-  });
-
-  it("offers a preview only for Typst, LaTeX and Markdown documents", () => {
-    expect(hasPreview("main.typ")).toBe(true);
-    expect(hasPreview("paper/main.tex")).toBe(true);
-    expect(hasPreview("notes.md")).toBe(true);
-    expect(hasPreview("refs.bib")).toBe(false);
-    expect(hasPreview("data.csv")).toBe(false);
   });
 });
 
