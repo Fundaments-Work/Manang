@@ -167,6 +167,15 @@ pnpm run verify:ui
 - **Memory Safety:** When compiling Rust on resource-constrained development machines, use:
   ```bash
   export CARGO_BUILD_JOBS=4
-  export CARGO_TARGET_DIR=/home/sapiens/Development/Manang/target
+  export CARGO_TARGET_DIR=<repo>/target
   ```
   Target specific crates (`-p <crate>`), avoid full workspace rebuilds, and never leave detached dev servers or fuzzer processes running.
+
+---
+
+## Conduct, security and licence
+
+- **Conduct:** everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+- **Security:** report vulnerabilities privately as described in [SECURITY.md](SECURITY.md), never in a public issue or pull request.
+- **Licence:** Manang is [MIT-licensed](LICENSE). By submitting a contribution you confirm you have the right to do so and agree that it is licensed under the same terms. New dependencies must pass `cargo deny` (licences and bans, see `deny.toml`) and, for the app binary, the banned-library check in AGENTS.md 7.4.
+- **Help:** see [SUPPORT.md](SUPPORT.md) for where to ask questions.
