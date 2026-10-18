@@ -132,7 +132,7 @@
   <span aria-hidden="true">/ {pages}</span>
 </label>
 
-<span class="mx-1 h-4 w-px shrink-0 bg-line @max-[230px]:hidden" aria-hidden="true"
+<span class="mx-1 h-4 w-px shrink-0 bg-line @max-[360px]:hidden" aria-hidden="true"
 ></span>
 
 <button
@@ -175,12 +175,12 @@
   <Icon name="plus" size={14} />
 </button>
 
-<span class="mx-1 h-4 w-px shrink-0 bg-line @max-[260px]:hidden" aria-hidden="true"
+<span class="mx-1 h-4 w-px shrink-0 bg-line @max-[360px]:hidden" aria-hidden="true"
 ></span>
 
 <button
   type="button"
-  class="mng-icon-btn @max-[260px]:hidden"
+  class="mng-icon-btn @max-[280px]:hidden"
   aria-label="Find in PDF"
   title="Find in PDF ({keys.find})"
   aria-pressed={view.findOpen}

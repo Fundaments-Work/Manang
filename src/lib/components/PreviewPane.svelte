@@ -16,6 +16,7 @@
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { detectPlatform } from "$lib/util/keyboard";
+  import { zoomKey } from "$lib/workbench/pdf/zoom";
   import { countLabel } from "$lib/workbench/problems";
 
   /**
@@ -71,6 +72,24 @@
     build.failure !== null ? build.failure.title : countLabel(build.counts),
   );
 
+  /**
+   * Zoom keys and Ctrl+F also work from the preview header (after using the
+   * zoom menu, the page box...), not only with the pages focused; the viewer
+   * handles them itself when they come from the pages.
+   */
+  function onPreviewKey(event: KeyboardEvent): void {
+    if (!paged || !shown || event.defaultPrevented) return;
+    const zoom = zoomKey(event);
+    if (zoom === "in") preview.view.zoomIn();
+    else if (zoom === "out") preview.view.zoomOut();
+    else if (zoom === "fit") preview.view.fit();
+    else if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key === "f")
+      preview.view.openFind();
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   /** The Dark pages toggle writes the setting, so it sticks. */
   async function setDarkPages(dark: boolean): Promise<void> {
     preview.view.darkPages = dark;
@@ -79,7 +98,12 @@
   }
 </script>
 
-<section class="flex h-full min-h-0 min-w-0 flex-col bg-bg" aria-label="Preview">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<section
+  class="flex h-full min-h-0 min-w-0 flex-col bg-bg"
+  aria-label="Preview"
+  onkeydown={onPreviewKey}
+>
   <div
     class="@container flex h-9 shrink-0 items-center gap-0.5 border-b border-line px-2"
     role="toolbar"
@@ -137,7 +161,7 @@
 
     <button
       type="button"
-      class="mng-icon-btn @max-[180px]:hidden"
+      class="mng-icon-btn @max-[340px]:hidden"
       aria-label="Refresh preview"
       title={isDiagram ? "Draw the diagram again" : "Compile now"}
       disabled={!isDiagram &&
