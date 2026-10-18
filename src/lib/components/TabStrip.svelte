@@ -1,7 +1,17 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
 
+  import { keymap } from "$lib/commands/keymap.svelte";
+  import { formatShortcut } from "$lib/commands/shortcut";
+  import SharePopover from "$lib/components/SharePopover.svelte";
   import ContextMenu, { type MenuItem } from "$lib/components/ui/ContextMenu.svelte";
+  import { SLOT_COLOURS, SLOT_COUNT, SLOT_STROKES } from "$lib/editor/live/remote";
+  import { live } from "$lib/state/live.svelte";
+  import { share } from "$lib/state/share.svelte";
+  import { sharePopover } from "$lib/state/sharePopover.svelte";
+  import { workspace } from "$lib/state/workspace.svelte";
+  import { initials } from "$lib/workbench/live";
+  import { detectPlatform } from "$lib/util/keyboard";
   import Icon from "$lib/components/ui/Icon.svelte";
   import {
     closeOtherTabs,
@@ -28,6 +38,23 @@
   let menu = $state<{ x: number; y: number; tab: Tab } | null>(null);
   let dragId = $state<string | null>(null);
   let dropAt = $state<number | null>(null);
+  let shareButton: HTMLButtonElement | undefined = $state();
+  const platform = detectPlatform();
+  // The one lime action of the view, only while updates are waiting (and not
+  // while the Versions view, which has its own lime Get updates, is showing).
+  const pending = $derived(
+    share.updatesWaiting && layout.sideView !== "source-control",
+  );
+  const shareKey = $derived.by(() => {
+    const first = keymap.shortcuts("share.open")[0];
+    return first === undefined ? "" : formatShortcut(first, platform);
+  });
+
+  // Presence: at most four marks, the rest folded into "+N" (names in its tooltip).
+  const maxMarks = $derived(layout.narrow ? 2 : 4);
+  const shownPeers = $derived(live.peers.slice(0, maxMarks));
+  const hiddenPeers = $derived(live.peers.slice(maxMarks));
+  const slotOf = (n: number): number => ((n % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
 
   const labels = $derived(tabLabels(tabs.tabs));
   const activeTypst = $derived(
@@ -42,6 +69,13 @@
       layout.effectivePreview === "editor" &&
       build.previewTarget() !== null,
   );
+
+  // Learn whether updates are waiting, so the Share button can say so.
+  $effect(() => {
+    const root = workspace.project?.root ?? "";
+    untrack(() => void share.load(root));
+  });
+  onMount(() => share.listen());
 
   // Keep the active tab visible when it changes, including after a keyboard jump.
   $effect(() => {
@@ -276,6 +310,41 @@
     {/each}
   </div>
 
+  {#if live.active}
+    <ul
+      class="m-0 flex shrink-0 list-none items-center gap-1 border-l border-line px-2"
+      aria-label="People in this session"
+      data-testid="presence"
+    >
+      {#each shownPeers as peer (peer.peer)}
+        {@const n = slotOf(peer.slot)}
+        <li
+          class="inline-flex h-5 min-w-5 items-center justify-center border border-line px-0.5 text-[10px] text-text"
+          style="border-bottom: 3px {SLOT_STROKES[n]} {SLOT_COLOURS[n]}"
+          title={peer.name}
+          aria-label={peer.name}
+          data-peer={peer.peer}
+        >
+          {initials(peer.name)}
+        </li>
+      {/each}
+      {#if hiddenPeers.length > 0}
+        <li
+          class="inline-flex h-5 min-w-5 items-center justify-center border border-line px-0.5 text-[10px] text-text-60"
+          title={hiddenPeers.map((p) => p.name).join(", ")}
+          aria-label="{hiddenPeers.length} more: {hiddenPeers
+            .map((p) => p.name)
+            .join(', ')}"
+        >
+          +{hiddenPeers.length}
+        </li>
+      {/if}
+      {#if live.peers.length === 0}
+        <li class="px-1 text-[11px] text-text-muted max-md:hidden">Only you</li>
+      {/if}
+    </ul>
+  {/if}
+
   {#if activeTypst && tabs.active !== undefined}
     {@const slidesOn = tabs.active.view === "slides"}
     <div
@@ -325,6 +394,30 @@
       </button>
     </div>
   {/if}
+
+  <div class="relative flex shrink-0 items-center border-l border-line px-1">
+    <button
+      bind:this={shareButton}
+      type="button"
+      class="mng-lime-hover inset-focus inline-flex h-7 items-center gap-1.5 px-2 text-xs {sharePopover.open
+        ? 'bg-surface-hi text-text'
+        : pending
+          ? 'border border-accent bg-accent text-accent-ink'
+          : 'text-text-60'}"
+      data-pending={pending}
+      data-testid="share-button"
+      aria-haspopup="true"
+      aria-expanded={sharePopover.open}
+      aria-controls="share-popover"
+      aria-keyshortcuts={shareKey}
+      title={shareKey === "" ? "Share" : `Share (${shareKey})`}
+      onclick={() => sharePopover.toggle()}
+    >
+      <Icon name="share" size={14} />
+      <span class="max-md:sr-only">Share</span>
+    </button>
+    <SharePopover anchor={shareButton} />
+  </div>
 </div>
 
 {#if menu !== null}

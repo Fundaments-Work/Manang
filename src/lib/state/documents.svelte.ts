@@ -20,7 +20,7 @@ import {
 } from "@codemirror/state";
 import { isolateHistory, undo } from "@codemirror/commands";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
-import { SvelteMap } from "svelte/reactivity";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
 import {
   applyKernelText,
@@ -549,7 +549,12 @@ export class DocumentsStore {
   /* Saving                                                                   */
   /* ----------------------------------------------------------------------- */
 
-  async save(path: string): Promise<boolean> {
+  /**
+   * Write a document. `silent` is for saving by itself (autosave): a file that
+   * changed on disk is marked in the bar above the editor instead of opening
+   * the question dialog, and a failure is reported once, not on every attempt.
+   */
+  async save(path: string, options: { silent?: boolean } = {}): Promise<boolean> {
     const session = this.#sessions.get(path);
     if (session === undefined) return true;
     const doc = session.doc;
@@ -559,12 +564,39 @@ export class DocumentsStore {
         doc.toString(),
         session.diskHash ?? "absent",
       );
+      this.#silentFailures.delete(path);
       return this.#saved(session, doc, written.hash);
     } catch (error) {
-      if (isConflictError(error)) return this.#resolveConflict(session, doc);
-      notice.error(`Could not save ${path}: ${errorMessage(error)}`);
+      if (isConflictError(error)) {
+        return options.silent === true
+          ? this.#markConflict(session)
+          : this.#resolveConflict(session, doc);
+      }
+      if (options.silent !== true || !this.#silentFailures.has(path)) {
+        notice.error(`Could not save ${path}: ${errorMessage(error)}`);
+      }
+      if (options.silent === true) this.#silentFailures.add(path);
       return false;
     }
+  }
+
+  readonly #silentFailures = new SvelteSet<string>();
+
+  /** Autosave met a file that changed on disk: show the bar, ask nothing, write nothing. */
+  async #markConflict(session: DocSession): Promise<false> {
+    try {
+      const disk = await workspace.readText(session.path);
+      if (session.external === null) {
+        session.markChanged(disk);
+        notice.error(
+          `${basename(session.path)} changed on disk. Your unsaved edits are kept: choose how to continue in the bar above the editor.`,
+        );
+      }
+    } catch (error) {
+      if (isNotFoundError(error)) session.markDeleted();
+      else reportError("documents.autosave", error);
+    }
+    return false;
   }
 
   #saved(session: DocSession, doc: Text, hash: string): true {
@@ -649,24 +681,45 @@ export class DocumentsStore {
   async externalChanges(changes: readonly ProjectChange[]): Promise<void> {
     for (const change of changes) {
       if (change.kind === "removed") {
-        this.#vanished(change.path);
+        await this.#vanished(change.path);
         continue;
       }
       if (change.kind === "renamed" && change.from !== undefined) {
-        this.#vanished(change.from);
+        await this.#vanished(change.from);
       }
       await this.syncWithDisk(change.path);
     }
   }
 
-  /** A file or folder left its path: the documents under it lost their file. */
-  #vanished(path: string): void {
-    for (const [key, session] of this.#sessions) {
+  /**
+   * A file or folder left its path: the documents under it lost their file.
+   * Saving replaces a file, which the watcher can report as a removal before
+   * the new one is visible, so a file counts as gone only when two reads a
+   * moment apart both find nothing.
+   */
+  async #vanished(path: string): Promise<void> {
+    for (const [key, session] of [...this.#sessions]) {
       if (key !== path && !key.startsWith(`${path}/`)) continue;
       if (session.external === "deleted") continue;
+      if (!(await this.#reallyGone(key))) continue;
+      if (this.#sessions.get(key) !== session) continue;
       session.markDeleted();
       notice.error(`${basename(key)} was deleted or moved on disk.`);
     }
+  }
+
+  /** True when the file is absent now and still absent a moment later. */
+  async #reallyGone(path: string): Promise<boolean> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await workspace.readText(path);
+        return false;
+      } catch (error) {
+        if (!isNotFoundError(error)) return false;
+      }
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return true;
   }
 
   /** Compare one open document with its file and act on the difference. */
@@ -719,7 +772,8 @@ export class DocumentsStore {
         }
         break;
       case "deleted":
-        if (session.external !== "deleted") {
+        if (session.external !== "deleted" && (await this.#reallyGone(path))) {
+          if (this.#sessions.get(path) !== session) break;
           session.markDeleted();
           notice.error(`${basename(path)} was deleted or moved on disk.`);
         }
