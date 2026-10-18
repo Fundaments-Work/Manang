@@ -237,6 +237,7 @@ pub const CORE_DEFAULTS: &[(&str, &str, &str)] = &[
     ("file.new", "Mod+N", ""),
     ("file.save", "Mod+S", ""),
     ("file.save-all", "Mod+Shift+S", ""),
+    ("file.save-version", "Mod+Alt+S", ""),
     ("doc.compile", "Mod+Shift+B", ""),
     ("doc.export-pdf", "Mod+E", ""),
     ("doc.format", "Alt+Shift+F", ""),

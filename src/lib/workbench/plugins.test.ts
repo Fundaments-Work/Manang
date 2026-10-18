@@ -33,7 +33,7 @@ describe("plugins panel model", () => {
       "citations.search",
       "citations.verify",
     ]);
-    expect(groups.find((g) => g.name === "git")?.commands.length).toBe(15);
+    expect(groups.find((g) => g.name === "git")?.commands.length).toBe(22);
     expect(groups.find((g) => g.name === "settings")?.commands.length).toBe(14);
     expect(groups.find((g) => g.name === "writing")?.commands.length).toBe(14);
     expect(groups.find((g) => g.name === "search")?.commands.map((c) => c.id)).toEqual([
@@ -52,10 +52,10 @@ describe("plugins panel model", () => {
       "typst.render",
       "typst.svg-to-pdf",
     ]);
-    // citations 7, diagram 4, editor 8, figure 10, git 15, latex 4, markdown 4,
+    // citations 7, diagram 4, editor 8, figure 10, git 22, latex 4, markdown 4,
     // project 22, search 6, settings 14, typst 6, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      7 + 4 + 8 + 10 + 15 + 4 + 4 + 22 + 6 + 14 + 6 + 14,
+      7 + 4 + 8 + 10 + 22 + 4 + 4 + 22 + 6 + 14 + 6 + 14,
     );
   });
 
