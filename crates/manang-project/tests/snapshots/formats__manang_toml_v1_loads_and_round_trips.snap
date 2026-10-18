@@ -1,0 +1,31 @@
+---
+source: crates/manang-project/tests/formats.rs
+expression: config
+---
+ProjectConfig {
+    version: None,
+    project: ProjectSection {
+        engine: Typst,
+        name: Some(
+            "Thesis",
+        ),
+        main: Some(
+            "src/thesis.typ",
+        ),
+    },
+    template: Some(
+        TemplateBinding {
+            id: "ieee-conference",
+            version: Some(
+                "1.2.0",
+            ),
+        },
+    ),
+    bibliography: Bibliography {
+        paths: [
+            "refs/a.bib",
+            "b.yml",
+        ],
+    },
+    read_only_newer: None,
+}

@@ -1,0 +1,11 @@
+[project]
+engine = "typst"
+name = "Thesis"
+main = "src/thesis.typ"
+
+[template]
+id = "ieee-conference"
+version = "1.2.0"
+
+[bibliography]
+paths = ["refs/a.bib", "b.yml"]

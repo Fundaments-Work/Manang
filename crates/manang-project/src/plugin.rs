@@ -114,6 +114,11 @@ impl ProjectPlugin {
             }
         };
         let name = display_name(&root, &config);
+        if let Some(found) = config.read_only_newer {
+            warnings.push(format!(
+                "manang.toml was written by a newer Manang (format version {found}); it is read as far as this version understands and never rewritten"
+            ));
+        }
         if let Err(e) = self.recent.touch(root.path(), &name) {
             warnings.push(format!("could not update the recent projects list: {e}"));
         }
@@ -133,7 +138,13 @@ impl ProjectPlugin {
         }
 
         let page = tree::list(&root, &TreeQuery::default())?;
-        let summary = summarize(&root, &config, &name, &warnings, &page)?;
+        let mut summary = summarize(&root, &config, &name, &warnings, &page)?;
+        // Damaged or newer list files, set aside or read-only: say so once.
+        let mut format_warnings = self.recent.take_warnings();
+        format_warnings.extend(self.registry.take_warnings());
+        if let Value::Object(map) = &mut summary {
+            map.insert("format_warnings".to_owned(), json!(format_warnings));
+        }
         // Replacing the state drops the previous watcher.
         *self.state.write() = Some(Arc::new(Open {
             root,

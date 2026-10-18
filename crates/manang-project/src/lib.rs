@@ -17,6 +17,7 @@ pub mod registry;
 pub mod scaffold;
 pub mod template;
 pub mod tree;
+mod versioned;
 pub mod watch;
 
 pub use config::{
