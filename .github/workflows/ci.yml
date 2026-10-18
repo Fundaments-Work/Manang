@@ -70,7 +70,7 @@ jobs:
           toolchain: "1.96.0"
       - name: No bundled C libraries in the app binary (AGENTS.md 7.4)
         run: |
-          if cargo tree -p manang --locked | grep -iE "tectonic|harfbuzz|freetype-sys|icu4c|openssl|aws-lc"; then
+          if cargo tree -p manang --locked | grep -iE "tectonic|harfbuzz|freetype-sys|icu4c|openssl-sys|openssl v|aws-lc"; then
             echo "::error::a banned crate is in the app's dependency tree"
             exit 1
           fi
