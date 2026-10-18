@@ -4,34 +4,88 @@ use std::collections::HashMap;
 
 /// Parse a CSL-JSON source string into normalized entries.
 pub fn parse_csl_json(source: &str, file: Option<&str>) -> Result<Vec<Entry>, ParseDiagnostic> {
-    let parsed: Value = serde_json::from_str(source).map_err(|err| ParseDiagnostic {
-        file: file.map(|s| s.to_string()),
-        line: err.line(),
-        column: err.column(),
-        message: format!("CSL-JSON parse error: {err}"),
-    })?;
+    let (entries, diags) = parse_csl_json_resilient(source, file);
+    if entries.is_empty()
+        && let Some(err) = diags.into_iter().next()
+    {
+        return Err(err);
+    }
+    Ok(entries)
+}
+
+/// Parse a CSL-JSON source string with error recovery, returning partial results and diagnostics.
+pub fn parse_csl_json_resilient(
+    source: &str,
+    file: Option<&str>,
+) -> (Vec<Entry>, Vec<ParseDiagnostic>) {
+    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
+    let trimmed = source.trim();
+    if trimmed.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+
+    let parsed: Value = match serde_json::from_str(source) {
+        Ok(v) => v,
+        Err(err) => {
+            return (
+                Vec::new(),
+                vec![ParseDiagnostic {
+                    file: file.map(|s| s.to_string()),
+                    line: err.line(),
+                    column: err.column(),
+                    message: format!("CSL-JSON parse error: {err}"),
+                }],
+            );
+        }
+    };
 
     let items = match parsed {
         Value::Array(arr) => arr,
         Value::Object(_) => vec![parsed],
         _ => {
-            return Err(ParseDiagnostic {
-                file: file.map(|s| s.to_string()),
-                line: 1,
-                column: 1,
-                message: "CSL-JSON root must be a JSON object or array of objects".to_string(),
-            });
+            return (
+                Vec::new(),
+                vec![ParseDiagnostic {
+                    file: file.map(|s| s.to_string()),
+                    line: 1,
+                    column: 1,
+                    message: "CSL-JSON root must be a JSON object or array of objects".to_string(),
+                }],
+            );
         }
     };
 
     let mut entries = Vec::new();
+    let mut diagnostics = Vec::new();
+    let mut seen_keys = HashMap::new();
+
     for (idx, item) in items.iter().enumerate() {
         if let Some(entry) = csl_item_to_entry(item, idx) {
+            if let Some(&first_idx) = seen_keys.get(&entry.key) {
+                diagnostics.push(ParseDiagnostic {
+                    file: file.map(|s| s.to_string()),
+                    line: 1,
+                    column: 1,
+                    message: format!(
+                        "duplicate citation key `{}` (first seen at entry index {first_idx})",
+                        entry.key
+                    ),
+                });
+            } else {
+                seen_keys.insert(entry.key.clone(), idx);
+            }
             entries.push(entry);
+        } else {
+            diagnostics.push(ParseDiagnostic {
+                file: file.map(|s| s.to_string()),
+                line: 1,
+                column: 1,
+                message: format!("item at index {idx} is not a valid CSL-JSON object"),
+            });
         }
     }
 
-    Ok(entries)
+    (entries, diagnostics)
 }
 
 fn csl_item_to_entry(item: &Value, idx: usize) -> Option<Entry> {

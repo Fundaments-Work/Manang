@@ -99,8 +99,16 @@ pub fn markdown_to_typst_with(
     let mut list_depth: usize = 0;
     let mut ordered_stack: Vec<bool> = Vec::new();
 
+    let mut last_offset = 0;
+    let mut current_line = line_offset + 1;
+
     for (event, range) in parser {
-        let line = line_offset + source[..range.start].chars().filter(|&c| c == '\n').count() + 1;
+        if range.start > last_offset {
+            let slice = &source.as_bytes()[last_offset..range.start.min(source.len())];
+            current_line += slice.iter().filter(|&&b| b == b'\n').count();
+            last_offset = range.start;
+        }
+        let line = current_line;
 
         if let Some(fence) = diagram.as_mut() {
             match event {

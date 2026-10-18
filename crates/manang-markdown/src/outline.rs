@@ -58,9 +58,9 @@ pub fn extract_outline(source: &str) -> Vec<Heading> {
             }
             Event::End(TagEnd::Heading(_)) => {
                 if in_heading {
-                    let line = source[..current_offset]
-                        .chars()
-                        .filter(|&c| c == '\n')
+                    let line = source.as_bytes()[..current_offset]
+                        .iter()
+                        .filter(|&&b| b == b'\n')
                         .count()
                         + 1;
                     headings.push(Heading {
