@@ -49,6 +49,7 @@ import {
   rectangularSelection,
 } from "@codemirror/view";
 
+import { aiDiff } from "./aiDiff";
 import { problemMarkers } from "./gutter";
 import { writing } from "./writing";
 import { languageFor, loadLanguageExtension, type EditorLanguage } from "./languages";
@@ -159,6 +160,7 @@ export function createEditorState(text: string, extra: Extension): EditorState {
       manangTheme,
       problemMarkers(),
       writing(),
+      aiDiff(),
       extra,
     ],
   });

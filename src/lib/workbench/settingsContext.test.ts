@@ -58,6 +58,7 @@ describe("contextual settings", () => {
       "editor",
       "preview",
       "compile",
+      "agent",
       "citations",
       "writing",
     ]);
@@ -78,6 +79,7 @@ describe("contextual settings", () => {
       "preview",
       "compile",
       "files",
+      "agent",
       "citations",
       "figure",
       "latex",
@@ -116,6 +118,7 @@ describe("contextual settings", () => {
       "editor",
       "preview",
       "compile",
+      "agent",
       "citations",
       "writing",
     ]);
