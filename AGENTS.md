@@ -2,8 +2,8 @@
 
 **Project:** Manang (The High-Performance Scientific Authoring & Illustration Suite)  
 **Target:** AI Coding Agents (Antigravity, Cursor, Claude Code, Copilot, etc.) and Human Engineers  
-**Version:** 1.2.0  
-**Last Updated:** 2026-10-17
+**Version:** 1.3.0  
+**Last Updated:** 2026-10-18
 
 ---
 
@@ -147,6 +147,14 @@ If any step fails, diagnose and fix the root cause. **Never disable lints or use
   - `test(crdt): add property test for concurrent cross-client edits`
   - `docs(agents): update testing harness specifications`
 * Every commit must be self-contained and leave the test suite passing.
+* Stage deliberately: check `git status` (and `git diff --cached --stat`) before each commit. Files staged earlier, such as deletions from `git rm`, go into the next commit whatever you name on the command line.
+
+### 6.1. Commit continuously, on a branch
+
+* **Never commit to `main` directly.** Every piece of work happens on its own branch: `feat/<topic>`, `fix/<topic>`, `perf/<topic>`, `docs/<topic>` for people and the lead agent; `agent/<topic>` for delegated agents; `antigravity/<topic>` for Antigravity.
+* **Commit early and often** on that branch: one commit per coherent step (a crate's API, its tests, its UI), each passing the quick gates for what it touches (`-p <crate>` checks and tests, `pnpm run check`, the relevant vitest files). Do not sit on hours of uncommitted work; an interrupted agent should leave a branch someone can pick up.
+* An agent's report names its branch and lists its commits. It does not push or merge.
+* The lead merges with `git merge --no-ff <branch>` after the full gates (section 5) pass on the merge result, then pushes `main` and removes the branch and its worktree (7.2).
 
 ---
 
@@ -172,6 +180,18 @@ Agents (and humans) work in parallel on one machine with limited CPU and disk. A
 * Merge conflicts in `Cargo.toml` (workspace `members`) and `Cargo.lock` are expected: keep the union of members and let Cargo regenerate the lockfile.
 
 ### 7.3. Builds and disk
+
+**Where things live (this machine: a 256 GB NVMe SSD and a 1 TB spinning HDD).** Random small-file I/O (cargo `target/`, `node_modules`, Vite, rust-analyzer, git) on the HDD made dev startup take minutes. So:
+
+| Put it on the SSD | Put it on the HDD |
+| :--- | :--- |
+| The working repo: `~/Development/Manang` (the only checkout; GitHub is the backup) | Release/packaging builds (below) |
+| Its `target/` (dev builds) and `node_modules/` | `CARGO_TARGET_DIR=/run/media/sapiens/Development/manang-release-target pnpm app:build` |
+| Agent worktrees (`.claude/worktrees`, sharing the repo's `target/`) | Archives: old build caches, fuzz corpora, screenshots, datasets |
+| Toolchains and caches (`~/.cargo`, `~/.rustup`, the pnpm store) | Projects not being worked on this month |
+
+* Keep the SSD lean: the shared `target/` is the only large thing; run `cargo clean -p <crate>` for crates you stopped touching, and never create a second full `target/` per worktree.
+* There is one checkout, on the SSD. Do not clone the repo onto the HDD to work there; push branches to GitHub for backup.
 * Do **not** run several heavy Rust builds at once (`cargo test --workspace`, `tauri dev`, and another agent's build share one `target/` lock and one CPU). Prefer `-p <crate>` while developing and the full workspace gate once at the end.
 * Long commands run in the background with a timeout; wait for completion notifications instead of polling or sleeping.
 * **Concurrency budget on one machine:** at most one heavy Rust build at a time (a workspace test run, `tauri dev`, or an agent's crate build), and at most one build-heavy agent alongside another tool such as Antigravity. Never run a full-workspace gate while agents are building. Watch `uptime`: a load average far above the core count means stop and serialise.
