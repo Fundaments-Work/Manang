@@ -1,0 +1,49 @@
+# cargo-deny policy: licences must be permissive (AGENTS.md: MIT-compatible),
+# and the crates that would link C system libraries into the app are banned.
+# Checked in CI (.github/workflows/ci.yml, job "supply-chain").
+
+[graph]
+# Default features only: the optional Tectonic engine (feature `engine` of
+# manang-latex, built as a separate sidecar) is not part of the app binary.
+all-features = false
+
+[licenses]
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unlicense",
+    "CC0-1.0",
+    "0BSD",
+    "BSL-1.0",
+    "CDLA-Permissive-2.0",
+    # File-level copyleft, compatible with an MIT application as a dependency
+    # (11 crates at the time of writing). Review any new MPL crate.
+    "MPL-2.0",
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+deny = [
+    # No statically bundled system libraries in the app binary (AGENTS.md 7.4).
+    { name = "openssl" },
+    { name = "openssl-sys" },
+    { name = "native-tls" },
+    { name = "aws-lc-sys" },
+    { name = "aws-lc-rs" },
+    { name = "harfbuzz_rs" },
+    { name = "freetype-sys" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
