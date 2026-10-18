@@ -17,7 +17,7 @@ expression: "Registry::with_core().schema()"
       "id": "appearance.coach-lines",
       "type": "bool",
       "default": true,
-      "description": "Show onboarding coach lines on the editor, preview, and figures.",
+      "description": "Show onboarding coach lines on the editor and preview.",
       "scope": "user",
       "requires-restart": false,
       "owner": "core",
