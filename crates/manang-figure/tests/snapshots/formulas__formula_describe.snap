@@ -1,0 +1,31 @@
+---
+source: crates/manang-figure/tests/formulas.rs
+expression: "json!({ \"other\": described[\"other\"], \"summary\": described[\"summary\"] })"
+---
+{
+  "other": [
+    {
+      "id": "n1",
+      "kind": "math",
+      "x": 40.0,
+      "y": 40.0,
+      "width": 167.3,
+      "height": 74.3,
+      "source": "integral_0^1 x^2 dif x = 1/3",
+      "language": "typst",
+      "size": 28.0
+    },
+    {
+      "id": "n2",
+      "kind": "math",
+      "x": 40.0,
+      "y": 160.0,
+      "width": 178.5,
+      "height": 74.8,
+      "source": "\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}",
+      "language": "latex",
+      "size": 24.0
+    }
+  ],
+  "summary": "1 shape, 1 connection, 0 frames, 2 other elements. Connections: \"integral_0^1 x^2 dif x = 1/3\" (n1) -> \"Result\" (n3) labelled \"gives\"."
+}

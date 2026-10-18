@@ -50,13 +50,14 @@ describe("plugins panel model", () => {
       "typst.export-pdf",
       "typst.jump-from-click",
       "typst.jump-from-cursor",
+      "typst.math-to-svg",
       "typst.render",
       "typst.svg-to-pdf",
     ]);
-    // citations 7, diagram 5, editor 8, figure 20, git 22, latex 4, markdown 4,
-    // plugins 10, project 27, search 6, settings 14, typst 6, writing 14.
+    // citations 7, diagram 5, editor 8, figure 21, git 22, latex 4, markdown 4,
+    // plugins 10, project 27, search 6, settings 14, typst 7, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      7 + 5 + 8 + 20 + 22 + 4 + 4 + 10 + 27 + 6 + 14 + 6 + 14,
+      7 + 5 + 8 + 21 + 22 + 4 + 4 + 10 + 27 + 6 + 14 + 7 + 14,
     );
   });
 

@@ -1,0 +1,15 @@
+---
+source: crates/manang-figure/tests/formulas.rs
+expression: svg
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">
+  <rect x="0" y="0" width="640" height="360" fill="#ffffff"/>
+  <g id="n1">
+    <path d="M40 40L200 40L200 120L40 120Z" fill="#102030" fill-opacity="0.4" stroke="#c6f135" stroke-width="1.5"/>
+    <text fill="#ff8800" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="120" y="85.6">Custom</tspan></text>
+  </g>
+  <g id="n2">
+    <path d="M335 20L410 75L335 130L260 75Z" fill="#f4f3f0" stroke="#1c1c1c" stroke-width="1.5"/>
+    <text fill="#1c1c1c" font-family="DM Sans, sans-serif" font-size="16" text-anchor="middle"><tspan x="335" y="70.6">Validate</tspan><tspan x="335" y="90.6">input</tspan></text>
+  </g>
+</svg>

@@ -78,6 +78,41 @@ export function wrap(
   return lines;
 }
 
+/** How far a label's font may shrink before a long word is broken. */
+export const MIN_LABEL_SCALE = 0.7;
+
+/**
+ * Fits `label` in a `maxWidth` by `maxHeight` text box (`fit_label`): breaks
+ * only at spaces and newlines; a word wider than the box shrinks the font
+ * (down to `MIN_LABEL_SCALE`, in 0.5 steps) before it is broken between
+ * characters; too many lines shrink it the same way.
+ */
+export function fitLabel(
+  label: string,
+  maxWidth: number,
+  maxHeight: number,
+  size: number,
+  family: FontFamily,
+): { lines: string[]; size: number } {
+  const floor = size * MIN_LABEL_SCALE;
+  let fitted = size;
+  const widest = label
+    .split(/[ \n]/)
+    .filter((w) => w !== "")
+    .reduce((w, word) => Math.max(w, measure(word, size, family)), 0);
+  if (maxWidth > 0 && widest > maxWidth) {
+    fitted = Math.floor(((size * maxWidth) / widest) * 2) / 2;
+    fitted = Math.min(Math.max(fitted, floor), size);
+  }
+  for (;;) {
+    const lines = wrap(label, maxWidth, fitted, family);
+    if (lines.length * fitted * LINE_HEIGHT <= maxHeight || fitted <= floor) {
+      return { lines, size: fitted };
+    }
+    fitted = Math.max(fitted - 0.5, floor);
+  }
+}
+
 /** Width and height of `text` without a width limit. */
 export function naturalSize(
   text: string,

@@ -33,7 +33,7 @@
   {
     "name": "figure_add_shapes",
     "title": "Add shapes to a figure",
-    "description": "Add one or more shapes (boxes, diamonds, ellipses, text, frames or Mermaid blocks) with labels. Positions are optional: shapes without x/y are placed in a row next to the existing content, and figure_layout can arrange them afterwards. Sizes are optional and fit the label. Returns the new ids, in order. One undo step.",
+    "description": "Add one or more shapes (boxes, diamonds, ellipses, text, frames, Mermaid blocks or formulas) with labels. Positions are optional: shapes without x/y are placed in a row next to the existing content, and figure_layout can arrange them afterwards. Sizes are optional and fit the label. Returns the new ids, in order. One undo step.",
     "command": "figure.add-shapes",
     "input_schema": {
       "type": "object",
@@ -47,7 +47,7 @@
           "items": {
             "type": "object",
             "properties": {
-              "kind": { "enum": ["rect", "diamond", "ellipse", "text", "frame", "mermaid"], "description": "Default rect. Use diamond for decisions, ellipse for start/end, text for free text, frame for a titled region." },
+              "kind": { "enum": ["rect", "diamond", "ellipse", "text", "frame", "mermaid", "formula"], "description": "Default rect. Use diamond for decisions, ellipse for start/end, text for free text, frame for a titled region, formula for typeset mathematics (give `source`)." },
               "label": { "type": "string", "description": "Text inside the shape (the text itself for kind text, the title for a frame)." },
               "x": { "type": "number" },
               "y": { "type": "number" },
@@ -55,7 +55,9 @@
               "height": { "type": "number", "minimum": 1 },
               "preset": { "$ref": "#/$defs/preset" },
               "style": { "$ref": "#/$defs/style" },
-              "source": { "type": "string", "description": "Mermaid text, for kind mermaid." }
+              "source": { "type": "string", "description": "Mermaid text for kind mermaid; the formula for kind formula (math only, no $ signs: Typst `integral_0^1 x^2 dif x` or LaTeX `\\int_0^1 x^2\\,dx`)." },
+              "language": { "enum": ["typst", "latex"], "description": "Formula language, default typst." },
+              "size": { "type": "number", "minimum": 1, "maximum": 1024, "description": "Formula font size in scene units, default 24." }
             },
             "additionalProperties": false
           }
@@ -76,7 +78,9 @@
             "roughness": { "type": "integer", "minimum": 0, "maximum": 2, "description": "0 clean, 1 hand-drawn, 2 very hand-drawn." },
             "fontFamily": { "enum": ["sans", "mono"] },
             "fontSize": { "type": "number", "minimum": 1, "maximum": 512 },
-            "textAlign": { "enum": ["left", "center", "right"] }
+            "textAlign": { "enum": ["left", "center", "right"] },
+            "labelColor": { "type": "string", "description": "Label and text colour: a palette token or #rrggbb. Default: the stroke colour." },
+            "fillOpacity": { "type": "number", "minimum": 0, "maximum": 100, "description": "Fill opacity on top of the overall opacity." }
           },
           "additionalProperties": false
         }
@@ -141,7 +145,7 @@
   {
     "name": "figure_update",
     "title": "Change shapes",
-    "description": "Change shapes or arrows addressed by id or label: label, kind (rect, diamond, ellipse, text, frame), position, size, rotation, style, routing or Mermaid source. Arrows bound to a moved shape follow. One undo step for the whole call.",
+    "description": "Change shapes or arrows addressed by id or label: label, kind (rect, diamond, ellipse, text, frame), position, size, rotation, style, routing, Mermaid source or a formula's source, language and size. Arrows bound to a moved shape follow. One undo step for the whole call.",
     "command": "figure.update",
     "input_schema": {
       "type": "object",
@@ -163,7 +167,9 @@
               "height": { "type": "number", "minimum": 0 },
               "angle": { "type": "number" },
               "routing": { "enum": ["straight", "elbow", "curved"] },
-              "source": { "type": "string" },
+              "source": { "type": "string", "description": "Mermaid text, or a formula's source." },
+              "language": { "enum": ["typst", "latex"], "description": "Formula language." },
+              "size": { "type": "number", "minimum": 1, "maximum": 1024, "description": "Formula font size." },
               "style": { "type": "object" }
             },
             "required": ["ref"],

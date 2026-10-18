@@ -18,7 +18,7 @@ import {
   polygon,
   rectPoints,
 } from "./sketch";
-import { wrap } from "./text";
+import { fitLabel, wrap } from "./text";
 import {
   createScene,
   type ConnectorNode,
@@ -146,6 +146,16 @@ describe("Rust parity", () => {
   it("wraps", () => {
     for (const w of fixture.wraps) {
       expect(wrap(w.text, w.width, w.size, w.family as FontFamily)).toEqual(w.lines);
+    }
+  });
+
+  it("fits labels", () => {
+    for (const f of fixture.fits) {
+      const got = fitLabel(f.text, f.width, f.height, f.size, f.family as FontFamily);
+      expect({ lines: got.lines, size: got.size }, f.text).toEqual({
+        lines: f.lines,
+        size: f.fitted,
+      });
     }
   });
 
