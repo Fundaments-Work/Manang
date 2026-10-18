@@ -3,90 +3,90 @@ source: crates/manang-git/tests/diff_snapshots.rs
 expression: v
 ---
 {
+  "staged": false,
   "files": [
     {
-      "additions": 0,
+      "path": "a.txt",
+      "status": "deleted",
       "binary": false,
+      "too_large": false,
+      "additions": 0,
       "deletions": 1,
       "hunks": [
         {
+          "old_start": 1,
+          "old_lines": 1,
+          "new_start": 0,
+          "new_lines": 0,
           "header": "@@ -1,1 +0,0 @@",
           "lines": [
             {
               "kind": "remove",
-              "new_line": null,
-              "new_offset": null,
-              "no_newline": false,
+              "text": "one",
               "old_line": 1,
+              "new_line": null,
               "old_offset": 0,
-              "text": "one"
+              "new_offset": null,
+              "no_newline": false
             }
-          ],
-          "new_lines": 0,
-          "new_start": 0,
-          "old_lines": 1,
-          "old_start": 1
+          ]
         }
-      ],
-      "path": "a.txt",
-      "status": "deleted",
-      "too_large": false
+      ]
     },
     {
-      "additions": 1,
+      "path": "crlf.txt",
+      "status": "modified",
       "binary": false,
+      "too_large": false,
+      "additions": 1,
       "deletions": 1,
       "hunks": [
         {
+          "old_start": 1,
+          "old_lines": 3,
+          "new_start": 1,
+          "new_lines": 3,
           "header": "@@ -1,3 +1,3 @@",
           "lines": [
             {
               "kind": "context",
-              "new_line": 1,
-              "new_offset": 0,
-              "no_newline": false,
+              "text": "a",
               "old_line": 1,
+              "new_line": 1,
               "old_offset": 0,
-              "text": "a"
+              "new_offset": 0,
+              "no_newline": false
             },
             {
               "kind": "remove",
-              "new_line": null,
-              "new_offset": null,
-              "no_newline": false,
+              "text": "b",
               "old_line": 2,
+              "new_line": null,
               "old_offset": 3,
-              "text": "b"
+              "new_offset": null,
+              "no_newline": false
             },
             {
               "kind": "add",
-              "new_line": 2,
-              "new_offset": 3,
-              "no_newline": false,
+              "text": "B",
               "old_line": null,
+              "new_line": 2,
               "old_offset": null,
-              "text": "B"
+              "new_offset": 3,
+              "no_newline": false
             },
             {
               "kind": "context",
-              "new_line": 3,
-              "new_offset": 6,
-              "no_newline": false,
+              "text": "c",
               "old_line": 3,
+              "new_line": 3,
               "old_offset": 6,
-              "text": "c"
+              "new_offset": 6,
+              "no_newline": false
             }
-          ],
-          "new_lines": 3,
-          "new_start": 1,
-          "old_lines": 3,
-          "old_start": 1
+          ]
         }
-      ],
-      "path": "crlf.txt",
-      "status": "modified",
-      "too_large": false
+      ]
     }
-  ],
-  "staged": false
+  ]
 }
