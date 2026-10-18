@@ -6373,6 +6373,11 @@ async function main() {
       `document.querySelector('[data-testid="share-button"]')?.dataset.pending === "false"`,
     );
     await shareFlag(null);
+    // The refusal above was provoked on purpose and logged by reportError.
+    for (let i = page.errors.length - 1; i >= 0; i -= 1) {
+      if (/sharing versions|getting updates/.test(page.errors[i]))
+        page.errors.splice(i, 1);
+    }
 
     /* ------------------------------------------------------------------ */
     section("Persistence");
