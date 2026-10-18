@@ -1,9 +1,15 @@
+<script lang="ts" module>
+  /** Ids for focused-surface registrations: one per viewer instance. */
+  let surfaceCount = 0;
+</script>
+
 <script lang="ts">
   import { onDestroy, tick, untrack } from "svelte";
   import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 
   import PdfFindBar from "$lib/components/PdfFindBar.svelte";
   import PdfOutline from "$lib/components/PdfOutline.svelte";
+  import { focusedSurface } from "$lib/commands/surface";
   import { reportError } from "$lib/kernel";
   import { openExternal } from "$lib/kernel/native";
   import type { PdfView } from "$lib/state/pdfView.svelte";
@@ -809,7 +815,31 @@
     event.stopPropagation();
   }
 
+  // Edit > Copy, Select all and Find go to this viewer while it has the focus.
+  // One id per instance: a preview and a PDF tab can both be open.
+  const stopSurface = focusedSurface.register({
+    id: `pdf-${++surfaceCount}`,
+    contains: (element) => root?.contains(element as Node) ?? false,
+    available: () => root !== undefined,
+    actions: {
+      copy: async () => {
+        const text = selectedText(document.getSelection());
+        if (text === "") return;
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (error) {
+          reportError("the selected PDF text could not be copied", error);
+        }
+      },
+      selectAll: () => {
+        if (column !== undefined) document.getSelection()?.selectAllChildren(column);
+      },
+      find: () => view.openFind(),
+    },
+  });
+
   onDestroy(() => {
+    stopSurface();
     loadToken += 1;
     findRun += 1;
     cancelAll();
