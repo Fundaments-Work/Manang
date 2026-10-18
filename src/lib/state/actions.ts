@@ -10,7 +10,7 @@
 import { paletteAction } from "$lib/commands/allowlist";
 import { recheckWriting, runFormat } from "$lib/editor/writing";
 import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
-import { kernel, errorMessage, inTauri } from "$lib/kernel";
+import { kernel, errorMessage, inTauri, reportError } from "$lib/kernel";
 import type { KernelEvent } from "$lib/kernel";
 import { writingApi } from "$lib/kernel/api";
 import type { Engine, ProjectChanged } from "$lib/kernel/types";
@@ -34,13 +34,14 @@ import {
   uniqueName,
 } from "$lib/workbench/paths";
 import { citationFor, type BibEntry } from "$lib/workbench/references";
-import { sanitizeSession, toSession } from "$lib/workbench/tabs";
+import { kindForPath, sanitizeSession, toSession } from "$lib/workbench/tabs";
 
 import { build } from "./build.svelte";
 import { dialog } from "./dialog.svelte";
 import { documents } from "./documents.svelte";
 import { blankFigure } from "./figure.svelte";
 import { figures } from "./figures.svelte";
+import { viewers } from "./viewers.svelte";
 import { home } from "./home.svelte";
 import { layout } from "./layout.svelte";
 import { notice } from "./notice.svelte";
@@ -72,14 +73,17 @@ export async function openFile(
     );
     return false;
   }
-  const isFigure = fileKind(path) === "figure";
-  const ok = isFigure
-    ? (await figures.open(path)) !== null
-    : (await documents.open(path)) !== null;
+  const kind = kindForPath(path);
+  const ok =
+    kind === "figure"
+      ? (await figures.open(path)) !== null
+      : kind === "viewer"
+        ? await viewers.open(path)
+        : (await documents.open(path)) !== null;
   if (!ok) return false;
-  tabs.open(path, isFigure ? undefined : options.view);
+  tabs.open(path, kind === "document" ? options.view : undefined);
   if (layout.narrow) layout.closeSide();
-  if (options.focus !== false && !isFigure) documents.focusEditor();
+  if (options.focus !== false && kind === "document") documents.focusEditor();
   return true;
 }
 
@@ -123,6 +127,7 @@ export async function closeTab(id: string): Promise<boolean> {
   tabs.close(id);
   documents.drop(tab.path);
   figures.drop(tab.path);
+  viewers.drop(tab.path);
   return true;
 }
 
@@ -166,6 +171,7 @@ function resetEditors(): void {
   for (const tab of tabs.tabs) {
     documents.drop(tab.path);
     figures.drop(tab.path);
+    viewers.drop(tab.path);
   }
   tabs.clear();
   preview.release();
@@ -317,10 +323,22 @@ export async function newFigure(): Promise<void> {
     notice.error("Open a folder before creating a figure.");
     return;
   }
-  await workspace.loadDir("figures").catch(() => undefined);
-  const name = uniqueName("untitled.figure.json", workspace.namesIn("figures"));
-  const problem = await createFile("figures", name);
-  if (problem !== null) notice.error(`Could not create the figure: ${problem}`);
+  await workspace.loadDir("figures");
+  const path = join(
+    "figures",
+    uniqueName("untitled.figure.json", workspace.namesIn("figures")),
+  );
+  try {
+    // The figure plugin writes the scene and its SVG and keeps it open.
+    await figures.create(path);
+  } catch (error) {
+    reportError("actions.newFigure", error);
+    notice.error(`Could not create the figure: ${errorMessage(error)}`);
+    return;
+  }
+  await workspace.loadDir("figures");
+  await workspace.reveal(path);
+  await openFile(path);
 }
 
 export async function newFileHere(): Promise<void> {
@@ -353,6 +371,7 @@ export async function renameEntry(
   tabs.renamed(path, to);
   documents.renamed(path, to);
   figures.renamed(path, to);
+  viewers.renamed(path, to);
   return null;
 }
 
@@ -371,6 +390,7 @@ export async function trashEntry(path: string): Promise<void> {
   tabs.removed(path);
   documents.dropUnder(path);
   figures.dropUnder(path);
+  viewers.dropUnder(path);
   notice.show(
     lost.length > 0
       ? `Moved ${basename(path)} to the trash. Unsaved changes in it were discarded.`
@@ -519,6 +539,9 @@ export async function runKernelCommand(id: string): Promise<void> {
     case "export-pdf":
       exportPdf();
       return;
+    case "new-figure":
+      await newFigure();
+      return;
     case null:
       break;
   }
@@ -551,6 +574,7 @@ function onKernelEvent(event: KernelEvent): void {
     .filter((c) => c.kind === "modified" || c.kind === "created")
     .map((c) => c.path);
   void documents.externalChange(touched);
+  void viewers.externalChange(touched);
   build.noteDiskChange();
 }
 

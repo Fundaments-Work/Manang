@@ -6,6 +6,9 @@
  * in a Rust plugin touches this file and `types.ts`, nothing else.
  */
 
+import type { FigureEdit } from "$lib/figure/edit";
+import type { FigureNode, FigureScene } from "$lib/figure/scene";
+
 import type { Kernel } from "./client";
 import type {
   ChangeState,
@@ -39,6 +42,8 @@ export function projectApi(kernel: Kernel) {
     close: () => kernel.run<null>("project.close"),
     tree: (query: TreeQuery = {}) => kernel.run<TreePage>("project.tree", { ...query }),
     readFile: (path: string) => kernel.run<string>("project.read-file", { path }),
+    /** Any project file as raw bytes (images, PDFs); never base64. */
+    readBytes: (path: string) => kernel.runBinary("project.read-bytes", { path }),
     writeFile: (path: string, content: string) =>
       kernel.run<{ bytes: number }>("project.write-file", { path, content }),
     rename: (from: string, to: string) =>
@@ -857,3 +862,69 @@ export interface MarkdownHeading {
   readonly line: number;
   readonly offset: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Figures (`figure.*`). Paths are absolute: the plugin is not project-bound. */
+/* -------------------------------------------------------------------------- */
+
+/** One operation, exactly as `figure.apply` takes it (`op` tag, kebab-case). */
+export type FigureOp = FigureEdit | { readonly op: "undo" } | { readonly op: "redo" };
+
+export interface FigureApplyResult {
+  readonly revision: number;
+  /** False when the op changed nothing (undo with no history, a zero move). */
+  readonly applied: boolean;
+  readonly can_undo: boolean;
+  readonly can_redo: boolean;
+}
+
+export interface FigureSaved {
+  /** Absolute paths of the written scene and its SVG. */
+  readonly json: string;
+  readonly svg: string;
+  readonly revision: number;
+}
+
+export interface FigureInfo {
+  readonly id: number;
+  readonly path: string | null;
+  readonly nodes: number;
+  readonly revision: number;
+  readonly dirty: boolean;
+}
+
+export interface FigureHit {
+  readonly hit: boolean;
+  readonly node_id: string | null;
+  readonly node: FigureNode | null;
+}
+
+export function figureApi(kernel: Kernel) {
+  return {
+    /** A new figure written to `path` straight away (scene and SVG). */
+    createAt: (path: string, width?: number, height?: number) =>
+      kernel.run<{ id: number } & Omit<FigureSaved, "revision">>("figure.create", {
+        path,
+        ...(width === undefined ? {} : { width }),
+        ...(height === undefined ? {} : { height }),
+      }),
+    open: (path: string) => kernel.run<{ id: number }>("figure.open", { path }),
+    get: (id: number) => kernel.run<FigureScene>("figure.get", { id }),
+    apply: (id: number, op: FigureOp) =>
+      kernel.run<FigureApplyResult>("figure.apply", { id, op }),
+    /** Writes `<name>.figure.json` and `<name>.svg`; `path` follows a rename. */
+    save: (id: number, path?: string) =>
+      kernel.run<FigureSaved>("figure.save", {
+        id,
+        ...(path === undefined ? {} : { path }),
+      }),
+    close: (id: number) => kernel.run<{ closed: boolean }>("figure.close", { id }),
+    list: () => kernel.run<FigureInfo[]>("figure.list"),
+    hitTest: (id: number, x: number, y: number) =>
+      kernel.run<FigureHit>("figure.hit-test", { id, x, y }),
+    /** The open figure as SVG bytes. */
+    exportSvg: (id: number) => kernel.runBinary("figure.export-svg", { id }),
+  };
+}
+
+export type FigureApi = ReturnType<typeof figureApi>;

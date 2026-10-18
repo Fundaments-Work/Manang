@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { renderSceneSvg } from "$lib/kernel/mockFigure";
 
-import { svgPathFor, translatedScene } from "./edit";
+import { applyEdit, embedLine, svgPathFor, translatedScene } from "./edit";
 import { createScene, type FigureScene } from "./scene";
 
 function sceneWith(): FigureScene {
@@ -101,5 +101,76 @@ describe("browser SVG stand-in", () => {
       expect(svg).toContain(tag);
     }
     expect(svg).toContain("a&lt;b&amp;c");
+  });
+});
+
+describe("applyEdit", () => {
+  it("applies each plugin operation without touching the input", () => {
+    const scene = sceneWith();
+    const added = applyEdit(scene, {
+      op: "add-node",
+      node: {
+        kind: "math",
+        id: "n9",
+        x: 1,
+        y: 2,
+        tex: "y",
+        size: 10,
+        color: "#b3d17a",
+      },
+    });
+    expect(added.nodes.length).toBe(scene.nodes.length + 1);
+    expect(scene.nodes.some((n) => n.id === "n9")).toBe(false);
+
+    const moved = applyEdit(scene, { op: "translate", id: "n1", dx: 3, dy: 4 });
+    expect(moved.nodes[0]).toMatchObject({ x: 13, y: 14, width: 20 });
+
+    const renamed = applyEdit(scene, {
+      op: "update-node",
+      node: {
+        kind: "math",
+        id: "n4",
+        x: 5,
+        y: 5,
+        tex: "E = mc^2",
+        size: 20,
+        color: "#b3d17a",
+      },
+    });
+    expect(renamed.nodes.find((n) => n.id === "n4")).toMatchObject({ tex: "E = mc^2" });
+
+    const removed = applyEdit(scene, { op: "remove-node", id: "n2" });
+    expect(removed.nodes.map((n) => n.id)).not.toContain("n2");
+    expect(applyEdit(scene, { op: "clear" }).nodes).toEqual([]);
+  });
+
+  it("refuses what the plugin refuses", () => {
+    const scene = sceneWith();
+    const first = scene.nodes[0];
+    if (first === undefined) throw new Error("scene has nodes");
+    expect(() => applyEdit(scene, { op: "add-node", node: first })).toThrow(
+      /already exists/,
+    );
+    expect(() => applyEdit(scene, { op: "remove-node", id: "zz" })).toThrow(
+      /not found/,
+    );
+    expect(() => applyEdit(scene, { op: "translate", id: "zz", dx: 1, dy: 1 })).toThrow(
+      /not found/,
+    );
+    expect(() =>
+      applyEdit(scene, { op: "translate", id: "n1", dx: Number.NaN, dy: 1 }),
+    ).toThrow(/finite/);
+  });
+});
+
+describe("embedLine", () => {
+  it("names the SVG in each engine's syntax", () => {
+    expect(embedLine("figures/a.svg", "typst")).toBe(
+      '#figure(image("figures/a.svg", width: 80%))',
+    );
+    expect(embedLine("figures/a.svg", "latex")).toBe(
+      "\\includesvg[width=0.8\\linewidth]{figures/a.svg}",
+    );
+    expect(embedLine("figures/a.svg", "markdown")).toBe("![](figures/a.svg)");
   });
 });
