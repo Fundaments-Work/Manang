@@ -1,0 +1,8 @@
+Hello world! こんにちは世界！
+你好，这是一段混合了中文字符的文本。
+مرحبا بك في اختبار الكتابة باللغة العربية مع الاتجاه من اليمين إلى اليسار.
+नमस्ते दुनिया! यह देवनागरी लिपि में लिखा गया पाठ है।
+Zero-width​space‌and‍joiner﻿here.
+Combining marks: é (e + combining acute accent), क + ् + ष = क्ष (Devanagari conjunct).
+한국어 텍스트도 여기에 있습니다.
+Mixed inline: The word مرحبا inside English text with 你好 and नमस्ते.
