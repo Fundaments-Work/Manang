@@ -103,7 +103,7 @@ export class SettingsState {
     if (
       before !== undefined &&
       JSON.stringify(before.value) !== JSON.stringify(entry.value) &&
-      this.defs.find((d) => d.id === id)?.requires_restart === true
+      this.defs.find((d) => d.id === id)?.["requires-restart"] === true
     )
       this.restartPending = true;
   }

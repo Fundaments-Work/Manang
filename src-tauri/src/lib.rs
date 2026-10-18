@@ -10,6 +10,7 @@ use std::sync::Arc;
 use manang_editor::{Editor, EditorPlugin};
 use manang_kernel::{BufferService, CommandInfo, EventBus, Kernel, KernelError, Payload};
 use manang_plugins::{ManagerConfig, PluginEvent, PluginManager, WatchHandle, WatchOptions};
+use manang_settings::PluginSettingsSync;
 use manang_wasm_host::{HostServices, ProjectRoot};
 use serde::Serialize;
 use serde_json::Value;
@@ -60,6 +61,8 @@ enum BootError {
     Manifest(#[from] manang_kernel::ManifestError),
     #[error(transparent)]
     Plugins(#[from] manang_plugins::ManagerError),
+    #[error(transparent)]
+    Settings(#[from] manang_settings::SyncError),
 }
 
 /// Directories the shell hands to plugins.
@@ -169,6 +172,21 @@ struct Shell {
     // Held so the manager and its file watcher live as long as the app.
     _plugins: Arc<PluginManager>,
     _watch: Option<WatchHandle>,
+    // Held so plugin settings keep reaching `<plugin>.configure` (ADR 0007).
+    _settings: Arc<PluginSettingsSync>,
+}
+
+/// Register every plugin's manifest settings, push their values, and keep
+/// pushing changes. A plugin that rejects its settings keeps its defaults;
+/// that must not stop the app.
+fn start_settings_sync(
+    kernel: &Arc<Kernel>,
+    events: &EventBus,
+) -> Result<Arc<PluginSettingsSync>, BootError> {
+    let sync = Arc::new(PluginSettingsSync::new(kernel));
+    let _ = sync.sync_all();
+    sync.start(events)?;
+    Ok(sync)
 }
 
 /// Load third-party WASM plugins and keep them hot-reloaded.
@@ -178,6 +196,7 @@ fn start_plugins(
     events: &EventBus,
     editor: &Arc<Editor>,
     project_root: &Arc<ProjectRoot>,
+    settings: &Arc<PluginSettingsSync>,
 ) -> Result<(Arc<PluginManager>, Option<WatchHandle>), BootError> {
     let mut config = ManagerConfig::new(manang_plugins::plugins_dir_in(dirs.config));
     config.cache_dir = Some(manang_plugins::cache_dir_in(dirs.cache));
@@ -190,11 +209,17 @@ fn start_plugins(
     // Scanning compiles components, which is CPU-bound: never on the UI thread.
     let scanner = Arc::clone(&manager);
     let bus = events.clone();
+    let scan_settings = Arc::clone(settings);
     std::thread::Builder::new()
         .name("manang-plugin-scan".to_owned())
         .spawn(move || {
             let topic = match scanner.scan() {
-                Ok(_) => "plugins.scanned",
+                Ok(report) => {
+                    for info in &report.loaded {
+                        let _ = scan_settings.sync_plugin(&info.name);
+                    }
+                    "plugins.scanned"
+                }
                 Err(_) => "plugins.scan-failed",
             };
             bus.emit(topic, Payload::Empty);
@@ -205,8 +230,12 @@ fn start_plugins(
         })?;
 
     let bus = events.clone();
+    let watch_settings = Arc::clone(settings);
     let watch = manager
         .watch(WatchOptions::default(), move |event| {
+            if let PluginEvent::Loaded(info) | PluginEvent::Reloaded(info) = &event {
+                let _ = watch_settings.sync_plugin(&info.name);
+            }
             let (topic, name) = match &event {
                 PluginEvent::Loaded(info) => ("plugins.loaded", info.name.clone()),
                 PluginEvent::Reloaded(info) => ("plugins.reloaded", info.name.clone()),
@@ -224,6 +253,45 @@ fn start_plugins(
 #[tauri::command]
 fn kernel_commands(shell: State<'_, Shell>) -> Vec<CommandInfo> {
     shell.kernel.commands()
+}
+
+/// One registered plugin, for the Plugins view.
+#[derive(Debug, Serialize)]
+pub struct PluginSummary {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub tier: manang_kernel::Tier,
+    pub permissions: manang_kernel::manifest::Permissions,
+    /// How many commands it contributes.
+    pub commands: usize,
+    /// Ids of the settings it declares.
+    pub settings: Vec<String>,
+}
+
+fn plugin_summaries(kernel: &Kernel) -> Vec<PluginSummary> {
+    let mut out: Vec<PluginSummary> = kernel
+        .plugin_names()
+        .into_iter()
+        .filter_map(|name| kernel.manifest(&name))
+        .map(|m| PluginSummary {
+            name: m.plugin.name,
+            version: m.plugin.version.to_string(),
+            description: m.plugin.description,
+            tier: m.plugin.tier,
+            permissions: m.permissions,
+            commands: m.contributes.commands.len(),
+            settings: m.contributes.settings.into_iter().map(|s| s.id).collect(),
+        })
+        .collect();
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
+/// Every registered plugin (first-party and WASM), sorted by name.
+#[tauri::command]
+fn kernel_plugins(shell: State<'_, Shell>) -> Vec<PluginSummary> {
+    plugin_summaries(&shell.kernel)
 }
 
 /// Tell the plugins that work on "the open project" which folder it is.
@@ -422,19 +490,23 @@ pub fn run() -> Result<(), tauri::Error> {
             let editor = Arc::new(Editor::new());
             let kernel = Arc::new(build_kernel(&dirs, &events, &editor)?);
             let project_root = Arc::new(ProjectRoot::new(None));
-            let (plugins, watch) = start_plugins(&kernel, &dirs, &events, &editor, &project_root)?;
+            let settings = start_settings_sync(&kernel, &events)?;
+            let (plugins, watch) =
+                start_plugins(&kernel, &dirs, &events, &editor, &project_root, &settings)?;
             forward_events(app.handle().clone(), &events)?;
             app.manage(Shell {
                 kernel,
                 project_root,
                 _plugins: plugins,
                 _watch: watch,
+                _settings: settings,
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
             kernel_commands,
+            kernel_plugins,
             kernel_invoke,
             kernel_invoke_binary,
             save_binary_artifact
@@ -513,5 +585,53 @@ mod tests {
             .invoke("editor.new", Payload::Empty)
             .expect("editor.new runs");
         assert_eq!(out, Payload::Json(json!({ "id": 1 })));
+    }
+
+    #[test]
+    fn first_party_settings_register_and_reach_their_plugins() {
+        let config = tempfile::tempdir().expect("tempdir");
+        let dirs = Dirs {
+            config: config.path(),
+            cache: config.path(),
+        };
+        let kernel = Arc::new(
+            build_kernel(&dirs, &EventBus::new(), &Arc::new(Editor::new()))
+                .expect("first-party plugins register"),
+        );
+        let sync = manang_settings::PluginSettingsSync::new(&kernel);
+        for (name, result) in sync.sync_all() {
+            let outcome = result.unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(
+                outcome.pushed,
+                outcome.declared > 0,
+                "{name} declares settings but has no configure command"
+            );
+        }
+        let Ok(Payload::Json(schema)) = kernel.invoke("settings.schema", Payload::Empty) else {
+            panic!("schema");
+        };
+        let engine = schema["settings"]
+            .as_array()
+            .and_then(|s| s.iter().find(|d| d["id"] == "latex.engine"))
+            .expect("latex.engine registered");
+        assert_eq!(engine["owner"], "latex");
+        assert_eq!(engine["category"], "latex");
+        assert_eq!(engine["scope"], "project");
+        assert_eq!(engine["title"], "Engine");
+
+        let summaries = super::plugin_summaries(&kernel);
+        let names: Vec<&str> = summaries.iter().map(|s| s.name.as_str()).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(names, sorted);
+        let latex = summaries
+            .iter()
+            .find(|s| s.name == "latex")
+            .expect("latex listed");
+        assert!(latex.settings.contains(&"latex.engine".to_owned()));
+        let json = serde_json::to_value(latex).expect("serialises");
+        assert_eq!(json["tier"], "native");
+        assert!(json["commands"].as_u64().is_some_and(|n| n > 0));
+        assert!(json["permissions"]["filesystem"].is_array());
     }
 }

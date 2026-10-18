@@ -110,7 +110,77 @@ fn project(h: &Harness) {
 fn manifest_is_native_search() {
     let m = manang_search::manifest().expect("manifest");
     assert_eq!(m.plugin.name, "search");
-    assert_eq!(m.contributes.commands.len(), 6);
+    assert_eq!(m.contributes.commands.len(), 7);
+    let ids: Vec<_> = m
+        .contributes
+        .settings
+        .iter()
+        .map(|s| s.id.as_str())
+        .collect();
+    assert_eq!(ids, ["search.exclude", "search.include-hidden"]);
+}
+
+#[test]
+fn configure_applies_exclude_and_hidden_defaults() {
+    let h = harness();
+    project(&h);
+    write(&h.root, "vendor/x.rs", "hello vendored\n");
+    let base = matched_paths(&h.text("hello", json!({})));
+    assert!(base.contains(&"vendor/x.rs".to_owned()));
+    assert!(!base.contains(&".hidden/secret.txt".to_owned()));
+
+    // The manifest defaults reproduce the built-in behaviour.
+    let m = manang_search::manifest().expect("manifest");
+    let defaults: serde_json::Map<String, Value> = m
+        .contributes
+        .settings
+        .iter()
+        .map(|s| (s.id.clone(), s.default.clone().unwrap_or(Value::Null)))
+        .collect();
+    h.ok("search.configure", json!({ "values": defaults }));
+    assert_eq!(matched_paths(&h.text("hello", json!({}))), base);
+
+    let applied = h.ok(
+        "search.configure",
+        json!({ "values": { "search.exclude": ["vendor/"], "search.include-hidden": true, "search.later": 1 } }),
+    );
+    assert_eq!(applied["search.exclude"], json!(["vendor/"]));
+    let got = matched_paths(&h.text("hello", json!({})));
+    assert!(!got.contains(&"vendor/x.rs".to_owned()), "{got:?}");
+    assert!(got.contains(&".hidden/secret.txt".to_owned()), "{got:?}");
+    assert!(!got.iter().any(|p| p.starts_with(".git/")));
+    // Per-request excludes are added to the configured ones; an explicit
+    // `hidden` still wins.
+    let got = matched_paths(&h.text("hello", json!({ "exclude": ["src"], "hidden": false })));
+    assert!(!got.contains(&"vendor/x.rs".to_owned()));
+    assert!(!got.contains(&"src/lib.rs".to_owned()));
+    assert!(!got.contains(&".hidden/secret.txt".to_owned()));
+    // The configured hidden default reaches the file finder too.
+    let files = h.file_paths("", json!({ "limit": 100 }));
+    assert!(files.contains(&".hidden/secret.txt".to_owned()));
+    // Replace previews honour the configured excludes.
+    let preview = h.ok(
+        "search.replace-preview",
+        json!({ "root": h.root_str(), "query": "hello", "replacement": "bye" }),
+    );
+    assert!(!matched_paths(&preview).contains(&"vendor/x.rs".to_owned()));
+
+    // Bad values are rejected and change nothing.
+    for bad in [
+        json!({ "search.exclude": "vendor" }),
+        json!({ "search.exclude": ["a{"] }),
+        json!({ "search.include-hidden": "yes" }),
+        json!({ "search.exclude": [], "search.include-hidden": 1 }),
+    ] {
+        assert!(
+            h.call("search.configure", json!({ "values": bad }))
+                .is_err(),
+            "{bad}"
+        );
+    }
+    assert!(h.call("search.configure", json!({})).is_err());
+    let got = matched_paths(&h.text("hello", json!({})));
+    assert!(!got.contains(&"vendor/x.rs".to_owned()));
 }
 
 #[test]

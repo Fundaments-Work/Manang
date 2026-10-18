@@ -21,4 +21,4 @@ pub mod text;
 
 pub use error::SearchError;
 pub use limits::Limits;
-pub use plugin::{NO_BUS_TTL, SearchPlugin, manifest, plugin};
+pub use plugin::{NO_BUS_TTL, SearchConfig, SearchPlugin, manifest, plugin};

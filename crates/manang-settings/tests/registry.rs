@@ -80,6 +80,17 @@ fn registration_rules() {
     assert!(reg.register(mine("my-plugin.width"), "my-plugin").is_ok());
     // Idempotent for the same owner and definition.
     assert!(reg.register(mine("my-plugin.width"), "my-plugin").is_ok());
+    // The same owner may change its definition (plugin hot reload).
+    let changed = mine("my-plugin.width").with_title("Width");
+    assert_eq!(
+        reg.register_all(vec![changed.clone()], "my-plugin").ok(),
+        Some(1)
+    );
+    assert_eq!(
+        reg.get("my-plugin.width").and_then(|d| d.title.as_deref()),
+        Some("Width")
+    );
+    assert_eq!(reg.register_all(vec![changed], "my-plugin").ok(), Some(0));
     // Different owner is refused.
     assert!(reg.register(mine("my-plugin.width"), "other").is_err());
     // Core ids are protected.

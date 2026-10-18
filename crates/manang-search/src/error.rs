@@ -18,6 +18,8 @@ pub enum SearchError {
     BadGlob { glob: String, reason: String },
     #[error("{given} globs given, at most {limit} are allowed")]
     TooManyGlobs { given: usize, limit: usize },
+    #[error("setting `{id}` {reason}")]
+    BadSetting { id: &'static str, reason: String },
     #[error("the replacement is {len} bytes, over the {limit} byte limit")]
     ReplacementTooLong { len: usize, limit: usize },
     #[error("unknown or expired replace plan `{0}`")]
