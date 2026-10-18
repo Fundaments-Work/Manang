@@ -1,33 +1,35 @@
 /**
  * Figure editor state: one `FigureState` per open figure file.
  *
- * Tools map one-to-one onto scene node kinds. The state owns the scene, the
- * active tool and the in-progress stroke; rendering is Svelte's job and the
- * headless SVG render belongs to the Rust figure crate. The scene is plain JSON
- * (`*.figure.json`), so it diffs and commits like any other project file.
+ * The figure plugin (`figure.*`) owns the scene, its revision and its undo
+ * history. This state keeps a mirror of the scene for drawing, the active
+ * tool and the gesture in progress.
+ *
+ * Edits are optimistic: every `figure.apply` operation addresses nodes by id
+ * and carries all its data, so the editor applies it to the mirror at once
+ * (`applyEdit`, the same rules the plugin uses) and sends it to the plugin
+ * behind, in order. A refused operation, an undo or a redo replaces the mirror
+ * with the plugin's scene and replays whatever is still queued on top. A drag
+ * moves the node on the mirror only and becomes one `translate` operation on
+ * release, so the history gets one step per gesture and the IPC sees one call.
  */
 
-import { HISTORY_LIMIT, svgPathFor, translatedScene } from "$lib/figure/edit";
+import { applyEdit, translatedScene, type FigureEdit } from "$lib/figure/edit";
+import { allAnchors, snapToAnchors, type SnapResult } from "$lib/figure/geometry";
 import {
-  allAnchors,
-  hitTest,
-  snapToAnchors,
-  type SnapResult,
-} from "$lib/figure/geometry";
-import {
-  appendNode,
   createScene,
   formatNodeId,
   nodeById,
-  removeNode,
-  replaceNode,
-  SCENE_VERSION,
   type Anchor,
   type FigureNode,
   type FigureScene,
   type StrokeSample,
   type Vec,
 } from "$lib/figure/scene";
+import { errorMessage, reportError } from "$lib/kernel";
+import type { FigureApplyResult, FigureOp, FigureSaved } from "$lib/kernel/api";
+
+import { notice } from "./notice.svelte";
 
 export type PenTool = "select" | "freehand" | "geometry" | "ellipse" | "arrow" | "math";
 
@@ -40,53 +42,57 @@ export const TOOLS: readonly { tool: PenTool; label: string; key: string }[] = [
   { tool: "math", label: "Formula", key: "M" },
 ];
 
-/** Parse a `.figure.json` file; throws a sentence the user can act on. */
-export function parseScene(text: string): FigureScene {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    throw new Error("This file is not valid JSON, so it cannot be opened as a figure.");
-  }
-  const scene = raw as Partial<FigureScene> | null;
-  if (
-    scene === null ||
-    typeof scene !== "object" ||
-    scene.version !== SCENE_VERSION ||
-    typeof scene.width !== "number" ||
-    typeof scene.height !== "number" ||
-    !Array.isArray(scene.nodes)
-  ) {
-    throw new Error(
-      `This file is not a version ${SCENE_VERSION} Manang figure (expected version, width, height and nodes).`,
-    );
-  }
-  return scene as FigureScene;
+/** The plugin side of one open figure (`figure.*` bound to its id). */
+export interface FigureBackend {
+  apply(op: FigureOp): Promise<FigureApplyResult>;
+  get(): Promise<FigureScene>;
+  /** The id of the topmost node at `point`, or null. */
+  hitTest(point: Vec): Promise<string | null>;
+  /** Write `<name>.figure.json` and `<name>.svg` for the project path `path`. */
+  save(path: string): Promise<FigureSaved>;
+  close(): Promise<void>;
+  /** The scene as SVG markup (`figure.export-svg`). */
+  exportSvg(): Promise<string>;
 }
 
 export function serializeScene(scene: FigureScene): string {
   return `${JSON.stringify(scene, null, 2)}\n`;
 }
 
+/** A select-tool press: the hit test is asynchronous, so the drag waits for it. */
+interface Press {
+  readonly start: Vec;
+  current: Vec;
+  released: boolean;
+  /** The node under the press, once the plugin answered. */
+  id: string | null;
+  /** The mirror before the drag started. */
+  base: FigureScene | null;
+}
+
 export class FigureState {
   path: string;
+  readonly #backend: FigureBackend;
+
+  /** The mirror of the plugin's scene, ahead of it by the queued edits. */
   scene = $state.raw<FigureScene>(createScene(960, 540));
-  /** The scene as last saved; `dirty` compares by reference. */
-  saved = $state.raw<FigureScene>(this.scene);
-  readonly dirty: boolean = $derived(this.scene !== this.saved);
+  /** The plugin's revision and the revision on disk. */
+  revision = $state(0);
+  savedRevision = $state(0);
+  /** Edits sent to the plugin and not yet acknowledged. */
+  pending = $state(0);
+  canUndo = $state(false);
+  canRedo = $state(false);
 
-  constructor(path: string, scene?: FigureScene) {
+  readonly dirty: boolean = $derived(
+    this.pending > 0 || this.revision !== this.savedRevision,
+  );
+
+  constructor(path: string, scene: FigureScene, backend: FigureBackend) {
     this.path = path;
-    if (scene !== undefined) {
-      this.scene = scene;
-      this.saved = scene;
-    }
-    this.#counter = highestId(this.scene);
-  }
-
-  /** Record that the current scene is what is on disk. */
-  markSaved(scene: FigureScene): void {
-    this.saved = scene;
+    this.scene = scene;
+    this.#backend = backend;
+    this.#counter = highestId(scene);
   }
 
   tool = $state<PenTool>("freehand");
@@ -105,52 +111,133 @@ export class FigureState {
 
   selectedId = $state<string | null>(null);
 
-  /** Scenes before each committed change, newest last. Scenes are immutable, so this is cheap. */
-  #undo: FigureScene[] = [];
-  #redo: FigureScene[] = [];
-  /** Bumped on every history change so `canUndo`/`canRedo` stay reactive. */
-  historyVersion = $state(0);
+  #press: Press | null = null;
+  #pressToken = 0;
 
-  /** While dragging a selection: the last pointer position and the scene before the drag. */
-  #moveLast: Vec | null = null;
-  #moveBase: FigureScene | null = null;
+  /** Plugin calls run one at a time, in the order they were made. */
+  #chain: Promise<unknown> = Promise.resolve();
+  /** Edits applied to the mirror whose plugin call has not finished. */
+  #inflight: FigureEdit[] = [];
 
-  get canUndo(): boolean {
-    void this.historyVersion;
-    return this.#undo.length > 0;
+  readonly selected: FigureNode | undefined = $derived(
+    this.selectedId === null ? undefined : nodeById(this.scene, this.selectedId),
+  );
+
+  readonly nodeCount: number = $derived(this.scene.nodes.length);
+
+  get isDrawing(): boolean {
+    return this.draft.length > 0 || this.dragStart !== null || this.#press !== null;
   }
 
-  get canRedo(): boolean {
-    void this.historyVersion;
-    return this.#redo.length > 0;
+  /* ---------------------------------------------------------------------- */
+  /* Plugin round trips                                                      */
+  /* ---------------------------------------------------------------------- */
+
+  #run<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.#chain.then(task);
+    this.#chain = next.catch(() => undefined);
+    return next;
   }
 
-  /** Replace the scene as one undoable step. */
-  commit(next: FigureScene, before: FigureScene = this.scene): void {
-    if (next === before) return;
-    this.#undo.push(before);
-    if (this.#undo.length > HISTORY_LIMIT) this.#undo.shift();
-    this.#redo = [];
-    this.scene = next;
-    this.historyVersion += 1;
+  /** Settles once every call made so far has finished. */
+  idle(): Promise<void> {
+    return this.#run(() => Promise.resolve());
   }
 
-  undo(): void {
-    const previous = this.#undo.pop();
-    if (previous === undefined) return;
-    this.#redo.push(this.scene);
-    this.scene = previous;
+  #ack(result: FigureApplyResult): void {
+    this.revision = result.revision;
+    this.canUndo = result.can_undo;
+    this.canRedo = result.can_redo;
+  }
+
+  /** Take the plugin's scene, with the still-queued edits replayed on top. */
+  async #resync(): Promise<void> {
+    let scene = await this.#backend.get();
+    for (const edit of this.#inflight) {
+      try {
+        scene = applyEdit(scene, edit);
+      } catch {
+        // That edit will be refused by the plugin too, and resync again.
+      }
+    }
+    this.scene = scene;
     this.#dropMissingSelection();
-    this.historyVersion += 1;
   }
 
-  redo(): void {
-    const next = this.#redo.pop();
-    if (next === undefined) return;
-    this.#undo.push(this.scene);
+  /** Apply `edit` now and send it to the plugin. False if it was refused locally. */
+  edit(edit: FigureEdit): boolean {
+    let next: FigureScene;
+    try {
+      next = applyEdit(this.scene, edit);
+    } catch (error) {
+      reportError("figure.edit", error);
+      return false;
+    }
     this.scene = next;
-    this.#dropMissingSelection();
-    this.historyVersion += 1;
+    this.canUndo = true;
+    this.canRedo = false;
+    this.#inflight.push(edit);
+    this.pending += 1;
+    void this.#run(async () => {
+      try {
+        this.#ack(await this.#backend.apply(edit));
+        this.#settle(edit);
+      } catch (error) {
+        this.#settle(edit);
+        reportError("figure.apply", error);
+        notice.error(`The figure refused that change: ${errorMessage(error)}`);
+        await this.#resync().catch((e: unknown) => reportError("figure.get", e));
+      }
+    });
+    return true;
+  }
+
+  #settle(edit: FigureEdit): void {
+    const at = this.#inflight.indexOf(edit);
+    if (at !== -1) this.#inflight.splice(at, 1);
+    this.pending -= 1;
+  }
+
+  #history(op: "undo" | "redo"): Promise<void> {
+    this.cancel();
+    return this.#run(async () => {
+      try {
+        const result = await this.#backend.apply({ op });
+        this.#ack(result);
+        if (result.applied) await this.#resync();
+      } catch (error) {
+        reportError(`figure.${op}`, error);
+        notice.error(`Could not ${op}: ${errorMessage(error)}`);
+      }
+    });
+  }
+
+  undo(): Promise<void> {
+    return this.#history("undo");
+  }
+
+  redo(): Promise<void> {
+    return this.#history("redo");
+  }
+
+  /** Save after every queued edit; resolves with what was written. */
+  save(): Promise<FigureSaved> {
+    const path = this.path;
+    return this.#run(async () => {
+      const saved = await this.#backend.save(path);
+      this.savedRevision = saved.revision;
+      return saved;
+    });
+  }
+
+  /** The current scene as SVG, after every queued edit. */
+  exportSvg(): Promise<string> {
+    return this.#run(() => this.#backend.exportSvg());
+  }
+
+  /** Release the plugin's copy (the tab closed). */
+  close(): Promise<void> {
+    return this.#run(() => this.#backend.close());
   }
 
   #dropMissingSelection(): void {
@@ -160,16 +247,6 @@ export class FigureState {
     ) {
       this.selectedId = null;
     }
-  }
-
-  readonly selected: FigureNode | undefined = $derived(
-    this.selectedId === null ? undefined : nodeById(this.scene, this.selectedId),
-  );
-
-  readonly nodeCount: number = $derived(this.scene.nodes.length);
-
-  get isDrawing(): boolean {
-    return this.draft.length > 0 || this.dragStart !== null || this.#moveLast !== null;
   }
 
   setTool(tool: PenTool): void {
@@ -199,16 +276,63 @@ export class FigureState {
         this.dragCurrent = point;
         break;
       case "select":
-        this.selectedId = hitTest(this.scene, point)?.id ?? null;
-        if (this.selectedId !== null) {
-          this.#moveLast = point;
-          this.#moveBase = this.scene;
-        }
+        this.#press = {
+          start: point,
+          current: point,
+          released: false,
+          id: null,
+          base: null,
+        };
+        void this.#pick(point, ++this.#pressToken);
         break;
       case "math":
         this.stampMath(point);
         break;
     }
+  }
+
+  /** Ask the plugin what is under the press, after every queued edit. */
+  async #pick(point: Vec, token: number): Promise<void> {
+    let id: string | null = null;
+    try {
+      id = await this.#run(() => this.#backend.hitTest(point));
+    } catch (error) {
+      reportError("figure.hit-test", error);
+    }
+    const press = this.#press;
+    if (token !== this.#pressToken || press === null) return;
+    this.selectedId = id;
+    if (id === null) {
+      if (press.released) this.#press = null;
+      return;
+    }
+    press.id = id;
+    press.base = this.scene;
+    if (press.released) {
+      this.#finishMove();
+      return;
+    }
+    this.#dragTo(press);
+  }
+
+  #dragTo(press: Press): void {
+    if (press.id === null || press.base === null) return;
+    const delta = {
+      x: press.current.x - press.start.x,
+      y: press.current.y - press.start.y,
+    };
+    // Live movement is drawn on the mirror only; the release sends one step.
+    this.scene = translatedScene(press.base, press.id, delta);
+  }
+
+  #finishMove(): void {
+    const press = this.#press;
+    this.#press = null;
+    if (press === null || press.id === null || press.base === null) return;
+    const dx = press.current.x - press.start.x;
+    const dy = press.current.y - press.start.y;
+    this.scene = press.base;
+    if (dx !== 0 || dy !== 0) this.edit({ op: "translate", id: press.id, dx, dy });
   }
 
   /**
@@ -219,11 +343,10 @@ export class FigureState {
    * outline deterministic across machines.
    */
   extend(point: Vec, pressure: number): void {
-    if (this.#moveLast !== null && this.selectedId !== null) {
-      const delta = { x: point.x - this.#moveLast.x, y: point.y - this.#moveLast.y };
-      this.#moveLast = point;
-      // Live movement is not a history step; the whole drag becomes one on release.
-      this.scene = translatedScene(this.scene, this.selectedId, delta);
+    const press = this.#press;
+    if (press !== null) {
+      press.current = point;
+      this.#dragTo(press);
       return;
     }
 
@@ -247,20 +370,22 @@ export class FigureState {
 
   /** Commits the in-progress node, if the gesture produced one. */
   endStroke(): void {
-    if (this.#moveBase !== null) {
-      this.commit(this.scene, this.#moveBase);
+    const press = this.#press;
+    if (press !== null) {
+      press.released = true;
+      // Still waiting for the hit test: it finishes the move when it lands.
+      if (press.id !== null) this.#finishMove();
+      return;
     }
 
     if (this.tool === "freehand" && this.draft.length > 1) {
-      this.commit(
-        appendNode(this.scene, {
-          kind: "stroke",
-          id: this.nextId(),
-          points: this.draft,
-          size: 2.5,
-          color: "#e8e6e1",
-        }),
-      );
+      this.add({
+        kind: "stroke",
+        id: this.nextId(),
+        points: this.draft,
+        size: 2.5,
+        color: "#e8e6e1",
+      });
     }
 
     if (this.dragStart !== null && this.dragCurrent !== null) {
@@ -268,33 +393,23 @@ export class FigureState {
       const to = this.dragCurrent;
 
       if (this.tool === "arrow" && Math.hypot(to.x - from.x, to.y - from.y) > 8) {
-        this.commit(
-          appendNode(this.scene, {
-            kind: "arrow",
-            id: this.nextId(),
-            from,
-            to,
-            color: "#e8e6e1",
-          }),
-        );
+        this.add({ kind: "arrow", id: this.nextId(), from, to, color: "#e8e6e1" });
       }
 
       if (this.tool === "geometry") {
         const width = to.x - from.x;
         const height = to.y - from.y;
         if (Math.abs(width) > 8 && Math.abs(height) > 8) {
-          this.commit(
-            appendNode(this.scene, {
-              kind: "rect",
-              id: this.nextId(),
-              x: from.x,
-              y: from.y,
-              width,
-              height,
-              stroke: "#e8e6e1",
-              fill: "#1c1c20",
-            }),
-          );
+          this.add({
+            kind: "rect",
+            id: this.nextId(),
+            x: from.x,
+            y: from.y,
+            width,
+            height,
+            stroke: "#e8e6e1",
+            fill: "#1c1c20",
+          });
         }
       }
 
@@ -302,18 +417,16 @@ export class FigureState {
         const rx = Math.abs(to.x - from.x) / 2;
         const ry = Math.abs(to.y - from.y) / 2;
         if (rx > 4 && ry > 4) {
-          this.commit(
-            appendNode(this.scene, {
-              kind: "ellipse",
-              id: this.nextId(),
-              cx: (from.x + to.x) / 2,
-              cy: (from.y + to.y) / 2,
-              rx,
-              ry,
-              stroke: "#e8e6e1",
-              fill: "#1c1c20",
-            }),
-          );
+          this.add({
+            kind: "ellipse",
+            id: this.nextId(),
+            cx: (from.x + to.x) / 2,
+            cy: (from.y + to.y) / 2,
+            rx,
+            ry,
+            stroke: "#e8e6e1",
+            fill: "#1c1c20",
+          });
         }
       }
     }
@@ -322,8 +435,12 @@ export class FigureState {
   }
 
   cancel(): void {
-    this.#moveLast = null;
-    this.#moveBase = null;
+    if (this.#press !== null) {
+      // An abandoned drag snaps back; nothing was sent.
+      if (this.#press.base !== null) this.scene = this.#press.base;
+      this.#press = null;
+      this.#pressToken += 1;
+    }
     this.draft = [];
     this.dragStart = null;
     this.dragCurrent = null;
@@ -334,20 +451,23 @@ export class FigureState {
   /* Mutation                                                               */
   /* ---------------------------------------------------------------------- */
 
+  add(node: FigureNode): boolean {
+    return this.edit({ op: "add-node", node });
+  }
+
   /** Places a formula and selects it so its text can be typed straight away. */
   stampMath(point: Vec, tex = "x"): void {
     const id = this.nextId();
-    this.commit(
-      appendNode(this.scene, {
-        kind: "math",
-        id,
-        x: point.x,
-        y: point.y,
-        tex,
-        size: 26,
-        color: "#b3d17a",
-      }),
-    );
+    const added = this.add({
+      kind: "math",
+      id,
+      x: point.x,
+      y: point.y,
+      tex,
+      size: 26,
+      color: "#b3d17a",
+    });
+    if (!added) return;
     this.tool = "select";
     this.selectedId = id;
   }
@@ -356,36 +476,24 @@ export class FigureState {
   setMathText(id: string, tex: string): void {
     const node = nodeById(this.scene, id);
     if (node?.kind !== "math" || tex.trim() === "" || node.tex === tex) return;
-    this.commit(replaceNode(this.scene, { ...node, tex }));
+    this.edit({ op: "update-node", node: { ...node, tex } });
   }
 
   deleteSelected(): void {
     if (this.selectedId === null) return;
-    this.commit(removeNode(this.scene, this.selectedId));
+    this.edit({ op: "remove-node", id: this.selectedId });
     this.selectedId = null;
   }
 
   /** Move the selection by a fixed step (arrow keys); one undo step each. */
   nudge(delta: Vec): void {
     if (this.selectedId === null) return;
-    this.commit(translatedScene(this.scene, this.selectedId, delta));
-  }
-
-  translate(id: string, delta: Vec): void {
-    this.commit(translatedScene(this.scene, id, delta));
+    this.edit({ op: "translate", id: this.selectedId, dx: delta.x, dy: delta.y });
   }
 
   clear(): void {
-    this.commit({
-      ...createScene(this.scene.width, this.scene.height),
-      version: SCENE_VERSION,
-    });
+    this.edit({ op: "clear" });
     this.selectedId = null;
-  }
-
-  /** The line that embeds this figure's rendered SVG in a Typst document. */
-  embedSnippet(): string {
-    return `#figure(image("${svgPathFor(this.path)}", width: 80%))`;
   }
 }
 

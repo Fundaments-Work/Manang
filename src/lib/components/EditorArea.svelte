@@ -2,6 +2,7 @@
   import type { Component } from "svelte";
 
   import EditorPane from "./EditorPane.svelte";
+  import FileViewer from "./FileViewer.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
   import { newFileHere } from "$lib/state/actions";
@@ -88,6 +89,8 @@
     {:else}
       <p class="m-auto text-xs text-text-muted" role="status">Opening figure</p>
     {/if}
+  {:else if tab.kind === "viewer"}
+    <FileViewer path={tab.path} />
   {:else if tab.view === "slides"}
     {#if Slides !== undefined}
       <Slides path={tab.path} />

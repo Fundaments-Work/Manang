@@ -15,6 +15,15 @@
     "core:window:allow-is-maximized",
     "opener:allow-reveal-item-in-dir",
     "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "/run/media/**" },
+        { "path": "/media/**" },
+        { "path": "/mnt/**" }
+      ]
+    },
     "dialog:allow-open",
     "dialog:allow-save",
     "os:allow-platform",
