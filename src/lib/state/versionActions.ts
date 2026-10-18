@@ -15,6 +15,7 @@ import {
   type GitVersionInfo,
 } from "$lib/kernel/api";
 import { gitActionableError, parseGitError } from "$lib/workbench/git";
+import { sharedNotice, updatedWords } from "$lib/workbench/share";
 import {
   changeSummary,
   changedPaths,
@@ -211,5 +212,59 @@ export async function restoreFromVersion(
   } catch (error) {
     fail("restoring a version", error);
     return null;
+  }
+}
+
+/** Share: send the saved versions to the shared location. */
+export async function shareVersions(): Promise<boolean> {
+  const root = workspace.project?.root;
+  if (root === undefined) return false;
+  try {
+    await saveOpenEdits();
+    const shared = await api.share({ root });
+    notice.show(sharedNotice(shared.pushed));
+    return true;
+  } catch (error) {
+    fail("sharing versions", error);
+    return false;
+  }
+}
+
+/**
+ * Get updates: fetch what others shared and combine it with this project.
+ * Unsaved work is kept as a version first; a clash stops before anything on
+ * disk changes and is explained, not raised.
+ */
+export async function getUpdates(): Promise<boolean> {
+  const root = workspace.project?.root;
+  if (root === undefined) return false;
+  try {
+    await saveOpenEdits();
+    const before = await api.syncStatus({ root });
+    if (before.uncommitted > 0 || before.ahead > 0) {
+      // A kept copy of unsaved work, or a combined version, is signed.
+      if (!(await ensureIdentity(root))) return false;
+    }
+    const result = await api.getUpdates({ root, strategy: "merge" });
+    const words = updatedWords(result);
+    if (words.kind === "conflicts") {
+      await dialog.ask({
+        title: "These changes cannot be combined automatically",
+        message: words.text,
+        actions: [{ id: "ok", label: "OK", primary: true }],
+      });
+      return false;
+    }
+    notice.show(words.text);
+    if (result.result === "fast-forwarded" || result.result === "merged") {
+      workspace.scheduleRefresh();
+      const open = tabs.tabs.map((t) => t.path);
+      void documents.externalChange(open);
+      void viewers.externalChange(open);
+    }
+    return true;
+  } catch (error) {
+    fail("getting updates", error);
+    return false;
   }
 }

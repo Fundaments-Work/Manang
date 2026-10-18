@@ -15,6 +15,7 @@ use crate::diff;
 use crate::error::GitError;
 use crate::history::{self, Shown};
 use crate::identity;
+use crate::remote::{self, Strategy};
 use crate::restore::{self, RestoreRequest};
 use crate::status;
 use crate::versions;
@@ -184,6 +185,28 @@ mod args {
         pub name: String,
         #[serde(default)]
         pub create: bool,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct RemoteSet {
+        pub root: Option<String>,
+        pub url: String,
+    }
+
+    #[derive(Deserialize, Default)]
+    #[serde(deny_unknown_fields)]
+    pub struct SyncStatus {
+        pub root: Option<String>,
+        #[serde(default)]
+        pub refresh: bool,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct GetUpdates {
+        pub root: Option<String>,
+        pub strategy: Option<String>,
     }
 
     #[derive(Deserialize)]
@@ -425,6 +448,35 @@ impl GitPlugin {
                 self.changed(&root);
                 let ctx = Ctx::open(&root)?;
                 json_payload(&status::status(&ctx)?)
+            }
+            "git.remote-get" => {
+                let a: args::Base = parse(input)?;
+                json_payload(&remote::remote_get(&self.ctx(a.root.as_deref())?)?)
+            }
+            "git.remote-set" => {
+                let a: args::RemoteSet = parse(input)?;
+                self.write(a.root.as_deref(), |c| remote::remote_set(c, &a.url))
+            }
+            "git.sync-status" => {
+                let a: args::SyncStatus = parse(input)?;
+                json_payload(&remote::sync_status(
+                    &self.ctx(a.root.as_deref())?,
+                    a.refresh,
+                )?)
+            }
+            "git.share" => {
+                let a: args::Base = parse(input)?;
+                self.write(a.root.as_deref(), remote::share)
+            }
+            "git.get-updates" => {
+                let a: args::GetUpdates = parse(input)?;
+                let strategy = match a.strategy.as_deref() {
+                    None => Strategy::Merge,
+                    Some(s) => Strategy::parse(s).ok_or_else(|| {
+                        GitError::BadArgs("`strategy` must be ff-only or merge".to_owned())
+                    })?,
+                };
+                self.write(a.root.as_deref(), |c| remote::get_updates(c, strategy))
             }
             "git.sync" => {
                 let a: args::Sync = parse(input)?;

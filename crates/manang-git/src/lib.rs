@@ -11,6 +11,7 @@ mod error;
 pub mod history;
 pub mod identity;
 mod plugin;
+pub mod remote;
 pub mod restore;
 pub mod runner;
 pub mod status;
