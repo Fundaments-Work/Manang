@@ -11,6 +11,7 @@ import { toEditorDiagnostics, type LintItem } from "$lib/kernel/lint";
 import { scalarLength } from "$lib/kernel/offsets";
 import type {
   CompileReport,
+  DiagramDiagnostic,
   LatexReport,
   MarkdownDiagnostic,
   WireDiagnostic,
@@ -31,7 +32,7 @@ export interface Problem {
   readonly line: number | null;
   readonly column: number | null;
   readonly hints: readonly string[];
-  /** Who reported it: "writing" for prose lint; absent for compiler diagnostics. */
+  /** Who reported it: "writing" for prose lint, "diagram" for diagram checks; absent for compiler diagnostics. */
   readonly source?: string;
   /** Rule id of a writing finding, e.g. `repeated-word`. */
   readonly code?: string;
@@ -64,6 +65,29 @@ export function fromWire(diagnostics: readonly WireDiagnostic[]): Problem[] {
 
 export function fromReport(report: CompileReport): Problem[] {
   return fromWire(report.diagnostics);
+}
+
+/**
+ * `diagram.check` diagnostics of `file`. Their lines and scalar columns use the
+ * Typst convention, so they reach Problems and the gutter unchanged.
+ */
+export function fromDiagram(
+  file: string,
+  diagnostics: readonly DiagramDiagnostic[],
+): Problem[] {
+  return sortProblems(
+    diagnostics.map((d, index) => ({
+      id: `diagram:${index}:${file}:${d.line}:${d.message}`,
+      severity: d.severity,
+      message: d.message,
+      file,
+      line: d.line,
+      column: d.column,
+      hints: [],
+      source: "diagram",
+      ...(d.code === undefined ? {} : { code: d.code }),
+    })),
+  );
 }
 
 const RANK: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
