@@ -53,6 +53,8 @@ pub struct ProjectEntry {
     pub archived: bool,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trashed_at: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -86,6 +88,7 @@ pub struct ListQuery {
     pub query: Option<String>,
     pub sort: Sort,
     pub include_archived: bool,
+    pub include_trashed: bool,
 }
 
 /// Keep `path` as the registry key: no trailing separators.
@@ -156,6 +159,7 @@ pub fn select(entries: &[ProjectEntry], q: &ListQuery) -> Vec<ProjectEntry> {
     let mut out: Vec<ProjectEntry> = entries
         .iter()
         .filter(|e| q.include_archived || !e.archived)
+        .filter(|e| q.include_trashed || e.trashed_at.is_none())
         .filter(|e| {
             needle.as_deref().is_none_or(|n| {
                 e.name.to_lowercase().contains(n)
@@ -291,6 +295,7 @@ impl Registry {
             pinned: false,
             archived: false,
             tags: Vec::new(),
+            trashed_at: None,
         };
         projects.push(entry.clone());
         self.write(projects)?;
@@ -322,6 +327,72 @@ impl Registry {
         let updated = entry.clone();
         self.write(projects)?;
         Ok(Some(updated))
+    }
+
+    /// Mark `path` as trashed with an RFC 3339 timestamp.
+    pub fn trash(&self, path: &str, stamp: &str) -> Result<Option<ProjectEntry>, ProjectError> {
+        let key = normalize_path(path);
+        let _guard = self.lock.lock();
+        let mut projects = self.read();
+        let Some(entry) = projects.iter_mut().find(|e| e.path == key) else {
+            return Ok(None);
+        };
+        entry.trashed_at = Some(stamp.to_owned());
+        let updated = entry.clone();
+        self.write(projects)?;
+        Ok(Some(updated))
+    }
+
+    /// Restore `path` from trash.
+    pub fn restore(&self, path: &str) -> Result<Option<ProjectEntry>, ProjectError> {
+        let key = normalize_path(path);
+        let _guard = self.lock.lock();
+        let mut projects = self.read();
+        let Some(entry) = projects.iter_mut().find(|e| e.path == key) else {
+            return Ok(None);
+        };
+        entry.trashed_at = None;
+        let updated = entry.clone();
+        self.write(projects)?;
+        Ok(Some(updated))
+    }
+
+    /// Purge trashed projects. If `older_than_days` is given, only projects
+    /// trashed at least that many days ago are removed. Returns the removed entries.
+    pub fn empty_trash(
+        &self,
+        older_than_days: Option<u32>,
+        now: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Vec<ProjectEntry>, ProjectError> {
+        let now = now.unwrap_or_else(chrono::Utc::now);
+        let _guard = self.lock.lock();
+        let mut projects = self.read();
+        let mut removed = Vec::new();
+        projects.retain(|e| {
+            let Some(trashed_at) = &e.trashed_at else {
+                return true;
+            };
+            let should_purge = match older_than_days {
+                None => true,
+                Some(days) => match chrono::DateTime::parse_from_rfc3339(trashed_at) {
+                    Ok(dt) => {
+                        let age = now.signed_duration_since(dt);
+                        age.num_seconds() >= (days as i64) * 86400
+                    }
+                    Err(_) => true,
+                },
+            };
+            if should_purge {
+                removed.push(e.clone());
+                false
+            } else {
+                true
+            }
+        });
+        if !removed.is_empty() {
+            self.write(projects)?;
+        }
+        Ok(removed)
     }
 
     /// Drop `path` from the list. Never touches the folder. Returns whether it
@@ -435,6 +506,7 @@ mod tests {
             pinned: false,
             archived: false,
             tags: Vec::new(),
+            trashed_at: None,
         }
     }
 
@@ -553,6 +625,79 @@ mod tests {
         assert!(!thumbs.exists("/a"));
     }
 
+    #[test]
+    fn old_projects_toml_loads_without_trashed_at() {
+        let old_toml = r#"
+[[projects]]
+path = "/p/legacy"
+name = "Legacy"
+engine = "typst"
+created = 100
+last_opened = 200
+pinned = true
+archived = false
+tags = ["old"]
+"#;
+        let parsed: RegistryFile = toml::from_str(old_toml).expect("parse old toml");
+        assert_eq!(parsed.projects.len(), 1);
+        assert_eq!(parsed.projects[0].path, "/p/legacy");
+        assert_eq!(parsed.projects[0].trashed_at, None);
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join(REGISTRY_FILE), old_toml).expect("write");
+        let reg = Registry::new(dir.path());
+        let all = reg.all();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].name, "Legacy");
+        assert_eq!(all[0].trashed_at, None);
+    }
+
+    #[test]
+    fn trash_restore_and_empty_trash() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let reg = Registry::new(dir.path());
+        reg.register("/p/a", "A", Engine::Typst, 10).expect("reg");
+        reg.register("/p/b", "B", Engine::Typst, 20).expect("reg");
+        reg.register("/p/c", "C", Engine::Typst, 30).expect("reg");
+
+        // Mark /p/a as trashed
+        let stamp_old = "2026-10-01T12:00:00Z";
+        let a = reg.trash("/p/a", stamp_old).expect("trash").expect("some");
+        assert_eq!(a.trashed_at.as_deref(), Some(stamp_old));
+
+        // Mark /p/b as trashed recently
+        let stamp_new = "2026-10-17T12:00:00Z";
+        reg.trash("/p/b", stamp_new).expect("trash");
+
+        // Restore /p/a
+        let restored = reg.restore("/p/a").expect("restore").expect("some");
+        assert_eq!(restored.trashed_at, None);
+
+        // Re-trash /p/a with old timestamp
+        reg.trash("/p/a", stamp_old).expect("trash");
+
+        // Reference time: 2026-10-18T12:00:00Z (a is 17 days old, b is 1 day old)
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z")
+            .expect("parse now")
+            .with_timezone(&chrono::Utc);
+
+        // Empty trash older than 7 days should purge only /p/a
+        let purged = reg.empty_trash(Some(7), Some(now)).expect("empty_trash");
+        assert_eq!(purged.len(), 1);
+        assert_eq!(purged[0].path, "/p/a");
+        assert!(reg.get("/p/a").is_none());
+        assert!(reg.get("/p/b").is_some());
+
+        // Empty trash with None should purge all remaining trashed entries (/p/b)
+        let purged_all = reg.empty_trash(None, Some(now)).expect("empty_trash");
+        assert_eq!(purged_all.len(), 1);
+        assert_eq!(purged_all[0].path, "/p/b");
+        assert!(reg.get("/p/b").is_none());
+
+        // Non-trashed /p/c is untouched
+        assert!(reg.get("/p/c").is_some());
+    }
+
     mod props {
         use super::*;
         use proptest::prelude::*;
@@ -575,9 +720,20 @@ mod tests {
                 any::<bool>(),
                 any::<bool>(),
                 proptest::collection::vec("\\PC{0,20}", 0..6),
+                proptest::option::of("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"),
             )
                 .prop_map(
-                    |(path, name, engine, created, last_opened, pinned, archived, tags)| {
+                    |(
+                        path,
+                        name,
+                        engine,
+                        created,
+                        last_opened,
+                        pinned,
+                        archived,
+                        tags,
+                        trashed_at,
+                    )| {
                         ProjectEntry {
                             path,
                             name,
@@ -587,6 +743,7 @@ mod tests {
                             pinned,
                             archived,
                             tags,
+                            trashed_at,
                         }
                     },
                 )
@@ -606,7 +763,7 @@ mod tests {
                 projects in proptest::collection::vec(arb_entry(), 0..12),
                 q in "\\PC{0,6}",
             ) {
-                let query = ListQuery { query: Some(q), include_archived: true, sort: Sort::Name };
+                let query = ListQuery { query: Some(q), include_archived: true, include_trashed: true, sort: Sort::Name };
                 let out = select(&projects, &query);
                 prop_assert!(out.len() <= projects.len());
                 prop_assert!(out.iter().all(|e| projects.contains(e)));

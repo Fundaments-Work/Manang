@@ -234,3 +234,95 @@ fn recent_entries_migrate_into_a_fresh_registry() {
     assert_eq!(list[0]["engine"], "markdown");
     assert_eq!(list[0]["last_opened"], 7);
 }
+
+#[test]
+fn trash_and_restore_via_kernel() {
+    let h = harness();
+    let alpha = h.create("Alpha", "typst");
+    let normal_list = h.ok("project.list", json!({}));
+    assert_eq!(names(&normal_list), ["Alpha"]);
+
+    let trashed = h.ok("project.trash", json!({ "path": alpha }));
+    assert!(trashed["trashed_at"].is_string());
+
+    // Filtered out from default list
+    let list_after = h.ok("project.list", json!({}));
+    assert_eq!(names(&list_after).len(), 0);
+
+    // Visible when include_trashed: true
+    let list_trashed = h.ok("project.list", json!({ "include_trashed": true }));
+    assert_eq!(names(&list_trashed), ["Alpha"]);
+    assert_eq!(list_trashed[0]["trashed_at"], trashed["trashed_at"]);
+
+    // Restore brings it back
+    let restored = h.ok("project.restore", json!({ "path": alpha }));
+    assert_eq!(restored["trashed_at"], Value::Null);
+
+    let list_restored = h.ok("project.list", json!({}));
+    assert_eq!(names(&list_restored), ["Alpha"]);
+
+    // Trashing/restoring unknown project errors with not found
+    let err = h
+        .call("project.trash", json!({ "path": "/unknown" }))
+        .expect_err("unknown");
+    assert!(err.contains("does not exist"), "{err}");
+    let err = h
+        .call("project.restore", json!({ "path": "/unknown" }))
+        .expect_err("unknown");
+    assert!(err.contains("does not exist"), "{err}");
+}
+
+#[test]
+fn purge_with_and_without_delete_files() {
+    let h = harness();
+    let beta = h.create("Beta", "typst");
+    let gamma = h.create("Gamma", "latex");
+
+    // Purge Beta with delete_files: false
+    let res = h.ok(
+        "project.purge",
+        json!({ "path": beta, "delete_files": false }),
+    );
+    assert_eq!(res, json!({ "purged": true, "deleted_files": false }));
+    // Removed from registry
+    let list = h.ok("project.list", json!({ "include_trashed": true }));
+    assert_eq!(names(&list), ["Gamma"]);
+    // Folder STILL exists on disk
+    assert!(Path::new(&beta).join("manang.toml").is_file());
+
+    // Purge Gamma with delete_files: true
+    let res = h.ok(
+        "project.purge",
+        json!({ "path": gamma, "delete_files": true }),
+    );
+    assert_eq!(res, json!({ "purged": true, "deleted_files": true }));
+    // Removed from registry
+    let list = h.ok("project.list", json!({ "include_trashed": true }));
+    assert_eq!(names(&list).len(), 0);
+    // Folder in original location is GONE (moved to system trash)
+    assert!(!Path::new(&gamma).exists());
+
+    // Purging non-existent project errors
+    let err = h
+        .call("project.purge", json!({ "path": "/unknown" }))
+        .expect_err("unknown");
+    assert!(err.contains("does not exist"), "{err}");
+}
+
+#[test]
+fn empty_trash_via_kernel() {
+    let h = harness();
+    let one = h.create("One", "typst");
+    let two = h.create("Two", "typst");
+    let _three = h.create("Three", "typst");
+
+    h.ok("project.trash", json!({ "path": one }));
+    h.ok("project.trash", json!({ "path": two }));
+
+    // Empty trash removes all trashed projects
+    let res = h.ok("project.empty-trash", json!({}));
+    assert_eq!(res["count"], 2);
+
+    let list = h.ok("project.list", json!({ "include_trashed": true }));
+    assert_eq!(names(&list), ["Three"]);
+}
