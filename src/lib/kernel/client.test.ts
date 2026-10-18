@@ -68,7 +68,9 @@ describe("kernel client", () => {
     const stop = await kernel.onEvent(() => undefined);
     expect(() => stop()).not.toThrow();
     expect(logged).toHaveBeenCalledWith(
-      "[manang] kernel events are unavailable:",
+      expect.stringContaining(
+        "[manang] kernel events are unavailable: Error: no tauri",
+      ),
       expect.any(Error),
     );
     logged.mockRestore();
