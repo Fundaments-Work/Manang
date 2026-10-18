@@ -24,7 +24,7 @@ fn core_categories_declare_their_contexts() {
     assert_eq!(contexts("editor.font-size"), ["document", "diagram"]);
     assert_eq!(contexts("preview.auto-compile"), ["document", "pdf"]);
     assert_eq!(contexts("compile.engine"), ["document"]);
-    assert_eq!(contexts("files.autosave"), ["app", "project"]);
+    assert_eq!(contexts("files.autosave"), ["app", "project", "document"]);
     // Every setting of a category shares its category's contexts.
     for def in reg.iter() {
         assert_eq!(
