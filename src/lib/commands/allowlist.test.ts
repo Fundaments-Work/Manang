@@ -70,6 +70,7 @@ describe("palette allowlist", () => {
     expect(paletteAction("writing.spell.check")).toBe("spell");
     expect(paletteAction("writing.stats.count")).toBe("stats");
     expect(paletteAction("typst.export-pdf")).toBe("export-pdf");
+    expect(paletteAction("figure.create")).toBe("new-figure");
     expect(paletteAction("editor.new")).toBeNull();
   });
 
@@ -87,6 +88,8 @@ describe("palette allowlist", () => {
   it("the palette lists only allowlisted plugin commands", async () => {
     const workbench: Command[] = [
       { id: "doc.export-pdf", title: "Export PDF", group: "Workbench", run: noop },
+      // Covers `figure.create`, so the plugin entry is not listed twice.
+      { id: "file.new-figure", title: "New figure", group: "Workbench", run: noop },
     ];
     const kernel = await createDevKernel().commands();
     const all = paletteCandidates({

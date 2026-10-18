@@ -10,14 +10,16 @@
   import { figures } from "$lib/state/figures.svelte";
   import type { FigureState, PenTool } from "$lib/state/figure.svelte";
 
+  import { FORMULA_FIELD } from "./FigureToolbar.svelte";
+
   /**
    * The figure editor, shown inside a tab.
    *
    * Native SVG, one element per scene node. Rendering through the framework is
    * affordable because the scene is small and the pointer work is imperative:
    * strokes are sampled on pointer move and only the committed scene is
-   * reactive. The scene is saved as `*.figure.json`; the Rust figure crate
-   * renders the same scene to SVG headlessly.
+   * reactive. The figure plugin owns the scene: edits, hit tests, undo and
+   * saving (`*.figure.json` plus the SVG documents embed) go through it.
    */
   interface Props {
     figure: FigureState;
@@ -44,6 +46,16 @@
   /** Mice report 0.5 for every event; only a pen has true pressure. */
   function pressureOf(event: PointerEvent): number {
     return event.pointerType === "pen" ? event.pressure : 0.5;
+  }
+
+  /** Double-click (or Enter) on a selected formula edits its text in the toolbar. */
+  function editFormula(): void {
+    if (figure.selected?.kind !== "math") return;
+    const field = document.getElementById(FORMULA_FIELD);
+    if (field instanceof HTMLInputElement) {
+      field.focus();
+      field.select();
+    }
   }
 
   function onpointerdown(event: PointerEvent): void {
@@ -84,13 +96,12 @@
     const mod = event.ctrlKey || event.metaKey;
     if (mod && !event.altKey && event.key.toLowerCase() === "z") {
       event.preventDefault();
-      if (event.shiftKey) figure.redo();
-      else figure.undo();
+      void (event.shiftKey ? figure.redo() : figure.undo());
       return;
     }
     if (mod && !event.altKey && event.key.toLowerCase() === "y") {
       event.preventDefault();
-      figure.redo();
+      void figure.redo();
       return;
     }
     if (mod || event.altKey) return;
@@ -104,6 +115,11 @@
     if (event.key === "Delete" || event.key === "Backspace") {
       event.preventDefault();
       figure.deleteSelected();
+      return;
+    }
+    if (event.key === "Enter" && figure.selected?.kind === "math") {
+      event.preventDefault();
+      editFormula();
       return;
     }
     const next = TOOL_KEYS[event.key.toLowerCase()];
@@ -123,7 +139,7 @@
       bind:this={surface}
       role="application"
       tabindex="0"
-      aria-label="Figure canvas. Drag to draw. Tool keys: P select, B freehand, G rectangle, E ellipse, A arrow, M formula. Drag a selected shape or use the arrow keys to move it. Delete removes the selection. Ctrl+Z undoes."
+      aria-label="Figure canvas. Drag to draw. Tool keys: P select, B freehand, G rectangle, E ellipse, A arrow, M formula. Drag a selected shape or use the arrow keys to move it. Delete removes the selection. Double-click or Enter edits a formula. Ctrl+Z undoes."
       viewBox="0 0 {figure.scene.width} {figure.scene.height}"
       width="100%"
       height="100%"
@@ -139,6 +155,7 @@
       {onpointerup}
       onpointercancel={onpointerup}
       {onkeydown}
+      ondblclick={editFormula}
     >
       <!-- The frame the figure is drawn on: radius 0, one hairline. -->
       <rect

@@ -1769,11 +1769,162 @@ async function main() {
     await shoot(page, "17-figure");
     await press(page, "s", { ctrl: true, wait: 400 });
     check(
-      "Ctrl+S saves the scene as JSON",
+      "Ctrl+S saves the scene as JSON and its SVG",
       await page.evaluate(
         `!document.querySelector('[role="tab"][aria-selected="true"]').getAttribute("aria-label").includes("unsaved")`,
       ),
     );
+
+    // Move the rectangle just drawn: select it and drag it.
+    const shapeXs = () =>
+      page.evaluate(
+        `[...document.querySelectorAll('svg[role="application"] rect')].map((r) => r.getAttribute("x")).join()`,
+      );
+    await clickText(page, "button[aria-pressed]", "Select");
+    const beforeMove = await shapeXs();
+    await mouse(page, "mouseMoved", svg.left + 260, svg.top + 415);
+    await mouse(page, "mousePressed", svg.left + 260, svg.top + 415);
+    await sleep(150);
+    await mouse(page, "mouseMoved", svg.left + 300, svg.top + 425);
+    await mouse(page, "mouseMoved", svg.left + 340, svg.top + 435);
+    await mouse(page, "mouseReleased", svg.left + 340, svg.top + 435);
+    await sleep(300);
+    const afterMove = await shapeXs();
+    check(
+      "dragging a selected shape moves it (one plugin edit on release)",
+      beforeMove !== afterMove &&
+        (await page.evaluate(`document.body.innerText.includes("5 nodes")`)) &&
+        (await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
+      `${beforeMove} -> ${afterMove}`,
+    );
+    await press(page, "Delete", { wait: 300 });
+    const deleted = await page.evaluate(`document.body.innerText.includes("4 nodes")`);
+    await press(page, "z", { ctrl: true, wait: 400 });
+    check(
+      "Delete removes the selection and Ctrl+Z brings it back through the plugin",
+      deleted && (await page.evaluate(`document.body.innerText.includes("5 nodes")`)),
+    );
+    await press(page, "s", { ctrl: true, wait: 400 });
+    check(
+      "saving after the move clears the unsaved mark",
+      !(await dirtyTabs(page)).includes("figures/state_lattice.figure.json"),
+    );
+
+    // A figure whose SVG was never written: Copy embed line writes it first.
+    if (!(await exists(page, 'aside[aria-label="Figures panel"]'))) {
+      await click(
+        page,
+        'nav[aria-label="Workbench views"] button[aria-label="Figures"]',
+      );
+      await sleep(300);
+    }
+    await clickText(page, "#side-panel ul button", "dissipation_curve");
+    await waitFor(
+      page,
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "figures/dissipation_curve.figure.json" && document.querySelector('svg[role="application"]') !== null`,
+      { label: "second figure" },
+    );
+    await clickText(
+      page,
+      '[role="toolbar"][aria-label="Figure tools"] button',
+      "Copy embed line",
+    );
+    await expectEventually(
+      page,
+      "Copy embed line names an SVG that now exists",
+      `(() => { const s = document.querySelector('footer[aria-label="Status"]')?.innerText ?? ""; return s.includes("Copied the embed line") || s.includes("figures/dissipation_curve.svg"); })()`,
+      { show: `document.querySelector('footer[aria-label="Status"]')?.innerText` },
+    );
+    if (!(await exists(page, 'aside[aria-label="Files panel"]'))) {
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+      await sleep(300);
+    }
+    if (
+      (await page.evaluate(
+        `document.querySelector('[role="treeitem"][data-path="figures"]')?.getAttribute("aria-expanded")`,
+      )) !== "true"
+    ) {
+      await click(page, '[role="treeitem"][data-path="figures"]');
+    }
+    await expectEventually(
+      page,
+      "the written SVG appears in Files next to its scene",
+      `document.querySelector('[role="treeitem"][data-path="figures/dissipation_curve.svg"]') !== null`,
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Opening any file");
+    await click(page, '[role="treeitem"][data-path="figures/sketch.png"]');
+    await expectEventually(
+      page,
+      "an image opens in a viewer tab, fitted, from a blob: URL",
+      `(() => { const img = document.querySelector('[data-viewer="figures/sketch.png"] img'); return img !== null && img.src.startsWith("blob:") && img.naturalWidth === 240; })()`,
+    );
+    check(
+      "the image tab is a real tab",
+      (await activeTab(page)) === "figures/sketch.png",
+    );
+    await click(page, '[data-viewer="figures/sketch.png"] img');
+    check(
+      "clicking the image shows it at 1:1",
+      await page.evaluate(
+        `document.querySelector('[data-viewer="figures/sketch.png"] button[aria-pressed]')?.getAttribute("aria-pressed") === "true"`,
+      ),
+    );
+    await shoot(page, "18-image-viewer");
+    const blobUrl = await page.evaluate(
+      `document.querySelector('[data-viewer="figures/sketch.png"] img').src`,
+    );
+    await press(page, "w", { ctrl: true, wait: 300, synthetic: true });
+    check(
+      "closing the image tab revokes its blob: URL",
+      !(await tabNames(page)).includes("figures/sketch.png") &&
+        (await page.evaluate(
+          `fetch(${JSON.stringify(blobUrl)}).then(() => false, () => true)`,
+        )),
+    );
+
+    async function goToFile(query) {
+      await press(page, "p", { ctrl: true, wait: 300 });
+      await insertText(page, query);
+      await sleep(200);
+      await press(page, "Enter", { wait: 500 });
+    }
+
+    await goToFile("measurements.csv");
+    await expectEventually(
+      page,
+      "a .csv opens as text in the editor (Go to file)",
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "data/measurements.csv" && (document.querySelector(".cm-content")?.innerText ?? "").includes("cycle,duration_ms")`,
+    );
+
+    await goToFile("landauer-note.pdf");
+    await expectEventually(
+      page,
+      "a .pdf opens in the PDF viewer tab",
+      `document.querySelector('[data-viewer="papers/landauer-note.pdf"] canvas') !== null || (document.querySelector('[data-viewer="papers/landauer-note.pdf"]')?.innerText ?? "").includes("page 1 of 1")`,
+      { timeout: 20000 },
+    );
+    await shoot(page, "19-pdf-viewer");
+
+    await goToFile("raw.zip");
+    await expectEventually(
+      page,
+      "a binary opens a quiet info tab with type and size",
+      `(() => { const v = document.querySelector('[data-viewer="data/raw.zip"]'); return v !== null && v.innerText.includes("ZIP archive") && v.innerText.includes("22 B"); })()`,
+    );
+    await clickText(
+      page,
+      '[data-viewer="data/raw.zip"] button',
+      "Open with system app",
+    );
+    await expectEventually(
+      page,
+      "in the browser, Open with system app says it needs the desktop app",
+      `(document.querySelector('footer[aria-label="Status"]')?.innerText ?? "").includes("needs the desktop app")`,
+    );
+    await shoot(page, "20-info-tab");
+    await noStrayEdits(page, "after opening any file");
 
     /* ------------------------------------------------------------------ */
     section("Source and preview");

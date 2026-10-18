@@ -5,6 +5,7 @@
 //! application lifecycle; the document engine arrives as sibling crates in
 //! `crates/`.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -349,6 +350,43 @@ async fn dispatch(
     Ok(output)
 }
 
+/// `path` resolved (`..` and symlinks included) when it is a file inside
+/// `root`; anything else is refused, so the web view cannot have the system
+/// open files outside the open project.
+fn file_in_project(root: &Path, path: &Path) -> Result<PathBuf, IpcError> {
+    let refuse = |why: &str| IpcError {
+        message: format!("[outside_project] {}: {why}", path.display()),
+    };
+    let root = root
+        .canonicalize()
+        .map_err(|_| refuse("the project folder is not readable"))?;
+    let file = path.canonicalize().map_err(|_| refuse("no such file"))?;
+    if !file.starts_with(&root) {
+        return Err(refuse("not inside the open project"));
+    }
+    if !file.is_file() {
+        return Err(refuse("not a file"));
+    }
+    Ok(file)
+}
+
+/// Open a project file in the program the system associates with it ("Open
+/// with system app" on files Manang cannot show). Only files inside the open
+/// project; the web view has no general permission to open paths.
+#[tauri::command]
+async fn open_in_system_app(shell: State<'_, Shell>, path: String) -> Result<(), IpcError> {
+    let root = shell.project_root.get().ok_or_else(|| IpcError {
+        message: "[no_project] open a project first".to_owned(),
+    })?;
+    let file = file_in_project(&root, Path::new(&path))?;
+    tauri_plugin_opener::open_path(&file, None::<&str>).map_err(|e| {
+        log::warn!("open_in_system_app {} failed: {e}", file.display());
+        IpcError {
+            message: format!("{} could not be opened: {e}", file.display()),
+        }
+    })
+}
+
 /// A command slower than this is logged even when it succeeds.
 const SLOW_COMMAND: Duration = Duration::from_millis(200);
 
@@ -596,7 +634,8 @@ pub fn run() -> Result<(), tauri::Error> {
             kernel_invoke,
             kernel_invoke_binary,
             save_binary_artifact,
-            open_devtools
+            open_devtools,
+            open_in_system_app
         ])
         .run(tauri::generate_context!())
 }
@@ -614,6 +653,43 @@ mod tests {
         assert!(check_destination(std::path::Path::new("out.pdf")).is_err());
         assert!(check_destination(dir.path()).is_err());
         assert!(check_destination(&dir.path().join("nope/out.pdf")).is_err());
+    }
+
+    #[test]
+    fn only_files_inside_the_project_can_be_opened_by_the_system() {
+        use super::file_in_project;
+        let project = tempfile::tempdir().expect("project");
+        let outside = tempfile::tempdir().expect("outside");
+        let inside = project.path().join("data.zip");
+        std::fs::write(&inside, b"x").expect("write");
+        let secret = outside.path().join("secret.sh");
+        std::fs::write(&secret, b"x").expect("write");
+
+        assert!(file_in_project(project.path(), &inside).is_ok());
+        let escape = project.path().join("..").join(
+            outside
+                .path()
+                .file_name()
+                .expect("name")
+                .to_str()
+                .expect("utf8"),
+        );
+        assert!(file_in_project(project.path(), &escape.join("secret.sh")).is_err());
+        assert!(file_in_project(project.path(), &secret).is_err());
+        assert!(
+            file_in_project(project.path(), project.path()).is_err(),
+            "a folder"
+        );
+        assert!(file_in_project(project.path(), &project.path().join("nope")).is_err());
+        #[cfg(unix)]
+        {
+            let link = project.path().join("link.sh");
+            std::os::unix::fs::symlink(&secret, &link).expect("symlink");
+            assert!(
+                file_in_project(project.path(), &link).is_err(),
+                "symlink out"
+            );
+        }
     }
 
     #[test]

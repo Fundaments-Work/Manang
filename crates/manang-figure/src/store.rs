@@ -49,6 +49,11 @@ enum TaggedFigureOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         color: Option<String>,
     },
+    Translate {
+        id: String,
+        dx: f64,
+        dy: f64,
+    },
     Undo,
     Redo,
 }
@@ -77,6 +82,11 @@ enum TypeFigureOp {
         #[serde(default)]
         color: Option<String>,
     },
+    Translate {
+        id: String,
+        dx: f64,
+        dy: f64,
+    },
     Undo,
     Redo,
 }
@@ -104,6 +114,11 @@ enum KindFigureOp {
         size: Option<f64>,
         #[serde(default)]
         color: Option<String>,
+    },
+    Translate {
+        id: String,
+        dx: f64,
+        dy: f64,
     },
     Undo,
     Redo,
@@ -151,6 +166,15 @@ pub enum FigureOp {
         /// Optional replacement color.
         color: Option<String>,
     },
+    /// Move a node by a delta in scene units (one undo step).
+    Translate {
+        /// ID of the node to move.
+        id: String,
+        /// Horizontal offset.
+        dx: f64,
+        /// Vertical offset.
+        dy: f64,
+    },
     /// Undo the latest operation.
     Undo,
     /// Redo the latest undone operation.
@@ -179,6 +203,11 @@ impl Serialize for FigureOp {
                 fill: fill.clone(),
                 size: *size,
                 color: color.clone(),
+            },
+            Self::Translate { id, dx, dy } => TaggedFigureOp::Translate {
+                id: id.clone(),
+                dx: *dx,
+                dy: *dy,
             },
             Self::Undo => TaggedFigureOp::Undo,
             Self::Redo => TaggedFigureOp::Redo,
@@ -212,6 +241,7 @@ impl<'de> Deserialize<'de> for FigureOp {
                     size,
                     color,
                 },
+                TaggedFigureOp::Translate { id, dx, dy } => Self::Translate { id, dx, dy },
                 TaggedFigureOp::Undo => Self::Undo,
                 TaggedFigureOp::Redo => Self::Redo,
             }),
@@ -233,6 +263,7 @@ impl<'de> Deserialize<'de> for FigureOp {
                     size,
                     color,
                 },
+                TypeFigureOp::Translate { id, dx, dy } => Self::Translate { id, dx, dy },
                 TypeFigureOp::Undo => Self::Undo,
                 TypeFigureOp::Redo => Self::Redo,
             }),
@@ -254,6 +285,7 @@ impl<'de> Deserialize<'de> for FigureOp {
                     size,
                     color,
                 },
+                KindFigureOp::Translate { id, dx, dy } => Self::Translate { id, dx, dy },
                 KindFigureOp::Undo => Self::Undo,
                 KindFigureOp::Redo => Self::Redo,
             }),
@@ -276,6 +308,12 @@ pub struct ApplyResult {
     pub revision: u64,
     /// Whether an edit, undo, or redo was actually applied.
     pub applied: bool,
+    /// Whether an undo step is available after this operation.
+    #[serde(default)]
+    pub can_undo: bool,
+    /// Whether a redo step is available after this operation.
+    #[serde(default)]
+    pub can_redo: bool,
 }
 
 /// Metadata summary of an open figure.
@@ -291,6 +329,54 @@ pub struct FigureInfo {
     pub revision: u64,
     /// Whether the figure has unsaved changes.
     pub dirty: bool,
+}
+
+/// Where a save wrote the scene and its rendered SVG.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedPaths {
+    /// The scene JSON (`<name>.figure.json`).
+    pub json: String,
+    /// The rendered SVG next to it (`<name>.svg`).
+    pub svg: String,
+    /// The revision that was written.
+    pub revision: u64,
+}
+
+/// Writes the scene JSON and its SVG, then marks the document saved.
+fn write_doc(doc: &mut FigureDocument) -> Result<SavedPaths, FigureError> {
+    let target = doc.path.clone().ok_or(FigureError::NoPath)?;
+    let (json_path, svg_path) = resolve_figure_paths(&target);
+
+    if let Some(parent) = json_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).map_err(|source| FigureError::Io {
+            path: parent.display().to_string(),
+            source,
+        })?;
+    }
+
+    // Pretty-printed with a final newline: the scene is a project file that
+    // people diff and commit.
+    let mut json_text = serde_json::to_string_pretty(&doc.scene)?;
+    json_text.push('\n');
+    fs::write(&json_path, json_text).map_err(|source| FigureError::Io {
+        path: json_path.display().to_string(),
+        source,
+    })?;
+
+    let svg_text = render_svg(&doc.scene, &SvgExportOptions::default());
+    fs::write(&svg_path, svg_text).map_err(|source| FigureError::Io {
+        path: svg_path.display().to_string(),
+        source,
+    })?;
+
+    doc.saved_revision = doc.revision;
+    Ok(SavedPaths {
+        json: json_path.display().to_string(),
+        svg: svg_path.display().to_string(),
+        revision: doc.revision,
+    })
 }
 
 /// Resolves canonical file paths for figure JSON and companion headless SVG.
@@ -416,91 +502,105 @@ impl FigureDocument {
         self.redo_stack.clear();
     }
 
+    /// Whether an undo step is available.
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+
+    /// Whether a redo step is available.
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
+
+    fn result(&self, applied: bool) -> ApplyResult {
+        ApplyResult {
+            revision: self.revision,
+            applied,
+            can_undo: self.can_undo(),
+            can_redo: self.can_redo(),
+        }
+    }
+
+    /// Records an applied edit: bumps the revision and reports the new state.
+    fn edited(&mut self) -> ApplyResult {
+        self.revision += 1;
+        self.result(true)
+    }
+
     /// Applies an operation to the figure, updating revision and undo/redo stacks.
+    ///
+    /// A failed operation leaves the scene, the revision and the history as
+    /// they were.
     pub fn apply(&mut self, op: FigureOp) -> Result<ApplyResult, FigureError> {
         match op {
             FigureOp::Undo => {
-                if let Some(prev) = self.undo_stack.pop() {
-                    if self.redo_stack.len() >= self.max_history {
-                        self.redo_stack.remove(0);
-                    }
-                    self.redo_stack.push(self.scene.clone());
-                    self.scene = prev;
-                    self.revision += 1;
-                    Ok(ApplyResult {
-                        revision: self.revision,
-                        applied: true,
-                    })
-                } else {
-                    Ok(ApplyResult {
-                        revision: self.revision,
-                        applied: false,
-                    })
+                let Some(prev) = self.undo_stack.pop() else {
+                    return Ok(self.result(false));
+                };
+                if self.redo_stack.len() >= self.max_history {
+                    self.redo_stack.remove(0);
                 }
+                let current = std::mem::replace(&mut self.scene, prev);
+                self.redo_stack.push(current);
+                Ok(self.edited())
             }
             FigureOp::Redo => {
-                if let Some(next) = self.redo_stack.pop() {
-                    if self.undo_stack.len() >= self.max_history {
-                        self.undo_stack.remove(0);
-                    }
-                    self.undo_stack.push(self.scene.clone());
-                    self.scene = next;
-                    self.revision += 1;
-                    Ok(ApplyResult {
-                        revision: self.revision,
-                        applied: true,
-                    })
-                } else {
-                    Ok(ApplyResult {
-                        revision: self.revision,
-                        applied: false,
-                    })
+                let Some(next) = self.redo_stack.pop() else {
+                    return Ok(self.result(false));
+                };
+                if self.undo_stack.len() >= self.max_history {
+                    self.undo_stack.remove(0);
                 }
+                let current = std::mem::replace(&mut self.scene, next);
+                self.undo_stack.push(current);
+                Ok(self.edited())
             }
             FigureOp::AddNode { node } => {
+                if self.scene.node_by_id(node.id()).is_some() {
+                    return Err(FigureError::DuplicateNode(node.id().to_owned()));
+                }
                 self.push_undo();
                 self.scene.append_node(node);
-                self.revision += 1;
-                Ok(ApplyResult {
-                    revision: self.revision,
-                    applied: true,
-                })
+                Ok(self.edited())
             }
             FigureOp::UpdateNode { node } => {
-                let node_id = node.id().to_owned();
-                self.push_undo();
-                if self.scene.replace_node(node) {
-                    self.revision += 1;
-                    Ok(ApplyResult {
-                        revision: self.revision,
-                        applied: true,
-                    })
-                } else {
-                    self.undo_stack.pop();
-                    Err(FigureError::NodeNotFound(node_id))
+                if self.scene.node_by_id(node.id()).is_none() {
+                    return Err(FigureError::NodeNotFound(node.id().to_owned()));
                 }
+                self.push_undo();
+                self.scene.replace_node(node);
+                Ok(self.edited())
             }
             FigureOp::RemoveNode { id } => {
-                self.push_undo();
-                if self.scene.remove_node(&id).is_some() {
-                    self.revision += 1;
-                    Ok(ApplyResult {
-                        revision: self.revision,
-                        applied: true,
-                    })
-                } else {
-                    self.undo_stack.pop();
-                    Err(FigureError::NodeNotFound(id))
+                if self.scene.node_by_id(&id).is_none() {
+                    return Err(FigureError::NodeNotFound(id));
                 }
+                self.push_undo();
+                self.scene.remove_node(&id);
+                Ok(self.edited())
+            }
+            FigureOp::Translate { id, dx, dy } => {
+                if !dx.is_finite() || !dy.is_finite() {
+                    return Err(FigureError::InvalidArgument(
+                        "`dx` and `dy` must be finite numbers".to_owned(),
+                    ));
+                }
+                if self.scene.node_by_id(&id).is_none() {
+                    return Err(FigureError::NodeNotFound(id));
+                }
+                if dx == 0.0 && dy == 0.0 {
+                    return Ok(self.result(false));
+                }
+                self.push_undo();
+                if let Some(node) = self.scene.nodes.iter_mut().find(|n| n.id() == id) {
+                    node.translate(dx, dy);
+                }
+                Ok(self.edited())
             }
             FigureOp::Clear => {
                 self.push_undo();
                 self.scene.nodes.clear();
-                self.revision += 1;
-                Ok(ApplyResult {
-                    revision: self.revision,
-                    applied: true,
-                })
+                Ok(self.edited())
             }
             FigureOp::SetStyle {
                 id,
@@ -509,55 +609,62 @@ impl FigureDocument {
                 size,
                 color,
             } => {
-                self.push_undo();
-                let Some(node) = self.scene.nodes.iter_mut().find(|n| n.id() == id) else {
-                    self.undo_stack.pop();
+                if self.scene.node_by_id(&id).is_none() {
                     return Err(FigureError::NodeNotFound(id));
-                };
-                match node {
-                    FigureNode::Stroke(s) => {
-                        if let Some(c) = color.or(stroke) {
-                            s.color = c;
-                        }
-                        if let Some(sz) = size {
-                            s.size = sz;
-                        }
-                    }
-                    FigureNode::Rect(r) => {
-                        if let Some(s) = stroke.or(color) {
-                            r.stroke = s;
-                        }
-                        if fill.is_some() {
-                            r.fill = fill;
-                        }
-                    }
-                    FigureNode::Ellipse(e) => {
-                        if let Some(s) = stroke.or(color) {
-                            e.stroke = s;
-                        }
-                        if fill.is_some() {
-                            e.fill = fill;
-                        }
-                    }
-                    FigureNode::Arrow(a) => {
-                        if let Some(c) = color.or(stroke) {
-                            a.color = c;
-                        }
-                    }
-                    FigureNode::Math(m) => {
-                        if let Some(c) = color.or(stroke) {
-                            m.color = c;
-                        }
-                        if let Some(sz) = size {
-                            m.size = sz;
-                        }
-                    }
                 }
-                self.revision += 1;
-                Ok(ApplyResult {
-                    revision: self.revision,
-                    applied: true,
-                })
+                self.push_undo();
+                if let Some(node) = self.scene.nodes.iter_mut().find(|n| n.id() == id) {
+                    apply_style(node, stroke, fill, size, color);
+                }
+                Ok(self.edited())
+            }
+        }
+    }
+}
+
+fn apply_style(
+    node: &mut FigureNode,
+    stroke: Option<String>,
+    fill: Option<String>,
+    size: Option<f64>,
+    color: Option<String>,
+) {
+    match node {
+        FigureNode::Stroke(s) => {
+            if let Some(c) = color.or(stroke) {
+                s.color = c;
+            }
+            if let Some(sz) = size {
+                s.size = sz;
+            }
+        }
+        FigureNode::Rect(r) => {
+            if let Some(s) = stroke.or(color) {
+                r.stroke = s;
+            }
+            if fill.is_some() {
+                r.fill = fill;
+            }
+        }
+        FigureNode::Ellipse(e) => {
+            if let Some(s) = stroke.or(color) {
+                e.stroke = s;
+            }
+            if fill.is_some() {
+                e.fill = fill;
+            }
+        }
+        FigureNode::Arrow(a) => {
+            if let Some(c) = color.or(stroke) {
+                a.color = c;
+            }
+        }
+        FigureNode::Math(m) => {
+            if let Some(c) = color.or(stroke) {
+                m.color = c;
+            }
+            if let Some(sz) = size {
+                m.size = sz;
             }
         }
     }
@@ -621,6 +728,35 @@ impl FigureStore {
         self.state.lock().add(None, FigureScene::new(w, h))
     }
 
+    /// Creates a figure at `path` and writes it to disk straight away
+    /// (`<name>.figure.json` and `<name>.svg`), so it exists as a project file
+    /// before the first edit. Refuses to overwrite an existing figure.
+    pub fn create_at(
+        &self,
+        path: &Path,
+        width: Option<f64>,
+        height: Option<f64>,
+    ) -> Result<(FigureId, SavedPaths), FigureError> {
+        let (json_path, _) = resolve_figure_paths(path);
+        if json_path.exists() {
+            return Err(FigureError::AlreadyExists(json_path.display().to_string()));
+        }
+        let w = width.unwrap_or(DEFAULT_SCENE_WIDTH);
+        let h = height.unwrap_or(DEFAULT_SCENE_HEIGHT);
+        let mut state = self.state.lock();
+        let id = state.add(Some(json_path), FigureScene::new(w, h));
+        let saved = match state.doc_mut(Some(id)).and_then(|(_, doc)| write_doc(doc)) {
+            Ok(saved) => saved,
+            Err(error) => {
+                // Nothing usable was created: do not leave a pathless ghost open.
+                state.figures.remove(&id);
+                state.active = state.figures.keys().next_back().copied();
+                return Err(error);
+            }
+        };
+        Ok((id, saved))
+    }
+
     /// Opens a figure from disk, resolving companion JSON and making it active.
     pub fn open(&self, path: &Path) -> Result<FigureId, FigureError> {
         let (json_path, _) = resolve_figure_paths(path);
@@ -645,41 +781,21 @@ impl FigureStore {
     }
 
     /// Saves a figure, writing both `<name>.figure.json` and `<name>.svg`.
-    pub fn save(&self, id: Option<FigureId>, path: Option<&Path>) -> Result<(), FigureError> {
+    ///
+    /// `path` (any of `x.figure.json`, `x.svg` or `x`) moves the figure there
+    /// first, so a renamed file is saved under its new name.
+    pub fn save(
+        &self,
+        id: Option<FigureId>,
+        path: Option<&Path>,
+    ) -> Result<SavedPaths, FigureError> {
         let mut state = self.state.lock();
         let (_, doc) = state.doc_mut(id)?;
-
         if let Some(p) = path {
             let (json_path, _) = resolve_figure_paths(p);
             doc.path = Some(json_path);
         }
-
-        let target = doc.path.clone().ok_or(FigureError::NoPath)?;
-        let (json_path, svg_path) = resolve_figure_paths(&target);
-
-        if let Some(parent) = json_path.parent()
-            && !parent.as_os_str().is_empty()
-        {
-            fs::create_dir_all(parent).map_err(|source| FigureError::Io {
-                path: parent.display().to_string(),
-                source,
-            })?;
-        }
-
-        let json_text = doc.scene.to_json()?;
-        fs::write(&json_path, json_text).map_err(|source| FigureError::Io {
-            path: json_path.display().to_string(),
-            source,
-        })?;
-
-        let svg_text = render_svg(&doc.scene, &SvgExportOptions::default());
-        fs::write(&svg_path, svg_text).map_err(|source| FigureError::Io {
-            path: svg_path.display().to_string(),
-            source,
-        })?;
-
-        doc.saved_revision = doc.revision;
-        Ok(())
+        write_doc(doc)
     }
 
     /// Activates an open figure by ID.
