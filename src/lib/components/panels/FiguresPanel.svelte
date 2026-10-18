@@ -10,6 +10,19 @@
   /** Figures: every `.figure` (and legacy `.figure.json`) in the project. Each opens in the figure editor, in a tab. */
 
   onMount(() => void workspace.ensureAll());
+  let list: HTMLUListElement | undefined = $state();
+
+  function onkeydown(event: KeyboardEvent, index: number): void {
+    const buttons = list?.querySelectorAll<HTMLButtonElement>("button[data-figure]");
+    if (!buttons) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      buttons[index + 1]?.focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      buttons[index - 1]?.focus();
+    }
+  }
 </script>
 
 <div class="mng-panel-head">
@@ -40,21 +53,23 @@
       >
     </div>
   {:else}
-    <ul class="m-0 list-none p-0" aria-label="Figure files">
-      {#each workspace.figures as figure (figure.path)}
+    <ul bind:this={list} class="m-0 list-none p-0" aria-label="Figure files">
+      {#each workspace.figures as figure, index (figure.path)}
         {@const active = tabs.active?.path === figure.path}
         <li>
           <button
             type="button"
+            data-figure
             class="inset-focus flex h-8 w-full items-center gap-2 px-4 text-left text-xs hover:bg-surface-hi {active
               ? 'bg-surface-hi text-text'
               : 'text-text-60 hover:text-text'}"
             aria-current={active ? "true" : undefined}
             onclick={() => void openFile(figure.path)}
+            onkeydown={(e) => onkeydown(e, index)}
           >
             <Icon name="figures" size={14} class="shrink-0 opacity-70" />
             <span class="truncate"
-              >{basename(figure.path).replace(/\.figure\.json$/, "")}</span
+              >{basename(figure.path).replace(/\.figure(\.json)?$/, "")}</span
             >
             {#if dirname(figure.path) !== ""}<span class="truncate text-text-muted"
                 >{dirname(figure.path)}</span

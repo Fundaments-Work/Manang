@@ -69,6 +69,7 @@
       type="button"
       class="mng-status"
       title="Git branch. Show changed files"
+      aria-label="Git branch: {workspace.branch}. Show changed files"
       onclick={() => layout.showSide("files")}
     >
       <Icon name="branch" size={12} />{workspace.branch}
@@ -81,6 +82,7 @@
       class="mng-status"
       class:text-text={build.status === "failed"}
       title="Show problems"
+      aria-label="Compilation status: {compileText}{warnings ? `, ${countLabel(build.counts)}` : ''}. Show problems panel"
       onclick={() => layout.showPanel("problems")}
     >
       {#if build.status === "failed"}<Icon
@@ -97,8 +99,8 @@
     class="min-w-0 flex-1 truncate px-3 leading-6 {notice.kind === 'error'
       ? 'text-text'
       : ''}"
-    role="status"
-    aria-live="polite"
+    role={notice.kind === "error" ? "alert" : "status"}
+    aria-live={notice.kind === "error" ? "assertive" : "polite"}
   >
     {notice.text}
   </span>
