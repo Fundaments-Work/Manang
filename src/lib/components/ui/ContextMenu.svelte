@@ -5,12 +5,16 @@
     readonly disabled?: boolean;
     /** Draws a rule above this item. */
     readonly separated?: boolean;
+    /** Set for a choice among options: shows as a radio item, checked or not. */
+    readonly checked?: boolean;
     readonly onselect: () => void;
   }
 </script>
 
 <script lang="ts">
   import { onMount } from "svelte";
+
+  import Icon from "$lib/components/ui/Icon.svelte";
 
   /**
    * Context menu (WAI-ARIA menu pattern): `role="menu"` with `menuitem`s, roving
@@ -129,7 +133,8 @@
     {/if}
     <button
       type="button"
-      role="menuitem"
+      role={item.checked === undefined ? "menuitem" : "menuitemradio"}
+      aria-checked={item.checked}
       data-index={index}
       tabindex={index === current ? 0 : -1}
       disabled={item.disabled === true}
@@ -140,6 +145,11 @@
       onmouseenter={() => (current = index)}
       onclick={() => choose(item)}
     >
+      {#if item.checked !== undefined}
+        <span class="flex w-3.5 shrink-0 justify-center" aria-hidden="true">
+          {#if item.checked}<Icon name="check" size={12} />{/if}
+        </span>
+      {/if}
       <span class="flex-1 truncate">{item.label}</span>
       {#if item.shortcut !== undefined}
         <span class="mng-kbd">{item.shortcut}</span>

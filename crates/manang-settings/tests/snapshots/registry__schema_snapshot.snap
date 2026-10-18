@@ -232,6 +232,20 @@ expression: "Registry::with_core().schema()"
       ]
     },
     {
+      "id": "preview.dark-pages",
+      "type": "bool",
+      "default": false,
+      "description": "Show PDF pages inverted for reading in the dark. Export is unaffected.",
+      "scope": "user",
+      "requires-restart": false,
+      "owner": "core",
+      "category": "preview",
+      "contexts": [
+        "document",
+        "pdf"
+      ]
+    },
+    {
       "id": "preview.debounce-ms",
       "type": "int",
       "min": 0,
@@ -239,6 +253,20 @@ expression: "Registry::with_core().schema()"
       "default": 300,
       "description": "Milliseconds to wait after the last keystroke before recompiling.",
       "scope": "project",
+      "requires-restart": false,
+      "owner": "core",
+      "category": "preview",
+      "contexts": [
+        "document",
+        "pdf"
+      ]
+    },
+    {
+      "id": "preview.double-click-source",
+      "type": "bool",
+      "default": true,
+      "description": "Double-click in the PDF goes to the source. Alt+double-click then selects a word.",
+      "scope": "user",
       "requires-restart": false,
       "owner": "core",
       "category": "preview",

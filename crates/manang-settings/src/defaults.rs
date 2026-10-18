@@ -139,6 +139,20 @@ pub fn definitions() -> Vec<SettingDef> {
             "Milliseconds to wait after the last keystroke before recompiling.",
         ),
         def(
+            "preview.double-click-source",
+            SettingType::Bool,
+            json!(true),
+            User,
+            "Double-click in the PDF goes to the source. Alt+double-click then selects a word.",
+        ),
+        def(
+            "preview.dark-pages",
+            SettingType::Bool,
+            json!(false),
+            User,
+            "Show PDF pages inverted for reading in the dark. Export is unaffected.",
+        ),
+        def(
             "compile.engine",
             choice(&["typst", "latex", "markdown"]),
             json!("typst"),
