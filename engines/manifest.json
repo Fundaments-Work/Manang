@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "engine": "tectonic",
+  "version": "0.17.0",
+  "package_host": "relay.fullyjustified.net",
+  "platforms": {
+    "linux-x86_64": {
+      "status": "built",
+      "file": "manang-latex-worker-linux-x86_64",
+      "size": 0,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "linux-aarch64": {
+      "status": "planned",
+      "file": "manang-latex-worker-linux-aarch64"
+    },
+    "windows-x86_64": {
+      "status": "planned",
+      "file": "manang-latex-worker-windows-x86_64.exe"
+    },
+    "macos-aarch64": {
+      "status": "planned",
+      "file": "manang-latex-worker-macos-aarch64"
+    },
+    "macos-x86_64": {
+      "status": "planned",
+      "file": "manang-latex-worker-macos-x86_64"
+    }
+  }
+}

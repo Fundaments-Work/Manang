@@ -18,6 +18,7 @@
 //! Failures that are not the document's fault are `PluginError::Failed`
 //! messages of the form `[code] text`; see [`LatexError::code`].
 
+pub mod builtin;
 pub mod diagnostics;
 mod driver;
 pub mod engine;
@@ -28,9 +29,10 @@ pub mod system;
 #[cfg(feature = "engine")]
 pub mod worker;
 
+pub use builtin::{EngineError, EngineSource, EngineStore};
 pub use driver::{
     BackendChoice, Build, CompileSpec, LatexConfig, compile, compile_with, resolve_cache_dir,
 };
 pub use error::LatexError;
-pub use plugin::{LatexPlugin, manifest, plugin};
+pub use plugin::{ENGINE_PROGRESS_TOPIC, LatexPlugin, manifest, plugin, plugin_with_events};
 pub use system::{Engine, TexTools};

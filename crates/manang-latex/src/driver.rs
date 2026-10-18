@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use wait_timeout::ChildExt;
 
+use crate::builtin::{EngineSource, EngineStore, InstalledEngine};
 use crate::diagnostics::{Diagnostic, Severity, parse_bibtex_log, parse_tex_log};
 use crate::engine::{FailureKind, WorkerOutcome, WorkerRequest};
 use crate::error::LatexError;
@@ -30,6 +31,13 @@ pub struct LatexConfig {
     /// The `manang-latex-worker` executable. `None` searches
     /// `$MANANG_LATEX_WORKER`, then next to the running executable.
     pub worker: Option<PathBuf>,
+    /// The folder the consented, downloaded engine lives in
+    /// (`<app data>/engines`). `None` means no built-in engine can be
+    /// installed or found.
+    pub engines_dir: Option<PathBuf>,
+    /// Which engine release this build offers. `None` selects the manifest
+    /// embedded in the app; tests inject their own.
+    pub engine_source: Option<EngineSource>,
     /// Holds `bundles/` and `formats/`. `None` selects
     /// `$MANANG_LATEX_CACHE` or the per-user cache directory.
     pub cache_dir: Option<PathBuf>,
@@ -62,6 +70,8 @@ impl Default for LatexConfig {
     fn default() -> Self {
         Self {
             worker: None,
+            engines_dir: None,
+            engine_source: None,
             cache_dir: None,
             bundle: None,
             allow_network: false,
@@ -142,6 +152,9 @@ fn find_worker(config: &LatexConfig) -> Result<PathBuf, LatexError> {
     if let Some(path) = std::env::var_os("MANANG_LATEX_WORKER") {
         return Ok(PathBuf::from(path));
     }
+    if let Some((path, _)) = installed_builtin(config) {
+        return Ok(path);
+    }
     if let Ok(exe) = std::env::current_exe() {
         // Next to the app, or one level up (test binaries live in `deps/`).
         for dir in exe.ancestors().skip(1).take(2) {
@@ -152,6 +165,24 @@ fn find_worker(config: &LatexConfig) -> Result<PathBuf, LatexError> {
         }
     }
     Err(LatexError::WorkerMissing(name))
+}
+
+/// The release this build offers: injected for tests, else the embedded one.
+pub fn engine_source(config: &LatexConfig) -> Option<EngineSource> {
+    config
+        .engine_source
+        .clone()
+        .or_else(|| EngineSource::embedded().ok())
+}
+
+/// The store the consented download installs into.
+pub fn engine_store(config: &LatexConfig) -> Option<EngineStore> {
+    config.engines_dir.clone().map(EngineStore::new)
+}
+
+/// The downloaded engine's worker, when a complete verified install exists.
+pub fn installed_builtin(config: &LatexConfig) -> Option<(PathBuf, InstalledEngine)> {
+    engine_store(config)?.installed_worker(&engine_source(config)?)
 }
 
 /// Whether the optional Tectonic worker is installed.
@@ -371,7 +402,12 @@ pub fn compile_with(
             let out_dir = scratch.path().join("out");
             fs::create_dir_all(&out_dir).map_err(|e| io_err(&out_dir, e))?;
             let outcome = run_tectonic(config, spec, &inputs, scratch.path(), &out_dir)?;
-            (out_dir, outcome, Engine::Xelatex, None, "tectonic")
+            // Name the engine that ran: "Tectonic 0.17.0" for the downloaded
+            // one, nothing when a developer pointed at their own worker.
+            let version = installed_builtin(config)
+                .filter(|(path, _)| find_worker(config).is_ok_and(|w| &w == path))
+                .map(|(_, m)| format!("Tectonic {}", m.version));
+            (out_dir, outcome, Engine::Xelatex, version, "tectonic")
         }
     };
 
