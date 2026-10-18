@@ -9,6 +9,7 @@
 import type { Kernel } from "./client";
 import type {
   ChangeState,
+  MarkdownDiagnostic,
   CompileReport,
   Engine,
   LatexReport,
@@ -175,6 +176,21 @@ export interface TextStats {
   readonly speaking_time_seconds: number;
 }
 
+/** One spelling dictionary the writing plugin can check with. */
+export interface SpellLanguage {
+  /** Normalised code such as `en_US`. */
+  readonly code: string;
+  /** Shipped with the app, or a Hunspell pair in the config folder. */
+  readonly source: "bundled" | "user";
+}
+
+export interface SpellLanguages {
+  /** The configured language (`writing.spell-language`). */
+  readonly default: string;
+  readonly spellcheck?: boolean;
+  readonly languages: readonly SpellLanguage[];
+}
+
 export function writingApi(kernel: Kernel) {
   return {
     spellCheck: (text: string, syntax: WritingSyntax) =>
@@ -190,6 +206,13 @@ export function writingApi(kernel: Kernel) {
       ),
     addWord: (word: string) =>
       kernel.run<{ added: boolean; count: number }>("writing.spell.add-word", { word }),
+    removeWord: (word: string) =>
+      kernel.run<{ removed: boolean; count: number }>("writing.spell.remove-word", {
+        word,
+      }),
+    /** The personal dictionary, sorted. */
+    words: () => kernel.run<{ words: string[] }>("writing.spell.words"),
+    languages: () => kernel.run<SpellLanguages>("writing.spell.languages"),
     lint: (text: string, syntax: WritingSyntax) =>
       kernel.run<ProseLintResult>("writing.lint.prose", { text, syntax }),
     format: (source: string, language: "typst" | "latex" | "markdown") =>
@@ -238,7 +261,16 @@ export function markdownApi(kernel: Kernel) {
       kernel.run<{ headings: readonly MarkdownHeading[] }>("markdown.outline", {
         source,
       }),
+    /** Typst markup for a Markdown source; frontmatter is dropped. */
+    toTypst: (source: string) =>
+      kernel.run<MarkdownToTypst>("markdown.to-typst", { source }),
   };
+}
+
+export interface MarkdownToTypst {
+  readonly typst: string;
+  /** Frontmatter that was dropped, constructs Typst has no equivalent for. */
+  readonly diagnostics: readonly MarkdownDiagnostic[];
 }
 
 export type LatexApi = ReturnType<typeof latexApi>;
@@ -829,6 +861,9 @@ export interface CitationExtractKeysResponse {
   readonly keys: readonly string[];
 }
 
+/** Styles `citations.format` accepts (`ieee` is an alias of `numeric`). */
+export type CitationStyle = "apa" | "numeric" | "ieee";
+
 export function citationsApi(kernel: Kernel) {
   return {
     load: (req: { paths: readonly string[] } | { path: string }) =>
@@ -836,8 +871,12 @@ export function citationsApi(kernel: Kernel) {
     search: (req: { query: string; limit?: number | undefined }) =>
       kernel.run<CitationSearchResponse>("citations.search", { ...req }),
     get: (key: string) => kernel.run<CitationEntry>("citations.get", { key }),
-    format: (key: string, style: "apa" | "numeric" | "ieee" = "apa") =>
-      kernel.run<CitationFormatResponse>("citations.format", { key, style }),
+    /** Without `style`, the plugin uses the configured `citations.style`. */
+    format: (key: string, style?: CitationStyle) =>
+      kernel.run<CitationFormatResponse>(
+        "citations.format",
+        style === undefined ? { key } : { key, style },
+      ),
     extractKeys: (source: string, syntax: "typst" | "latex" | "markdown") =>
       kernel.run<CitationExtractKeysResponse>("citations.extract-keys", {
         source,
