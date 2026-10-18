@@ -5659,6 +5659,26 @@ async function main() {
     );
 
     // Both changed the same file: stops, names it, changes nothing.
+    await typeAtEnd("// share-local\n");
+    await press(page, "s", { ctrl: true, alt: true, wait: 500 });
+    await expectEventually(
+      page,
+      "a local version is saved before the clash",
+      `document.querySelector("#dialog-title")?.textContent === "Save a version"`,
+    );
+    await insertText(page, "Local draft");
+    await pressDialogButton("Save");
+    await expectEventually(
+      page,
+      "the status line counts the version to share and Share is the lime one",
+      `document.querySelector('${SHARE} [data-testid="share-status"]')?.innerText.includes("to share")`,
+      { show: `document.querySelector('${SHARE}')?.innerText` },
+    );
+    check(
+      "exactly one action is lime: Share (again)",
+      JSON.stringify(await limeButtons()) === '["Share"]',
+      JSON.stringify(await limeButtons()),
+    );
     await shareFlag("conflicts");
     await clickText(page, `${SHARE} button`, "Get updates");
     await expectEventually(
@@ -5684,6 +5704,10 @@ async function main() {
       { show: `document.querySelector('footer[aria-label="Status"]').innerText` },
     );
     await shareFlag(null);
+    // The refusals above were provoked on purpose and logged by reportError.
+    for (let i = page.errors.length - 1; i >= 0; i -= 1) {
+      if (/sharing versions|getting updates/.test(page.errors[i])) page.errors.splice(i, 1);
+    }
     check(
       "the group uses no git jargon",
       !/\b(push|pull|fetch|merge|rebase|upstream|origin|commit)\b/i.test(await shareText()),
