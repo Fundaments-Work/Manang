@@ -494,6 +494,9 @@ async function liveSection(browser) {
     `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
     { label: "editor shows main.typ" },
   );
+  // Focus the editor first, so the palette shortcut reaches the page and not a panel.
+  await press(page, "Escape", { wait: 100 });
+  await click(page, ".cm-content");
   const run = (command, args = {}) =>
     page.evaluate(
       `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
