@@ -26,6 +26,7 @@ import { pluginsPlugin } from "./mockPlugins";
 import { searchPlugin } from "./mockSearch";
 import { settingsPlugin } from "./mockSettings";
 import { typstPlugin } from "./mockTypst";
+import { healPlugin } from "./mockHeal";
 import { writingPlugin } from "./mockWriting";
 
 export const DEMO_ROOT = "/home/author/entropy-paper";
@@ -470,6 +471,7 @@ export function createDevKernel(
       pluginsPlugin(),
       settingsPlugin(host),
       writingPlugin(),
+      healPlugin(),
       agentPlugin,
       livePlugin,
     ],

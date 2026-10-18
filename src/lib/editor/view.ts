@@ -51,6 +51,7 @@ import {
 
 import { aiDiff } from "./aiDiff";
 import { problemMarkers } from "./gutter";
+import { healFixes } from "./heal";
 import { writing } from "./writing";
 import { languageFor, loadLanguageExtension, type EditorLanguage } from "./languages";
 import { manangTheme } from "./theme";
@@ -167,6 +168,7 @@ export function createEditorState(text: string, extra: Extension): EditorState {
       manangTheme,
       problemMarkers(),
       writing(),
+      healFixes(),
       aiDiff(),
       extra,
     ],

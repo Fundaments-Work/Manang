@@ -18,6 +18,7 @@ import {
   type Text,
   type TransactionSpec,
 } from "@codemirror/state";
+import { isolateHistory, undo } from "@codemirror/commands";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
 import { SvelteMap } from "svelte/reactivity";
 
@@ -222,6 +223,49 @@ export class DocSession {
       this.#dispatch({ selection: { anchor, head } });
     }
     this.dirty = !this.doc.eq(this.savedDoc);
+  }
+
+  /**
+   * Apply a fix's edits (UTF-16 offsets of the current text) as one undoable
+   * step, kept apart from typing in the undo history. False, with nothing
+   * changed, when an edit falls outside the text.
+   */
+  applyEdits(
+    edits: readonly {
+      readonly from: number;
+      readonly to: number;
+      readonly insert: string;
+    }[],
+  ): boolean {
+    const length = this.doc.length;
+    if (edits.some((e) => e.from < 0 || e.to < e.from || e.to > length)) return false;
+    const spec: TransactionSpec = {
+      changes: edits.map((e) => ({ from: e.from, to: e.to, insert: e.insert })),
+      annotations: [isolateHistory.of("full"), Transaction.userEvent.of("input.fix")],
+    };
+    const view = this.#store.view;
+    if (this.#shown && view !== undefined) view.dispatch(spec);
+    else {
+      const tr = this.state.update(spec);
+      for (const batch of opsForTransactions([tr])) this.sync.submit(batch);
+      this.state = tr.state;
+      this.dirty = !this.doc.eq(this.savedDoc);
+    }
+    return true;
+  }
+
+  /** Undo the last step of the history (a fix, right after it was applied). */
+  undoLast(): boolean {
+    const view = this.#store.view;
+    if (this.#shown && view !== undefined) return undo(view);
+    return undo({
+      state: this.state,
+      dispatch: (tr) => {
+        for (const batch of opsForTransactions([tr])) this.sync.submit(batch);
+        this.state = tr.state;
+        this.dirty = !this.doc.eq(this.savedDoc);
+      },
+    });
   }
 
   /**

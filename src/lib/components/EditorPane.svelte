@@ -7,6 +7,7 @@
   import { build } from "$lib/state/build.svelte";
   import { diagram } from "$lib/state/diagram.svelte";
   import { documents } from "$lib/state/documents.svelte";
+  import { heal } from "$lib/state/heal.svelte";
   import { problemsIn, toGutter } from "$lib/workbench/problems";
 
   /**
@@ -52,7 +53,8 @@
   });
 
   $effect(() => {
-    const problems = [...build.problems, ...diagram.problems];
+    const problems = [...build.problems, ...diagram.problems, ...heal.problems];
+    void heal.results;
     void documents.version;
     if (view === undefined) return;
     const session = documents.get(path);
@@ -62,6 +64,7 @@
       toGutter(
         untrack(() => session.text()),
         problemsIn(problems, path),
+        (problem) => heal.choicesFor(problem),
       ),
     );
   });
