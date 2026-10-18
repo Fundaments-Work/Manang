@@ -6,40 +6,40 @@ expression: rows
   {
     "sample": "typst",
     "stats": {
+      "words": 47,
       "characters": 252,
       "characters_no_spaces": 205,
-      "paragraphs": 2,
-      "reading_time_minutes": 0.2,
-      "reading_time_seconds": 12,
       "sentences": 4,
-      "speaking_time_seconds": 19,
-      "words": 47
+      "paragraphs": 2,
+      "reading_time_seconds": 12,
+      "reading_time_minutes": 0.2,
+      "speaking_time_seconds": 19
     }
   },
   {
     "sample": "latex",
     "stats": {
+      "words": 19,
       "characters": 118,
       "characters_no_spaces": 99,
-      "paragraphs": 1,
-      "reading_time_minutes": 0.1,
-      "reading_time_seconds": 5,
       "sentences": 3,
-      "speaking_time_seconds": 8,
-      "words": 19
+      "paragraphs": 1,
+      "reading_time_seconds": 5,
+      "reading_time_minutes": 0.1,
+      "speaking_time_seconds": 8
     }
   },
   {
     "sample": "markdown",
     "stats": {
+      "words": 14,
       "characters": 74,
       "characters_no_spaces": 60,
-      "paragraphs": 3,
-      "reading_time_minutes": 0.1,
-      "reading_time_seconds": 4,
       "sentences": 3,
-      "speaking_time_seconds": 6,
-      "words": 14
+      "paragraphs": 3,
+      "reading_time_seconds": 4,
+      "reading_time_minutes": 0.1,
+      "speaking_time_seconds": 6
     }
   }
 ]
