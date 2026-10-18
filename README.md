@@ -16,6 +16,22 @@ Manang combines **Typst**, **LaTeX (Tectonic)**, **Markdown**, an in-house **vec
 
 ---
 
+## User guide
+
+A guide for authors in [`docs/user/`](docs/user/index.md):
+
+- **[Getting started](docs/user/getting-started.md)** — Running from source, Home view, creating projects, and window layout.
+- **[Writing](docs/user/writing.md)** — Typst, LaTeX, and Markdown editing, spell check, formatting, snippets, and word counts.
+- **[Preview and PDF](docs/user/preview-and-pdf.md)** — Preview layouts, live recompile, SyncTeX jumps, PDF export, and TeX Live setup.
+- **[Figures and diagrams](docs/user/figures-and-diagrams.md)** — Vector figure editor, text diagrams (Mermaid, Pikchr, ASCII), and document includes.
+- **[References](docs/user/references.md)** — Bibliographies, citation styles, inserting citations, and online verification.
+- **[Projects and files](docs/user/projects-and-files.md)** — File tree, openers, system apps, and Git source control.
+- **[Settings and shortcuts](docs/user/settings-and-shortcuts.md)** — User vs project scope, preferences, and keyboard shortcuts.
+- **[Plugins](docs/user/plugins.md)** — Built-in and sandboxed WebAssembly plugins, permissions, and status indicators.
+- **[Troubleshooting](docs/user/troubleshooting.md)** — Log file locations, developer tools, and common problem fixes.
+
+---
+
 ## Development
 
 Requires Rust 1.85+, Node 22+, and pnpm 10. On Linux the Tauri shell needs
