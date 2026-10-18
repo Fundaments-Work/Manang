@@ -3,6 +3,7 @@ name = "search"
 version = "0.1.0"
 description = "Fuzzy file finder, project-wide text search, atomic replace and in-document find"
 tier = "native"
+settings_contexts = ["app", "project"]
 
 [permissions]
 filesystem = ["write:project"]

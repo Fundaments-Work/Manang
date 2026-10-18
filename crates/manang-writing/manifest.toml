@@ -3,6 +3,7 @@ name = "writing"
 version = "0.1.0"
 description = "Writing tools: formatting, spell check, prose lint, symbols, snippets and statistics"
 tier = "native"
+settings_contexts = ["document"]
 
 [permissions]
 # The user dictionary and snippets live in the config directory the host

@@ -24,8 +24,30 @@ fn float(min: f64, max: f64) -> SettingType {
     }
 }
 
+/// The contexts each core category belongs to: where a contextual Settings
+/// page shows it. Opened for the whole application (`app`) the page shows
+/// every group; opened from a document it shows the `document` groups, and
+/// so on. A category missing here belongs to `app` only.
+pub const CATEGORY_CONTEXTS: &[(&str, &[&str])] = &[
+    ("appearance", &["app"]),
+    ("editor", &["document", "diagram"]),
+    ("preview", &["document", "pdf"]),
+    ("compile", &["document"]),
+    ("files", &["app", "project"]),
+];
+
+/// The contexts of a core category (`["app"]` when it declares none).
+pub fn category_contexts(category: &str) -> &'static [&'static str] {
+    CATEGORY_CONTEXTS
+        .iter()
+        .find(|(name, _)| *name == category)
+        .map_or(&["app"], |(_, contexts)| contexts)
+}
+
 fn def(id: &str, ty: SettingType, default: Value, scope: Scope, description: &str) -> SettingDef {
+    let category = id.split('.').next().unwrap_or_default();
     SettingDef::new(id, ty, default, scope, false, description)
+        .with_contexts(category_contexts(category))
 }
 
 /// The core definitions, in no particular order.
