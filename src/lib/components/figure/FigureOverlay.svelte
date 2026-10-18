@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { freedrawPath, nodeBounds, normalizeRect } from "$lib/figure/geometry";
+  import {
+    freedrawPath,
+    nodeBounds,
+    nodeRect,
+    normalizeRect,
+  } from "$lib/figure/geometry";
   import { handlePositions, RESIZE_HANDLES } from "$lib/figure/handles";
   import { isConnector, isShape, nodeById } from "$lib/figure/scene";
   import { selectionBounds } from "$lib/figure/selection";
@@ -82,6 +87,21 @@
       vector-effect="non-scaling-stroke"
       data-selection-bounds
     />
+    {@const mpos = handlePositions(multi, 0, z)}
+    {#each RESIZE_HANDLES as h (h)}
+      <rect
+        data-handle={h}
+        data-multi-handle
+        x={mpos[h].x - hs / 2}
+        y={mpos[h].y - hs / 2}
+        width={hs}
+        height={hs}
+        fill="var(--mng-bg)"
+        stroke="var(--mng-accent)"
+        stroke-width="1"
+        vector-effect="non-scaling-stroke"
+      />
+    {/each}
   {/if}
 
   {#if one !== undefined && one.locked !== true}
@@ -113,6 +133,21 @@
         vector-effect="non-scaling-stroke"
         transform="rotate(45 {pos.rotate.x} {pos.rotate.y})"
       />
+    {:else if one.kind === "math"}
+      {@const fpos = handlePositions(nodeRect(one), 0, z)}
+      {#each RESIZE_HANDLES as h (h)}
+        <rect
+          data-handle={h}
+          x={fpos[h].x - hs / 2}
+          y={fpos[h].y - hs / 2}
+          width={hs}
+          height={hs}
+          fill="var(--mng-bg)"
+          stroke="var(--mng-accent)"
+          stroke-width="1"
+          vector-effect="non-scaling-stroke"
+        />
+      {/each}
     {:else if isConnector(one)}
       {#each [["start", one.points[0]], ["end", one.points[one.points.length - 1]]] as const as [name, p] (name)}
         {#if p !== undefined}

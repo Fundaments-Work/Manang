@@ -16,6 +16,7 @@ import {
   unionRect,
   nodeBounds,
 } from "$lib/figure/geometry";
+import { approxMath } from "$lib/figure/mathApprox";
 import type { FigureOp } from "$lib/figure/ops";
 import { labelWidth, LABEL_PADDING } from "$lib/figure/render";
 import {
@@ -29,6 +30,7 @@ import {
   type FigureNode,
   type FigureScene,
   type Head,
+  type MathLanguage,
   type Rect,
   type Routing,
   type ShapeNode,
@@ -124,6 +126,40 @@ export function preset(name: string): Style {
 
 const SHAPE_KINDS = ["rect", "diamond", "ellipse", "text", "frame", "mermaid"] as const;
 
+/** Default font size of a formula (`FORMULA_SIZE`). */
+const FORMULA_SIZE = 24;
+
+function mathLanguage(name: string | undefined): MathLanguage {
+  if (name === undefined || name === "typst") return "typst";
+  if (name === "latex") return "latex";
+  throw invalid(`unknown math language \`${name}\`; use typst or latex`);
+}
+
+/**
+ * Renders a formula the way the plugin does for a tool (measuring it; a
+ * broken formula is a positioned `[math_error]`), here with the browser
+ * mock's approximate renderer (`mathApprox.ts`).
+ */
+function measureFormula(
+  id: string,
+  language: MathLanguage,
+  source: string,
+  size: number,
+): { width: number; height: number } {
+  try {
+    const m = approxMath(language, source, size);
+    return { width: m.width, height: m.height };
+  } catch (error) {
+    const e = error as { message?: string; line?: number; column?: number };
+    const place =
+      e.line === undefined ? "" : ` (line ${e.line}, column ${e.column ?? 1})`;
+    throw toolError(
+      "math_error",
+      `formula \`${id}\`: ${e.message ?? String(error)}${place}`,
+    );
+  }
+}
+
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
 }
@@ -138,8 +174,14 @@ export function shapeSummary(node: FigureNode): Record<string, unknown> {
     width: round2(r.width),
     height: round2(r.height),
   };
-  const label = labelOf(node);
-  if (label !== undefined) out["label"] = label;
+  if (node.kind === "math") {
+    out["source"] = node.source;
+    out["language"] = node.language ?? "typst";
+    out["size"] = node.size;
+  } else {
+    const label = labelOf(node);
+    if (label !== undefined) out["label"] = label;
+  }
   if ((node.groups ?? []).length > 0) out["groups"] = node.groups;
   return out;
 }
@@ -217,8 +259,59 @@ export function addShapes(
   for (const raw of shapes) {
     const s = obj(raw, "each shape");
     const kind = optStr(s, "kind") ?? "rect";
+    if (kind === "formula") {
+      const source = optStr(s, "source");
+      if (source === undefined || source.trim() === "") {
+        throw invalid(
+          "a formula needs `source` (Typst or LaTeX math, without $ signs)",
+        );
+      }
+      const language = mathLanguage(optStr(s, "language"));
+      const size = optNum(s, "size") ?? FORMULA_SIZE;
+      const style: Style =
+        s["style"] === undefined ? {} : (obj(s["style"], "`style`") as Style);
+      const guess = {
+        width: Math.max(source.length * size * 0.6, size),
+        height: size * 1.4,
+      };
+      const px = optNum(s, "x");
+      const py = optNum(s, "y");
+      let at: Vec;
+      if (px !== undefined && py !== undefined) {
+        at = { x: px, y: py };
+      } else {
+        if (inRow === 5) {
+          x = rowX;
+          y += rowH + 60;
+          rowH = 0;
+          inRow = 0;
+        }
+        at = { x: px ?? x, y: py ?? y };
+        x += guess.width + 60;
+        rowH = Math.max(rowH, guess.height);
+        inRow += 1;
+      }
+      counter += 1;
+      const id = formatNodeId(counter);
+      const box = measureFormula(id, language, source, size);
+      nodes.push({
+        kind: "math",
+        id,
+        x: at.x,
+        y: at.y,
+        source,
+        ...(language === "typst" ? {} : { language }),
+        size,
+        width: box.width,
+        height: box.height,
+        ...(Object.keys(style).length === 0 ? {} : { style }),
+      });
+      continue;
+    }
     if (!(SHAPE_KINDS as readonly string[]).includes(kind)) {
-      throw invalid(`unknown shape kind \`${kind}\`; use ${SHAPE_KINDS.join(", ")}`);
+      throw invalid(
+        `unknown shape kind \`${kind}\`; use ${SHAPE_KINDS.join(", ")}, formula`,
+      );
     }
     let style: Style =
       optStr(s, "preset") !== undefined ? preset(optStr(s, "preset") ?? "") : {};
@@ -335,6 +428,27 @@ export function update(scene: FigureScene, args: Args): ToolEdit {
     for (const key of ["label", "kind", "angle", "routing", "source", "style"]) {
       if (c[key] !== undefined) set[key] = c[key];
     }
+    if (c["language"] !== undefined || c["size"] !== undefined) {
+      if (node.kind !== "math") {
+        throw invalid(
+          `\`${id}\` is not a formula; only formulas have \`language\` and \`size\``,
+        );
+      }
+      if (c["language"] !== undefined)
+        set["language"] = mathLanguage(optStr(c, "language"));
+      if (c["size"] !== undefined) set["size"] = c["size"];
+    }
+    if (node.kind === "math" && ["source", "language", "size"].some((k) => k in set)) {
+      const next = {
+        language:
+          (set["language"] as MathLanguage | undefined) ?? node.language ?? "typst",
+        source: (set["source"] as string | undefined) ?? node.source,
+        size: (set["size"] as number | undefined) ?? node.size,
+      };
+      const box = measureFormula(id, next.language, next.source, next.size);
+      set["width"] = box.width;
+      set["height"] = box.height;
+    }
     if (
       typeof set["kind"] === "string" &&
       (!("x" in node) ||
@@ -362,7 +476,7 @@ export function update(scene: FigureScene, args: Args): ToolEdit {
   }
   if (ops.length === 0) {
     throw invalid(
-      "nothing to change: give label, kind, x, y, width, height, angle, style, routing or source",
+      "nothing to change: give label, kind, x, y, width, height, angle, style, routing, source, language or size",
     );
   }
   return { op: { op: "batch", ops }, ids };

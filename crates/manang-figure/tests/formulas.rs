@@ -207,6 +207,20 @@ fn the_canvas_command_renders_either_language_as_binary_svg() {
         assert!(!svg.contains("<text"), "outlines only");
         assert!(svg.contains("currentColor"));
     }
+    // The canvas can ask for a colour baked in (an <image> cannot inherit one).
+    let blue = svg_of(
+        &k,
+        "figure.render-math",
+        json!({ "language": "latex", "source": "x^2", "size": 20, "color": "#0072B2" }),
+    );
+    assert!(blue.contains("#0072b2") && !blue.contains("currentColor"));
+    assert!(
+        k.invoke(
+            "figure.render-math",
+            Payload::Json(json!({ "source": "x", "color": "red" }))
+        )
+        .is_err()
+    );
     // Cached or not, the same input answers with the same bytes.
     assert_eq!(
         typst,

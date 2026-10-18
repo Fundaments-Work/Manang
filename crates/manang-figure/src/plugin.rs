@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use crate::error::FigureError;
 use crate::math::{self, MathError, MathSvg};
 use crate::ops::FigureOp;
-use crate::palette::Theme;
+use crate::palette::{self, Theme};
 use crate::scene::{FigureNode, FigureScene, MathLanguage, MathNode, ShapeNode, Vec2};
 use crate::store::{FigureId, FigureStore, resolve_figure_paths};
 use crate::svg::{SvgExportOptions, render_svg_with};
@@ -716,7 +716,24 @@ impl Plugin for FigurePlugin {
                 let rendered = self
                     .render_formula(ctx, language, source, size)
                     .map_err(|e| PluginError::Failed(e.to_tagged()))?;
-                Ok(Payload::Binary(Arc::from(rendered.svg.into_bytes())))
+                // The canvas draws the SVG as an image, where `currentColor`
+                // cannot be inherited: it asks for the colour baked in.
+                let svg = match a.get("color").and_then(Value::as_str) {
+                    None | Some("currentColor") => rendered.svg,
+                    Some(color) if palette::parse_rgb(color).is_some() => math::recolour_svg(
+                        &rendered.svg,
+                        |v| v == "currentColor",
+                        &palette::normalize_colour(color),
+                        None,
+                    )
+                    .map_err(PluginError::Failed)?,
+                    Some(other) => {
+                        return Err(PluginError::Failed(format!(
+                            "[invalid_argument] `color` must be currentColor or #rrggbb, not `{other}`"
+                        )));
+                    }
+                };
+                Ok(Payload::Binary(Arc::from(svg.into_bytes())))
             }
             "figure.hit-test" => {
                 let fig_id = id(&a)?;

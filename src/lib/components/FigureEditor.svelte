@@ -3,9 +3,11 @@
   import FigureNodeView from "./figure/FigureNodeView.svelte";
   import FigureOverlay from "./figure/FigureOverlay.svelte";
   import FigureProperties from "./figure/FigureProperties.svelte";
+  import FormulaEditor from "./figure/FormulaEditor.svelte";
   import MermaidDialog from "./figure/MermaidDialog.svelte";
   import { handleCursor } from "$lib/figure/handles";
   import { TOOLS } from "$lib/figure/keymap";
+  import { strokeColour } from "$lib/figure/palette";
   import { isConnector, type FigureNode } from "$lib/figure/scene";
   import { cull, toScreen, viewBox, visibleRect } from "$lib/figure/viewport";
   import { focusedSurface } from "$lib/commands/surface";
@@ -50,6 +52,12 @@
     figure.gesture?.kind === "erase" ? figure.gesture.ids : new Set<string>(),
   );
   const editingId = $derived(figure.editing?.id ?? null);
+  /** The page shows its background (a custom one does not follow the theme). */
+  const pageFill = $derived(
+    figure.scene.background === undefined
+      ? "none"
+      : strokeColour(figure.scene.background, theme),
+  );
 
   function target(node: FigureNode, end: "start" | "end"): FigureNode | undefined {
     if (!isConnector(node)) return undefined;
@@ -286,8 +294,7 @@
     const tl = toScreen(figure.view, { x: e.box.x, y: e.box.y });
     const z = figure.view.zoom;
     const node = e.id === null ? undefined : byId.get(e.id);
-    const size =
-      (node?.kind === "math" ? node.size : (node?.style?.fontSize ?? 16)) * z;
+    const size = (node?.style?.fontSize ?? 16) * z;
     return {
       left: tl.x,
       top: tl.y,
@@ -295,8 +302,8 @@
       height: Math.max(e.box.height * z, size * 1.6),
       size,
       angle: e.angle,
-      align: e.kind === "text" || e.kind === "math" ? "left" : "center",
-      mono: node?.kind === "math" || node?.style?.fontFamily === "mono",
+      align: e.kind === "text" ? "left" : "center",
+      mono: node?.style?.fontFamily === "mono",
     };
   });
 
@@ -306,10 +313,7 @@
       event.preventDefault();
       figure.cancelLabel();
       surface?.focus();
-    } else if (
-      event.key === "Enter" &&
-      (event.ctrlKey || event.metaKey || figure.editing?.kind === "math")
-    ) {
+    } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       figure.commitLabel();
       surface?.focus();
@@ -337,122 +341,127 @@
 <div class="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-bg">
   <FigureToolbar {figure} onsave={() => void figures.save(figure.path)} />
 
-  <div
-    bind:this={host}
-    bind:clientWidth={hostWidth}
-    bind:clientHeight={hostHeight}
-    class="relative min-h-0 flex-1 overflow-hidden"
-    role="presentation"
-    onkeydown={hostKeydown}
-    ondragover={(e) => e.preventDefault()}
-    {ondrop}
-  >
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->
-    <svg
-      bind:this={surface}
-      role="application"
-      tabindex="0"
-      aria-label="Figure canvas. Tool keys: {toolKeys}. Drag to draw or select; double-click a shape to edit its label. Space-drag, the middle button or scrolling pans; Ctrl+scroll zooms. Delete removes the selection. Ctrl+Z undoes."
-      viewBox={viewBox(figure.view, hostWidth, hostHeight)}
-      width="100%"
-      height="100%"
-      preserveAspectRatio="xMinYMin meet"
-      class="block touch-none outline-none select-none"
-      style="cursor: {cursor}"
-      {onpointerdown}
-      {onpointermove}
-      {onpointerup}
-      onpointercancel={() => figure.cancel()}
-      {onkeydown}
-      {onkeyup}
-      onblur={() => (figure.spaceHeld = false)}
-      {ondblclick}
+  <div class="flex min-h-0 flex-1" onkeydown={hostKeydown} role="presentation">
+    <div
+      bind:this={host}
+      bind:clientWidth={hostWidth}
+      bind:clientHeight={hostHeight}
+      class="relative min-h-0 min-w-0 flex-1 overflow-hidden"
+      role="presentation"
+      ondragover={(e) => e.preventDefault()}
+      {ondrop}
     >
-      <!-- The page: what an export covers when nothing lies outside it. -->
-      <rect
-        data-page
-        x="0"
-        y="0"
-        width={figure.scene.width}
-        height={figure.scene.height}
-        fill="none"
-        stroke="var(--mng-line)"
-        stroke-width="1"
-        vector-effect="non-scaling-stroke"
-      />
-
-      {#each visible as node (node.id)}
-        <FigureNodeView
-          {node}
-          startTarget={target(node, "start")}
-          endTarget={target(node, "end")}
-          {theme}
-          dim={erasing.has(node.id)}
-          hideText={editingId === node.id}
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->
+      <svg
+        bind:this={surface}
+        role="application"
+        tabindex="0"
+        aria-label="Figure canvas. Tool keys: {toolKeys}. Drag to draw or select; double-click a shape to edit its label. Space-drag, the middle button or scrolling pans; Ctrl+scroll zooms. Delete removes the selection. Ctrl+Z undoes."
+        viewBox={viewBox(figure.view, hostWidth, hostHeight)}
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMinYMin meet"
+        class="block touch-none outline-none select-none"
+        style="cursor: {cursor}"
+        {onpointerdown}
+        {onpointermove}
+        {onpointerup}
+        onpointercancel={() => figure.cancel()}
+        {onkeydown}
+        {onkeyup}
+        onblur={() => (figure.spaceHeld = false)}
+        {ondblclick}
+      >
+        <!-- The page: what an export covers when nothing lies outside it. -->
+        <rect
+          data-page
+          x="0"
+          y="0"
+          width={figure.scene.width}
+          height={figure.scene.height}
+          fill={pageFill}
+          stroke="var(--mng-line)"
+          stroke-width="1"
+          vector-effect="non-scaling-stroke"
         />
-      {/each}
 
-      <FigureOverlay {figure} />
-    </svg>
+        {#each visible as node (node.id)}
+          <FigureNodeView
+            {node}
+            startTarget={target(node, "start")}
+            endTarget={target(node, "end")}
+            {theme}
+            dim={erasing.has(node.id)}
+            hideText={editingId === node.id}
+            formula={figure.formulaShown}
+          />
+        {/each}
 
-    {#if figure.editing !== null && editorBox !== null}
-      <textarea
-        use:focusOnMount
-        class="selectable absolute z-10 resize-none overflow-hidden border border-accent bg-transparent p-0 text-text outline-none"
-        style="left: {editorBox.left}px; top: {editorBox.top}px; width: {editorBox.width}px; height: {editorBox.height}px; font-size: {editorBox.size}px; line-height: 1.25; text-align: {editorBox.align}; font-family: {editorBox.mono
-          ? 'var(--font-mono)'
-          : 'var(--font-sans)'}; transform: rotate({editorBox.angle}deg); transform-origin: center;"
-        aria-label="Edit label"
-        data-label-editor
-        value={figure.editing.text}
-        oninput={(e) =>
-          figure.setEditingText((e.currentTarget as HTMLTextAreaElement).value)}
-        onblur={() => figure.commitLabel()}
-        onkeydown={labelKeydown}
-      ></textarea>
-    {/if}
+        <FigureOverlay {figure} />
+      </svg>
+
+      {#if figure.editing !== null && editorBox !== null}
+        <textarea
+          use:focusOnMount
+          class="selectable absolute z-10 resize-none overflow-hidden border border-accent bg-transparent p-0 text-text outline-none"
+          style="left: {editorBox.left}px; top: {editorBox.top}px; width: {editorBox.width}px; height: {editorBox.height}px; font-size: {editorBox.size}px; line-height: 1.25; text-align: {editorBox.align}; font-family: {editorBox.mono
+            ? 'var(--font-mono)'
+            : 'var(--font-sans)'}; transform: rotate({editorBox.angle}deg); transform-origin: center;"
+          aria-label="Edit label"
+          data-label-editor
+          value={figure.editing.text}
+          oninput={(e) =>
+            figure.setEditingText((e.currentTarget as HTMLTextAreaElement).value)}
+          onblur={() => figure.commitLabel()}
+          onkeydown={labelKeydown}
+        ></textarea>
+      {/if}
+
+      <FormulaEditor {figure} {hostWidth} {hostHeight} />
+
+      {#if figure.mermaidPrompt !== null}
+        <div
+          class="absolute bottom-8 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 border border-line bg-surface px-2 py-1.5 text-[12px] text-text-60"
+          data-mermaid-prompt
+          role="group"
+          aria-label="Pasted Mermaid text"
+        >
+          Mermaid text:
+          <button
+            type="button"
+            class="mng-btn h-7 px-2"
+            onclick={() =>
+              void figure.insertMermaid(figure.mermaidPrompt ?? "", "shapes")}
+            >Insert as shapes</button
+          >
+          <button
+            type="button"
+            class="mng-btn h-7 px-2"
+            onclick={() =>
+              void figure.insertMermaid(figure.mermaidPrompt ?? "", "block")}
+            >Insert as block</button
+          >
+          <button
+            type="button"
+            class="mng-btn h-7 px-2"
+            onclick={() => figure.pasteAsText(figure.mermaidPrompt ?? "")}
+            >Paste as text</button
+          >
+        </div>
+      {/if}
+
+      {#if figure.mermaidDialog}
+        <MermaidDialog {figure} />
+      {/if}
+
+      <p
+        class="pointer-events-none absolute bottom-2 left-4 m-0 font-mono text-[10px] text-text-muted"
+      >
+        {figure.nodeCount}
+        {figure.nodeCount === 1 ? "node" : "nodes"} in {figure.path}
+      </p>
+    </div>
 
     <FigureProperties {figure} {theme} />
-
-    {#if figure.mermaidPrompt !== null}
-      <div
-        class="absolute bottom-8 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 border border-line bg-surface px-2 py-1.5 text-[12px] text-text-60"
-        data-mermaid-prompt
-        role="group"
-        aria-label="Pasted Mermaid text"
-      >
-        Mermaid text:
-        <button
-          type="button"
-          class="mng-btn h-7 px-2"
-          onclick={() =>
-            void figure.insertMermaid(figure.mermaidPrompt ?? "", "shapes")}
-          >Insert as shapes</button
-        >
-        <button
-          type="button"
-          class="mng-btn h-7 px-2"
-          onclick={() => void figure.insertMermaid(figure.mermaidPrompt ?? "", "block")}
-          >Insert as block</button
-        >
-        <button
-          type="button"
-          class="mng-btn h-7 px-2"
-          onclick={() => figure.pasteAsText(figure.mermaidPrompt ?? "")}
-          >Paste as text</button
-        >
-      </div>
-    {/if}
-
-    {#if figure.mermaidDialog}
-      <MermaidDialog {figure} />
-    {/if}
-
-    <p
-      class="pointer-events-none absolute bottom-2 left-4 m-0 font-mono text-[10px] text-text-muted"
-    >
-      {figure.nodeCount}
-      {figure.nodeCount === 1 ? "node" : "nodes"} in {figure.path}
-    </p>
   </div>
 </div>
