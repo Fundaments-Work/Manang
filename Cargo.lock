@@ -6650,6 +6650,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "manang-visual"
+version = "0.1.0"
+dependencies = [
+ "criterion 0.5.1",
+ "manang-markdown",
+ "manang-typst",
+ "parking_lot",
+ "proptest",
+ "ropey",
+ "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "manang-wasm-host"
 version = "0.1.0"
 dependencies = [
