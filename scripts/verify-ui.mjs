@@ -489,6 +489,9 @@ async function autosaveSection(browser) {
     `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
     { label: "editor shows main.typ" },
   );
+  // A dialog left by an earlier section (a recovery offer, say) would swallow the keys.
+  await press(page, "Escape", { wait: 150 });
+  await click(page, ".cm-content");
   const setMode = (value) =>
     page.evaluate(
       `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("settings.set", { id: "files.autosave", value: ${JSON.stringify(value)}, scope: "user" }))`,
@@ -1072,8 +1075,9 @@ async function main() {
     );
     const browser = await Cdp.open(version.webSocketDebuggerUrl);
 
-    if (process.env.MANANG_ONLY === "live") {
-      await liveSection(browser);
+    if (process.env.MANANG_ONLY === "live" || process.env.MANANG_ONLY === "autosave") {
+      if (process.env.MANANG_ONLY === "autosave") await autosaveSection(browser);
+      else await liveSection(browser);
       browser.close();
       child.kill("SIGTERM");
       const bad = results.filter((entry) => !entry.passed);
