@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AGENT_MAX,
+  AGENT_MIN,
   DEFAULT_LAYOUT,
+  agentOverlays,
   PANEL_MAX,
   SIDE_MAX,
   SIDE_MIN,
@@ -29,6 +32,22 @@ describe("layout model", () => {
       panelOpen: true,
       panelTab: "output",
     });
+  });
+
+  it("keeps the Agent column's width within bounds and drops the old bottom tab", () => {
+    expect(sanitizeLayout({ agentWidth: 10, agentOpen: true })).toMatchObject({
+      agentWidth: AGENT_MIN,
+      agentOpen: true,
+    });
+    expect(sanitizeLayout({ agentWidth: 9000 }).agentWidth).toBe(AGENT_MAX);
+    // An older build stored the Agent as a bottom-panel tab.
+    expect(sanitizeLayout({ panelTab: "agent" }).panelTab).toBe("problems");
+    expect(DEFAULT_LAYOUT.agentOpen).toBe(false);
+  });
+
+  it("floats the Agent column over the editor under 900px", () => {
+    expect(agentOverlays(899)).toBe(true);
+    expect(agentOverlays(900)).toBe(false);
   });
 
   it("cycles preview split, editor, preview", () => {

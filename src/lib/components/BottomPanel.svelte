@@ -1,7 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
 
-  import AgentView from "$lib/components/agent/AgentView.svelte";
   import Icon from "$lib/components/ui/Icon.svelte";
   import { goToProblem } from "$lib/state/actions";
   import { agent } from "$lib/state/agent.svelte";
@@ -26,7 +25,6 @@
   const tabsList: readonly { id: PanelTab; label: string }[] = [
     { id: "problems", label: "Problems" },
     { id: "output", label: "Output" },
-    { id: "agent", label: "Agent" },
   ];
 
   // Compiler diagnostics, diagram checks and prose-lint findings share one
@@ -155,9 +153,7 @@
     id="panel-body"
     role="tabpanel"
     aria-labelledby="panel-tab-{layout.panelTab}"
-    class="min-h-0 flex-1 {layout.panelTab === 'agent'
-      ? 'overflow-hidden'
-      : 'overflow-y-auto'}"
+    class="min-h-0 flex-1 overflow-y-auto"
   >
     {#if layout.panelTab === "problems"}
       {#if groups.length === 0}
@@ -227,8 +223,6 @@
           </div>
         {/each}
       {/if}
-    {:else if layout.panelTab === "agent"}
-      <AgentView />
     {:else}
       <div
         role="log"

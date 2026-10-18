@@ -39,7 +39,7 @@ export type TranscriptItem =
       readonly proposalId: string;
       readonly proposalKind: string;
       readonly edit: TextEdit | null;
-      readonly state: "pending" | "accepted" | "rejected" | "stale";
+      readonly state: "pending" | "accepted" | "rejected" | "stale" | "undone";
     }
   | {
       readonly kind: "error";
@@ -345,7 +345,7 @@ export function answerApproval(
 export function decideProposal(
   state: AgentViewState,
   proposalId: string,
-  next: "accepted" | "rejected" | "stale",
+  next: "accepted" | "rejected" | "stale" | "undone",
 ): AgentViewState {
   return {
     ...state,

@@ -16,7 +16,7 @@
 
   interface Item {
     /** A side panel, or `settings` for the Settings page. */
-    readonly view: SideView | "settings";
+    readonly view: SideView | "agent" | "settings";
     readonly label: string;
     readonly icon: IconName;
     readonly shortcut?: string;
@@ -47,15 +47,21 @@
       shortcut: formatShortcut({ key: "x", mod: true, shift: true }, platform),
     },
   ];
+  const agentItem: Item = {
+    view: "agent",
+    label: "Agent",
+    icon: "agent",
+    shortcut: formatShortcut({ key: "a", mod: true, shift: true }, platform),
+  };
   const bottom: Item = {
     view: "settings",
     label: "Settings",
     icon: "settings",
     shortcut: formatShortcut({ key: ",", mod: true }, platform),
   };
-  const all = [...top, bottom];
+  const all = [...top, agentItem, bottom];
 
-  let focused = $state<SideView | "settings">("files");
+  let focused = $state<SideView | "agent" | "settings">("files");
   let bar: HTMLElement | undefined = $state();
 
   const changes = $derived(workspace.git?.changes.length ?? 0);
@@ -77,13 +83,12 @@
   {@const open =
     item.view === "settings"
       ? settingsPage.open
-      : !settingsPage.open &&
-        layout.sideView === item.view &&
-        sidePanelVisible(layout.sideView, workspace.project !== null)}
-  {@const needsProject =
-    item.view !== "settings" &&
-    workspace.project === null &&
-    !sidePanelVisible(item.view, false)}
+      : item.view === "agent"
+        ? !settingsPage.open && layout.agentOpen && workspace.project !== null
+        : !settingsPage.open &&
+          layout.sideView === item.view &&
+          sidePanelVisible(layout.sideView, workspace.project !== null)}
+  {@const needsProject = item.view !== "settings" && workspace.project === null}
   <button
     type="button"
     data-view={item.view}
@@ -100,6 +105,14 @@
       if (needsProject) return;
       if (item.view === "settings") {
         settingsPage.toggle(context.settingsOrigin);
+        return;
+      }
+      if (item.view === "agent") {
+        // The Agent is its own column on the right: it toggles beside the side panel.
+        if (settingsPage.open) {
+          settingsPage.hide();
+          layout.showAgent();
+        } else layout.toggleAgent();
         return;
       }
       // A view button leaves the Settings page, showing its panel.
@@ -149,6 +162,7 @@
       {@render button(item)}
     {/each}
     <div class="mt-auto">
+      {@render button(agentItem)}
       {@render button(bottom)}
     </div>
   </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
 
+  import AgentDock from "./agent/AgentDock.svelte";
   import ActivityBar from "./ActivityBar.svelte";
   import BottomPanel from "./BottomPanel.svelte";
   import CommandPalette from "./CommandPalette.svelte";
@@ -88,6 +89,11 @@
       sidePanelVisible(layout.sideView, workspace.project !== null),
   );
 
+  const agentShown = $derived(
+    layout.agentOpen && workspace.project !== null && !home.showing && !layout.zen,
+  );
+  const agentOverlayOpen = $derived(agentShown && layout.agentOverlay);
+
   onMount(() => {
     keymap.start();
     installShellSurfaces();
@@ -129,6 +135,9 @@
       } else if (sideOverlay) {
         event.preventDefault();
         layout.closeSide();
+      } else if (agentOverlayOpen) {
+        event.preventDefault();
+        layout.closeAgent();
       }
       return;
     }
@@ -215,6 +224,9 @@
         </div>
       {/if}
     </main>
+    {#if agentShown}
+      <AgentDock />
+    {/if}
   </div>
 
   {#if !layout.zen}
