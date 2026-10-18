@@ -63,6 +63,10 @@ pub enum ProviderEvent {
     },
     /// Streamed assistant text.
     TextDelta { text: String },
+    /// Streamed reasoning text (Anthropic thinking summaries, DeepSeek
+    /// `reasoning_content`). For display only; the complete reasoning arrives
+    /// in a `Block` and is what gets replayed.
+    ThinkingDelta { text: String },
     /// A complete block, exactly as the provider produced it (thinking
     /// blocks included). Append these to history to replay losslessly.
     Block { block: ContentBlock },

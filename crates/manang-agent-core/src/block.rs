@@ -109,6 +109,11 @@ impl ContentBlock {
         self.raw.get()
     }
 
+    /// The raw value, for embedding into a request without re-encoding.
+    pub fn raw(&self) -> &RawValue {
+        &self.raw
+    }
+
     /// The text of a `text` block.
     pub fn as_text(&self) -> Option<String> {
         #[derive(Deserialize)]
