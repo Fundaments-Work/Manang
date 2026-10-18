@@ -39,7 +39,11 @@ async fn loopback_works_and_non_loopback_is_blocked_offline() {
     // IP literals: refused before any connection.
     for base in ["http://192.0.2.1:9/v1", "http://[2001:db8::1]:9/v1"] {
         let p = ollama_provider(base, offline());
-        assert_eq!(code_of(&collect(&p, &chat("m", "hi")).await), "offline_blocked", "{base}");
+        assert_eq!(
+            code_of(&collect(&p, &chat("m", "hi")).await),
+            "offline_blocked",
+            "{base}"
+        );
     }
     // A hostname that resolves nowhere safe: the loopback-only resolver (not a string check)
     // refuses it at connect time. It surfaces as a connect failure, never a connection.
@@ -54,19 +58,22 @@ async fn loopback_works_and_non_loopback_is_blocked_offline() {
 #[tokio::test]
 async fn redirects_are_not_followed() {
     let target = serve(vec![Reply::sse(OLLAMA)]).await;
-    let origin = serve(vec![Reply::status(302, "").header(
-        "location",
-        &format!("{}/v1/chat/completions", target.url()),
-    )])
-    .await;
+    let origin =
+        serve(vec![Reply::status(302, "").header(
+            "location",
+            &format!("{}/v1/chat/completions", target.url()),
+        )])
+        .await;
     let p = ollama_provider(&format!("{}/v1", origin.url()), rig_policy());
     let events = collect(&p, &chat("m", "hi")).await;
     assert_eq!(code_of(&events), "http_302");
     assert_eq!(target.request_count().await, 0);
 }
 
+type Seen = (String, Vec<(String, String)>, String);
+
 struct Tap {
-    seen: Mutex<Vec<(String, Vec<(String, String)>, String)>>,
+    seen: Mutex<Vec<Seen>>,
 }
 
 impl rig::RequestTap for Tap {
@@ -97,10 +104,15 @@ async fn tap_sees_the_final_request_and_can_redact_before_send() {
     let events = collect(&p, &chat("claude-sonnet-5-5", "about SECRET-PROJECT")).await;
 
     // (b) the tap saw the exact final body and headers, with the key masked.
-    let seen = tap.seen.lock().unwrap();
+    let seen = tap.seen.lock().unwrap().clone();
     assert_eq!(seen.len(), 1);
     assert!(seen[0].2.contains("SECRET-PROJECT"));
-    assert!(seen[0].1.iter().any(|(k, v)| k == "x-api-key" && v == "***"));
+    assert!(
+        seen[0]
+            .1
+            .iter()
+            .any(|(k, v)| k == "x-api-key" && v == "***")
+    );
     assert!(!format!("{:?}", seen[0].1).contains("sk-test-123"));
     // ... and the server received the redacted body, with the real key.
     let sent = server.captured(0).await;
@@ -112,7 +124,12 @@ async fn tap_sees_the_final_request_and_can_redact_before_send() {
         ProviderEvent::Started { request_id: Some(id), .. } if id == "req_hdr_9"
     ));
     assert!(events.contains(&ProviderEvent::Usage {
-        usage: Usage { input: 25, output: 15, cache_read: 10, cache_write: 3 }
+        usage: Usage {
+            input: 25,
+            output: 15,
+            cache_read: 10,
+            cache_write: 3
+        }
     }));
 }
 
@@ -125,11 +142,17 @@ async fn our_retry_rules_wrap_the_rig_call_path() {
     )])
     .await;
     let (_, p) = anthropic_pair(&server);
-    assert_eq!(code_of(&collect(&p, &chat("claude-sonnet-5-5", "hi")).await), "rate_limit_error");
+    assert_eq!(
+        code_of(&collect(&p, &chat("claude-sonnet-5-5", "hi")).await),
+        "rate_limit_error"
+    );
     assert_eq!(server.request_count().await, 1);
 
     let server = serve(vec![
-        Reply::status(500, r#"{"type":"error","error":{"type":"api_error","message":"boom"}}"#),
+        Reply::status(
+            500,
+            r#"{"type":"error","error":{"type":"api_error","message":"boom"}}"#,
+        ),
         Reply::sse(A_TEXT),
     ])
     .await;

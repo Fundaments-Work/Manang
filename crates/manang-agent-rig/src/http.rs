@@ -96,23 +96,13 @@ impl HttpMiddleware for TapMiddleware {
 }
 
 /// Settings of the policy layer.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct HttpPolicy {
     pub retry: RetryPolicy,
     /// Refuse IP-literal destinations that are not loopback. (Hostnames are checked by the
     /// native client's resolver, see [`crate::native`].)
     pub loopback_only: bool,
     pub tap: Option<Arc<dyn RequestTap>>,
-}
-
-impl Default for HttpPolicy {
-    fn default() -> Self {
-        Self {
-            retry: RetryPolicy::default(),
-            loopback_only: false,
-            tap: None,
-        }
-    }
 }
 
 impl std::fmt::Debug for HttpPolicy {
