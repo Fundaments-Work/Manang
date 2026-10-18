@@ -79,15 +79,85 @@ pub struct CommandSpec {
     pub title: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Which settings layers may hold a declared setting.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SettingScope {
+    /// Only the user settings file may set it.
+    #[default]
+    User,
+    /// The user file sets the default and a project may override it.
+    Project,
+}
+
+/// The value type of a declared setting.
+///
+/// Same JSON/TOML shape as `manang_settings::SettingType`: an internally
+/// tagged `type` field (`bool`, `int`, `float`, `enum`, `string`, `path`,
+/// `list`) plus that type's parameters (`min`/`max`, `values`, `item`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum SettingKind {
+    Bool,
+    Int {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        min: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max: Option<i64>,
+    },
+    Float {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        min: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max: Option<f64>,
+    },
+    Enum {
+        values: Vec<String>,
+    },
+    String,
+    Path,
+    List {
+        item: Box<SettingKind>,
+    },
+}
+
+/// A setting a plugin declares under `[[contributes.settings]]`.
+///
+/// The host registers it with the settings plugin (owner = plugin name) and
+/// pushes effective values to `<plugin>.configure` (ADR 0007).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SettingSpec {
+    /// `<plugin-name>.<kebab-case>`, e.g. `latex.engine`.
+    pub id: String,
+    #[serde(flatten)]
+    pub kind: SettingKind,
+    /// Required; validated against `kind`. Optional here only so a missing
+    /// default yields a precise [`ManifestError::BadSetting`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<serde_json::Value>,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub scope: SettingScope,
+    #[serde(default)]
+    pub requires_restart: bool,
+    /// Short human label for the Settings UI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Contributes {
     #[serde(default)]
     pub commands: Vec<CommandSpec>,
     #[serde(default)]
     pub hooks: Vec<Hook>,
+    #[serde(default)]
+    pub settings: Vec<SettingSpec>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
     pub plugin: PluginMeta,
     #[serde(default)]
@@ -106,6 +176,80 @@ fn valid_name(name: &str) -> bool {
     chars.next().is_some_and(|c| c.is_ascii_lowercase())
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && !name.ends_with('-')
+}
+
+/// One or more dot-separated lowercase kebab-case segments.
+fn valid_local_id(id: &str) -> bool {
+    id.split('.').all(valid_name)
+}
+
+/// Why `value` is not a valid value of `kind`, if it is not.
+fn check_value(kind: &SettingKind, value: &serde_json::Value) -> Result<(), String> {
+    use serde_json::Value;
+    match (kind, value) {
+        (SettingKind::Bool, Value::Bool(_)) | (SettingKind::String, Value::String(_)) => Ok(()),
+        (SettingKind::Int { min, max }, Value::Number(n)) => {
+            let i = n.as_i64().ok_or_else(|| format!("{n} is not an integer"))?;
+            if min.is_some_and(|m| i < m) || max.is_some_and(|m| i > m) {
+                return Err(format!("{i} is out of range"));
+            }
+            Ok(())
+        }
+        (SettingKind::Float { min, max }, Value::Number(n)) => {
+            let f = n.as_f64().ok_or_else(|| format!("{n} is not a number"))?;
+            if min.is_some_and(|m| f < m) || max.is_some_and(|m| f > m) {
+                return Err(format!("{f} is out of range"));
+            }
+            Ok(())
+        }
+        (SettingKind::Enum { values }, Value::String(s)) => {
+            if values.contains(s) {
+                Ok(())
+            } else {
+                Err(format!("`{s}` is not one of {}", values.join(", ")))
+            }
+        }
+        (SettingKind::Path, Value::String(s)) if !s.is_empty() => Ok(()),
+        (SettingKind::List { item }, Value::Array(items)) => {
+            items.iter().try_for_each(|v| check_value(item, v))
+        }
+        (kind, other) => Err(format!("{other} does not match type {kind:?}")),
+    }
+}
+
+/// Check one setting declaration's type parameters and default.
+fn check_setting(setting: &SettingSpec) -> Result<(), String> {
+    if setting.description.trim().is_empty() {
+        return Err("a description is required".to_owned());
+    }
+    match &setting.kind {
+        SettingKind::Int {
+            min: Some(a),
+            max: Some(b),
+        } if a > b => return Err(format!("minimum {a} is above maximum {b}")),
+        SettingKind::Float { min, max } => {
+            if min.is_some_and(|m| !m.is_finite()) || max.is_some_and(|m| !m.is_finite()) {
+                return Err("range bounds must be finite".to_owned());
+            }
+            if let (Some(a), Some(b)) = (min, max)
+                && a > b
+            {
+                return Err(format!("minimum {a} is above maximum {b}"));
+            }
+        }
+        SettingKind::Enum { values } if values.is_empty() => {
+            return Err("an enum needs at least one value".to_owned());
+        }
+        SettingKind::List { item } if matches!(**item, SettingKind::List { .. }) => {
+            return Err("lists cannot be nested".to_owned());
+        }
+        _ => {}
+    }
+    let default = setting
+        .default
+        .as_ref()
+        .ok_or_else(|| "a default is required".to_owned())?;
+    check_value(&setting.kind, default).map_err(|e| format!("the default is invalid: {e}"))
 }
 
 /// A relative, forward-slash path with no `..`, root or drive components.
@@ -161,8 +305,34 @@ impl Manifest {
                 return Err(ManifestError::DuplicateCommand(command.id.clone()));
             }
         }
+        if self.contributes.settings.len() > MAX_ENTRIES {
+            return Err(ManifestError::TooMany(MAX_ENTRIES, "settings"));
+        }
+        let mut seen = HashSet::new();
+        for setting in &self.contributes.settings {
+            let local = setting.id.strip_prefix(&prefix).unwrap_or("");
+            if !valid_local_id(local) {
+                return Err(ManifestError::UnnamespacedSetting {
+                    plugin: name.clone(),
+                    setting: setting.id.clone(),
+                });
+            }
+            if !seen.insert(setting.id.as_str()) {
+                return Err(ManifestError::DuplicateSetting(setting.id.clone()));
+            }
+            check_setting(setting).map_err(|message| ManifestError::BadSetting {
+                id: setting.id.clone(),
+                message,
+            })?;
+        }
         CapabilitySet::from_permissions(&self.permissions)?;
         Ok(())
+    }
+
+    /// The command through which a plugin that declares settings receives
+    /// their effective values: `<plugin>.configure`.
+    pub fn configure_command(&self) -> String {
+        format!("{}.configure", self.plugin.name)
     }
 
     /// The capabilities this manifest grants.
@@ -277,6 +447,145 @@ title = "Export slides"
         }
         let ok = "[plugin]\nname = \"a\"\nversion = \"1.0.0\"\nentry = \"bin/p.wasm\"\n";
         assert!(Manifest::from_toml(ok).is_ok());
+    }
+
+    const LATEX_HEAD: &str = "[plugin]\nname = \"latex\"\nversion = \"1.0.0\"\n";
+
+    const LATEX_SETTINGS: &str = r#"
+[[contributes.settings]]
+id = "latex.engine"
+type = "enum"
+values = ["pdflatex", "xelatex"]
+default = "pdflatex"
+scope = "project"
+title = "Engine"
+description = "TeX engine."
+
+[[contributes.settings]]
+id = "latex.timeout-seconds"
+type = "int"
+min = 1
+max = 600
+default = 120
+description = "Timeout."
+requires-restart = true
+
+[[contributes.settings]]
+id = "latex.extra"
+type = "list"
+item = { type = "string" }
+default = []
+description = "Extra."
+
+[[contributes.settings]]
+id = "latex.ratio"
+type = "float"
+min = 0
+max = 1.5
+default = 1
+description = "Ratio."
+"#;
+
+    #[test]
+    fn parses_declared_settings() {
+        let m = Manifest::from_toml(&format!("{LATEX_HEAD}{LATEX_SETTINGS}")).expect("valid");
+        let s = &m.contributes.settings;
+        assert_eq!(s.len(), 4);
+        assert_eq!(s[0].scope, SettingScope::Project);
+        assert_eq!(s[0].title.as_deref(), Some("Engine"));
+        assert_eq!(s[0].default, Some(serde_json::json!("pdflatex")));
+        assert_eq!(
+            s[1].kind,
+            SettingKind::Int {
+                min: Some(1),
+                max: Some(600)
+            }
+        );
+        assert!(s[1].requires_restart);
+        assert_eq!(s[1].default, Some(serde_json::json!(120)));
+        assert_eq!(s[2].scope, SettingScope::User);
+        assert_eq!(
+            s[2].kind,
+            SettingKind::List {
+                item: Box::new(SettingKind::String)
+            }
+        );
+        assert_eq!(
+            s[3].kind,
+            SettingKind::Float {
+                min: Some(0.0),
+                max: Some(1.5)
+            }
+        );
+        assert_eq!(m.configure_command(), "latex.configure");
+    }
+
+    #[test]
+    fn rejects_bad_settings() {
+        let one = |body: &str| format!("{LATEX_HEAD}[[contributes.settings]]\n{body}");
+        let cases = [
+            (
+                "id = \"other.x\"\ntype = \"bool\"\ndefault = true\ndescription = \"d\"\n",
+                "unnamespaced",
+            ),
+            (
+                "id = \"latex\"\ntype = \"bool\"\ndefault = true\ndescription = \"d\"\n",
+                "bare plugin name",
+            ),
+            (
+                "id = \"latex.Bad\"\ntype = \"bool\"\ndefault = true\ndescription = \"d\"\n",
+                "bad local id",
+            ),
+            (
+                "id = \"latex.x\"\ntype = \"bool\"\ndescription = \"d\"\n",
+                "no default",
+            ),
+            (
+                "id = \"latex.x\"\ntype = \"bool\"\ndefault = 1\ndescription = \"d\"\n",
+                "wrong default type",
+            ),
+            (
+                "id = \"latex.x\"\ntype = \"enum\"\nvalues = [\"a\"]\ndefault = \"b\"\ndescription = \"d\"\n",
+                "default outside enum",
+            ),
+            (
+                "id = \"latex.x\"\ntype = \"int\"\nmin = 5\nmax = 1\ndefault = 3\ndescription = \"d\"\n",
+                "inverted range",
+            ),
+            (
+                "id = \"latex.x\"\ntype = \"int\"\nmax = 1\ndefault = 3\ndescription = \"d\"\n",
+                "default above max",
+            ),
+            (
+                "id = \"latex.x\"\ntype = \"bool\"\ndefault = true\n",
+                "no description",
+            ),
+            (
+                "id = \"latex.x\"\ntype = \"colour\"\ndefault = true\ndescription = \"d\"\n",
+                "unknown type",
+            ),
+        ];
+        for (body, why) in cases {
+            assert!(Manifest::from_toml(&one(body)).is_err(), "{why}");
+        }
+        let decl = "id = \"latex.x\"\ntype = \"bool\"\ndefault = true\ndescription = \"d\"\n";
+        let dup = one(&format!("{decl}[[contributes.settings]]\n{decl}"));
+        assert!(matches!(
+            Manifest::from_toml(&dup),
+            Err(ManifestError::DuplicateSetting(_))
+        ));
+        let mut m = Manifest::from_toml(&one(decl)).expect("valid");
+        let template = m.contributes.settings[0].clone();
+        m.contributes.settings = (0..=MAX_ENTRIES)
+            .map(|i| SettingSpec {
+                id: format!("latex.s{i}"),
+                ..template.clone()
+            })
+            .collect();
+        assert!(matches!(
+            m.validate(),
+            Err(ManifestError::TooMany(_, "settings"))
+        ));
     }
 
     #[test]

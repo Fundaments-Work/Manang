@@ -10,6 +10,7 @@
 
 use std::collections::BTreeMap;
 
+use manang_kernel::{SettingKind, SettingScope, SettingSpec};
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value, json};
 
@@ -254,6 +255,9 @@ pub struct SettingDef {
     pub scope: Scope,
     #[serde(default)]
     pub requires_restart: bool,
+    /// Short human label for the Settings UI; the UI falls back to the id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     /// Who registered it (`core` or a plugin name). Set by the registry.
     #[serde(default, skip_deserializing)]
     pub owner: String,
@@ -278,14 +282,67 @@ impl SettingDef {
             description: description.to_owned(),
             scope,
             requires_restart,
+            title: None,
             owner: String::new(),
             category: String::new(),
         }
     }
 
+    /// Set the human label shown by the Settings UI.
+    #[must_use]
+    pub fn with_title(mut self, title: &str) -> Self {
+        self.title = Some(title.to_owned());
+        self
+    }
+
     /// Validate a candidate value for this setting.
     pub fn validate(&self, value: &Value) -> Result<Value, ValidationError> {
         self.ty.validate(&self.id, value)
+    }
+}
+
+impl From<&SettingKind> for SettingType {
+    fn from(kind: &SettingKind) -> Self {
+        match kind {
+            SettingKind::Bool => Self::Bool,
+            SettingKind::Int { min, max } => Self::Int {
+                min: *min,
+                max: *max,
+            },
+            SettingKind::Float { min, max } => Self::Float {
+                min: *min,
+                max: *max,
+            },
+            SettingKind::Enum { values } => Self::Enum {
+                values: values.clone(),
+            },
+            SettingKind::String => Self::String,
+            SettingKind::Path => Self::Path,
+            SettingKind::List { item } => Self::List {
+                item: Box::new(Self::from(&**item)),
+            },
+        }
+    }
+}
+
+impl From<&SettingSpec> for SettingDef {
+    /// Convert a manifest declaration. A missing default (rejected by
+    /// manifest validation) becomes `null`, which registration then refuses.
+    fn from(spec: &SettingSpec) -> Self {
+        Self {
+            id: spec.id.clone(),
+            ty: SettingType::from(&spec.kind),
+            default: spec.default.clone().unwrap_or(Value::Null),
+            description: spec.description.clone(),
+            scope: match spec.scope {
+                SettingScope::User => Scope::User,
+                SettingScope::Project => Scope::Project,
+            },
+            requires_restart: spec.requires_restart,
+            title: spec.title.clone(),
+            owner: String::new(),
+            category: String::new(),
+        }
     }
 }
 
@@ -377,18 +434,19 @@ impl Registry {
         def.validate(&def.default)
             .map_err(|e| bad(format!("the default is invalid: {e}")))?;
         if let Some(existing) = self.defs.get(&def.id) {
-            let same = existing.owner == owner
-                && SettingDef {
-                    owner: String::new(),
-                    category: String::new(),
-                    ..existing.clone()
-                } == SettingDef {
-                    owner: String::new(),
-                    category: String::new(),
-                    ..def.clone()
-                };
-            if same {
-                return Ok(false);
+            let same = SettingDef {
+                owner: String::new(),
+                category: String::new(),
+                ..existing.clone()
+            } == SettingDef {
+                owner: String::new(),
+                category: String::new(),
+                ..def.clone()
+            };
+            if existing.owner == owner {
+                // Identical: no-op. Changed by its owner (a hot-reloaded
+                // plugin's new manifest): replace the definition.
+                return Ok(!same);
             }
             return Err(SettingsError::Duplicate {
                 id: def.id.clone(),
@@ -406,7 +464,7 @@ impl Registry {
     }
 
     /// Register one setting. Re-registering an identical definition by the
-    /// same owner is a no-op.
+    /// same owner is a no-op; a changed one by the same owner replaces it.
     pub fn register(&mut self, def: SettingDef, owner: &str) -> Result<(), SettingsError> {
         self.register_all(vec![def], owner).map(|_| ())
     }

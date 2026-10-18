@@ -32,6 +32,12 @@ pub enum ManifestError {
     UnnamespacedCommand { plugin: String, command: String },
     #[error("command `{0}` is declared more than once")]
     DuplicateCommand(String),
+    #[error("setting `{setting}` must be namespaced as `{plugin}.<kebab-case>`")]
+    UnnamespacedSetting { plugin: String, setting: String },
+    #[error("setting `{0}` is declared more than once")]
+    DuplicateSetting(String),
+    #[error("setting `{id}`: {message}")]
+    BadSetting { id: String, message: String },
     #[error(transparent)]
     Capability(#[from] CapabilityError),
 }
