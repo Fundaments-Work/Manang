@@ -1,0 +1,10 @@
+# Everything needs a maintainer's review; security-sensitive areas are listed so they are never missed.
+*                                  @sapienskid
+/crates/manang-wasm-host/          @sapienskid
+/crates/manang-plugins/            @sapienskid
+/crates/manang-keystore/           @sapienskid
+/crates/manang-live/               @sapienskid
+/crates/manang-relay/              @sapienskid
+/crates/manang-agent*/             @sapienskid
+/.github/                          @sapienskid
+/SECURITY.md                       @sapienskid

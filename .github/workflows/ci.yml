@@ -23,7 +23,7 @@ jobs:
   rust:
     name: Rust (fmt, clippy, tests)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120 # a cold cache builds Typst and Wasmtime
     steps:
       - uses: actions/checkout@v4
       - name: System libraries for the Tauri shell
