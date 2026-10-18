@@ -933,3 +933,48 @@ pub fn verify_entry(local: &Entry, client: &dyn HttpClient) -> VerificationResul
   10. `docs/user/troubleshooting.md`: Log file paths on Linux, macOS, and Windows for identifier `work.fundaments.manang`, developer tools via `F12`, fixing "No TeX installation found", resolving Linux Wayland + NVIDIA stuttering (`WEBKIT_DISABLE_DMABUF_RENDERER`), and plugin debugging.
 - **README Update:** Linked `docs/user/index.md` and all 9 topic guides in a dedicated "User guide" section.
 
+---
+
+## Starter Templates & Offline Starters (`antigravity/templates`)
+
+- **Branch:** `antigravity/templates`
+- **Commits:**
+  - `5572534 feat(templates): add starter templates and manifests`
+  - `081cbcd feat(project): add template loading, project.templates command and validation tests`
+  - `3eaba08 feat(ui): add Templates section, TemplateCard and template selection in NewProject`
+  - `f9b5408 test(ui): add Templates section coverage to verify-ui script`
+  - `5fe628c test(ui): add data-template-card attributes and verify template creation flow`
+
+### Work Completed:
+1. **Templates Library (`templates/`):**
+   - 11 starter templates created with valid `template.toml` manifests:
+     - `blank-typst`, `blank-latex`, `blank-markdown`
+     - `article-typst`, `article-latex`, `notes-markdown`
+     - `thesis-chapter-typst`, `letter-typst`, `slides-typst`, `poster-typst`, `lab-report-latex`
+   - Every Typst template compiles offline through the Typst compiler with zero warnings.
+2. **Rust Engine (`crates/manang-project`):**
+   - Implemented embedded template loading (`template.rs`), returning metadata summaries (`list_templates()`, `find_template()`).
+   - Added `project.templates` command in `manifest.toml` and registered in `plugin.rs`.
+   - Updated project scaffolding (`scaffold::create`) to populate all files and directories from the chosen template with title interpolation.
+   - Added automated tests in `tests/templates.rs`:
+     - `every_template_manifest_is_valid`: validates all 11 `template.toml` files on disk.
+     - `built_in_templates_match_required_list`: verifies embedded summaries match 11 starters.
+     - `scaffold_populates_template_files_and_config`: tests end-to-end scaffolding from template.
+     - `every_typst_template_compiles_through_typst_compiler`: verifies offline compilation of all 6 Typst templates.
+3. **Browser Dev Kernel (`src/lib/kernel/mockTemplates.ts` & `mockProject.ts`):**
+   - Added `BUILTIN_TEMPLATES` and `listMockTemplates()` serving browser dev and UI tests without disk access.
+   - Handled `project.templates` and updated `project.create` to scaffold template files into the mock filesystem.
+4. **UI & State (`src/lib/`):**
+   - Added `selectTemplates()` in `src/lib/workbench/templates.ts` with 6 Vitest tests (`templates.test.ts`).
+   - Created `TemplateCard.svelte`: Fundaments-compliant card with tonal SVG wireframe layouts (portrait paper, slides, poster, letter, notebook), badges, descriptions, and tags.
+   - Updated `NewProject.svelte`: added template selector dropdown with description preview, language filtering, and template scaffolding.
+   - Updated `Home.svelte`: renders Templates section with language filter chips (All, Typst, LaTeX, Markdown) and search integration. "Use template" opens New Project with template pre-selected.
+5. **UI Verification & Quality Gates:**
+   - Updated `scripts/verify-ui.mjs` with dedicated "Templates" section.
+   - Headless CDP test: 286/286 checks passed on port 1443 (`02-templates.png`, `02b-template-created.png`).
+   - `cargo fmt --all -- --check` passed.
+   - `cargo clippy -p manang-project` passed with 0 warnings.
+   - `cargo test -p manang-project` passed all 77 unit/integration tests.
+   - `pnpm run check && pnpm run lint` passed with 0 errors and 0 warnings.
+   - `pnpm test` passed all 64 test suites (488 tests).
+

@@ -111,3 +111,7 @@ title = "Purge project from trash"
 [[contributes.commands]]
 id = "project.empty-trash"
 title = "Empty trash"
+
+[[contributes.commands]]
+id = "project.templates"
+title = "List starter templates"

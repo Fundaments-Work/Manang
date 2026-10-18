@@ -1,0 +1,6 @@
+id = "slides-typst"
+name = "Slides (Typst)"
+engine = "typst"
+description = "Presentation slide deck with 16:9 aspect ratio and structured headings."
+tags = ["slides", "presentation", "typst"]
+main = "main.typ"
