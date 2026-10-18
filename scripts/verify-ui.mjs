@@ -1008,6 +1008,43 @@ async function main() {
     );
 
     /* ------------------------------------------------------------------ */
+    section("Settings views");
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
+    );
+    await waitFor(page, `!!document.querySelector('section[aria-label="Settings"]')`);
+    await clickText(
+      page,
+      'section[aria-label="Settings"] button',
+      "Keyboard shortcuts",
+    );
+    await expectEventually(
+      page,
+      "Keyboard shortcuts lists a command with two shortcuts as two rows",
+      `(() => { const t = document.querySelector('section[aria-label="Settings"]').innerText; return t.includes("Ctrl+K") && t.includes("Ctrl+Shift+P"); })()`,
+      {
+        show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 300)`,
+      },
+    );
+    await clickText(page, 'section[aria-label="Settings"] button', "About");
+    await expectEventually(
+      page,
+      "About shows the app and its licences",
+      `(() => { const t = document.querySelector('section[aria-label="Settings"]').innerText; return t.includes("Manang") && /licen[cs]e/i.test(t); })()`,
+      {
+        show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 300)`,
+      },
+    );
+    await press(page, "Escape");
+    await press(page, "Escape");
+    await expectEventually(
+      page,
+      "Esc leaves Settings from the About view",
+      `!document.querySelector('section[aria-label="Settings"]')`,
+    );
+
+    /* ------------------------------------------------------------------ */
     section("Files tree");
     await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
     check(
