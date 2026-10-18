@@ -59,6 +59,11 @@ pub struct PluginMeta {
     /// Path to the `.wasm` module, relative to the plugin directory.
     #[serde(default)]
     pub entry: Option<String>,
+    /// Where the plugin's section and settings belong in a contextual
+    /// Settings page (see [`SETTINGS_CONTEXTS`]). Empty means `["app"]`:
+    /// shown only when Settings is opened for the whole application.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub settings_contexts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +152,68 @@ pub struct SettingSpec {
     pub title: Option<String>,
 }
 
+/// The menus of the title bar's menu bar (the application menu on macOS).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MenuBar {
+    File,
+    Edit,
+    View,
+    Go,
+    Build,
+    Help,
+}
+
+/// Where a command appears in a menu: groups are separated by a rule and
+/// sorted by name (the shell's own are `1_new`, `2_open`, ...), items within a
+/// group by `order`, then title.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MenuPlacement {
+    pub bar: MenuBar,
+    pub group: String,
+    pub order: i32,
+}
+
+fn default_menu_group() -> String {
+    "plugins".to_owned()
+}
+
+/// A menu item a plugin contributes under `[[contributes.menus]]`. The
+/// command must be one the same manifest declares; the menu runs it with no
+/// arguments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MenuSpec {
+    pub command: String,
+    pub bar: MenuBar,
+    /// Lowercase letters, digits, `_` and `-`; `plugins` when absent.
+    #[serde(default = "default_menu_group")]
+    pub group: String,
+    #[serde(default)]
+    pub order: i32,
+}
+
+impl MenuSpec {
+    pub fn placement(&self) -> MenuPlacement {
+        MenuPlacement {
+            bar: self.bar,
+            group: self.group.clone(),
+            order: self.order,
+        }
+    }
+}
+
+/// Most characters in a menu group name.
+pub const MAX_MENU_GROUP: usize = 64;
+
+fn valid_menu_group(group: &str) -> bool {
+    !group.is_empty()
+        && group.len() <= MAX_MENU_GROUP
+        && group
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Contributes {
     #[serde(default)]
@@ -155,6 +222,8 @@ pub struct Contributes {
     pub hooks: Vec<Hook>,
     #[serde(default)]
     pub settings: Vec<SettingSpec>,
+    #[serde(default)]
+    pub menus: Vec<MenuSpec>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -164,6 +233,46 @@ pub struct Manifest {
     pub permissions: Permissions,
     #[serde(default)]
     pub contributes: Contributes,
+}
+
+/// The places a settings group can belong to. Settings opened from a place
+/// show only the groups declaring it; opened for the whole application
+/// (`app`) they show everything. `engine:<name>` names a document engine,
+/// such as `engine:typst`.
+pub const SETTINGS_CONTEXTS: &[&str] = &["app", "project", "document", "figure", "diagram", "pdf"];
+
+/// Most contexts one settings group may declare.
+pub const MAX_SETTINGS_CONTEXTS: usize = 8;
+
+/// The context of a group that declares none.
+pub const DEFAULT_SETTINGS_CONTEXT: &str = "app";
+
+/// True for one of [`SETTINGS_CONTEXTS`] or `engine:<kebab-case name>`.
+pub fn valid_settings_context(context: &str) -> bool {
+    SETTINGS_CONTEXTS.contains(&context) || context.strip_prefix("engine:").is_some_and(valid_name)
+}
+
+/// Why a list of settings contexts is invalid, if it is: too many entries,
+/// an unknown value or a repeated one.
+pub fn check_settings_contexts(contexts: &[String]) -> Result<(), String> {
+    if contexts.len() > MAX_SETTINGS_CONTEXTS {
+        return Err(format!(
+            "at most {MAX_SETTINGS_CONTEXTS} settings contexts are allowed"
+        ));
+    }
+    let mut seen = HashSet::new();
+    for context in contexts {
+        if !valid_settings_context(context) {
+            return Err(format!(
+                "unknown settings context `{context}`; expected one of {} or `engine:<name>`",
+                SETTINGS_CONTEXTS.join(", ")
+            ));
+        }
+        if !seen.insert(context.as_str()) {
+            return Err(format!("settings context `{context}` is listed twice"));
+        }
+    }
+    Ok(())
 }
 
 /// Largest manifest the parser will look at.
@@ -325,8 +434,66 @@ impl Manifest {
                 message,
             })?;
         }
+        self.validate_menus()?;
+        check_settings_contexts(&self.plugin.settings_contexts)
+            .map_err(ManifestError::BadSettingsContexts)?;
         CapabilitySet::from_permissions(&self.permissions)?;
         Ok(())
+    }
+
+    /// Menu items name a command this manifest declares, once per menu, in a
+    /// well-formed group.
+    fn validate_menus(&self) -> Result<(), ManifestError> {
+        if self.contributes.menus.len() > MAX_ENTRIES {
+            return Err(ManifestError::TooMany(MAX_ENTRIES, "menu items"));
+        }
+        let declared: HashSet<&str> = self
+            .contributes
+            .commands
+            .iter()
+            .map(|c| c.id.as_str())
+            .collect();
+        let mut seen = HashSet::new();
+        for menu in &self.contributes.menus {
+            let bad = |message: &str| ManifestError::BadMenu {
+                command: menu.command.clone(),
+                message: message.to_owned(),
+            };
+            if !declared.contains(menu.command.as_str()) {
+                return Err(bad(
+                    "the command is not declared in [[contributes.commands]]",
+                ));
+            }
+            if !valid_menu_group(&menu.group) {
+                return Err(bad(
+                    "the group must be 1-64 lowercase letters, digits, `_` or `-`",
+                ));
+            }
+            if !seen.insert((menu.command.as_str(), menu.bar)) {
+                return Err(bad("the command is placed in the same menu twice"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Where each of this plugin's commands appears in the menus.
+    pub fn menus_for(&self, command: &str) -> Vec<MenuPlacement> {
+        self.contributes
+            .menus
+            .iter()
+            .filter(|m| m.command == command)
+            .map(MenuSpec::placement)
+            .collect()
+    }
+
+    /// The contexts the plugin's Settings section belongs to: its declared
+    /// `settings_contexts`, or `["app"]` when it declares none.
+    pub fn settings_contexts(&self) -> Vec<String> {
+        if self.plugin.settings_contexts.is_empty() {
+            vec![DEFAULT_SETTINGS_CONTEXT.to_owned()]
+        } else {
+            self.plugin.settings_contexts.clone()
+        }
     }
 
     /// The command through which a plugin that declares settings receives
@@ -592,5 +759,155 @@ description = "Ratio."
     fn hook_modes() {
         assert_eq!(Hook::OnCompilePre.mode(), HookMode::Pipeline);
         assert_eq!(Hook::OnLint.mode(), HookMode::FanOut);
+    }
+
+    const MENU_HEAD: &str = "[plugin]\nname = \"marp\"\nversion = \"1.0.0\"\n\
+        [[contributes.commands]]\nid = \"marp.export\"\ntitle = \"Export slides\"\n\
+        [[contributes.commands]]\nid = \"marp.preview\"\ntitle = \"Preview slides\"\n";
+
+    #[test]
+    fn parses_menu_contributions() {
+        let src = format!(
+            "{MENU_HEAD}[[contributes.menus]]\ncommand = \"marp.export\"\nbar = \"file\"\n\
+             group = \"5_export\"\norder = 2\n\
+             [[contributes.menus]]\ncommand = \"marp.preview\"\nbar = \"view\"\n\
+             [[contributes.menus]]\ncommand = \"marp.export\"\nbar = \"build\"\n"
+        );
+        let m = Manifest::from_toml(&src).expect("valid");
+        assert_eq!(
+            m.contributes.menus[0],
+            MenuSpec {
+                command: "marp.export".to_owned(),
+                bar: MenuBar::File,
+                group: "5_export".to_owned(),
+                order: 2,
+            }
+        );
+        // Group and order are optional.
+        assert_eq!(m.contributes.menus[1].group, "plugins");
+        assert_eq!(m.contributes.menus[1].order, 0);
+        let placed: Vec<MenuBar> = m.menus_for("marp.export").iter().map(|p| p.bar).collect();
+        assert_eq!(placed, vec![MenuBar::File, MenuBar::Build]);
+        assert!(m.menus_for("marp.nope").is_empty());
+        // Manifests without menus still parse.
+        assert!(
+            Manifest::from_toml(MENU_HEAD)
+                .expect("valid")
+                .contributes
+                .menus
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn rejects_bad_menu_contributions() {
+        let menu = |body: &str| format!("{MENU_HEAD}[[contributes.menus]]\n{body}");
+        for body in [
+            // Not declared by this manifest (another plugin's or unknown).
+            "command = \"other.run\"\nbar = \"file\"\n",
+            "command = \"marp.missing\"\nbar = \"file\"\n",
+            // Bad groups.
+            "command = \"marp.export\"\nbar = \"file\"\ngroup = \"\"\n",
+            "command = \"marp.export\"\nbar = \"file\"\ngroup = \"Export Things\"\n",
+        ] {
+            assert!(
+                matches!(
+                    Manifest::from_toml(&menu(body)),
+                    Err(ManifestError::BadMenu { .. })
+                ),
+                "{body}"
+            );
+        }
+        let long = format!(
+            "command = \"marp.export\"\nbar = \"file\"\ngroup = \"{}\"\n",
+            "g".repeat(65)
+        );
+        assert!(matches!(
+            Manifest::from_toml(&menu(&long)),
+            Err(ManifestError::BadMenu { .. })
+        ));
+        // Unknown menus and unknown keys are TOML errors.
+        for body in [
+            "command = \"marp.export\"\nbar = \"tools\"\n",
+            "command = \"marp.export\"\nbar = \"file\"\nwhen = \"x\"\n",
+            "bar = \"file\"\n",
+        ] {
+            assert!(
+                matches!(
+                    Manifest::from_toml(&menu(body)),
+                    Err(ManifestError::Toml(_))
+                ),
+                "{body}"
+            );
+        }
+        let twice = menu(
+            "command = \"marp.export\"\nbar = \"file\"\n\
+             [[contributes.menus]]\ncommand = \"marp.export\"\nbar = \"file\"\norder = 3\n",
+        );
+        assert!(matches!(
+            Manifest::from_toml(&twice),
+            Err(ManifestError::BadMenu { .. })
+        ));
+    }
+
+    #[test]
+    fn too_many_menu_items_are_rejected() {
+        let mut m = Manifest::from_toml(MENU_HEAD).expect("valid");
+        m.contributes.menus = (0..=MAX_ENTRIES)
+            .map(|i| MenuSpec {
+                command: "marp.export".to_owned(),
+                bar: MenuBar::File,
+                group: format!("g{i}"),
+                order: 0,
+            })
+            .collect();
+        assert!(matches!(
+            m.validate(),
+            Err(ManifestError::TooMany(_, "menu items"))
+        ));
+    }
+
+    #[test]
+    fn settings_contexts_default_to_app() {
+        let m = Manifest::from_toml(LATEX_HEAD).expect("valid");
+        assert!(m.plugin.settings_contexts.is_empty());
+        assert_eq!(m.settings_contexts(), vec!["app".to_owned()]);
+    }
+
+    #[test]
+    fn parses_settings_contexts() {
+        let src = "[plugin]\nname = \"latex\"\nversion = \"1.0.0\"\n\
+                   settings_contexts = [\"document\", \"engine:latex\"]\n";
+        let m = Manifest::from_toml(src).expect("valid");
+        assert_eq!(m.settings_contexts(), vec!["document", "engine:latex"]);
+    }
+
+    #[test]
+    fn rejects_bad_settings_contexts() {
+        let with = |list: &str| {
+            format!("[plugin]\nname = \"a\"\nversion = \"1.0.0\"\nsettings_contexts = {list}\n")
+        };
+        for list in [
+            "[\"editor\"]",
+            "[\"engine:\"]",
+            "[\"engine:Typst\"]",
+            "[\"Document\"]",
+            "[\"\"]",
+            "[\"document\", \"document\"]",
+            "[\"app\", \"project\", \"document\", \"figure\", \"diagram\", \"pdf\", \"engine:a\", \"engine:b\", \"engine:c\"]",
+        ] {
+            assert!(
+                matches!(
+                    Manifest::from_toml(&with(list)),
+                    Err(ManifestError::BadSettingsContexts(_))
+                ),
+                "{list}"
+            );
+        }
+        for good in SETTINGS_CONTEXTS {
+            assert!(valid_settings_context(good), "{good}");
+        }
+        assert!(valid_settings_context("engine:typst"));
+        assert!(Manifest::from_toml(&with("[]")).is_ok());
     }
 }

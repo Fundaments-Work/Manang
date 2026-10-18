@@ -24,8 +24,30 @@ fn float(min: f64, max: f64) -> SettingType {
     }
 }
 
+/// The contexts each core category belongs to: where a contextual Settings
+/// page shows it. Opened for the whole application (`app`) the page shows
+/// every group; opened from a document it shows the `document` groups, and
+/// so on. A category missing here belongs to `app` only.
+pub const CATEGORY_CONTEXTS: &[(&str, &[&str])] = &[
+    ("appearance", &["app"]),
+    ("editor", &["document", "diagram"]),
+    ("preview", &["document", "pdf"]),
+    ("compile", &["document"]),
+    ("files", &["app", "project"]),
+];
+
+/// The contexts of a core category (`["app"]` when it declares none).
+pub fn category_contexts(category: &str) -> &'static [&'static str] {
+    CATEGORY_CONTEXTS
+        .iter()
+        .find(|(name, _)| *name == category)
+        .map_or(&["app"], |(_, contexts)| contexts)
+}
+
 fn def(id: &str, ty: SettingType, default: Value, scope: Scope, description: &str) -> SettingDef {
+    let category = id.split('.').next().unwrap_or_default();
     SettingDef::new(id, ty, default, scope, false, description)
+        .with_contexts(category_contexts(category))
 }
 
 /// The core definitions, in no particular order.
@@ -115,6 +137,20 @@ pub fn definitions() -> Vec<SettingDef> {
             json!(300),
             Project,
             "Milliseconds to wait after the last keystroke before recompiling.",
+        ),
+        def(
+            "preview.double-click-source",
+            SettingType::Bool,
+            json!(true),
+            User,
+            "Double-click in the PDF goes to the source. Alt+double-click then selects a word.",
+        ),
+        def(
+            "preview.dark-pages",
+            SettingType::Bool,
+            json!(false),
+            User,
+            "Show PDF pages inverted for reading in the dark. Export is unaffected.",
         ),
         def(
             "compile.engine",

@@ -2,11 +2,10 @@ import { mount } from "svelte";
 
 import "./app.css";
 import App from "./App.svelte";
-import { installDevtoolsShortcut, installErrorLog } from "./lib/kernel/log";
+import { installErrorLog } from "./lib/kernel/log";
 
 // First, so errors while mounting and booting reach the terminal too.
 installErrorLog();
-installDevtoolsShortcut();
 
 const target = document.getElementById("app");
 

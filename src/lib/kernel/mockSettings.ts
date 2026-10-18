@@ -5,6 +5,8 @@
  * over `MockProjectHost` in browser and tests.
  */
 
+import { DEFAULT_BINDINGS } from "$lib/commands/defaults";
+
 import type { MockPlugin, MockPluginFactory } from "./mock";
 import type { MockProjectHost } from "./mockProject";
 import type {
@@ -37,7 +39,16 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["theme.get", "Get full theme token definition"],
 ];
 
-const CORE_DEFINITIONS: SettingDef[] = [
+/** `crates/manang-settings/src/defaults.rs` `CATEGORY_CONTEXTS`. */
+export const CATEGORY_CONTEXTS: Readonly<Record<string, readonly string[]>> = {
+  appearance: ["app"],
+  editor: ["document", "diagram"],
+  preview: ["document", "pdf"],
+  compile: ["document"],
+  files: ["app", "project"],
+};
+
+const CORE_SETTINGS: Omit<SettingDef, "contexts">[] = [
   {
     id: "appearance.theme",
     type: "enum",
@@ -57,7 +68,8 @@ const CORE_DEFINITIONS: SettingDef[] = [
     "requires-restart": false,
     owner: "core",
     category: "appearance",
-    description: "Id of a user theme from the themes folder to use instead of the built-in one. Empty for none.",
+    description:
+      "Id of a user theme from the themes folder to use instead of the built-in one. Empty for none.",
   },
   {
     id: "appearance.ui-scale",
@@ -80,7 +92,8 @@ const CORE_DEFINITIONS: SettingDef[] = [
     "requires-restart": false,
     owner: "core",
     category: "appearance",
-    description: "Replace transitions with instant changes. `system` follows the operating system.",
+    description:
+      "Replace transitions with instant changes. `system` follows the operating system.",
   },
   {
     id: "editor.font-size",
@@ -171,6 +184,28 @@ const CORE_DEFINITIONS: SettingDef[] = [
     description: "Milliseconds to wait after the last keystroke before recompiling.",
   },
   {
+    id: "preview.double-click-source",
+    type: "bool",
+    default: true,
+    scope: "user",
+    "requires-restart": false,
+    owner: "core",
+    category: "preview",
+    description:
+      "Double-click in the PDF goes to the source. Alt+double-click then selects a word.",
+  },
+  {
+    id: "preview.dark-pages",
+    type: "bool",
+    default: false,
+    scope: "user",
+    "requires-restart": false,
+    owner: "core",
+    category: "preview",
+    description:
+      "Show PDF pages inverted for reading in the dark. Export is unaffected.",
+  },
+  {
     id: "compile.engine",
     type: "enum",
     values: ["typst", "latex", "markdown"],
@@ -200,18 +235,24 @@ const CORE_DEFINITIONS: SettingDef[] = [
     "requires-restart": false,
     owner: "core",
     category: "files",
-    description: "Move deleted files to the trash instead of removing them permanently.",
+    description:
+      "Move deleted files to the trash instead of removing them permanently.",
   },
 ];
 
-const DEFAULT_KEYBINDINGS: KeybindingItem[] = [
-  { command: "palette.open", key: "Mod+K", display: "Ctrl+K", when: "", source: "default" },
-  { command: "editor.save", key: "Mod+S", display: "Ctrl+S", when: "editorFocus", source: "default" },
-  { command: "editor.find", key: "Mod+F", display: "Ctrl+F", when: "editorFocus", source: "default" },
-  { command: "workbench.close-tab", key: "Mod+W", display: "Ctrl+W", when: "", source: "default" },
-  { command: "workbench.toggle-panel", key: "Mod+J", display: "Ctrl+J", when: "", source: "default" },
-  { command: "workbench.toggle-zen", key: "Mod+Shift+Z", display: "Ctrl+Shift+Z", when: "", source: "default" },
-];
+const CORE_DEFINITIONS: SettingDef[] = CORE_SETTINGS.map((d) => ({
+  ...d,
+  contexts: CATEGORY_CONTEXTS[d.category] ?? ["app"],
+}));
+
+/** The shipped defaults, shared with the frontend so the two cannot differ. */
+const DEFAULT_KEYBINDINGS: KeybindingItem[] = DEFAULT_BINDINGS.map((d) => ({
+  command: d.command,
+  key: d.key,
+  display: d.key.replace("Mod+", "Ctrl+"),
+  when: "",
+  source: "default",
+}));
 
 const THEME_DARK: ThemeDetail = {
   id: "dark",
@@ -273,10 +314,14 @@ function validateValue(def: SettingDef, value: unknown): unknown {
         throw { message: `expected integer for \`${def.id}\`` };
       }
       if (def.min !== undefined && value < def.min) {
-        throw { message: `value ${value} is below minimum ${def.min} for \`${def.id}\`` };
+        throw {
+          message: `value ${value} is below minimum ${def.min} for \`${def.id}\``,
+        };
       }
       if (def.max !== undefined && value > def.max) {
-        throw { message: `value ${value} is above maximum ${def.max} for \`${def.id}\`` };
+        throw {
+          message: `value ${value} is above maximum ${def.max} for \`${def.id}\``,
+        };
       }
       return value;
     }
@@ -285,16 +330,22 @@ function validateValue(def: SettingDef, value: unknown): unknown {
         throw { message: `expected number for \`${def.id}\`` };
       }
       if (def.min !== undefined && value < def.min) {
-        throw { message: `value ${value} is below minimum ${def.min} for \`${def.id}\`` };
+        throw {
+          message: `value ${value} is below minimum ${def.min} for \`${def.id}\``,
+        };
       }
       if (def.max !== undefined && value > def.max) {
-        throw { message: `value ${value} is above maximum ${def.max} for \`${def.id}\`` };
+        throw {
+          message: `value ${value} is above maximum ${def.max} for \`${def.id}\``,
+        };
       }
       return value;
     }
     case "enum": {
       if (typeof value !== "string" || !(def.values ?? []).includes(value)) {
-        throw { message: `value ${JSON.stringify(value)} is not valid for \`${def.id}\` (allowed: ${(def.values ?? []).join(", ")})` };
+        throw {
+          message: `value ${JSON.stringify(value)} is not valid for \`${def.id}\` (allowed: ${(def.values ?? []).join(", ")})`,
+        };
       }
       return value;
     }
@@ -363,7 +414,9 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
     commands: COMMANDS,
     handlers: {
       "settings.schema": () => {
-        const categories = [...new Set([...definitions.values()].map((d) => d.category))];
+        const categories = [
+          ...new Set([...definitions.values()].map((d) => d.category)),
+        ];
         const response: SettingsSchema = {
           version: 1,
           categories,
@@ -382,7 +435,10 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
           return res;
         }
 
-        const values: Record<string, { value: unknown; source: "default" | "user" | "project" }> = {};
+        const values: Record<
+          string,
+          { value: unknown; source: "default" | "user" | "project" }
+        > = {};
         for (const [key] of definitions) {
           const desc = resolveSetting(key);
           if (desc) {
@@ -455,7 +511,9 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
       },
 
       "settings.register": (args) => {
-        const settings = Array.isArray(args.settings) ? (args.settings as SettingDef[]) : [];
+        const settings = Array.isArray(args.settings)
+          ? (args.settings as SettingDef[])
+          : [];
         const owner = typeof args.owner === "string" ? args.owner : "plugin";
         let registered = 0;
         for (const s of settings) {
@@ -464,6 +522,7 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
               ...s,
               owner,
               category: s.id.split(".")[0] ?? "other",
+              contexts: s.contexts !== undefined && s.contexts.length > 0 ? s.contexts : ["app"],
             });
             registered += 1;
           }
@@ -496,34 +555,38 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
       },
 
       "keybindings.list": () => {
-        const bindings: KeybindingItem[] = DEFAULT_KEYBINDINGS.map((d) => {
-          const user = userKeybindings.get(d.command);
-          if (user) {
-            return {
-              command: d.command,
-              key: user.key,
-              display: user.key.replace("Mod+", "Ctrl+"),
-              when: user.when,
-              source: "user",
-            };
-          }
-          return d;
-        });
+        // As the registry does: a user entry replaces all of its command's
+        // defaults; an entry with no keys unbinds.
+        const bindings: KeybindingItem[] = DEFAULT_KEYBINDINGS.filter(
+          (d) => !userKeybindings.has(d.command),
+        );
+        for (const [command, u] of userKeybindings) {
+          if (u.key === "") continue;
+          bindings.push({
+            command,
+            key: u.key,
+            display: u.key.replace("Mod+", "Ctrl+"),
+            when: u.when,
+            source: "user",
+          });
+        }
 
-        // Add any user-only custom bindings
-        for (const [cmd, u] of userKeybindings) {
-          if (!DEFAULT_KEYBINDINGS.some((d) => d.command === cmd)) {
-            bindings.push({
-              command: cmd,
-              key: u.key,
-              display: u.key.replace("Mod+", "Ctrl+"),
-              when: u.when,
-              source: "user",
+        // Two commands on one key: a tie, or a user binding shadowing a default.
+        const conflicts: KeybindingConflict[] = [];
+        for (let i = 0; i < bindings.length; i++) {
+          for (let j = i + 1; j < bindings.length; j++) {
+            const x = bindings[i];
+            const y = bindings[j];
+            if (x === undefined || y === undefined) continue;
+            if (x.command === y.command) continue;
+            if (x.key.toLowerCase() !== y.key.toLowerCase()) continue;
+            conflicts.push({
+              key: x.display,
+              kind: x.source === y.source ? "conflict" : "shadow",
+              commands: [x.command, y.command].sort(),
             });
           }
         }
-
-        const conflicts: KeybindingConflict[] = [];
         const response: KeybindingsListResponse = {
           platform: "linux",
           bindings,
@@ -545,7 +608,12 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
 
       "keybindings.set": (args) => {
         const command = String(args.command);
-        const key = typeof args.key === "string" ? args.key : (Array.isArray(args.keys) ? String(args.keys[0]) : "");
+        const key =
+          typeof args.key === "string"
+            ? args.key
+            : Array.isArray(args.keys)
+              ? String(args.keys[0] ?? "")
+              : "";
         const when = typeof args.when === "string" ? args.when : "";
 
         userKeybindings.set(command, { key, when });
@@ -578,8 +646,20 @@ export function settingsPlugin(host: MockProjectHost): MockPluginFactory {
       "theme.list": () => {
         const response: ThemeListResponse = {
           themes: [
-            { id: THEME_DARK.id, name: THEME_DARK.name, scheme: THEME_DARK.scheme, builtin: true, base: null },
-            { id: THEME_LIGHT.id, name: THEME_LIGHT.name, scheme: THEME_LIGHT.scheme, builtin: true, base: null },
+            {
+              id: THEME_DARK.id,
+              name: THEME_DARK.name,
+              scheme: THEME_DARK.scheme,
+              builtin: true,
+              base: null,
+            },
+            {
+              id: THEME_LIGHT.id,
+              name: THEME_LIGHT.name,
+              scheme: THEME_LIGHT.scheme,
+              builtin: true,
+              base: null,
+            },
           ],
           warnings: [],
         };

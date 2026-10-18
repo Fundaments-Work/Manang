@@ -20,7 +20,10 @@ expression: "Registry::with_core().schema()"
       "scope": "user",
       "requires-restart": false,
       "owner": "core",
-      "category": "appearance"
+      "category": "appearance",
+      "contexts": [
+        "app"
+      ]
     },
     {
       "id": "appearance.reduced-motion",
@@ -35,7 +38,10 @@ expression: "Registry::with_core().schema()"
       "scope": "user",
       "requires-restart": false,
       "owner": "core",
-      "category": "appearance"
+      "category": "appearance",
+      "contexts": [
+        "app"
+      ]
     },
     {
       "id": "appearance.theme",
@@ -50,7 +56,10 @@ expression: "Registry::with_core().schema()"
       "scope": "user",
       "requires-restart": false,
       "owner": "core",
-      "category": "appearance"
+      "category": "appearance",
+      "contexts": [
+        "app"
+      ]
     },
     {
       "id": "appearance.ui-scale",
@@ -62,7 +71,10 @@ expression: "Registry::with_core().schema()"
       "scope": "user",
       "requires-restart": false,
       "owner": "core",
-      "category": "appearance"
+      "category": "appearance",
+      "contexts": [
+        "app"
+      ]
     },
     {
       "id": "compile.engine",
@@ -77,7 +89,10 @@ expression: "Registry::with_core().schema()"
       "scope": "project",
       "requires-restart": false,
       "owner": "core",
-      "category": "compile"
+      "category": "compile",
+      "contexts": [
+        "document"
+      ]
     },
     {
       "id": "editor.font-size",
@@ -89,7 +104,11 @@ expression: "Registry::with_core().schema()"
       "scope": "project",
       "requires-restart": false,
       "owner": "core",
-      "category": "editor"
+      "category": "editor",
+      "contexts": [
+        "document",
+        "diagram"
+      ]
     },
     {
       "id": "editor.line-height",
@@ -101,7 +120,11 @@ expression: "Registry::with_core().schema()"
       "scope": "project",
       "requires-restart": false,
       "owner": "core",
-      "category": "editor"
+      "category": "editor",
+      "contexts": [
+        "document",
+        "diagram"
+      ]
     },
     {
       "id": "editor.line-numbers",
@@ -111,7 +134,11 @@ expression: "Registry::with_core().schema()"
       "scope": "project",
       "requires-restart": false,
       "owner": "core",
-      "category": "editor"
+      "category": "editor",
+      "contexts": [
+        "document",
+        "diagram"
+      ]
     },
     {
       "id": "editor.tab-size",
@@ -123,7 +150,11 @@ expression: "Registry::with_core().schema()"
       "scope": "project",
       "requires-restart": false,
       "owner": "core",
-      "category": "editor"
+      "category": "editor",
+      "contexts": [
+        "document",
+        "diagram"
+      ]
     },
     {
       "id": "editor.vim-mode",
@@ -133,7 +164,11 @@ expression: "Registry::with_core().schema()"
       "scope": "user",
       "requires-restart": false,
       "owner": "core",
-      "category": "editor"
+      "category": "editor",
+      "contexts": [
+        "document",
+        "diagram"
+      ]
     },
     {
       "id": "editor.word-wrap",
@@ -143,7 +178,11 @@ expression: "Registry::with_core().schema()"
       "scope": "project",
       "requires-restart": false,
       "owner": "core",
-      "category": "editor"
+      "category": "editor",
+      "contexts": [
+        "document",
+        "diagram"
+      ]
     },
     {
       "id": "files.autosave",
@@ -158,7 +197,11 @@ expression: "Registry::with_core().schema()"
       "scope": "user",
       "requires-restart": false,
       "owner": "core",
-      "category": "files"
+      "category": "files",
+      "contexts": [
+        "app",
+        "project"
+      ]
     },
     {
       "id": "files.trash-on-delete",
@@ -168,7 +211,11 @@ expression: "Registry::with_core().schema()"
       "scope": "user",
       "requires-restart": false,
       "owner": "core",
-      "category": "files"
+      "category": "files",
+      "contexts": [
+        "app",
+        "project"
+      ]
     },
     {
       "id": "preview.auto-compile",
@@ -178,7 +225,25 @@ expression: "Registry::with_core().schema()"
       "scope": "project",
       "requires-restart": false,
       "owner": "core",
-      "category": "preview"
+      "category": "preview",
+      "contexts": [
+        "document",
+        "pdf"
+      ]
+    },
+    {
+      "id": "preview.dark-pages",
+      "type": "bool",
+      "default": false,
+      "description": "Show PDF pages inverted for reading in the dark. Export is unaffected.",
+      "scope": "user",
+      "requires-restart": false,
+      "owner": "core",
+      "category": "preview",
+      "contexts": [
+        "document",
+        "pdf"
+      ]
     },
     {
       "id": "preview.debounce-ms",
@@ -190,7 +255,25 @@ expression: "Registry::with_core().schema()"
       "scope": "project",
       "requires-restart": false,
       "owner": "core",
-      "category": "preview"
+      "category": "preview",
+      "contexts": [
+        "document",
+        "pdf"
+      ]
+    },
+    {
+      "id": "preview.double-click-source",
+      "type": "bool",
+      "default": true,
+      "description": "Double-click in the PDF goes to the source. Alt+double-click then selects a word.",
+      "scope": "user",
+      "requires-restart": false,
+      "owner": "core",
+      "category": "preview",
+      "contexts": [
+        "document",
+        "pdf"
+      ]
     }
   ]
 }

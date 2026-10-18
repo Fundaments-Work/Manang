@@ -297,6 +297,7 @@ const KEYS = {
   Delete: ["Delete", 46],
   F2: ["F2", 113],
   F5: ["F5", 116],
+  F10: ["F10", 121],
   "\\": ["Backslash", 220],
   ",": ["Comma", 188],
 };
@@ -430,6 +431,9 @@ async function noStrayEdits(cdp, where) {
     dirty.join(),
   );
 }
+
+/** The PDF page box in the preview header: `{ page, of }` (1-based), or null. */
+const PAGE_BOX = `(() => { const i = document.querySelector('[data-page-input]'); if (!i) return null; const m = /\\/\\s*(\\d+)/.exec(i.closest("label")?.innerText ?? ""); return { page: Number(i.value), of: Number(m?.[1] ?? 0) }; })()`;
 
 const exists = (cdp, selector) =>
   cdp.evaluate(`document.querySelector(${JSON.stringify(selector)}) !== null`);
@@ -662,8 +666,8 @@ async function main() {
     );
     await expectEventually(
       page,
-      "preview renders the compiled page as SVG from typst.render",
-      `document.querySelector('img[alt^="Page 1"]')?.src.startsWith("blob:")`,
+      "preview shows the Typst document as a PDF from typst.export-pdf",
+      `document.querySelector('[data-pdf-viewer] canvas') !== null`,
     );
     await expectEventually(
       page,
@@ -681,10 +685,64 @@ async function main() {
     );
     check("main.typ opened in a tab on open", (await activeTab(page)) === "main.typ");
     check(
-      "breadcrumb names the project and file",
+      "the title bar has the logo only: no name, no breadcrumb",
       await page.evaluate(
-        `document.querySelector('nav[aria-label="Breadcrumb"]').innerText.replace(/\\s+/g, " ").includes("Entropy paper / main.typ")`,
+        `(() => { const b = document.querySelector('header button[aria-label="Home"]'); return b.innerText.trim() === "" && !document.querySelector('header nav[aria-label="Breadcrumb"]') && !!b.querySelector("svg"); })()`,
       ),
+    );
+    {
+      const logo = await rect(page, 'header button[aria-label="Home"]');
+      const colour = () =>
+        page.evaluate(
+          `getComputedStyle(document.querySelector('header button[aria-label="Home"] svg')).color`,
+        );
+      const bg = () =>
+        page.evaluate(
+          `getComputedStyle(document.querySelector('header button[aria-label="Home"]')).backgroundColor`,
+        );
+      const before = await colour();
+      await mouse(page, "mouseMoved", logo.x, logo.y);
+      await sleep(250);
+      check(
+        "hovering the logo turns it lime, without a background",
+        (await colour()) !== before &&
+          (await colour()) === "rgb(198, 241, 53)" &&
+          ["rgba(0, 0, 0, 0)", "transparent"].includes(await bg()),
+        `${before} -> ${await colour()}, bg ${await bg()}`,
+      );
+      await mouse(page, "mouseMoved", 640, 400);
+      // Every icon button turns lime on hover, with no background: a shared
+      // icon button (the Files panel header) and an activity-bar button. (The
+      // window controls only exist in the desktop app.)
+      for (const [name, selector] of [
+        ["a panel icon button", "#side-panel button.mng-icon-btn"],
+        [
+          "an activity-bar button",
+          'nav[aria-label="Workbench views"] button[aria-label="Search"]',
+        ],
+      ]) {
+        const target = await rect(page, selector);
+        if (target === null) {
+          check(`hover colour: ${name} exists`, false);
+          continue;
+        }
+        await mouse(page, "mouseMoved", target.x, target.y);
+        await sleep(250);
+        const seen = await page.evaluate(
+          `(() => { const s = getComputedStyle(document.querySelector(${JSON.stringify(selector)})); return s.color + " | " + s.backgroundColor; })()`,
+        );
+        check(
+          `hovering ${name} turns it lime, without a background`,
+          seen.startsWith("rgb(198, 241, 53)") &&
+            /\| (rgba\(0, 0, 0, 0\)|transparent)$/.test(seen),
+          seen,
+        );
+        await mouse(page, "mouseMoved", 640, 400);
+      }
+    }
+    check(
+      "the window title names the file and the project",
+      await page.evaluate(`document.title === "main.typ — Entropy paper"`),
     );
     check(
       "status bar shows engine, caret, words, git branch and kernel",
@@ -695,7 +753,7 @@ async function main() {
     check(
       "the page stays paper-white in the dark theme",
       await page.evaluate(
-        `getComputedStyle(document.querySelector('img[alt^="Page 1"]')).backgroundColor === "rgb(250, 249, 247)"`,
+        `getComputedStyle(document.querySelector('[data-pdf-viewer] [data-page="1"]')).backgroundColor === "rgb(250, 249, 247)"`,
       ),
     );
     check(
@@ -790,6 +848,10 @@ async function main() {
       "the top bar search now searches settings",
       await exists(page, 'header input[aria-label="Search settings and plugins"]'),
     );
+    // Opened over a document, Settings show that document's settings; this
+    // part checks the whole page, so widen to all settings first.
+    if (await exists(page, "[data-settings-scope]"))
+      await clickText(page, "[data-settings-scope] button", "Show all settings");
     await expectEventually(
       page,
       "settings list every registered plugin, with its access",
@@ -1002,6 +1064,258 @@ async function main() {
     await click(page, '[role="tab"][data-tab="notes.md"]', "middle");
     await noStrayEdits(page, "after converting");
     // The side panel shows References again, as before this section.
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="References"]',
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Settings views");
+    await click(
+      page,
+      'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
+    );
+    await waitFor(page, `!!document.querySelector('section[aria-label="Settings"]')`);
+    await clickText(
+      page,
+      'section[aria-label="Settings"] button',
+      "Keyboard shortcuts",
+    );
+    await expectEventually(
+      page,
+      "Keyboard shortcuts lists a command with two shortcuts as two rows",
+      `(() => { const t = document.querySelector('section[aria-label="Settings"]').innerText; return t.includes("Ctrl+K") && t.includes("Ctrl+Shift+P"); })()`,
+      {
+        show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 300)`,
+      },
+    );
+    check(
+      "no source-comment text leaks onto the page while Settings are open",
+      await page.evaluate(`!/\\/\\*|\\*\\/|<!--/.test(document.body.innerText)`),
+    );
+    await clickText(page, 'section[aria-label="Settings"] button', "About");
+    await expectEventually(
+      page,
+      "About shows the app and its licences",
+      `(() => { const t = document.querySelector('section[aria-label="Settings"]').innerText; return t.includes("Manang") && /licen[cs]e/i.test(t); })()`,
+      {
+        show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 300)`,
+      },
+    );
+    await press(page, "Escape");
+    await press(page, "Escape");
+    await expectEventually(
+      page,
+      "Esc leaves Settings from the About view",
+      `!document.querySelector('section[aria-label="Settings"]')`,
+    );
+
+    /* ------------------------------------------------------------------ */
+    section("Contextual settings");
+    const settingsGroups = () =>
+      page.evaluate(
+        `[...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group)`,
+      );
+    const settingsNav = () =>
+      page.evaluate(
+        `document.querySelector('nav[aria-label="Settings sections"]')?.innerText ?? ""`,
+      );
+    const scopeLine = () =>
+      page.evaluate(`document.querySelector("[data-settings-scope]")?.innerText ?? ""`);
+    const closeSettings = async () => {
+      for (
+        let i = 0;
+        i < 3 && (await exists(page, 'section[aria-label="Settings"]'));
+        i++
+      )
+        await press(page, "Escape");
+      await waitFor(page, `!document.querySelector('section[aria-label="Settings"]')`, {
+        label: "settings closed",
+      });
+    };
+    const openSettingsFromBar = async () => {
+      await click(
+        page,
+        'nav[aria-label="Workbench views"] button[aria-label="Settings"]',
+      );
+      await waitFor(
+        page,
+        `!!document.querySelector('section[aria-label="Settings"] [data-group]')`,
+        {
+          label: "settings open",
+        },
+      );
+    };
+
+    await press(page, "p", { ctrl: true, wait: 300 });
+    await insertText(page, "main.typ");
+    await press(page, "Enter", { wait: 600 });
+    await waitFor(
+      page,
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "main.typ"`,
+      {
+        label: "main.typ active",
+      },
+    );
+    await openSettingsFromBar();
+    await expectEventually(
+      page,
+      "from a Typst document, the scope line names the file and its engine",
+      `document.querySelector("[data-settings-scope]")?.innerText.includes("Settings for main.typ · Typst")`,
+      { show: `document.querySelector("[data-settings-scope]")?.innerText` },
+    );
+    await expectEventually(
+      page,
+      "a Typst document shows Editor, Preview, Compile, Typst, Writing and Citations",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return ["editor", "preview", "compile", "plugin:typst", "plugin:writing", "plugin:citations"].every((x) => g.includes(x)); })()`,
+      {
+        show: `[...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group).join()`,
+      },
+    );
+    {
+      const groups = await settingsGroups();
+      check(
+        "and not Appearance, LaTeX or Search",
+        !["appearance", "files", "plugin:latex", "plugin:search", "plugin:figure"].some(
+          (x) => groups.includes(x),
+        ),
+        groups.join(),
+      );
+      const nav = await settingsNav();
+      check(
+        "the section list holds only the shown groups",
+        ["Editor", "Preview", "Compile", "Typst", "Writing", "Citations"].every((n) =>
+          nav.includes(n),
+        ) &&
+          !["Appearance", "LaTeX", "Search", "Keyboard shortcuts", "About"].some((n) =>
+            nav.includes(n),
+          ),
+        nav.replace(/\s+/g, " "),
+      );
+      check(
+        "Keyboard shortcuts and About stay reachable as links",
+        await page.evaluate(
+          `(() => { const t = document.querySelector("[data-settings-app-links]")?.innerText ?? ""; return t.includes("Keyboard shortcuts") && t.includes("About"); })()`,
+        ),
+      );
+    }
+    await shoot(page, "07c-settings-document");
+
+    // Search finds in the scope first, and links what only all settings show.
+    await click(page, 'header input[aria-label="Search settings and plugins"]');
+    await insertText(page, "theme");
+    await expectEventually(
+      page,
+      "searching for a setting outside the scope offers it in all settings",
+      `/\\d+ more in all settings/.test(document.querySelector("[data-settings-more]")?.innerText ?? "") && !document.querySelector('[data-setting="appearance.theme"]')`,
+      {
+        show: `document.querySelector('section[aria-label="Settings"]').innerText.slice(0, 300)`,
+      },
+    );
+    await shoot(page, "07d-settings-search-elsewhere");
+    await clickText(page, "[data-settings-more] button", "more in all settings");
+    await expectEventually(
+      page,
+      "following the link shows the match in all settings, without closing",
+      `!!document.querySelector('[data-setting="appearance.theme"]') && !document.querySelector("[data-settings-scope]")`,
+    );
+    await closeSettings();
+    check(
+      "Escape returns to the same tab",
+      (await activeTab(page)) === "main.typ",
+      await activeTab(page),
+    );
+
+    // Show all settings widens the page without closing it.
+    await press(page, ",", { ctrl: true, wait: 400 });
+    await expectEventually(
+      page,
+      "Ctrl+, over a document opens that document's settings",
+      `document.querySelector("[data-settings-scope]")?.innerText.includes("main.typ")`,
+    );
+    await clickText(page, "[data-settings-scope] button", "Show all settings");
+    await expectEventually(
+      page,
+      "Show all settings shows every group and keeps the page open",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return ["appearance", "editor", "files", "plugin:latex", "plugin:search", "plugin:typst"].every((x) => g.includes(x)) && !document.querySelector("[data-settings-scope]"); })()`,
+    );
+    check(
+      "all settings list Keyboard shortcuts and About in the section list",
+      await page.evaluate(
+        `(() => { const t = document.querySelector('nav[aria-label="Settings sections"]').innerText; return t.includes("Keyboard shortcuts") && t.includes("About"); })()`,
+      ),
+    );
+    await closeSettings();
+
+    // The palette's Document settings and Open all settings.
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "document settings");
+    await press(page, "Enter", { wait: 500 });
+    await expectEventually(
+      page,
+      "Document settings opens the active document's settings",
+      `document.querySelector("[data-settings-scope]")?.innerText.includes("main.typ")`,
+    );
+    await closeSettings();
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "open all settings");
+    await press(page, "Enter", { wait: 500 });
+    await expectEventually(
+      page,
+      "Open all settings shows everything over a document",
+      `!!document.querySelector('section[aria-label="Settings"] [data-group="appearance"]') && !document.querySelector("[data-settings-scope]")`,
+    );
+    await closeSettings();
+
+    // From a figure: the Figure plugin's settings.
+    await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Figures"]');
+    await sleep(400);
+    await clickText(page, "#side-panel ul button", "state_lattice");
+    await waitFor(page, `document.querySelector('svg[role="application"]') !== null`, {
+      label: "figure editor",
+    });
+    await openSettingsFromBar();
+    await expectEventually(
+      page,
+      "from a figure, Settings show the Figure plugin only",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return g.includes("plugin:figure") && !g.includes("editor") && !g.includes("appearance") && !g.includes("plugin:typst"); })()`,
+      {
+        show: `[...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group).join()`,
+      },
+    );
+    check(
+      "the scope line names the figure",
+      (await scopeLine()).includes("state_lattice.figure.json · Figure"),
+      await scopeLine(),
+    );
+    await shoot(page, "07e-settings-figure");
+    await closeSettings();
+    check(
+      "closing returns to the figure",
+      (await activeTab(page)) === "figures/state_lattice.figure.json",
+    );
+    await click(
+      page,
+      '[role="tab"][data-tab="figures/state_lattice.figure.json"]',
+      "middle",
+    );
+
+    // From Home: everything.
+    await click(page, 'header button[aria-label="Home"]');
+    await waitFor(page, `!!document.querySelector('section[aria-label="Home"]')`, {
+      label: "Home shown",
+    });
+    await click(page, 'nav[aria-label="Home sections"] button[aria-label="Settings"]');
+    await expectEventually(
+      page,
+      "from Home, Settings show every group with no scope line",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return ["appearance", "editor", "preview", "compile", "files", "plugin:latex", "plugin:search", "plugin:typst", "plugin:figure"].every((x) => g.includes(x)) && !document.querySelector("[data-settings-scope]"); })()`,
+    );
+    await closeSettings();
+    await clickText(page, "button", "Back to Entropy paper");
+    await waitFor(page, `!document.querySelector('section[aria-label="Home"]')`, {
+      label: "back in the project",
+    });
     await click(
       page,
       'nav[aria-label="Workbench views"] button[aria-label="References"]',
@@ -1266,9 +1580,9 @@ async function main() {
       `document.querySelectorAll(".manang-problem-error").length >= 1`,
     );
     check(
-      "the preview keeps the last good page and says so",
+      "the preview keeps the last good pages and says so",
       await page.evaluate(
-        `document.querySelector('img[alt^="Page 1"]') !== null && document.querySelector('section[aria-label="Preview"]').innerText.includes("last good page")`,
+        `document.querySelector('[data-pdf-viewer] canvas') !== null && document.querySelector('section[aria-label="Preview"]').innerText.includes("last good page")`,
       ),
     );
     await shoot(page, "12-error-state");
@@ -1339,19 +1653,25 @@ async function main() {
     await press(page, "j", { ctrl: true });
 
     // Preview toolbar
+    const box = await page.evaluate(PAGE_BOX);
     check(
       "preview toolbar shows page n of N",
-      await page.evaluate(
-        `/Page 1 of \\d+/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
-      ),
+      box !== null && box.page === 1 && box.of >= 1,
+      JSON.stringify(box),
     );
+    const zoomText = () =>
+      page.evaluate(
+        `document.querySelector("[data-zoom-menu]")?.textContent.trim() ?? ""`,
+      );
+    const zoomBefore = await zoomText();
     await click(page, 'button[aria-label="Zoom in"]');
+    const zoomAfter = await zoomText();
     check(
-      "zoom in sets a percentage",
-      await page.evaluate(
-        `/125%/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
-      ),
+      "zoom in steps up to the next preset percentage",
+      /^\d+%$/.test(zoomAfter) && parseInt(zoomAfter) > parseInt(zoomBefore),
+      `${zoomBefore} -> ${zoomAfter}`,
     );
+    await click(page, 'button[aria-label="Zoom out"]');
     await click(page, 'button[aria-label="Refresh preview"]');
     // Layout switch, from the preview's own header.
     await click(
@@ -2159,8 +2479,8 @@ async function main() {
     /* ------------------------------------------------------------------ */
     section("Source and preview");
     await clickText(page, '[role="tab"]', "main.typ");
-    await waitFor(page, `document.querySelector('img[alt^="Page 1"]') !== null`, {
-      label: "the Typst page",
+    await waitFor(page, `document.querySelector('[data-pdf-viewer] canvas') !== null`, {
+      label: "the Typst pages",
     });
     const caretLine = () =>
       page.evaluate(
@@ -2171,12 +2491,10 @@ async function main() {
     await press(page, "Home", { ctrl: true });
     for (let i = 0; i < 10; i += 1) await press(page, "ArrowDown", { wait: 30 });
     const sourceLine = await caretLine();
-    await page.evaluate(
-      `document.querySelector('[role="region"][aria-label="Rendered page"]').scrollTop = 1e6`,
-    );
+    await page.evaluate(`document.querySelector('[data-pdf-viewer]').scrollTop = 1e6`);
     await press(page, "j", { ctrl: true, alt: true, wait: 500 });
     const markRect = await rect(page, "[data-preview-mark]");
-    const region = await rect(page, '[role="region"][aria-label="Rendered page"]');
+    const region = await rect(page, "[data-pdf-viewer]");
     check(
       '"Show in preview" (Ctrl+Alt+J) outlines the caret\'s text on the page',
       markRect !== null && sourceLine > 2,
@@ -2232,6 +2550,486 @@ async function main() {
       ),
     );
     await shoot(page, "18-source-jump");
+
+    /* ------------------------------------------------------------------ */
+    section("PDF viewer");
+    // Several pages, a web link and the bibliography's citations: the Typst
+    // preview is the same PDF viewer as LaTeX (ADR 0006, 2026-10-18).
+    const viewerSel = "[data-pdf-viewer]";
+    const viewerTop = () =>
+      page.evaluate(`document.querySelector("${viewerSel}").scrollTop`);
+    await focusEditor(page);
+    await caretToEnd(page);
+    {
+      const para =
+        "Entropy production in driven quantum systems is bounded below by the thermodynamic length of the protocol.";
+      let appendix =
+        '\n= Appendix\n\nSee #link("https://typst.app")[the Typst website] for details.\n\n';
+      for (let i = 0; i < 24; i += 1) appendix += `${para} Paragraph ${i}.\n\n`;
+      await insertText(page, appendix);
+    }
+    await expectEventually(
+      page,
+      "the Typst document shows all its pages in one scroll",
+      `(() => { const v = document.querySelector("${viewerSel}"); const n = v?.querySelectorAll("[data-page]").length ?? 0; return n >= 3 && (${PAGE_BOX})?.of === n && v.scrollHeight > v.clientHeight * 2; })()`,
+      { timeout: 10000 },
+    );
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 0`);
+    await sleep(600);
+    await shoot(page, "25-pdf-pages");
+
+    // Text selection: drag across the title on the text layer.
+    const title = await page.evaluate(`(() => {
+      const s = [...document.querySelectorAll('[data-page="1"] [data-text-layer] span')].find((e) => e.textContent.includes("Quantum thermodynamic"));
+      if (!s) return null;
+      const r = s.getBoundingClientRect();
+      return { left: r.left, right: r.right, y: (r.top + r.bottom) / 2 };
+    })()`);
+    if (title !== null) {
+      await mouse(page, "mouseMoved", title.left + 1, title.y);
+      await mouse(page, "mousePressed", title.left + 1, title.y);
+      for (let x = title.left + 1; x <= title.right - 1; x += 16) {
+        await page.send("Input.dispatchMouseEvent", {
+          type: "mouseMoved",
+          x,
+          y: title.y,
+          button: "left",
+          buttons: 1,
+        });
+      }
+      await mouse(page, "mouseReleased", title.right - 1, title.y);
+      await sleep(200);
+    }
+    const selected = await page.evaluate(`getSelection().toString()`);
+    check(
+      "dragging over the text layer selects the words",
+      selected.includes("Quantum thermodynamic"),
+      JSON.stringify(selected),
+    );
+    check(
+      "the selection uses the accent selection tone, and the text stays invisible",
+      await page.evaluate(`(() => {
+        const s = document.querySelector('[data-page="1"] [data-text-layer] span');
+        const sel = getComputedStyle(s, "::selection");
+        return sel.backgroundColor.startsWith("color(srgb") || sel.backgroundColor.includes("198, 241, 53") ? getComputedStyle(s).color === "rgba(0, 0, 0, 0)" : false;
+      })()`),
+      await page.evaluate(
+        `getComputedStyle(document.querySelector('[data-page="1"] [data-text-layer] span'), "::selection").backgroundColor`,
+      ),
+    );
+    check(
+      "copy puts the selected PDF text on the clipboard as plain text",
+      await page.evaluate(`(() => {
+        const data = new DataTransfer();
+        const event = new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true });
+        document.querySelector('[data-page="1"] [data-text-layer] span').dispatchEvent(event);
+        return event.defaultPrevented && data.getData("text/plain").includes("Quantum thermodynamic");
+      })()`),
+    );
+    check(
+      "a selection is not a source jump: the caret stays in the editor where it was",
+      /Ln \d+, Col \d+/.test(await statusText(page)) &&
+        (await page.evaluate(
+          `document.querySelector(".cm-line[data-source-flash]") === null`,
+        )),
+    );
+
+    // Alt+double-click selects a word; plain double-click goes to the source.
+    const word = await page.evaluate(`(() => {
+      const s = [...document.querySelectorAll('[data-page="1"] [data-text-layer] span')].find((e) => e.textContent.startsWith("Monte Carlo"));
+      if (!s) return null;
+      const r = s.getBoundingClientRect();
+      return { x: r.left + 12, y: (r.top + r.bottom) / 2 };
+    })()`);
+    if (word !== null) {
+      for (const [type, count] of [
+        ["mousePressed", 1],
+        ["mouseReleased", 1],
+        ["mousePressed", 2],
+        ["mouseReleased", 2],
+      ]) {
+        await page.send("Input.dispatchMouseEvent", {
+          type,
+          x: word.x,
+          y: word.y,
+          button: "left",
+          buttons: 1,
+          clickCount: count,
+          modifiers: 1,
+        });
+      }
+      await sleep(200);
+    }
+    check(
+      "Alt+double-click selects the word under the pointer",
+      (await page.evaluate(`getSelection().toString().trim()`)) === "Monte",
+      await page.evaluate(`getSelection().toString()`),
+    );
+    await press(page, "Home", { ctrl: true });
+    if (word !== null) {
+      for (const [type, count] of [
+        ["mousePressed", 1],
+        ["mouseReleased", 1],
+        ["mousePressed", 2],
+        ["mouseReleased", 2],
+      ]) {
+        await mouse(page, type, word.x, word.y, "left", count);
+      }
+    }
+    await expectEventually(
+      page,
+      "double-click on the page goes to the source line (Overleaf's default)",
+      `document.querySelector('[role="tab"][data-tab][aria-selected="true"]')?.dataset.tab === "sections/results.typ" && document.querySelector(".cm-line[data-source-flash]") !== null`,
+      { timeout: 4000 },
+    );
+    await clickText(page, '[role="tab"]', "main.typ");
+    await waitFor(page, `document.querySelector("${viewerSel} canvas") !== null`);
+
+    // Find in PDF.
+    await click(page, `${viewerSel} [data-page="1"]`);
+    await press(page, "f", { ctrl: true, wait: 300 });
+    check(
+      "Ctrl+F in the preview opens its own find bar, focused",
+      await page.evaluate(
+        `document.activeElement?.closest("[data-pdf-find]") !== null && document.querySelector('[data-pdf-find]')?.getAttribute("role") === "search"`,
+      ),
+    );
+    await insertText(page, "entropy production");
+    await expectEventually(
+      page,
+      "find counts the matches across all pages: 1 of N",
+      `/^1 of (2[5-9]|[3-9]\\d)$/.test(document.querySelector("[data-pdf-find-count]")?.textContent.trim() ?? "")`,
+      {
+        show: `document.querySelector("[data-pdf-find-count]")?.textContent`,
+        timeout: 6000,
+      },
+    );
+    check(
+      "the current match is outlined in the accent, the others in a quiet tone",
+      await page.evaluate(`(() => {
+        const current = document.querySelectorAll(".mng-hit[data-current]");
+        const other = document.querySelector(".mng-hit:not([data-current])");
+        if (current.length < 1 || other === null) return false;
+        const c = getComputedStyle(current[0]);
+        return c.outlineColor === "rgb(198, 241, 53)" && c.outlineStyle === "solid" && getComputedStyle(other).outlineStyle === "none";
+      })()`),
+    );
+    const firstHit = await page.evaluate(
+      `document.querySelector(".mng-hit[data-current]")?.getBoundingClientRect().top ?? null`,
+    );
+    await press(page, "Enter", { wait: 300 });
+    check(
+      "Enter moves to the next match",
+      (await page.evaluate(
+        `document.querySelector("[data-pdf-find-count]")?.textContent.trim().startsWith("2 of")`,
+      )) &&
+        (await page.evaluate(
+          `document.querySelector(".mng-hit[data-current]")?.getBoundingClientRect().top ?? null`,
+        )) !== firstHit,
+    );
+    await press(page, "Enter", { shift: true, wait: 300 });
+    check(
+      "Shift+Enter moves back",
+      await page.evaluate(
+        `document.querySelector("[data-pdf-find-count]")?.textContent.trim().startsWith("1 of")`,
+      ),
+    );
+    const total = () =>
+      page.evaluate(
+        `Number(/of (\\d+)/.exec(document.querySelector("[data-pdf-find-count]")?.textContent ?? "")?.[1] ?? 0)`,
+      );
+    const anyCase = await total();
+    await click(page, 'button[aria-label="Match case"]');
+    const exactCase = await total();
+    check(
+      "Match case narrows the search to the lower-case matches",
+      exactCase >= 1 && exactCase < anyCase,
+      `${anyCase} -> ${exactCase}`,
+    );
+    await click(page, 'button[aria-label="Match case"]');
+    await shoot(page, "26-pdf-find");
+    await press(page, "Escape", { wait: 200 });
+    check(
+      "Esc closes the find bar and clears the highlights",
+      !(await exists(page, "[data-pdf-find]")) && !(await exists(page, ".mng-hit")),
+    );
+
+    // Ctrl+wheel zooms at the pointer, without zooming the page itself.
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 300`);
+    await sleep(300);
+    const box1 = await rect(page, viewerSel);
+    const pointer = { x: box1.left + box1.w * 0.6, y: box1.top + box1.h * 0.45 };
+    const anchor = await page.evaluate(`(() => {
+      const slot = document.elementFromPoint(${pointer.x}, ${pointer.y})?.closest("[data-index]");
+      if (!slot) return null;
+      const r = slot.getBoundingClientRect();
+      return { index: slot.dataset.index, fx: (${pointer.x} - r.left) / r.width, fy: (${pointer.y} - r.top) / r.height, width: r.width };
+    })()`);
+    for (let i = 0; i < 4; i += 1) {
+      await page.send("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        x: pointer.x,
+        y: pointer.y,
+        deltaX: 0,
+        deltaY: -100,
+        modifiers: 2,
+      });
+      await sleep(30);
+    }
+    await sleep(700);
+    const moved = await page.evaluate(`(() => {
+      const slot = document.querySelector('[data-index="${anchor?.index}"]');
+      if (!slot) return null;
+      const r = slot.getBoundingClientRect();
+      return { x: r.left + ${anchor?.fx} * r.width, y: r.top + ${anchor?.fy} * r.height, width: r.width };
+    })()`);
+    check(
+      "Ctrl+wheel zooms in, keeping the point under the pointer within 3px",
+      anchor !== null &&
+        moved !== null &&
+        moved.width > anchor.width * 1.3 &&
+        Math.abs(moved.x - pointer.x) <= 3 &&
+        Math.abs(moved.y - pointer.y) <= 3,
+      JSON.stringify({ pointer, moved }),
+    );
+    check(
+      "the browser's own zoom is untouched",
+      await page.evaluate(
+        `window.visualViewport.scale === 1 && document.documentElement.style.zoom === ""`,
+      ),
+    );
+    await expectEventually(
+      page,
+      "after the zoom settles the visible pages are redrawn sharply",
+      `(() => { const c = document.querySelector('${viewerSel} [data-page] canvas'); if (!c) return false; const r = c.getBoundingClientRect(); return c.width >= Math.floor(r.width * devicePixelRatio) - 2; })()`,
+    );
+    await shoot(page, "27-pdf-wheel-zoom");
+
+    // Presets: a menu that the keyboard can use.
+    await press(page, "0", { ctrl: true, wait: 300 });
+    const fitWidth = await page.evaluate(
+      `document.querySelector('${viewerSel} [data-page="1"]').getBoundingClientRect().width`,
+    );
+    await page.evaluate(`document.querySelector("[data-zoom-menu]").focus()`);
+    await press(page, "ArrowDown", { wait: 200 });
+    check(
+      "the zoom value opens a menu of presets from the keyboard",
+      await page.evaluate(`(() => {
+        const items = [...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].map((b) => b.textContent.trim());
+        return ["Fit width", "Fit page", "50%", "75%", "100%", "125%", "150%", "200%", "300%", "400%"].every((l) => items.some((t) => t.startsWith(l))) && document.activeElement?.getAttribute("role")?.startsWith("menuitem");
+      })()`),
+    );
+    check(
+      "the current zoom is the checked entry",
+      await page.evaluate(
+        `[...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((b) => b.textContent.trim()).join() .startsWith("Fit width")`,
+      ),
+    );
+    await page.evaluate(
+      `[...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].find((b) => b.textContent.trim().startsWith("200%")).click()`,
+    );
+    await sleep(400);
+    const at200 = await page.evaluate(
+      `document.querySelector('${viewerSel} [data-page="1"]').getBoundingClientRect().width`,
+    );
+    check(
+      "the 200% preset shows the page at twice its printed size",
+      Math.abs(at200 - 595.28 * (96 / 72) * 2) < 3 && at200 !== fitWidth,
+      `${fitWidth} -> ${at200}`,
+    );
+    await press(page, "-", { ctrl: true, wait: 300 });
+    check(
+      "Ctrl+- steps down a preset",
+      (await page.evaluate(
+        `document.querySelector("[data-zoom-menu]").textContent.trim()`,
+      )) === "150%",
+    );
+    await press(page, "=", { ctrl: true, wait: 300 });
+    await press(page, "=", { ctrl: true, wait: 300 });
+    await press(page, "=", { ctrl: true, wait: 600 });
+    check(
+      "Ctrl+= steps up to 400% at most",
+      (await page.evaluate(
+        `document.querySelector("[data-zoom-menu]").textContent.trim()`,
+      )) === "400%",
+    );
+    const memory = await page.evaluate(`(() => ({
+      canvases: document.querySelectorAll("${viewerSel} canvas").length,
+      pixels: [...document.querySelectorAll("${viewerSel} canvas")].reduce((n, c) => n + c.width * c.height, 0),
+      heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
+      pages: document.querySelectorAll("${viewerSel} [data-page]").length,
+    }))()`);
+    check(
+      "at 400% only the pages near the viewport own a canvas",
+      memory.canvases <= 3 && memory.canvases < memory.pages,
+      JSON.stringify(memory),
+    );
+    await press(page, "0", { ctrl: true, wait: 400 });
+    check(
+      "Ctrl+0 fits the width again",
+      Math.abs(
+        (await page.evaluate(
+          `document.querySelector('${viewerSel} [data-page="1"]').getBoundingClientRect().width`,
+        )) - fitWidth,
+      ) < 2,
+    );
+
+    // Links: a citation scrolls to the bibliography; a web link opens the
+    // system browser (here: window.open), never the webview.
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 0`);
+    await sleep(300);
+    const cite = await rect(
+      page,
+      `${viewerSel} [data-page="1"] a[data-pdf-link="internal"]`,
+    );
+    if (cite !== null) {
+      await mouse(page, "mouseMoved", cite.x, cite.y);
+      check(
+        "links show a pointer",
+        await page.evaluate(
+          `getComputedStyle(document.querySelector('${viewerSel} a[data-pdf-link]')).cursor === "pointer"`,
+        ),
+      );
+      await mouse(page, "mousePressed", cite.x, cite.y);
+      await mouse(page, "mouseReleased", cite.x, cite.y);
+    }
+    await expectEventually(
+      page,
+      "a citation link scrolls to the References heading",
+      `(() => { const h = [...document.querySelectorAll("${viewerSel} [data-text-layer] span")].find((s) => s.textContent === "References"); if (!h) return false; const top = h.getBoundingClientRect().top - document.querySelector("${viewerSel}").getBoundingClientRect().top; return document.querySelector("${viewerSel}").scrollTop > 0 && top >= 0 && top < 80; })()`,
+      { timeout: 4000 },
+    );
+    await page.evaluate(
+      `window.__opened = []; window.open = (url) => { window.__opened.push(url); return null; }`,
+    );
+    const web = await rect(page, `${viewerSel} a[data-pdf-link="external"]`);
+    if (web !== null) {
+      await page.evaluate(
+        `document.querySelector('${viewerSel} a[data-pdf-link="external"]').scrollIntoView({ block: "center" })`,
+      );
+      const webNow = await rect(page, `${viewerSel} a[data-pdf-link="external"]`);
+      await mouse(page, "mouseMoved", webNow.x, webNow.y);
+      await mouse(page, "mousePressed", webNow.x, webNow.y);
+      await mouse(page, "mouseReleased", webNow.x, webNow.y);
+      await sleep(300);
+    }
+    check(
+      "a web link opens outside the app and the webview stays put",
+      (await page.evaluate(`JSON.stringify(window.__opened)`)) ===
+        '["https://typst.app/"]' && (await page.evaluate(`location.pathname`)) === "/",
+      await page.evaluate(`JSON.stringify(window.__opened)`),
+    );
+
+    // The page box, keys, outline and dark pages.
+    await click(page, "[data-page-input]");
+    await page.evaluate(`document.querySelector("[data-page-input]").select()`);
+    await insertText(page, "3");
+    await press(page, "Enter", { wait: 400 });
+    check(
+      "typing a page number and Enter jumps to that page",
+      (await page.evaluate(PAGE_BOX))?.page === 3 &&
+        (await page.evaluate(
+          `Math.abs(document.querySelector('${viewerSel} [data-page="3"]').getBoundingClientRect().top - document.querySelector("${viewerSel}").getBoundingClientRect().top - 16) < 4`,
+        )),
+      JSON.stringify(await page.evaluate(PAGE_BOX)),
+    );
+    await page.evaluate(`document.querySelector("${viewerSel}").focus()`);
+    await press(page, "Home", { wait: 300 });
+    check("Home goes to the first page", (await viewerTop()) === 0);
+    await press(page, "PageDown", { wait: 300 });
+    check(
+      "PageDown goes to the next page",
+      (await page.evaluate(PAGE_BOX))?.page === 2,
+    );
+    await press(page, "End", { wait: 300 });
+    check(
+      "End goes to the last page",
+      (await page.evaluate(PAGE_BOX))?.page === (await page.evaluate(PAGE_BOX))?.of,
+    );
+    await click(page, 'button[aria-label="PDF outline"]');
+    check(
+      "the outline lists the document's headings",
+      await page.evaluate(`(() => {
+        const t = document.querySelector("[data-pdf-outline]")?.innerText ?? "";
+        return t.includes("Quantum thermodynamic bounds") && t.includes("References") && t.includes("Appendix");
+      })()`),
+    );
+    await shoot(page, "28-pdf-outline");
+    await clickText(page, "[data-pdf-outline] button", "Quantum thermodynamic bounds");
+    await sleep(300);
+    check("an outline entry scrolls to its heading", (await viewerTop()) < 40);
+    await click(page, 'button[aria-label="PDF outline"]');
+    check("the outline toggles off", !(await exists(page, "[data-pdf-outline]")));
+    // In this split the pane is narrow enough that the toggle gives way.
+    await page.evaluate(
+      `document.querySelector('button[aria-label="Dark pages"]').click()`,
+    );
+    await sleep(200);
+    check(
+      "Dark pages inverts the page pictures only, keeping hues",
+      await page.evaluate(`(() => {
+        const c = getComputedStyle(document.querySelector("${viewerSel} canvas")).filter;
+        const t = getComputedStyle(document.querySelector("${viewerSel} [data-text-layer]")).filter;
+        return c === "invert(1) hue-rotate(180deg)" && t === "none";
+      })()`),
+    );
+    await shoot(page, "29-pdf-dark");
+    // In this split the pane is narrow enough that the toggle gives way.
+    await page.evaluate(
+      `document.querySelector('button[aria-label="Dark pages"]').click()`,
+    );
+    await sleep(200);
+    check(
+      "Dark pages toggles back off",
+      await page.evaluate(
+        `getComputedStyle(document.querySelector("${viewerSel} canvas")).filter === "none"`,
+      ),
+    );
+
+    // The reading position survives switching to another document and back.
+    await page.evaluate(`document.querySelector("${viewerSel}").scrollTop = 700`);
+    await sleep(400);
+    const readingAt = await viewerTop();
+    await goToFile("notes.md");
+    await waitFor(
+      page,
+      `!!document.querySelector('article[aria-label="Markdown preview"]')`,
+    );
+    await clickText(page, '[role="tab"]', "main.typ");
+    await waitFor(page, `document.querySelector("${viewerSel} canvas") !== null`);
+    await sleep(500);
+    check(
+      "switching tabs and back keeps the place in the PDF",
+      Math.abs((await viewerTop()) - readingAt) < 4,
+      `${readingAt} -> ${await viewerTop()}`,
+    );
+
+    // At 1024px with the side panel open nothing in the header is cut off.
+    await resize(page, 1024, 700);
+    await sleep(300);
+    check(
+      "at 1024px with the side panel open every header control is whole and clickable",
+      await page.evaluate(`(() => {
+        if (!document.querySelector("#side-panel")) return false;
+        const s = document.querySelector('section[aria-label="Preview"]');
+        const bar = s.querySelector('[role="toolbar"]');
+        const sr = s.getBoundingClientRect();
+        const shown = [...bar.querySelectorAll("button, input")].filter((b) => b.getBoundingClientRect().width > 0);
+        return bar.scrollWidth <= bar.clientWidth && shown.length >= 6 && shown.every((b) => { const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return r.left >= sr.left && r.right <= sr.right && (hit === b || b.contains(hit)); });
+      })()`),
+      await page.evaluate(
+        `[...document.querySelectorAll('section[aria-label="Preview"] [role="toolbar"] button, section[aria-label="Preview"] [role="toolbar"] input')].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.getAttribute("aria-label")).join("|")`,
+      ),
+    );
+    await shoot(page, "30-pdf-header-1024");
+    await resize(page, 1280, 820);
+    await sleep(300);
+
+    // Put main.typ back as it was.
+    await focusEditor(page);
+    for (let i = 0; i < 6 && (await dirtyTabs(page)).includes("main.typ"); i += 1)
+      await press(page, "z", { ctrl: true, wait: 400 });
+    await noStrayEdits(page, "after the PDF viewer");
 
     /* ------------------------------------------------------------------ */
     section("Diagrams");
@@ -2500,9 +3298,9 @@ async function main() {
     const headerFits = `(() => { const s = document.querySelector('section[aria-label="Preview"]'); const bar = s?.querySelector('[role="toolbar"]'); const close = bar?.querySelector('button[aria-label="Close preview"]'); if (!close) return false; const r = close.getBoundingClientRect(); return r.width > 0 && r.right <= s.getBoundingClientRect().right && bar.scrollWidth <= bar.clientWidth; })()`;
     const WINDOW_BUTTONS = '["Minimise", "Maximise", "Restore", "Close window"]';
     check(
-      "the workbench top bar has no buttons but Home and the window controls",
+      "the workbench top bar has no buttons but Home, the menus and the window controls",
       await page.evaluate(
-        `[...document.querySelectorAll("header button")].every((b) => b.getAttribute("aria-label") === "Home" || ${WINDOW_BUTTONS}.includes(b.getAttribute("aria-label")))`,
+        `[...document.querySelectorAll("header button")].every((b) => b.getAttribute("aria-label") === "Home" || b.closest("[data-menu-root]") !== null || ${WINDOW_BUTTONS}.includes(b.getAttribute("aria-label")))`,
       ),
     );
     check(
@@ -2652,6 +3450,245 @@ async function main() {
     );
 
     /* ------------------------------------------------------------------ */
+    section("Menu bar");
+    const menuOpen = (label) =>
+      page.evaluate(
+        `document.querySelector('header [role="menu"][aria-label="${label}"]') !== null`,
+      );
+    const anyMenuOpen = () =>
+      page.evaluate(`document.querySelector('header [role="menu"]') !== null`);
+    const panelOpen = () => exists(page, "#bottom-panel");
+    check(
+      "the top bar shows six menus: File, Edit, View, Go, Build, Help",
+      (await page.evaluate(
+        `[...document.querySelectorAll('header [role="menubar"] [data-menu-bar]')].map((b) => b.textContent.trim()).join()`,
+      )) === "File,Edit,View,Go,Build,Help",
+    );
+    check(
+      "the menus sit after the mark, at the start of the free space",
+      await page.evaluate(
+        `(() => { const home = document.querySelector('header button[aria-label="Home"]').getBoundingClientRect(); const bar = document.querySelector('header [role="menubar"]').getBoundingClientRect(); const free = document.querySelector('header [data-menu-root]').parentElement.getBoundingClientRect(); return home.right <= bar.left && Math.abs(bar.left - free.left) < 2; })()`,
+      ),
+    );
+    check(
+      "menu buttons carry roles, popup state, Alt shortcuts and a roving tabindex",
+      await page.evaluate(
+        `(() => { const b = [...document.querySelectorAll('header [data-menu-bar]')]; return b.every((x) => x.getAttribute("role") === "menuitem" && x.getAttribute("aria-haspopup") === "menu" && x.getAttribute("aria-expanded") === "false" && /^Alt\\+[A-Z]$/.test(x.getAttribute("aria-keyshortcuts"))) && b.filter((x) => x.tabIndex === 0).length === 1; })()`,
+      ),
+    );
+    check(
+      "the bar's empty areas still drag the window; the menus do not",
+      await page.evaluate(
+        `(() => { const h = document.querySelector("header"); const free = h.querySelector("[data-menu-root]").parentElement; const bar = h.querySelector('[role="menubar"]').getBoundingClientRect(); return h.hasAttribute("data-tauri-drag-region") && free.hasAttribute("data-tauri-drag-region") && free.getBoundingClientRect().right - bar.right > 200 && [...h.querySelectorAll("[data-menu-root], [data-menu-root] *")].every((e) => !e.hasAttribute("data-tauri-drag-region")); })()`,
+      ),
+    );
+    await focusEditor(page);
+    await press(page, "f", { alt: true, wait: 300 });
+    check("Alt+F opens File", await menuOpen("File"));
+    check(
+      "the mnemonics are underlined while the menus are in keyboard use",
+      (await page.evaluate(
+        `[...document.querySelectorAll('header [data-menu-bar] .underline')].map((u) => u.textContent).join("")`,
+      )) === "FEVGBH",
+    );
+    check(
+      "File lists its groups with separators and shows shortcuts in DM Mono",
+      await page.evaluate(
+        `(() => { const m = document.querySelector('header [role="menu"][aria-label="File"]'); const save = m.querySelector('[data-command="file.save"]'); const key = save?.querySelector(".font-mono"); return m.querySelectorAll('[role="separator"]').length >= 4 && key?.textContent === "Ctrl+S" && save.getAttribute("aria-keyshortcuts") === "Control+S" && getComputedStyle(key).fontFamily.includes("DM Mono"); })()`,
+      ),
+    );
+    check(
+      "the first enabled item has focus, marked with the accent",
+      await page.evaluate(
+        `(() => { const a = document.activeElement; return a?.getAttribute("role") === "menuitem" && a.dataset.menuItem === "0" && a.querySelector(".bg-accent") !== null; })()`,
+      ),
+    );
+    check(
+      "the open menu is a flat panel: hairline border, no radius, no shadow",
+      await page.evaluate(
+        `(() => { const m = getComputedStyle(document.querySelector('header [role="menu"]')); return m.borderTopWidth === "1px" && m.borderTopLeftRadius === "0px" && m.boxShadow === "none"; })()`,
+      ),
+    );
+    await shoot(page, "18f-menu-file");
+    await press(page, "ArrowRight", { wait: 150 });
+    await press(page, "ArrowRight", { wait: 200 });
+    check("arrow keys move from File to View, which opens", await menuOpen("View"));
+    const itemBefore = await page.evaluate(`document.activeElement?.dataset.menuItem`);
+    await press(page, "ArrowDown", { wait: 200 });
+    check(
+      "ArrowDown moves down View's items",
+      await page.evaluate(
+        `(() => { const a = document.activeElement; return a?.closest('[role="menu"]')?.getAttribute("aria-label") === "View" && a.dataset.menuItem === String(Number(${JSON.stringify(itemBefore)}) + 1); })()`,
+      ),
+    );
+    await press(page, "Escape", { wait: 300 });
+    check(
+      "Escape closes the menu and gives focus back to the editor",
+      !(await anyMenuOpen()) &&
+        (await page.evaluate(`document.activeElement?.closest(".cm-editor") !== null`)),
+    );
+    await press(page, "F10", { wait: 200 });
+    check(
+      "F10 focuses the menu bar without opening a menu",
+      !(await anyMenuOpen()) &&
+        (await page.evaluate(`document.activeElement?.dataset.menuBar === "0"`)),
+    );
+    await press(page, "Escape", { wait: 200 });
+
+    const panelBefore = await panelOpen();
+    await click(page, 'header [data-menu="view"]');
+    check("clicking View opens it", await menuOpen("View"));
+    await mouse(
+      page,
+      "mouseMoved",
+      ...(await rect(page, 'header [data-menu="go"]').then((r) => [r.x, r.y])),
+    );
+    await sleep(150);
+    check("hovering Go while View is open switches to Go", await menuOpen("Go"));
+    await mouse(
+      page,
+      "mouseMoved",
+      ...(await rect(page, 'header [data-menu="view"]').then((r) => [r.x, r.y])),
+    );
+    await sleep(150);
+    await click(page, 'header [role="menu"] [data-command="view.toggle-panel"]');
+    check(
+      "View > Toggle panel runs its command and closes the menu",
+      (await panelOpen()) !== panelBefore && !(await anyMenuOpen()),
+    );
+    await press(page, "j", { ctrl: true, wait: 300 });
+    check("Ctrl+J, its shortcut, toggles it back", (await panelOpen()) === panelBefore);
+
+    await click(page, 'header [data-menu="file"]');
+    check(
+      "a disabled item is marked disabled (File > Quit in a browser)",
+      await page.evaluate(
+        `document.querySelector('header [data-command="app.quit"]')?.getAttribute("aria-disabled") === "true"`,
+      ),
+    );
+    await click(page, 'header [data-command="app.quit"]');
+    check(
+      "clicking a disabled item does nothing; the menu stays open",
+      await menuOpen("File"),
+    );
+    await mouse(page, "mousePressed", 700, 400);
+    await mouse(page, "mouseReleased", 700, 400);
+    await sleep(200);
+    check("a click outside closes the menu", !(await anyMenuOpen()));
+
+    await click(page, 'header [data-menu="edit"]');
+    check(
+      "Edit lists Undo, Redo, Cut, Copy, Paste, Select all, Find, Replace",
+      (await page.evaluate(
+        `[...document.querySelectorAll('header [role="menu"][aria-label="Edit"] [role="menuitem"]')].slice(0, 8).map((i) => i.querySelector("span.truncate").textContent).join()`,
+      )) === "Undo,Redo,Cut,Copy,Paste,Select all,Find,Replace",
+    );
+    await click(page, 'header [data-command="edit.find"]');
+    await expectEventually(
+      page,
+      "Edit > Find opens the editor's find panel (the focused surface)",
+      `document.querySelector(".cm-editor .cm-search") !== null`,
+      { timeout: 3000 },
+    );
+    await press(page, "Escape", { wait: 300 });
+    await noStrayEdits(page, "menu bar");
+
+    // A shortcut changed in Settings applies at once, here and in the menus.
+    await click(page, 'header [data-menu="help"]');
+    await click(page, 'header [data-command="help.keybindings"]');
+    await waitFor(
+      page,
+      `document.querySelector('button[aria-label="Change shortcut for view.toggle-panel"]') !== null`,
+      { timeout: 8000 },
+    );
+    await page.evaluate(
+      `document.querySelector('button[aria-label="Change shortcut for view.toggle-panel"]').scrollIntoView({ block: "center" })`,
+    );
+    await sleep(150);
+    await click(page, 'button[aria-label="Change shortcut for view.toggle-panel"]');
+    await press(page, "y", { ctrl: true, alt: true, wait: 200 });
+    await press(page, "Enter", { wait: 600 });
+    await shoot(page, "18g-keybinding-changed");
+    await press(page, "Escape", { wait: 400 });
+    const panelNow = await panelOpen();
+    // Synthetic: unbound, Ctrl+J would reach Chromium, which opens Downloads.
+    await press(page, "j", { ctrl: true, wait: 300, synthetic: true });
+    check(
+      "after rebinding, the old shortcut Ctrl+J does nothing",
+      (await panelOpen()) === panelNow,
+    );
+    await press(page, "y", { ctrl: true, alt: true, wait: 300 });
+    check(
+      "the shortcut changed in Settings > Keyboard shortcuts runs the command",
+      (await panelOpen()) !== panelNow,
+    );
+    await click(page, 'header [data-menu="view"]');
+    check(
+      "the menu shows the new shortcut",
+      (await page.evaluate(
+        `document.querySelector('header [data-command="view.toggle-panel"] .font-mono')?.textContent`,
+      )) === "Ctrl+Alt+Y",
+    );
+    await press(page, "Escape", { wait: 200 });
+    await press(page, "y", { ctrl: true, alt: true, wait: 300 });
+    // Put the default back for the sections that follow.
+    await click(page, 'header [data-menu="help"]');
+    await click(page, 'header [data-command="help.keybindings"]');
+    await waitFor(
+      page,
+      `document.querySelector('button[aria-label="Reset shortcut for view.toggle-panel"]') !== null`,
+    );
+    await page.evaluate(
+      `document.querySelector('button[aria-label="Reset shortcut for view.toggle-panel"]').scrollIntoView({ block: "center" })`,
+    );
+    await sleep(150);
+    await click(page, 'button[aria-label="Reset shortcut for view.toggle-panel"]');
+    await sleep(400);
+    await press(page, "Escape", { wait: 400 });
+    const panelReset = await panelOpen();
+    await press(page, "j", { ctrl: true, wait: 300 });
+    check("resetting it brings Ctrl+J back", (await panelOpen()) !== panelReset);
+    await press(page, "j", { ctrl: true, wait: 300 });
+
+    // Narrow: the six menus fold into one Menu button with the same model.
+    await resize(page, 860, 700);
+    await sleep(300);
+    if (await exists(page, "#side-panel")) await press(page, "Escape", { wait: 300 });
+    check(
+      "at 860px the menus fold into one Menu button",
+      (await exists(page, "header [data-menu-fold]")) &&
+        !(await exists(page, "header [data-menu-bar]")),
+    );
+    await click(page, "header [data-menu-fold]");
+    check(
+      "the Menu button lists the same six menus",
+      (await page.evaluate(
+        `[...document.querySelectorAll('header [data-menu-row]')].map((b) => b.textContent.replace("›", "").trim()).join()`,
+      )) === "File,Edit,View,Go,Build,Help",
+    );
+    await click(page, 'header [data-menu-row="2"]');
+    check("choosing View opens its items beside the list", await menuOpen("View"));
+    await shoot(page, "18h-menu-folded");
+    const foldedBefore = await panelOpen();
+    await click(page, 'header [role="menu"] [data-command="view.toggle-panel"]');
+    check(
+      "a folded menu item runs its command",
+      (await panelOpen()) !== foldedBefore && !(await anyMenuOpen()),
+    );
+    await press(page, "j", { ctrl: true, wait: 300 });
+    check(
+      "at 860px the top bar fits without overflow",
+      await page.evaluate(
+        `(() => { const bar = document.querySelector("header"); return document.documentElement.scrollWidth <= window.innerWidth && bar.scrollWidth <= bar.clientWidth; })()`,
+      ),
+    );
+    await resize(page, 1280, 820);
+    await sleep(300);
+    if (!(await exists(page, "#side-panel")))
+      await click(page, 'nav[aria-label="Workbench views"] button[aria-label="Files"]');
+    await noStrayEdits(page, "menu bar, narrow");
+
+    /* ------------------------------------------------------------------ */
     section("Persistence");
     await press(page, "j", { ctrl: true });
     const tabsBefore = await tabNames(page);
@@ -2742,10 +3779,7 @@ async function main() {
 
     /* ------------------------------------------------------------------ */
     section("Home inside a project, and switching");
-    const crumb = (cdp) =>
-      cdp.evaluate(
-        `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.replace(/\\s+/g, " ") ?? ""`,
-      );
+    const crumb = (cdp) => cdp.evaluate(`document.title`);
     await click(page, 'header button[aria-label="Home"]');
     await expectEventually(
       page,
@@ -2782,14 +3816,12 @@ async function main() {
     // Switch from Home.
     await click(page, 'header button[aria-label="Home"]');
     await clickText(page, "[data-project] button", "Lecture notes");
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Lecture notes")`,
-      { label: "switched to Lecture notes" },
-    );
+    await waitFor(page, `document.title.includes("Lecture notes")`, {
+      label: "switched to Lecture notes",
+    });
     check(
       "switching opens the other project's main file",
-      (await crumb(page)).includes("Lecture notes / index.md"),
+      (await crumb(page)).includes("index.md — Lecture notes"),
       await crumb(page),
     );
     check(
@@ -2815,11 +3847,9 @@ async function main() {
     await shoot(page, "24-switcher");
     await insertText(page, "entropy");
     await press(page, "Enter", { wait: 500 });
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
-      { label: "switched back" },
-    );
+    await waitFor(page, `document.title.includes("Entropy paper")`, {
+      label: "switched back",
+    });
     check(
       "the switcher opens the project and its earlier tabs come back",
       (await tabNames(page)).length > 1 && (await tabNames(page)).includes("main.typ"),
@@ -2847,20 +3877,16 @@ async function main() {
     await insertText(page, "lecture");
     await press(page, "Enter", { wait: 400 });
     await clickText(page, '[role="alertdialog"] button', "Don't save");
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Lecture notes")`,
-      { label: "switched after discarding" },
-    );
+    await waitFor(page, `document.title.includes("Lecture notes")`, {
+      label: "switched after discarding",
+    });
     check("discarding switches", (await crumb(page)).includes("Lecture notes"));
     await press(page, "o", { ctrl: true, synthetic: true });
     await insertText(page, "entropy");
     await press(page, "Enter", { wait: 500 });
-    await waitFor(
-      page,
-      `document.querySelector('nav[aria-label="Breadcrumb"]')?.innerText.includes("Entropy paper")`,
-      { label: "back in Entropy paper" },
-    );
+    await waitFor(page, `document.title.includes("Entropy paper")`, {
+      label: "back in Entropy paper",
+    });
 
     section("LaTeX and Markdown preview");
     const doc = await newPage(browser);
@@ -2881,11 +3907,11 @@ async function main() {
       "status bar reports the LaTeX compile time",
       `/Compiled in \\d+ ms/.test(document.querySelector('footer[aria-label="Status"]').innerText)`,
     );
+    const latexBox = await doc.evaluate(PAGE_BOX);
     check(
       "the toolbar says which page of how many",
-      await doc.evaluate(
-        `/Page 1 of \\d+/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
-      ),
+      latexBox !== null && latexBox.page === 1 && latexBox.of >= 1,
+      JSON.stringify(latexBox),
     );
     check(
       "the preview header names the TeX backend",
@@ -2974,14 +4000,15 @@ async function main() {
     await expectEventually(
       doc,
       "a long document reports several pages",
-      `/Page 1 of ([2-9]|\\d\\d)/.test(document.querySelector('section[aria-label="Preview"]').innerText)`,
+      `(${PAGE_BOX})?.of >= 2`,
       { timeout: 8000 },
     );
-    await click(doc, 'button[aria-label="Next page"]');
+    await doc.evaluate(`document.querySelector("[data-pdf-viewer]").focus()`);
+    await press(doc, "PageDown");
     await expectEventually(
       doc,
-      "Next page scrolls the viewer to page 2",
-      `/Page 2 of/.test(document.querySelector('section[aria-label="Preview"]').innerText) && document.querySelector('[data-pdf-viewer]').scrollTop > 100`,
+      "PageDown in the viewer scrolls to page 2",
+      `(${PAGE_BOX})?.page === 2 && document.querySelector('[data-pdf-viewer]').scrollTop > 100`,
     );
     const scrollBefore = await doc.evaluate(
       `document.querySelector('[data-pdf-viewer]').scrollTop`,
@@ -3002,6 +4029,19 @@ async function main() {
         `document.querySelectorAll('[data-pdf-viewer] canvas').length <= 4`,
       ),
     );
+
+    // Contextual settings over a LaTeX document: LaTeX's, not Typst's.
+    await press(doc, ",", { ctrl: true, wait: 400 });
+    await expectEventually(
+      doc,
+      "from a LaTeX document, Settings show the LaTeX plugin and not Typst",
+      `(() => { const g = [...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group); return g.includes("plugin:latex") && g.includes("editor") && !g.includes("plugin:typst") && !g.includes("appearance") && (document.querySelector("[data-settings-scope]")?.innerText ?? "").includes("· LaTeX"); })()`,
+      {
+        show: `[...document.querySelectorAll('section[aria-label="Settings"] [data-group]')].map((e) => e.dataset.group).join()`,
+      },
+    );
+    await shoot(doc, "23b-settings-latex");
+    await press(doc, "Escape", { wait: 300 });
 
     // Markdown.
     await press(doc, "k", { ctrl: true, wait: 300 });

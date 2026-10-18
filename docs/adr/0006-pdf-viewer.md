@@ -64,3 +64,75 @@ nothing is loaded until a LaTeX preview is shown (the main bundle is unchanged).
   viewer.
 - If a Rust renderer is wanted later (for example a thumbnail strip), hayro is
   the candidate; it can sit behind the same `latex.export-pdf` bytes.
+
+## Amendment, 2026-10-18: one viewer for Typst and LaTeX, Overleaf parity
+
+### Decisions
+
+- **Typst previews as a PDF.** The one-page SVG preview (`typst.render` into
+  an `<img>`) is gone from the preview pane; Typst and LaTeX both go through
+  this viewer, so selection, find, links, the outline and zoom exist once.
+  `typst.export-pdf` already exported from the cached `PagedDocument` and
+  caches the bytes per compile, so no new Rust path was needed. `typst.render`
+  stays for project thumbnails and slides. Typst's jump commands speak points
+  from the page's top-left corner, which is what the viewer measures; a Rust
+  test checks that every exported page box is `[0 0 w h]` with the compiled
+  size and a vitest reads the exported PDF with pdf.js and finds the headings
+  where `typst.jump-from-cursor` puts them (`testdata/typst-preview/`).
+- **Text layer:** pdf.js `TextLayer` per drawn page, styled after pdf.js'
+  viewer CSS (transparent runs, `--total-scale-factor`, so it follows zoom
+  without being rebuilt). Selection handling is pdf.js' `endOfContent`
+  technique as adapted in Theorem (`ensureGlobalTextLayerSelectionListeners`,
+  MIT, same owner), with its edge auto-scroll and its WebKit text-width
+  calibration (WebKitGTK measures fonts differently from pdf.js' canvas, so
+  runs are re-scaled per font from measured widths). Copy writes tidied
+  plain text. A page whose text is part of the selection keeps its layer when
+  it scrolls away.
+- **Links:** our own link layer from `getAnnotations()` (as Theorem's
+  `PDFLinkLayer`), not pdf.js' `AnnotationLayer`: no link service, forms or
+  scripting to carry. Internal destinations scroll inside the viewer; web
+  links (http/https only) go to `openExternal`; the webview never navigates.
+- **Zoom:** 100% is the printed size at 96 dpi (1 pt = 4/3 CSS px). Presets
+  fit width, fit page, 50 to 400%; Ctrl/Cmd+=, -, 0; Ctrl+wheel and pinch
+  are previewed with a CSS transform and committed when the gesture pauses
+  (Theorem's approach, `wheelZoomFactor` too), anchored so the point under the
+  pointer stays put. The wheel listener is not passive, so the webview never
+  zooms itself. Pages relayout at once (canvases stretch) and are redrawn at
+  zoom x devicePixelRatio 140 ms after the zoom settles.
+- **Canvas resolution:** the 2x cap is replaced by a pixel budget of 2^24
+  pixels (64 MB) per page canvas; only pages within one viewport of the
+  visible area own a canvas, a text layer and links, as before.
+- **One pdf.js worker** is shared by every document. A worker per
+  `getDocument` cost about 200 ms of worker start-up on every recompile.
+- **Double-click** goes to the source by default (setting
+  `preview.double-click-source`, like Overleaf); Alt+double-click selects a
+  word. **Dark pages** (setting `preview.dark-pages`, header toggle) inverts
+  the canvas only (`invert(1) hue-rotate(180deg)`); export is unaffected.
+- The pure parts are in `src/lib/workbench/pdf/` (zoom, layout and anchoring,
+  navigation and the page box, find, links and outline, calibration) with
+  vitest suites; state in `state/pdfView.svelte.ts`.
+- No fonts or cmaps are shipped: Typst and pdfLaTeX output embed their fonts.
+  A PDF with non-embedded CJK text may still need cmaps later.
+
+### Measured (2026-10-18, this machine: 12 threads, optimised dev profile)
+
+Edit to updated visible pages, for Typst documents of 11 and 52 A4 pages
+(headings, outline, links, `lorem`), split pane, two pages visible:
+
+| Step | 11 pages | 52 pages |
+| :--- | ---: | ---: |
+| Incremental compile (`cargo bench --profile dev --bench pdf`) | 6-12 ms | 1-8 ms |
+| `export_pdf` after the edit | 7.5 ms | 33 ms |
+| pdf.js open with the shared worker (Chromium) | 2-6 ms | 4-5 ms |
+| Draw the two visible pages: canvas, text layer, links | 95-108 ms | 198-210 ms |
+| Main-thread tasks over 50 ms during the draw | 0 | 0 |
+
+So an edit shows in about 120 ms (11 pages) and 250 ms (52 pages) after the
+debounce, most of it drawing (fonts are loaded again for each new document);
+the drawing is sliced by pdf.js, never blocks the main thread for 50 ms, and
+the old pages stay on screen until the new ones are drawn, so typing does not
+stutter. The SVG fallback was therefore not kept.
+
+Memory at 400% on a 3-page document in the browser harness: 2 canvases,
+28.5 M pixels in all, 35 MB JS heap; at fit width 3-4 canvases. The WebKitGTK
+numbers in the real app are not measured here (headless Chromium only).

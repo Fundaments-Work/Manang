@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from "$lib/components/ui/Icon.svelte";
   import { openAsText, openInSystemApp, revealFile } from "$lib/state/actions";
+  import { PdfView } from "$lib/state/pdfView.svelte";
   import { viewers } from "$lib/state/viewers.svelte";
   import {
     PREVIEW_BYTES,
@@ -34,8 +35,7 @@
   let broken = $state(false);
 
   // PDF viewer state, local to this tab.
-  let page = $state(0);
-  let pages = $state(0);
+  const pdfView = new PdfView();
   let pdfError = $state("");
 
   $effect(() => {
@@ -66,8 +66,10 @@
     {#if natural !== null}
       <span class="font-mono text-[11px]">{natural.w} by {natural.h} px</span>
     {/if}
-    {#if file?.kind === "pdf" && pages > 0}
-      <span class="font-mono text-[11px]">page {page + 1} of {pages}</span>
+    {#if file?.kind === "pdf" && pdfView.pageCount > 0}
+      <span class="font-mono text-[11px]"
+        >page {pdfView.page + 1} of {pdfView.pageCount}</span
+      >
     {/if}
     <span class="ml-auto"></span>
     {#if file?.kind === "image"}
@@ -147,11 +149,8 @@
         {#await import("./PdfViewer.svelte") then viewer}
           <viewer.default
             data={file.pdf}
-            zoom={null}
-            jump={0}
-            page={0}
-            onpage={(next: number) => (page = next)}
-            onpages={(count: number) => (pages = count)}
+            view={pdfView}
+            docKey={path}
             onerror={(message: string) => (pdfError = message)}
           />
         {:catch}

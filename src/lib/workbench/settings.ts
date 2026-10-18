@@ -2,7 +2,10 @@
  * Pure settings and keybindings workbench logic.
  */
 
-import type { KeybindingConflict, SettingDef } from "$lib/kernel/api";
+import type { KeybindingConflict, SettingDef, SettingScope } from "$lib/kernel/api";
+
+import { diagramLanguageOf } from "./diagram";
+import { basename, engineOf, extension, type Engine } from "./paths";
 
 export interface SettingsGroup {
   readonly id: string;
@@ -33,6 +36,8 @@ const SETTING_ORDER: readonly string[] = [
   "editor.tab-size",
   "preview.auto-compile",
   "preview.debounce-ms",
+  "preview.double-click-source",
+  "preview.dark-pages",
 ];
 
 function settingRank(id: string): number {
@@ -160,6 +165,175 @@ export function filterSettings(
       owner.includes(q)
     );
   });
+}
+
+/**
+ * Where the Settings page was opened from. It decides which groups the page
+ * shows: a document shows the document's settings, Home or the palette's
+ * "Open all settings" shows everything (`app`).
+ */
+export type SettingsOrigin =
+  | { readonly kind: "app" }
+  | { readonly kind: "document"; readonly path: string; readonly engine: Engine | null }
+  | { readonly kind: "diagram"; readonly path: string }
+  | { readonly kind: "figure"; readonly path: string }
+  | { readonly kind: "pdf"; readonly path: string | null };
+
+export const APP_ORIGIN: SettingsOrigin = { kind: "app" };
+
+/** The context of a group that declares none (`DEFAULT_SETTINGS_CONTEXT`). */
+const DEFAULT_CONTEXTS: readonly string[] = ["app"];
+
+/** The contexts a setting's group belongs to; `["app"]` when it declares none. */
+export function contextsOf(item: {
+  readonly contexts?: readonly string[] | undefined;
+}) {
+  return item.contexts !== undefined && item.contexts.length > 0
+    ? item.contexts
+    : DEFAULT_CONTEXTS;
+}
+
+/** The contexts an origin shows, or null for the app scope (everything). */
+export function originContexts(origin: SettingsOrigin): readonly string[] | null {
+  switch (origin.kind) {
+    case "app":
+      return null;
+    case "document":
+      return origin.engine === null
+        ? ["document"]
+        : ["document", `engine:${origin.engine}`];
+    case "diagram":
+      return ["diagram"];
+    case "figure":
+      return ["figure"];
+    case "pdf":
+      return ["pdf"];
+  }
+}
+
+/** Whether a group declaring `contexts` shows for `origin`. */
+export function inContext(
+  contexts: readonly string[],
+  origin: SettingsOrigin,
+): boolean {
+  const wanted = originContexts(origin);
+  return wanted === null || contexts.some((c) => wanted.includes(c));
+}
+
+/**
+ * A plugin section's contexts: its manifest's `settings_contexts` (from the
+ * plugin list), else those its settings carry, else `["app"]`.
+ */
+export function pluginContexts(
+  name: string,
+  info:
+    readonly { readonly name: string; readonly contexts?: readonly string[] }[] | null,
+  defs: readonly SettingDef[],
+): readonly string[] {
+  const declared = info?.find((p) => p.name === name)?.contexts;
+  if (declared !== undefined && declared.length > 0) return declared;
+  const own = defs.find((d) => d.owner === name);
+  return own === undefined ? DEFAULT_CONTEXTS : contextsOf(own);
+}
+
+/** The settings groups shown for `origin`, in display order. */
+export function groupsForContext(
+  defs: readonly SettingDef[],
+  origin: SettingsOrigin,
+): SettingsGroup[] {
+  return groupSettings(defs.filter((d) => inContext(contextsOf(d), origin)));
+}
+
+/** A search split into what the scope shows and what only "all settings" would. */
+export interface ScopedMatches {
+  readonly here: SettingDef[];
+  readonly elsewhere: SettingDef[];
+}
+
+export function splitMatches(
+  defs: readonly SettingDef[],
+  query: string,
+  origin: SettingsOrigin,
+): ScopedMatches {
+  const here: SettingDef[] = [];
+  const elsewhere: SettingDef[] = [];
+  for (const def of filterSettings(defs, query)) {
+    (inContext(contextsOf(def), origin) ? here : elsewhere).push(def);
+  }
+  return { here, elsewhere };
+}
+
+/**
+ * Which file the page writes to when it opens: in a document scope with a
+ * project, "This project" when the project overrides any shown setting (so
+ * what you see is what you change), otherwise User.
+ */
+export function defaultSettingsScope(
+  origin: SettingsOrigin,
+  shown: readonly SettingDef[],
+  sourceOf: (id: string) => string,
+  hasProject: boolean,
+): SettingScope {
+  if (!hasProject || origin.kind !== "document") return "user";
+  return shown.some((d) => d.scope === "project" && sourceOf(d.id) === "project")
+    ? "project"
+    : "user";
+}
+
+const ENGINE_LABELS: Record<Engine, string> = {
+  typst: "Typst",
+  latex: "LaTeX",
+  markdown: "Markdown",
+};
+
+/** The one line naming the scope, e.g. "Settings for main.typ · Typst". */
+export function scopeLabel(origin: SettingsOrigin): string {
+  switch (origin.kind) {
+    case "app":
+      return "All settings";
+    case "document":
+      return origin.engine === null
+        ? `Settings for ${basename(origin.path)}`
+        : `Settings for ${basename(origin.path)} · ${ENGINE_LABELS[origin.engine]}`;
+    case "diagram":
+      return `Settings for ${basename(origin.path)} · Diagram`;
+    case "figure":
+      return `Settings for ${basename(origin.path)} · Figure`;
+    case "pdf":
+      return origin.path === null
+        ? "Settings for the PDF viewer"
+        : `Settings for ${basename(origin.path)} · PDF`;
+  }
+}
+
+/** What an origin needs to know about the tab Settings opens over. */
+export interface OriginTab {
+  readonly kind: "document" | "figure" | "viewer";
+  readonly path: string;
+}
+
+/**
+ * The origin for Settings opened over `tab`. Home (or no tab) is the app
+ * scope; a figure tab the figure scope; a PDF viewer tab the PDF scope; a
+ * diagram source the diagram scope; any other document its engine's scope.
+ */
+export function settingsOriginFor(
+  tab: OriginTab | undefined,
+  onHome: boolean,
+): SettingsOrigin {
+  if (onHome || tab === undefined) return APP_ORIGIN;
+  switch (tab.kind) {
+    case "figure":
+      return { kind: "figure", path: tab.path };
+    case "viewer":
+      return extension(tab.path) === "pdf"
+        ? { kind: "pdf", path: tab.path }
+        : APP_ORIGIN;
+    case "document":
+      if (diagramLanguageOf(tab.path) !== null)
+        return { kind: "diagram", path: tab.path };
+      return { kind: "document", path: tab.path, engine: engineOf(tab.path) };
+  }
 }
 
 /**
