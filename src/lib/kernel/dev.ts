@@ -236,6 +236,60 @@ const SKETCH_PNG = new Uint8Array([
   68, 174, 66, 96, 130,
 ]);
 
+/** A one-page PDF (plain ASCII, so it can live in source), for the PDF tab. */
+const NOTE_PDF = new TextEncoder().encode(
+  `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 110 >>
+stream
+BT /F1 18 Tf 72 720 Td (Landauer bound: kT ln 2 per erased bit.) Tj ET
+0.78 0.95 0.21 RG 72 700 m 540 700 l S
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000401 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+471
+%%EOF
+`,
+);
+
+/** An empty ZIP archive: a file Manang cannot show, for the info tab. */
+const RAW_ZIP = new Uint8Array([
+  0x50,
+  0x4b,
+  0x05,
+  0x06,
+  ...new Array<number>(18).fill(0),
+]);
+
+const MEASUREMENTS_CSV = `cycle,duration_ms,heat_kT
+1,10,0.93
+2,20,0.81
+3,40,0.75
+4,80,0.71
+`;
+
 const LECTURE_INDEX = `# Lecture notes
 
 Week one covers the basics of statistical mechanics.
@@ -299,6 +353,9 @@ export const DEMO_PROJECTS: readonly SeedProject[] = [
       "figures/state_lattice.svg": FIGURE_SVG,
       "figures/dissipation_curve.figure.json": JSON.stringify(CURVE, null, 2),
       "figures/sketch.png": SKETCH_PNG,
+      "data/measurements.csv": MEASUREMENTS_CSV,
+      "data/raw.zip": RAW_ZIP,
+      "papers/landauer-note.pdf": NOTE_PDF,
     },
     committed: [
       "main.typ",
@@ -309,6 +366,9 @@ export const DEMO_PROJECTS: readonly SeedProject[] = [
       "figures/state_lattice.svg",
       "figures/dissipation_curve.figure.json",
       "figures/sketch.png",
+      "data/measurements.csv",
+      "data/raw.zip",
+      "papers/landauer-note.pdf",
     ],
     // results.typ was committed before its last paragraph was added.
     committedEarlier: { "sections/results.typ": RESULTS_COMMITTED },

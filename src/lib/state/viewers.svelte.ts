@@ -1,41 +1,67 @@
 /**
- * Read-only viewer tabs: images and PDFs from the project.
+ * Read-only viewer tabs: images, PDFs, text too large to edit, and an info
+ * tab for every other file.
  *
  * Bytes come raw through `project.read-bytes` (never base64). An image is
  * shown through a `blob:` URL, revoked when its tab closes or the file is
- * reloaded; a PDF keeps its bytes for the PDF viewer.
+ * reloaded; a PDF keeps its bytes for the PDF viewer; large text keeps only
+ * the start of the file; a binary keeps nothing but its size.
  */
 
 import { SvelteMap } from "svelte/reactivity";
 
 import { errorMessage, kernel, reportError } from "$lib/kernel";
 import { projectApi } from "$lib/kernel/api";
-import { imageType, viewerKind, type ViewerKind } from "$lib/workbench/paths";
+import { PREVIEW_BYTES, type OpenAs } from "$lib/workbench/opener";
+import { imageType } from "$lib/workbench/paths";
 
 import { notice } from "./notice.svelte";
 
 const api = projectApi(kernel);
+
+export type ViewerKind = "image" | "pdf" | "large-text" | "binary";
 
 export interface ViewedFile {
   readonly path: string;
   readonly kind: ViewerKind;
   /** Size on disk, in bytes. */
   readonly size: number;
-  /** A `blob:` URL for an image; null for a PDF. */
+  /** A `blob:` URL for an image. */
   readonly url: string | null;
-  /** The raw PDF; null for an image. */
+  /** The raw PDF. */
   readonly pdf: Uint8Array | null;
+  /** The start of a large text file. */
+  readonly preview: string | null;
+}
+
+function isViewer(as: OpenAs): as is ViewerKind {
+  return as === "image" || as === "pdf" || as === "large-text" || as === "binary";
 }
 
 /** Wrap bytes for display. Pure apart from `URL.createObjectURL`. */
-export function viewedFile(path: string, bytes: Uint8Array): ViewedFile {
-  const kind = viewerKind(path);
-  if (kind === null) throw new Error(`${path} is not an image or a PDF.`);
-  if (kind === "pdf") return { path, kind, size: bytes.length, url: null, pdf: bytes };
-  const type = imageType(path) ?? "application/octet-stream";
-  // Copy into a fresh ArrayBuffer: the IPC buffer may be a view on a larger one.
-  const blob = new Blob([bytes.slice()], { type });
-  return { path, kind, size: bytes.length, url: URL.createObjectURL(blob), pdf: null };
+export function viewedFile(
+  path: string,
+  kind: ViewerKind,
+  bytes: Uint8Array,
+): ViewedFile {
+  const base = { path, kind, size: bytes.length, url: null, pdf: null, preview: null };
+  switch (kind) {
+    case "pdf":
+      return { ...base, pdf: bytes };
+    case "large-text":
+      return {
+        ...base,
+        preview: new TextDecoder().decode(bytes.subarray(0, PREVIEW_BYTES)),
+      };
+    case "binary":
+      return base;
+    case "image": {
+      const type = imageType(path) ?? "application/octet-stream";
+      // Copy into a fresh buffer: the IPC bytes may be a view on a larger one.
+      const blob = new Blob([bytes.slice()], { type });
+      return { ...base, url: URL.createObjectURL(blob) };
+    }
+  }
 }
 
 function release(file: ViewedFile): void {
@@ -49,15 +75,19 @@ export class ViewersStore {
     return this.#open.get(path);
   }
 
-  async #load(path: string): Promise<ViewedFile> {
-    return viewedFile(path, await api.readBytes(path));
-  }
-
-  /** Read the file and hold it for its tab. False (with a notice) on failure. */
-  async open(path: string): Promise<boolean> {
-    if (this.#open.has(path)) return true;
+  /**
+   * Hold `path` for its viewer tab, shown as `as`. `bytes` are the file's
+   * contents when the caller already read them (to decide how to open it).
+   * False, with a notice, on failure.
+   */
+  async open(path: string, as: OpenAs, bytes?: Uint8Array): Promise<boolean> {
+    if (!isViewer(as)) return false;
+    const existing = this.#open.get(path);
+    if (existing !== undefined && existing.kind === as) return true;
     try {
-      this.#open.set(path, await this.#load(path));
+      const next = viewedFile(path, as, bytes ?? (await api.readBytes(path)));
+      this.#open.set(path, next);
+      if (existing !== undefined) release(existing);
       return true;
     } catch (error) {
       reportError("viewers.open", error);
@@ -72,7 +102,7 @@ export class ViewersStore {
       const old = this.#open.get(path);
       if (old === undefined) continue;
       try {
-        const next = await this.#load(path);
+        const next = viewedFile(path, old.kind, await api.readBytes(path));
         // The tab may have closed while reading.
         if (this.#open.get(path) !== old) {
           release(next);

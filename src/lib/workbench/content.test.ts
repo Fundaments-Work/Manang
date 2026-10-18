@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fileKind, engineOf, imageType, isOpenable, viewerKind } from "./paths";
+import { fileKind, engineOf, imageType } from "./paths";
 import {
   authorSummary,
   citationFor,
@@ -156,23 +156,9 @@ describe("file classification", () => {
     expect(fileKind("README")).toBe("text");
     expect(engineOf("x.tex")).toBe("latex");
     expect(engineOf("x.bib")).toBeNull();
-    // Images and PDFs open in a read-only viewer tab; other binaries do not open.
-    expect(isOpenable("x.png")).toBe(true);
-    expect(isOpenable("x.svg")).toBe(true);
-    expect(isOpenable("x.pdf")).toBe(true);
-    expect(isOpenable("x.zip")).toBe(false);
-    expect(isOpenable("x.woff2")).toBe(false);
-    expect(isOpenable("x.bib")).toBe(true);
   });
 
-  it("picks a viewer for images and PDFs only", () => {
-    expect(viewerKind("figures/a.PNG")).toBe("image");
-    expect(viewerKind("a.jpeg")).toBe("image");
-    expect(viewerKind("a.svg")).toBe("image");
-    expect(viewerKind("paper.pdf")).toBe("pdf");
-    expect(viewerKind("a.figure.json")).toBeNull();
-    expect(viewerKind("main.typ")).toBeNull();
-    expect(viewerKind("a.ico")).toBeNull();
+  it("knows the media type of the images a viewer shows", () => {
     expect(imageType("a.jpg")).toBe("image/jpeg");
     expect(imageType("a.svg")).toBe("image/svg+xml");
     expect(imageType("a.pdf")).toBeNull();

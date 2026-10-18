@@ -7,7 +7,8 @@
  * its tab.
  */
 
-import { basename, dirname, fileKind, isUnder, moved, viewerKind } from "./paths";
+import { openAsByName, tabKindOf } from "./opener";
+import { basename, dirname, isUnder, moved } from "./paths";
 
 export type TabKind = "document" | "figure" | "viewer";
 export type DocumentView = "text" | "slides";
@@ -30,13 +31,22 @@ export const EMPTY_TABS: TabsModel = { tabs: [], active: null, history: [] };
 
 export const tabId = (path: string): string => path;
 
-export function kindForPath(path: string): TabKind {
-  if (fileKind(path) === "figure") return "figure";
-  return viewerKind(path) === null ? "document" : "viewer";
+/**
+ * The tab kind the name gives (`opener.ts`). A name that says nothing (no
+ * or an unknown extension) falls back to `fallback`: the kind decided from
+ * the file's bytes when it was opened.
+ */
+export function kindForPath(path: string, fallback: TabKind = "document"): TabKind {
+  const as = openAsByName(path);
+  return as === null ? fallback : tabKindOf(as);
 }
 
-export function makeTab(path: string, view: DocumentView = "text"): Tab {
-  return { id: tabId(path), kind: kindForPath(path), path, view };
+export function makeTab(
+  path: string,
+  view: DocumentView = "text",
+  kind?: TabKind,
+): Tab {
+  return { id: tabId(path), kind: kind ?? kindForPath(path), path, view };
 }
 
 function withActive(model: TabsModel, id: string | null): TabsModel {
@@ -57,6 +67,7 @@ export function openTab(
   model: TabsModel,
   path: string,
   view?: DocumentView,
+  kind?: TabKind,
 ): TabsModel {
   const id = tabId(path);
   const existing = model.tabs.find((tab) => tab.id === id);
@@ -71,7 +82,7 @@ export function openTab(
   const index = at === -1 ? model.tabs.length : at + 1;
   const tabs = [
     ...model.tabs.slice(0, index),
-    makeTab(path, view),
+    makeTab(path, view, kind),
     ...model.tabs.slice(index),
   ];
   return withActive({ ...model, tabs }, id);
@@ -86,6 +97,16 @@ export function setView(model: TabsModel, id: string, view: DocumentView): TabsM
     ...model,
     tabs: model.tabs.map((tab) =>
       tab.id === id && tab.kind === "document" ? { ...tab, view } : tab,
+    ),
+  };
+}
+
+/** Show a tab's file in another editor (an SVG as text), keeping its place. */
+export function setKind(model: TabsModel, id: string, kind: TabKind): TabsModel {
+  return {
+    ...model,
+    tabs: model.tabs.map((tab) =>
+      tab.id === id ? { ...tab, kind, view: "text" as const } : tab,
     ),
   };
 }
@@ -147,6 +168,16 @@ export function moveTab(model: TabsModel, id: string, toIndex: number): TabsMode
   return { ...model, tabs };
 }
 
+/**
+ * A rename does not change what a file holds: a viewer stays a viewer (a large
+ * `.txt`, say), but a file renamed to or from `.figure.json` changes editor.
+ */
+function renamedKind(tab: Tab, path: string): TabKind {
+  const named = kindForPath(path, tab.kind);
+  if (named === "figure" || tab.kind === "figure") return named;
+  return tab.kind === "viewer" ? "viewer" : named;
+}
+
 /** A file or folder was renamed: keep its tabs, pointing at the new path. */
 export function renamePath(model: TabsModel, from: string, to: string): TabsModel {
   const remap = (id: string): string => moved(id, from, to);
@@ -155,7 +186,7 @@ export function renamePath(model: TabsModel, from: string, to: string): TabsMode
       const path = moved(tab.path, from, to);
       return path === tab.path
         ? tab
-        : { ...tab, path, id: tabId(path), kind: kindForPath(path) };
+        : { ...tab, path, id: tabId(path), kind: renamedKind(tab, path) };
     }),
     active: model.active === null ? null : remap(model.active),
     history: model.history.map(remap),

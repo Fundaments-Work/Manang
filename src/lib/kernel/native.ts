@@ -112,6 +112,17 @@ export async function revealInFileManager(path: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Open a file (an absolute path) in the app the system associates with it.
+ * False when unavailable (the browser build).
+ */
+export async function openWithSystem(path: string): Promise<boolean> {
+  if (!inTauri()) return false;
+  const { openPath } = await import("@tauri-apps/plugin-opener");
+  await openPath(path);
+  return true;
+}
+
 /** Open a web link (a DOI, a licence) in the default browser. */
 export async function openExternal(url: string): Promise<void> {
   if (!/^https?:\/\//i.test(url)) throw new Error(`Not a web link: ${url}`);
