@@ -95,3 +95,23 @@ title = "Files changed by a version"
 [[contributes.commands]]
 id = "git.version-diff"
 title = "One file's diff for a version"
+
+[[contributes.commands]]
+id = "git.remote-get"
+title = "Read the shared location"
+
+[[contributes.commands]]
+id = "git.remote-set"
+title = "Set the shared location"
+
+[[contributes.commands]]
+id = "git.sync-status"
+title = "Share status"
+
+[[contributes.commands]]
+id = "git.share"
+title = "Share your versions"
+
+[[contributes.commands]]
+id = "git.get-updates"
+title = "Get updates"

@@ -858,6 +858,47 @@ export interface GitRestored {
   readonly trash: string | null;
 }
 
+export interface GitRemoteInfo {
+  readonly name: string | null;
+  readonly url: string | null;
+}
+
+export type GitShareState = "no-remote" | "up-to-date" | "ahead" | "behind" | "diverged";
+
+export interface GitSyncStatus {
+  readonly state: GitShareState;
+  readonly remote: string | null;
+  readonly branch: string | null;
+  /** Saved versions not on the remote yet. */
+  readonly ahead: number;
+  /** Versions on the remote that are not here. */
+  readonly behind: number;
+  readonly never_shared: boolean;
+  /** Files with changes that are not saved as a version. */
+  readonly uncommitted: number;
+}
+
+export interface GitShared {
+  readonly remote: string;
+  readonly branch: string;
+  readonly pushed: number;
+}
+
+export type GitUpdateResult =
+  | "up-to-date"
+  | "fast-forwarded"
+  | "merged"
+  | "diverged"
+  | "conflicts";
+
+export interface GitUpdated {
+  readonly result: GitUpdateResult;
+  /** Files both sides changed (only for `conflicts`). */
+  readonly files: readonly string[];
+  readonly received: number;
+  readonly safety_version: string | null;
+}
+
 export function gitApi(kernel: Kernel) {
   return {
     open: (root: string) =>
@@ -963,6 +1004,21 @@ export function gitApi(kernel: Kernel) {
       save_first?: boolean | undefined;
       root?: string | undefined;
     }) => kernel.run<GitRestored>("git.restore", { ...req }),
+    remoteGet: (req: { root?: string | undefined } = {}) =>
+      kernel.run<GitRemoteInfo>("git.remote-get", { ...req }),
+    remoteSet: (req: { url: string; root?: string | undefined }) =>
+      kernel.run<GitRemoteInfo>("git.remote-set", { ...req }),
+    syncStatus: (
+      req: { refresh?: boolean | undefined; root?: string | undefined } = {},
+    ) => kernel.run<GitSyncStatus>("git.sync-status", { ...req }),
+    share: (req: { root?: string | undefined } = {}) =>
+      kernel.run<GitShared>("git.share", { ...req }),
+    getUpdates: (
+      req: {
+        strategy?: "ff-only" | "merge" | undefined;
+        root?: string | undefined;
+      } = {},
+    ) => kernel.run<GitUpdated>("git.get-updates", { ...req }),
     sync: (req: {
       action: "fetch" | "pull" | "push";
       remote?: string | undefined;
