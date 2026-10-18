@@ -129,9 +129,6 @@ Key judgements for scientific authoring:
   the page has no filesystem or network by default. Compare TeX: Tectonic
   bundles run from our sidecar for LaTeX; for Python there is no equivalent
   single static binary.
-* A CPython-on-WASI runner under Wasmtime (our existing host) would be a
-  tighter sandbox but lacks numpy/matplotlib wheels: **unverified**, treat as
-  research only.
 
 ### (d) Typst scripting
 
@@ -284,8 +281,7 @@ Cheapest useful thing, both paths:
   to PDF/HTML, stderr to Problems, preview of the result. Tests skip when
   tools are absent (and fail under a `REQUIRE_TOOLS` env var, as Calepin does).
 
-Risks: Python discovery on Windows and macOS, matplotlib backend quirks,
-stateful hashing correctness.
+Risks: Python discovery on Windows and macOS, stateful hashing.
 
 ### Horizon B: full Jupyter client (4 to 6 weeks)
 
@@ -314,9 +310,3 @@ Pyodide in a hidden sandboxed webview with numpy/matplotlib, offline bundle
    `process` capability and third-party runners to Horizon B?
 7. **Zero-install priority:** is "works without Python" a beta requirement
    (then Pyodide moves up and the slice grows by about three weeks)?
-
-Sources: librepaper.org; github.com/vincentarelbundock/calepin (README,
-CLAUDE.md, Cargo.toml, releases); forum.typst.app Calepin and Callisto threads;
-quarto.org docs (code-execution, typst output); crates.io API for the
-`runtimelib`, `jupyter-protocol`, `jupyter-zmq-client`, `zeromq`, `zmq` crates;
-GitHub API for licences and release dates; Pyodide release assets.
