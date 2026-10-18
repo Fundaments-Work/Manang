@@ -44,13 +44,25 @@ export function sortEntries(entries: readonly TreeEntry[]): TreeEntry[] {
     });
 }
 
+/**
+ * Entries the tree keeps out of sight by default: dotfiles (`.gitignore`) and
+ * the project's own `manang.toml`, which Settings edits. Searching the files
+ * (the filter, Ctrl+P) still finds them, and "Show hidden files" lists them.
+ */
+export function isHiddenEntry(entry: TreeEntry): boolean {
+  return entry.name.startsWith(".") || entry.path === "manang.toml";
+}
+
 export function visibleRows(
   listings: ReadonlyMap<string, readonly TreeEntry[]>,
   expanded: ReadonlySet<string>,
+  showHidden = false,
 ): TreeRow[] {
   const rows: TreeRow[] = [];
   const walk = (dir: string, depth: number): void => {
-    const entries = sortEntries(listings.get(dir) ?? []);
+    const entries = sortEntries(listings.get(dir) ?? []).filter(
+      (entry) => showHidden || !isHiddenEntry(entry),
+    );
     entries.forEach((entry, index) => {
       const isDir = entry.kind === "dir";
       const open = isDir && expanded.has(entry.path);

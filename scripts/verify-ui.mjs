@@ -23,12 +23,25 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request as httpRequest } from "node:http";
+import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 
 const ORIGIN = process.env.MANANG_ORIGIN ?? "http://127.0.0.1:1420";
 const SHOTS = "artifacts/screens";
-const PORT = Number(process.env.MANANG_CDP_PORT ?? 9333);
+/**
+ * The browser's DevTools port: MANANG_CDP_PORT when set, otherwise a free one,
+ * so two suites (agents, CI, a developer) never talk to each other's browser.
+ */
+let PORT = Number(process.env.MANANG_CDP_PORT ?? 0);
+
+async function freePort() {
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
 
 function findBrowser() {
   for (const name of [
@@ -464,6 +477,7 @@ async function main() {
     process.exit(1);
   }
   mkdirSync(SHOTS, { recursive: true });
+  if (PORT === 0) PORT = await freePort();
   // Recent Chrome ignores --remote-debugging-port on the default profile, and a
   // throwaway profile keeps the suite away from the user's own browser data.
   const profile = mkdtempSync(join(tmpdir(), "manang-ui-"));
@@ -2226,6 +2240,29 @@ async function main() {
     );
 
     await noStrayEdits(page, "after filtering");
+    // Dotfiles and manang.toml stay out of the tree until asked for.
+    check(
+      "the tree hides manang.toml and dotfiles by default",
+      !(await exists(page, '[role="treeitem"][data-path="manang.toml"]')) &&
+        !(await exists(page, '[role="treeitem"][data-path=".manang"]')),
+    );
+    await page.evaluate(
+      `document.querySelector('[role="tree"]').parentElement.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 150, clientY: 600 }))`,
+    );
+    await sleep(200);
+    await clickText(page, '[role="menuitem"]', "Show hidden files");
+    await sleep(300);
+    check(
+      "Show hidden files lists manang.toml",
+      await exists(page, '[role="treeitem"][data-path="manang.toml"]'),
+    );
+    await page.evaluate(
+      `document.querySelector('[role="tree"]').parentElement.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 150, clientY: 600 }))`,
+    );
+    await sleep(200);
+    await clickText(page, '[role="menuitem"]', "Hide hidden files");
+    await sleep(300);
+
     // Create, rename, delete
     await click(page, 'button[aria-label="New file"]');
     await expectEventually(
@@ -2250,6 +2287,16 @@ async function main() {
       (await tabNames(page)).includes("ideas.typ") &&
         !(await tabNames(page)).includes("untitled.typ"),
     );
+    // An unhurried second click on a file renames it; the field keeps the extension.
+    await click(page, '[role="treeitem"][data-path="ideas.typ"]');
+    await sleep(800);
+    await click(page, '[role="treeitem"][data-path="ideas.typ"]');
+    await sleep(200);
+    check(
+      "a slow second click on a file starts renaming it",
+      await exists(page, "input[data-editing]"),
+    );
+    await press(page, "Escape", { wait: 200 });
     await page.evaluate(
       `document.querySelector('[role="treeitem"][data-path="ideas.typ"]').focus()`,
     );
@@ -2263,6 +2310,25 @@ async function main() {
       "a notice confirms the trash",
       (await statusText(page)).includes("Moved ideas.typ to the trash"),
     );
+    // New figure asks for a name, starting from "untitled".
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, "New figure");
+    await press(page, "Enter", { wait: 500 });
+    await expectEventually(
+      page,
+      "New figure asks for a name, suggesting untitled",
+      `document.querySelector('[role="alertdialog"] input, [role="dialog"] input')?.value === "untitled"`,
+    );
+    await press(page, "a", { ctrl: true });
+    await insertText(page, "orbit");
+    await press(page, "Enter", { wait: 800 });
+    check(
+      "the figure is created under the name that was typed",
+      (await tabNames(page)).includes("figures/orbit.figure"),
+      JSON.stringify(await tabNames(page)),
+    );
+    // Close it again: the demo project does not keep a figure across a reload.
+    await press(page, "w", { ctrl: true, wait: 300, synthetic: true });
 
     await noStrayEdits(page, "after create, rename and delete");
     // Context menu
@@ -5574,14 +5640,16 @@ async function main() {
           ? `localStorage.removeItem("manang.mock.git-share")`
           : `localStorage.setItem("manang.mock.git-share", ${JSON.stringify(value)})`,
       );
-    const shareText = () => page.evaluate(`document.querySelector('${SHARE}')?.innerText ?? ""`);
+    const shareText = () =>
+      page.evaluate(`document.querySelector('${SHARE}')?.innerText ?? ""`);
     const limeButtons = () =>
       page.evaluate(
         `[...document.querySelectorAll('${SHARE} button')].filter((b) => b.className.includes("bg-accent")).map((b) => b.textContent.trim())`,
       );
     check(
       "the Versions view has a Share group asking for an address on first use",
-      (await exists(page, SHARE)) && (await exists(page, `${SHARE} input#share-address`)),
+      (await exists(page, SHARE)) &&
+        (await exists(page, `${SHARE} input#share-address`)),
     );
     check(
       "before connecting there is no Share or Get updates button",
@@ -5694,7 +5762,8 @@ async function main() {
     );
     check(
       "it names the file and says nothing was changed",
-      (await dialogText()).includes("main.") && (await dialogText()).includes("Nothing was changed"),
+      (await dialogText()).includes("main.") &&
+        (await dialogText()).includes("Nothing was changed"),
       await dialogText(),
     );
     await shoot(page, "37-share-conflict");
@@ -5712,11 +5781,14 @@ async function main() {
     await shareFlag(null);
     // The refusals above were provoked on purpose and logged by reportError.
     for (let i = page.errors.length - 1; i >= 0; i -= 1) {
-      if (/sharing versions|getting updates/.test(page.errors[i])) page.errors.splice(i, 1);
+      if (/sharing versions|getting updates/.test(page.errors[i]))
+        page.errors.splice(i, 1);
     }
     check(
       "the group uses no git jargon",
-      !/\b(push|pull|fetch|merge|rebase|upstream|origin|commit)\b/i.test(await shareText()),
+      !/\b(push|pull|fetch|merge|rebase|upstream|origin|commit)\b/i.test(
+        await shareText(),
+      ),
       await shareText(),
     );
     check(

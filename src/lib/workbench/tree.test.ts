@@ -7,6 +7,7 @@ import {
   branchLabel,
   filterRows,
   gitMarks,
+  isHiddenEntry,
   navigate,
   sortEntries,
   typeAhead,
@@ -217,5 +218,23 @@ describe("paths", () => {
     expect(
       uniqueName("untitled.typ", new Set(["untitled.typ", "untitled 2.typ"])),
     ).toBe("untitled 3.typ");
+  });
+});
+
+describe("hidden entries", () => {
+  const withHidden = new Map<string, readonly TreeEntry[]>([
+    ["", [file(".gitignore"), file("manang.toml"), file("main.typ"), dir(".manang")]],
+    ["figures", [file("figures/manang.toml")]],
+  ]);
+
+  it("keeps dotfiles and the project config out of the tree", () => {
+    expect(visibleRows(withHidden, new Set()).map((r) => r.path)).toEqual(["main.typ"]);
+  });
+
+  it("lists them when asked, and only the root manang.toml counts as the config", () => {
+    expect(visibleRows(withHidden, new Set(), true).map((r) => r.path)).toContain(
+      "manang.toml",
+    );
+    expect(isHiddenEntry(file("figures/manang.toml"))).toBe(false);
   });
 });

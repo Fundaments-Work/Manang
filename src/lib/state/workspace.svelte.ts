@@ -56,12 +56,14 @@ export class WorkspaceState {
   references = $state.raw<readonly BibEntry[]>([]);
   referencesLoaded = $state(false);
   filter = $state("");
+  /** Whether the tree lists dotfiles and `manang.toml` (off by default). */
+  showHidden = $state(false);
   opening = $state(false);
   error = $state("");
 
   readonly rows = $derived(
     this.filter.trim() === ""
-      ? visibleRows(this.listings, this.expanded)
+      ? visibleRows(this.listings, this.expanded, this.showHidden)
       : filterRows(this.all ?? [], this.filter),
   );
   readonly marks = $derived(gitMarks(this.git));
