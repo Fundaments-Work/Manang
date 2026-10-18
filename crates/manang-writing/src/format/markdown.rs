@@ -153,6 +153,13 @@ fn plan(lines: &[Line<'_>], opts: &MarkdownOptions) -> Vec<Plan> {
                 .map(|p| p + 1)
         })
         .flatten();
+    // Leading blank lines are dropped, except before a `---`: without them it
+    // would open front matter on the next pass and change the document.
+    let keep_leading = front_end.is_none()
+        && lines
+            .iter()
+            .find(|l| !blank(l.text))
+            .is_some_and(|l| l.text.trim_end() == "---");
     let mut fence: Option<(char, usize)> = None;
     let mut math = false;
     let mut blank_run = 0usize;
@@ -202,7 +209,7 @@ fn plan(lines: &[Line<'_>], opts: &MarkdownOptions) -> Vec<Plan> {
                 .iter()
                 .find(|l| !blank(l.text))
                 .is_some_and(|l| indented_code(l.text));
-            let over = blank_run > opts.max_blank_lines || !emitted;
+            let over = blank_run > opts.max_blank_lines || (!emitted && !keep_leading);
             if over && !next_indented {
                 plans.push(Plan::Drop);
             } else if opts.trim_trailing_whitespace {
@@ -336,6 +343,15 @@ mod tests {
     fn code_math_front_matter_and_indented_code_are_untouched() {
         let doc = "---\ntitle: x  \n\n\n---\n\n```rust\nlet a = 1;   \n\n\n\nlet b;\n```\n\n$$\nx  \n\n\n= y\n$$\n\n    indented   \n\n\n    more\n";
         assert_eq!(fmt(doc), doc);
+    }
+
+    #[test]
+    fn a_leading_thematic_break_does_not_become_front_matter() {
+        // Dropping the blank line would make `---` open front matter next time.
+        let doc = "\n---\n```\n---\n\n";
+        assert_eq!(fmt(doc), doc);
+        assert_eq!(fmt(&fmt(doc)), fmt(doc));
+        assert_eq!(fmt("\n\n\ntext\n"), "text\n");
     }
 
     #[test]
