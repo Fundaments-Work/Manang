@@ -8,7 +8,14 @@
  */
 
 import { paletteAction } from "$lib/commands/allowlist";
-import { NEW_FIGURE_NAME } from "$lib/figure/files";
+import {
+  FIGURE_EXTENSION,
+  LEGACY_FIGURE_SUFFIX,
+  NEW_FIGURE_NAME,
+  figureNameProblem,
+  figureStem,
+  newFigureRequest,
+} from "$lib/figure/files";
 import { recheckWriting, runFormat } from "$lib/editor/writing";
 import { writingSyntaxFor } from "$lib/editor/writing/languageMap";
 import { kernel, errorMessage, inTauri, reportError } from "$lib/kernel";
@@ -411,17 +418,37 @@ export async function createFolder(dir: string, name: string): Promise<string | 
   }
 }
 
-/** A new, empty figure in `figures/`, opened for drawing. */
+/**
+ * A new, empty figure in `figures/`, opened for drawing. Asks for a name first
+ * (it starts as "untitled", or "untitled-2" and so on when that is taken), so
+ * the file is called what the author means from the start. Never overwrites.
+ */
 export async function newFigure(): Promise<void> {
   if (workspace.project === null) {
     notice.error("Open a folder before creating a figure.");
     return;
   }
   await workspace.loadDir("figures");
-  const path = join(
-    "figures",
-    uniqueName(NEW_FIGURE_NAME, workspace.namesIn("figures")),
-  );
+  const taken = workspace.namesIn("figures");
+  let name = figureStem(uniqueName(NEW_FIGURE_NAME, taken));
+  let path = "";
+  for (;;) {
+    const answer = await dialog.prompt(newFigureRequest(name));
+    if (answer.id !== "create") return;
+    name = answer.value.trim();
+    const problem = figureNameProblem(name);
+    if (problem !== null) {
+      notice.error(problem);
+      continue;
+    }
+    const file = `${name}${FIGURE_EXTENSION}`;
+    if (taken.includes(file) || taken.includes(`${name}${LEGACY_FIGURE_SUFFIX}`)) {
+      notice.error(`There is already a figure called ${name}. Pick another name.`);
+      continue;
+    }
+    path = join("figures", file);
+    break;
+  }
   try {
     // The figure plugin writes the scene and its SVG and keeps it open.
     await figures.create(path);
