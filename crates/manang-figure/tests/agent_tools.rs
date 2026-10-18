@@ -291,7 +291,7 @@ fn mermaid_becomes_shapes_or_a_block() {
     let exported = call(&k, "figure_export", json!({ "path": path }));
     let svg = fs::read_to_string(exported["svg"].as_str().unwrap_or_default()).expect("svg");
     assert!(
-        svg.contains("<svg x="),
+        svg.contains("<svg id=\"mng-"),
         "the Mermaid block is embedded as a nested SVG"
     );
 }
