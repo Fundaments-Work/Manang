@@ -61,6 +61,26 @@ pub enum GitError {
     RevNotFound(String),
     #[error("`{0}` does not exist at that revision")]
     PathNotInRev(String),
+    #[error("this project is not connected to a shared location yet; add its address first")]
+    NoRemote,
+    #[error("{0}")]
+    BadRemoteUrl(String),
+    #[error("there is nothing to share yet; save a version first")]
+    NothingToShare,
+    #[error(
+        "someone else has shared changes since you last got updates; get updates first, then share again"
+    )]
+    ShareRejected,
+    #[error(
+        "the shared location did not accept your sign-in; check that you have access, and that git is set up with your credentials or ssh key"
+    )]
+    AuthFailed,
+    #[error("the shared location could not be reached; check the address and your connection")]
+    RemoteUnreachable,
+    #[error(
+        "your project and the shared copy do not share any history, so they cannot be combined"
+    )]
+    UnrelatedHistories,
     #[error("git backend: {0}")]
     Backend(String),
     #[error("{context}: {source}")]
@@ -106,6 +126,13 @@ impl GitError {
             Self::CommandFailed { .. } => "command-failed",
             Self::RevNotFound(_) => "rev-not-found",
             Self::PathNotInRev(_) => "path-not-in-rev",
+            Self::NoRemote => "no-remote",
+            Self::BadRemoteUrl(_) => "bad-remote-url",
+            Self::NothingToShare => "nothing-to-share",
+            Self::ShareRejected => "share-rejected",
+            Self::AuthFailed => "auth-failed",
+            Self::RemoteUnreachable => "remote-unreachable",
+            Self::UnrelatedHistories => "unrelated-histories",
             Self::Backend(_) => "backend",
             Self::Io { .. } => "io",
         }
