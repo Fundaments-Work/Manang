@@ -1754,11 +1754,27 @@ async function main() {
     );
     await clickText(page, "button[aria-pressed]", "Rectangle");
     const svg = await rect(page, 'svg[role="application"]');
-    await mouse(page, "mouseMoved", svg.left + 200, svg.top + 380);
-    await mouse(page, "mousePressed", svg.left + 200, svg.top + 380);
+    // Dragged up and to the left: a negative size used to draw nothing.
+    const solidRects = () =>
+      page.evaluate(
+        `[...document.querySelectorAll('svg[role="application"] rect:not([stroke-dasharray])')].filter((r) => Number(r.getAttribute("width")) > 8 && Number(r.getAttribute("height")) > 8).length`,
+      );
+    const rectsBefore = await solidRects();
     await mouse(page, "mouseMoved", svg.left + 320, svg.top + 450);
-    await mouse(page, "mouseReleased", svg.left + 320, svg.top + 450);
+    await mouse(page, "mousePressed", svg.left + 320, svg.top + 450);
+    await mouse(page, "mouseMoved", svg.left + 200, svg.top + 380);
+    check(
+      "the rectangle tool previews a box while dragging, not a line",
+      await page.evaluate(
+        `(() => { const svg = document.querySelector('svg[role="application"]'); const box = svg.querySelector('rect[stroke-dasharray="4 4"]'); return box !== null && Number(box.getAttribute("width")) > 100 && svg.querySelector('line[stroke-dasharray="4 4"]') === null; })()`,
+      ),
+    );
+    await mouse(page, "mouseReleased", svg.left + 200, svg.top + 380);
     await sleep(300);
+    check(
+      "a rectangle dragged up and left is drawn with a positive size",
+      (await solidRects()) === rectsBefore + 1,
+    );
     check(
       "drawing adds a node and marks the tab dirty",
       (await page.evaluate(`document.body.innerText.includes("5 nodes")`)) &&
