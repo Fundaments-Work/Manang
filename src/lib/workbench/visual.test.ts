@@ -73,12 +73,17 @@ describe("toolbar items", () => {
       "math",
     ]);
     expect(items.find((i) => i.id === "image")?.command).toBe("figure");
-    expect(itemsFor("markdown", ALL).find((i) => i.id === "image")?.command).toBe("image");
+    expect(itemsFor("markdown", ALL).find((i) => i.id === "image")?.command).toBe(
+      "image",
+    );
   });
 
   it("keeps a group divider only between groups that exist", () => {
     const onlyInline = ALL.filter((s) => ["bold", "italic"].includes(s.command));
-    expect(itemsFor("markdown", onlyInline).map((i) => i.groupStart)).toEqual([false, false]);
+    expect(itemsFor("markdown", onlyInline).map((i) => i.groupStart)).toEqual([
+      false,
+      false,
+    ]);
     const mixed = ALL.filter((s) => ["bold", "link"].includes(s.command));
     expect(itemsFor("markdown", mixed).map((i) => i.groupStart)).toEqual([false, true]);
   });
@@ -112,20 +117,34 @@ describe("toolbar items", () => {
 
   it("writes image sources relative to the document", () => {
     expect(relativeTo("notes.md", "figures/a.svg")).toBe("figures/a.svg");
-    expect(relativeTo("sections/results.typ", "figures/a.svg")).toBe("../figures/a.svg");
+    expect(relativeTo("sections/results.typ", "figures/a.svg")).toBe(
+      "../figures/a.svg",
+    );
     expect(relativeTo("sections/results.typ", "sections/img/a.png")).toBe("img/a.png");
     expect(relativeTo("a/b/c.md", "a/x.png")).toBe("../x.png");
   });
 });
 
 describe("a plan is one transaction", () => {
-  const apply = (text: string, anchor: number, head: number, command: string, arg?: string) => {
+  const apply = (
+    text: string,
+    anchor: number,
+    head: number,
+    command: string,
+    arg?: string,
+  ) => {
     let state = EditorState.create({
       doc: text,
       selection: { anchor, head },
       extensions: [history()],
     });
-    const edit = plan({ format: "markdown", text }, command, Math.min(anchor, head), Math.max(anchor, head), arg);
+    const edit = plan(
+      { format: "markdown", text },
+      command,
+      Math.min(anchor, head),
+      Math.max(anchor, head),
+      arg,
+    );
     expect(planFits(edit, state.doc.length)).toBe(true);
     const tr = state.update(planToSpec(edit));
     state = tr.state;
@@ -186,9 +205,16 @@ describe("visual mode rules", () => {
     expect(opensVisual(["markdown", "typst"], "typst")).toBe(true);
     expect(opensVisual("markdown", "markdown")).toBe(false);
     expect(withVisualDefault([], "markdown", true)).toEqual(["markdown"]);
-    expect(withVisualDefault(["markdown"], "typst", true)).toEqual(["markdown", "typst"]);
-    expect(withVisualDefault(["markdown", "typst"], "markdown", false)).toEqual(["typst"]);
-    expect(withVisualDefault(["markdown", "markdown", "x"], "markdown", true)).toEqual(["markdown"]);
+    expect(withVisualDefault(["markdown"], "typst", true)).toEqual([
+      "markdown",
+      "typst",
+    ]);
+    expect(withVisualDefault(["markdown", "typst"], "markdown", false)).toEqual([
+      "typst",
+    ]);
+    expect(withVisualDefault(["markdown", "markdown", "x"], "markdown", true)).toEqual([
+      "markdown",
+    ]);
     expect(withVisualDefault(undefined, "typst", false)).toEqual([]);
   });
 
