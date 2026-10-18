@@ -185,7 +185,7 @@
   // A layer picked on the canvas scrolls into view in the list.
   $effect(() => {
     const [first] = figure.selection;
-    if (first === undefined || list === undefined) return;
+    if (first === undefined || !list) return;
     list
       .querySelector<HTMLElement>(`[data-layer="${first}"]`)
       ?.scrollIntoView({ block: "nearest" });
