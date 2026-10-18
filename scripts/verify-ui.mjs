@@ -542,6 +542,20 @@ async function liveSection(browser) {
       show: `document.querySelector('section[aria-label="Settings"]')?.innerText.slice(0, 200)`,
     },
   );
+  check(
+    "Settings has a Collaboration group with the relay, the name and what the relay sees",
+    await page.evaluate(
+      `(() => { const g = document.querySelector('[data-testid="settings-collaboration"]'); const t = g?.innerText ?? ""; return !!g && t.includes("Collaboration") && t.includes("Relay address") && t.includes("Name shown to collaborators") && t.includes("encrypted data only") && t.includes("never your text"); })()`,
+    ),
+  );
+  await sleep(400);
+  check(
+    "the page scrolled to the Collaboration group",
+    await page.evaluate(
+      `(() => { const g = document.querySelector('[data-testid="settings-collaboration"]'); const r = g.getBoundingClientRect(); return r.top < window.innerHeight / 2; })()`,
+    ),
+  );
+  await shoot(page, "settings-collaboration");
   await press(page, "Escape");
   await press(page, "Escape");
   // -- The Share button and popover, before any relay is set. ------------
