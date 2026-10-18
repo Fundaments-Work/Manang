@@ -1652,6 +1652,17 @@ async function visualSection(browser) {
   );
   await select(TEXT.length);
 
+  // The toolbar is one Tab stop; the arrow keys move along it.
+  await page.evaluate(`document.querySelector('[data-visual="bold"]').focus()`);
+  await press(page, "ArrowRight", { wait: 150 });
+  check(
+    "arrow keys move along the toolbar",
+    await page.evaluate(
+      `document.activeElement?.getAttribute("data-visual") === "italic" && document.querySelectorAll('[data-testid="visual-toolbar"] button[tabindex="0"]').length === 1`,
+    ),
+  );
+  await select(TEXT.length);
+
   // -- Toolbar and keyboard: only the intended text changes. ---------------------
   const before = await docText();
   const plainAt = await at("plain");

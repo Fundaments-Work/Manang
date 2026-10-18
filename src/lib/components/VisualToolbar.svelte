@@ -179,6 +179,29 @@
     }
   }
 
+  /** Roving focus (WAI-ARIA toolbar): one Tab stop, arrows move along the buttons. */
+  let rove = $state(0);
+  let bar: HTMLDivElement | undefined = $state();
+
+  function onkeydown(event: KeyboardEvent): void {
+    const keys = ["ArrowRight", "ArrowLeft", "Home", "End"];
+    if (!keys.includes(event.key) || bar === undefined) return;
+    const buttons = [
+      ...bar.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
+    ];
+    const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (buttons.length === 0 || at === -1) return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : (at + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) %
+            buttons.length;
+    buttons[next]?.focus();
+  }
+
   const hasMenu = (item: ToolbarItem): boolean =>
     item.control === "heading" || item.control === "math" || item.control === "insert";
 </script>
@@ -188,8 +211,11 @@
   role="toolbar"
   aria-label="Formatting"
   data-testid="visual-toolbar"
+  tabindex="-1"
+  bind:this={bar}
+  {onkeydown}
 >
-  {#each items as item (item.id)}
+  {#each items as item, index (item.id)}
     {#if item.groupStart === true}
       <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
     {/if}
@@ -203,6 +229,8 @@
       aria-haspopup={hasMenu(item) ? "menu" : undefined}
       aria-keyshortcuts={item.shortcut}
       title={text}
+      tabindex={index === Math.min(rove, items.length - 1) ? 0 : -1}
+      onfocus={() => (rove = index)}
       disabled={isDisabled(states, item.command)}
       onmousedown={(event) => event.preventDefault()}
       onclick={(event) => activate(item, event)}
