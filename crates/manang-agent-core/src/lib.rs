@@ -15,6 +15,7 @@ pub mod price;
 pub mod provider;
 pub mod redact;
 pub mod request;
+pub mod sse;
 
 pub use block::{BlockKind, ContentBlock, Message, Role, ToolUseView};
 pub use error::CoreError;
@@ -30,3 +31,4 @@ pub use price::{CostEstimate, Price, PriceTable};
 pub use provider::{EventStream, Provider};
 pub use redact::{Redaction, RedactionConfig, RedactionKind, RedactionSpan, redact};
 pub use request::{CacheBreakpoint, ChatRequest, MAX_CACHE_BREAKPOINTS, RiskClass, ToolSpec};
+pub use sse::{MAX_EVENT_BYTES, SseEvent, SseParser};
