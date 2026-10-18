@@ -6634,6 +6634,7 @@ dependencies = [
  "criterion 0.5.1",
  "insta",
  "manang-kernel",
+ "manang-visual",
  "parking_lot",
  "proptest",
  "quick-xml 0.42.0",

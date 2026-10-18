@@ -17,6 +17,7 @@ mod jump;
 mod math;
 mod plugin;
 mod svgpdf;
+pub mod visual;
 mod world;
 
 pub use compiler::{CompileReport, CompileRequest, Compiler, CompilerConfig, MAX_SOURCES};
