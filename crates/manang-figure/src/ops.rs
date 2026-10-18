@@ -201,6 +201,10 @@ pub enum FigureOp {
         width: f64,
         /// New height.
         height: f64,
+        /// Page background: a palette token or `#rrggbb`; `none` makes it
+        /// transparent; absent leaves it as it is.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        background: Option<String>,
     },
     /// Several operations as one undo step.
     Batch {
@@ -272,9 +276,12 @@ pub struct Delta {
     after: Vec<(String, Option<FigureNode>)>,
     order_before: Option<Vec<String>>,
     order_after: Option<Vec<String>>,
-    canvas_before: Option<(f64, f64)>,
-    canvas_after: Option<(f64, f64)>,
+    canvas_before: Option<Canvas>,
+    canvas_after: Option<Canvas>,
 }
+
+/// The page: width, height, background.
+type Canvas = (f64, f64, Option<String>);
 
 impl Delta {
     /// Whether nothing changed.
@@ -294,7 +301,7 @@ impl Delta {
             scene,
             &self.before,
             self.order_before.as_deref(),
-            self.canvas_before,
+            self.canvas_before.as_ref(),
         );
     }
 
@@ -304,7 +311,7 @@ impl Delta {
             scene,
             &self.after,
             self.order_after.as_deref(),
-            self.canvas_after,
+            self.canvas_after.as_ref(),
         );
     }
 }
@@ -313,7 +320,7 @@ fn apply_side(
     scene: &mut FigureScene,
     nodes: &[(String, Option<FigureNode>)],
     order: Option<&[String]>,
-    canvas: Option<(f64, f64)>,
+    canvas: Option<&Canvas>,
 ) {
     for (id, value) in nodes {
         match value {
@@ -330,9 +337,10 @@ fn apply_side(
     if let Some(order) = order {
         reorder_to(scene, order);
     }
-    if let Some((w, h)) = canvas {
-        scene.width = w;
-        scene.height = h;
+    if let Some((w, h, bg)) = canvas {
+        scene.width = *w;
+        scene.height = *h;
+        scene.background = bg.clone();
     }
 }
 
@@ -359,7 +367,7 @@ struct Tx<'a> {
     before: Vec<(String, Option<FigureNode>)>,
     seen: HashSet<String>,
     order_before: Option<Vec<String>>,
-    canvas_before: Option<(f64, f64)>,
+    canvas_before: Option<Canvas>,
 }
 
 impl<'a> Tx<'a> {
@@ -400,7 +408,8 @@ impl<'a> Tx<'a> {
             .ok_or_else(|| FigureError::NodeNotFound(id.to_owned()))
     }
 
-    fn insert(&mut self, index: Option<usize>, node: FigureNode) -> Result<(), FigureError> {
+    fn insert(&mut self, index: Option<usize>, mut node: FigureNode) -> Result<(), FigureError> {
+        node.normalise_colours();
         node.validate()?;
         validate_colours(node.style())?;
         if self.scene.node_by_id(node.id()).is_some() {
@@ -432,12 +441,21 @@ impl<'a> Tx<'a> {
         reorder_to(self.scene, order);
     }
 
-    fn set_canvas(&mut self, width: f64, height: f64) {
+    fn set_canvas(&mut self, width: f64, height: f64, background: Option<&str>) {
         if self.canvas_before.is_none() {
-            self.canvas_before = Some((self.scene.width, self.scene.height));
+            self.canvas_before = Some((
+                self.scene.width,
+                self.scene.height,
+                self.scene.background.clone(),
+            ));
         }
         self.scene.width = width;
         self.scene.height = height;
+        match background {
+            Some("none") => self.scene.background = None,
+            Some(bg) => self.scene.background = Some(palette::normalize_colour(bg)),
+            None => {}
+        }
     }
 
     fn rollback(self) {
@@ -445,7 +463,7 @@ impl<'a> Tx<'a> {
             self.scene,
             &self.before,
             self.order_before.as_deref(),
-            self.canvas_before,
+            self.canvas_before.as_ref(),
         );
     }
 
@@ -464,7 +482,11 @@ impl<'a> Tx<'a> {
             Some(old) if old != order_after => (Some(old), Some(order_after)),
             _ => (None, None),
         };
-        let current = (self.scene.width, self.scene.height);
+        let current = (
+            self.scene.width,
+            self.scene.height,
+            self.scene.background.clone(),
+        );
         let (canvas_before, canvas_after) = match self.canvas_before {
             Some(old) if old != current => (Some(old), Some(current)),
             _ => (None, None),
@@ -481,13 +503,20 @@ impl<'a> Tx<'a> {
 }
 
 fn validate_colours(style: &Style) -> Result<(), FigureError> {
-    for value in [&style.stroke, &style.fill].into_iter().flatten() {
+    for value in style.colours() {
         if !palette::is_colour(value) {
             return Err(FigureError::InvalidArgument(format!(
                 "unknown colour `{value}`; use none, a palette token ({}) or #rrggbb",
                 palette::token_names().join(", ")
             )));
         }
+    }
+    if let Some(o) = style.fill_opacity
+        && !(0.0..=100.0).contains(&o)
+    {
+        return Err(FigureError::InvalidArgument(
+            "fillOpacity must be between 0 and 100".to_owned(),
+        ));
     }
     if let Some(o) = style.opacity
         && !(0.0..=100.0).contains(&o)
@@ -550,10 +579,12 @@ fn run(tx: &mut Tx<'_>, op: &FigureOp) -> Result<(), FigureError> {
         }
         FigureOp::AddNode { node } => tx.insert(None, node.clone()),
         FigureOp::UpdateNode { node } => {
+            let mut node = node.clone();
+            node.normalise_colours();
             node.validate()?;
             validate_colours(node.style())?;
             let slot = tx.get_mut(node.id())?;
-            *slot = node.clone();
+            *slot = node;
             Ok(())
         }
         FigureOp::Update { id, set } => update(tx, id, set),
@@ -630,8 +661,9 @@ fn run(tx: &mut Tx<'_>, op: &FigureOp) -> Result<(), FigureError> {
                 fill: fill.clone(),
                 ..Style::default()
             };
-            let patch = style.clone().unwrap_or_default().merged(&legacy);
+            let mut patch = style.clone().unwrap_or_default().merged(&legacy);
             validate_colours(&patch)?;
+            patch.normalise_colours();
             if let Some(s) = size {
                 finite(&[*s])?;
             }
@@ -649,13 +681,24 @@ fn run(tx: &mut Tx<'_>, op: &FigureOp) -> Result<(), FigureError> {
             }
             Ok(())
         }
-        FigureOp::SetCanvas { width, height } => {
+        FigureOp::SetCanvas {
+            width,
+            height,
+            background,
+        } => {
+            if let Some(bg) = background
+                && !palette::is_colour(bg)
+            {
+                return Err(FigureError::InvalidArgument(format!(
+                    "the background `{bg}` is not none, a palette token or #rrggbb"
+                )));
+            }
             if !(width.is_finite() && height.is_finite() && *width > 0.0 && *height > 0.0) {
                 return Err(FigureError::InvalidArgument(
                     "the page size must be positive and finite".to_owned(),
                 ));
             }
-            tx.set_canvas(*width, *height);
+            tx.set_canvas(*width, *height, background.as_deref());
             Ok(())
         }
         FigureOp::Clear => {
@@ -719,8 +762,9 @@ fn update(tx: &mut Tx<'_>, id: &str, set: &Map<String, Value>) -> Result<(), Fig
             }
         }
     }
-    let node: FigureNode = serde_json::from_value(value)
+    let mut node: FigureNode = serde_json::from_value(value)
         .map_err(|e| FigureError::InvalidArgument(format!("cannot update `{id}`: {e}")))?;
+    node.normalise_colours();
     node.validate()?;
     validate_colours(node.style())?;
     *tx.get_mut(id)? = node;
@@ -826,11 +870,27 @@ fn resize(tx: &mut Tx<'_>, id: &str, to: Rect) -> Result<(), FigureError> {
             }
         }
         FigureNode::Math(m) => {
-            if from.height > 0.0 && to.height > 0.0 {
-                m.size *= to.height / from.height;
-            }
+            // A formula scales as a whole: by whichever side moved more.
+            let kw = if from.width > 0.0 && to.width > 0.0 {
+                to.width / from.width
+            } else {
+                1.0
+            };
+            let kh = if from.height > 0.0 && to.height > 0.0 {
+                to.height / from.height
+            } else {
+                1.0
+            };
+            let k = if (kw - 1.0).abs() > (kh - 1.0).abs() {
+                kw
+            } else {
+                kh
+            };
+            m.size *= k;
+            m.width = from.width * k;
+            m.height = from.height * k;
             m.x = to.x;
-            m.y = to.y + m.size;
+            m.y = to.y;
         }
         other => {
             if let Some(s) = other.shape_mut() {

@@ -14,6 +14,7 @@
 mod error;
 mod geometry;
 mod layout;
+pub mod math;
 mod mermaid;
 mod migrate;
 mod ops;
@@ -34,6 +35,7 @@ pub use geometry::{
     points_bounds, polygon_to_path, rotate_point, round_coord, scene_bounds, union_rect,
 };
 pub use layout::{Direction, layout_moves};
+pub use math::{MathError, MathSvg, render_math};
 pub use mermaid::{nodes_from_layout, to_mermaid};
 pub use ops::{AlignEdge, Axis, Delta, End, FigureOp, ZOrder, apply as apply_op, next_group_id};
 pub use palette::Theme;
@@ -41,8 +43,8 @@ pub use plugin::{FigurePlugin, manifest, plugin, plugin_with_events, plugin_with
 pub use route::{BIND_GAP, elbow, route};
 pub use scene::{
     Binding, ConnectorNode, FigureNode, FigureScene, FontFamily, FreedrawNode, Head, Heads,
-    MathNode, Rect, Routing, SCENE_VERSION, ShapeNode, StrokeSample, StrokeStyle, Style, TextAlign,
-    Vec2, format_node_id, parse_node_id,
+    MathLanguage, MathNode, Rect, Routing, SCENE_VERSION, ShapeNode, StrokeSample, StrokeStyle,
+    Style, TextAlign, Vec2, format_node_id, parse_node_id,
 };
 pub use store::{
     ApplyResult, DEFAULT_MAX_HISTORY, DEFAULT_SCENE_HEIGHT, DEFAULT_SCENE_WIDTH, FigureDocument,

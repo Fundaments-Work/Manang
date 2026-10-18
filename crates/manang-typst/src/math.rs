@@ -319,6 +319,12 @@ fn recolour(svg: &str, color: &str, width: f64, height: f64) -> Result<String, S
             if is_root && matches!(key, "width" | "height" | "viewBox") {
                 continue;
             }
+            // SVG 2 `href` needs no namespace declaration, so the formula can
+            // be nested in any document without declaring `xlink` there.
+            if key == "xmlns:xlink" || key == "xmlns:h5" {
+                continue;
+            }
+            let key = if key == "xlink:href" { "href" } else { key };
             let value = attr
                 .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                 .map_err(|e| e.to_string())?;

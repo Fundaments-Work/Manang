@@ -5,7 +5,8 @@
 
 use manang_figure::{
     AlignEdge, Axis, Binding, ConnectorNode, End, FigureDocument, FigureNode, FigureOp,
-    FigureScene, FreedrawNode, Routing, ShapeNode, StrokeSample, Style, Vec2, ZOrder,
+    FigureScene, FreedrawNode, MathLanguage, MathNode, Routing, ShapeNode, StrokeSample, Style,
+    Vec2, ZOrder,
 };
 use proptest::prelude::*;
 use serde_json::{Map, Value, json};
@@ -36,12 +37,16 @@ fn style() -> impl Strategy<Value = Style> {
         prop::option::of(prop::sample::select(vec!["none", "surface", "orange"])),
         prop::option::of(0u8..3),
         prop::option::of(1u8..5),
+        prop::option::of(prop::sample::select(vec!["sage", "#0a1b2c"])),
+        prop::option::of(0u8..=10),
     )
-        .prop_map(|(stroke, fill, roughness, w)| Style {
+        .prop_map(|(stroke, fill, roughness, w, label, fill_opacity)| Style {
             stroke: stroke.map(str::to_owned),
             fill: fill.map(str::to_owned),
             roughness,
             stroke_width: w.map(f64::from),
+            label_color: label.map(str::to_owned),
+            fill_opacity: fill_opacity.map(|p| f64::from(p) * 10.0),
             ..Style::default()
         })
 }
@@ -112,12 +117,36 @@ fn freedraw(id: String) -> impl Strategy<Value = FigureNode> {
     })
 }
 
+fn math(id: String) -> impl Strategy<Value = FigureNode> {
+    (
+        coord(),
+        coord(),
+        "[a-z^_ ]{1,10}",
+        any::<bool>(),
+        size(),
+        style(),
+    )
+        .prop_map(move |(x, y, source, latex, measured, style)| {
+            let language = if latex {
+                MathLanguage::Latex
+            } else {
+                MathLanguage::Typst
+            };
+            let mut m = MathNode::new(id.clone(), x, y, source, language, 18.0);
+            m.width = measured.round();
+            m.height = (measured / 2.0).round();
+            m.style = style;
+            FigureNode::Math(m)
+        })
+}
+
 fn node() -> impl Strategy<Value = FigureNode> {
     id().prop_flat_map(|id| {
         prop_oneof![
             4 => shape(id.clone()),
             2 => connector(id.clone()),
-            1 => freedraw(id),
+            1 => freedraw(id.clone()),
+            1 => math(id),
         ]
     })
 }
@@ -171,7 +200,12 @@ fn op() -> impl Strategy<Value = FigureOp> {
             size: None,
             color: None,
         }),
-        1 => (size(), size()).prop_map(|(width, height)| FigureOp::SetCanvas { width, height }),
+        1 => (size(), size(), prop::option::of(prop::sample::select(vec!["none", "paper", "#102030"])))
+            .prop_map(|(width, height, bg)| FigureOp::SetCanvas {
+                width,
+                height,
+                background: bg.map(str::to_owned),
+            }),
         1 => Just(FigureOp::Clear),
     ];
     leaf.prop_recursive(1, 8, 4, |inner| {

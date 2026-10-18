@@ -24,7 +24,34 @@ pub fn to_current(mut value: Value) -> Result<Value, FigureError> {
     if version < 2 {
         value = v1_to_v2(value)?;
     }
+    migrate_math_nodes(&mut value);
     Ok(value)
+}
+
+/// Formulas written before real math rendering kept `tex` and a baseline
+/// `y`. They become LaTeX `source` (that is what `tex` meant) with a
+/// top-left `y`, so the box they occupied is unchanged. This runs on every
+/// version: the first v2 files had `tex` too.
+fn migrate_math_nodes(value: &mut Value) {
+    let Some(nodes) = value.get_mut("nodes").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for node in nodes {
+        let Some(map) = node.as_object_mut() else {
+            continue;
+        };
+        if map.get("kind").and_then(Value::as_str) != Some("math") {
+            continue;
+        }
+        let Some(tex) = map.remove("tex") else {
+            continue;
+        };
+        map.insert("source".to_owned(), tex);
+        map.insert("language".to_owned(), json!("latex"));
+        let size = num(map, "size");
+        let y = num(map, "y");
+        map.insert("y".to_owned(), json!(y - size));
+    }
 }
 
 fn take(map: &mut Map<String, Value>, key: &str) -> Option<Value> {
@@ -216,5 +243,44 @@ mod tests {
         )
         .expect_err("refused");
         assert!(err.to_string().contains("blob"));
+    }
+
+    #[test]
+    fn old_formulas_become_latex_sources_in_the_same_box() {
+        // A v2 file from before real math rendering: `tex` and a baseline y.
+        let v2 = json!({
+            "version": 2, "width": 800, "height": 600,
+            "nodes": [{ "kind": "math", "id": "n1", "x": 10, "y": 50, "tex": "E = mc^2", "size": 20,
+                        "style": { "stroke": "#B3D17A" } }]
+        });
+        let scene = FigureScene::from_value(v2).expect("reads");
+        let FigureNode::Math(m) = &scene.nodes[0] else {
+            panic!("a formula")
+        };
+        assert_eq!(m.source, "E = mc^2");
+        assert_eq!(m.language.as_str(), "latex");
+        assert_eq!((m.x, m.y, m.size), (10.0, 30.0, 20.0));
+        // Hex colours are normalised on read, and the file form is stable.
+        assert_eq!(m.style.stroke.as_deref(), Some("#b3d17a"));
+        let text = scene.to_file_json().expect("writes");
+        assert!(text.contains("\"source\"") && text.contains("\"language\": \"latex\""));
+        assert!(!text.contains("\"tex\""));
+        assert_eq!(FigureScene::from_json(&text).expect("reads"), scene);
+        // v1 formulas follow the same road.
+        let v1 = json!({ "version": 1, "width": 100, "height": 100, "nodes": [{ "kind": "math", "id": "n1", "x": 1, "y": 40, "tex": "x", "size": 16 }] });
+        let scene = FigureScene::from_value(v1).expect("reads");
+        assert!(matches!(&scene.nodes[0], FigureNode::Math(m) if m.y == 24.0));
+    }
+
+    #[test]
+    fn malformed_hex_is_a_read_error_not_a_silent_fallback() {
+        let bad = json!({ "version": 2, "width": 10, "height": 10, "nodes": [
+            { "kind": "rect", "id": "n1", "x": 0, "y": 0, "width": 5, "height": 5, "style": { "stroke": "#12345" } }
+        ]});
+        let err = FigureScene::from_value(bad).expect_err("refused");
+        assert!(err.to_string().contains("#12345"), "{err}");
+        let bad_bg =
+            json!({ "version": 2, "width": 10, "height": 10, "background": "#zzz", "nodes": [] });
+        assert!(FigureScene::from_value(bad_bg).is_err());
     }
 }

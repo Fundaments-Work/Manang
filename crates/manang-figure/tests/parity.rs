@@ -6,7 +6,7 @@
 //! and `src/lib/figure/parity.test.ts` fails when TypeScript does.
 
 use manang_figure::sketch::{self, Rng};
-use manang_figure::text::wrap;
+use manang_figure::text::{fit_label, wrap};
 use manang_figure::{FigureDocument, FigureNode, FigureOp, FigureScene, FontFamily, Rect, route};
 use serde_json::{Value, json};
 
@@ -92,6 +92,24 @@ fn op_cases() -> Vec<(&'static str, Vec<Value>)> {
                 json!({ "op": "set-canvas", "width": 400, "height": 300 }),
                 json!({ "op": "batch", "ops": [{ "op": "move", "ids": ["a"], "dx": 1, "dy": 2 }, { "op": "remove", "ids": ["c"] }] }),
                 json!({ "op": "clear" }),
+            ],
+        ),
+        (
+            "colours, background and formulas",
+            vec![
+                base.clone(),
+                json!({ "op": "add", "nodes": [
+                    { "kind": "math", "id": "m", "x": 20, "y": 300, "source": "x^2", "language": "latex", "size": 20, "width": 40, "height": 28 },
+                    { "kind": "math", "id": "m2", "x": 120, "y": 300, "source": "y", "size": 20 }
+                ] }),
+                json!({ "op": "set-style", "ids": ["a", "b", "m"], "style": { "stroke": "#ABCDEF", "labelColor": "#0A0B0C", "fillOpacity": 30 } }),
+                json!({ "op": "set-canvas", "width": 960, "height": 540, "background": "#FAFAFA" }),
+                json!({ "op": "resize", "id": "m", "x": 30, "y": 310, "width": 80, "height": 56 }),
+                json!({ "op": "resize", "id": "m2", "x": 130, "y": 310, "width": 50, "height": 28 }),
+                json!({ "op": "update", "id": "m", "set": { "source": "x^3", "style": { "labelColor": null } } }),
+                json!({ "op": "bind", "id": "e1", "end": "end", "node": "m" }),
+                json!({ "op": "set-canvas", "width": 960, "height": 540, "background": "none" }),
+                json!({ "op": "set-style", "ids": ["a"], "style": { "stroke": "#12" } }),
             ],
         ),
         (
@@ -201,6 +219,26 @@ fn build() -> Value {
             "lines": wrap(text, width, size, family) }),
         );
     }
+    let mut fits = Vec::new();
+    for (text, width, height, size, family) in [
+        ("Validate input", 50.0, 100.0, 16.0, FontFamily::Sans),
+        ("Is it ok", 80.0, 100.0, 16.0, FontFamily::Sans),
+        ("Supercalifragilistic", 40.0, 100.0, 16.0, FontFamily::Sans),
+        (
+            "one two three four five six",
+            60.0,
+            40.0,
+            16.0,
+            FontFamily::Mono,
+        ),
+        ("", 60.0, 40.0, 16.0, FontFamily::Sans),
+    ] {
+        let (lines, fitted) = fit_label(text, width, height, size, family);
+        fits.push(
+            json!({ "text": text, "width": width, "height": height, "size": size,
+            "family": family, "lines": lines, "fitted": fitted }),
+        );
+    }
     // Routing against a fixed scene with a rotated shape.
     let mut scene: FigureScene = serde_json::from_value(json!({
         "version": 2, "width": 800, "height": 600, "nodes": [
@@ -245,6 +283,7 @@ fn build() -> Value {
         "connectors": connectors,
         "seeds": seeds,
         "wraps": wraps,
+        "fits": fits,
         "routes": { "scene": serde_json::from_value::<Value>(json!({
             "version": 2, "width": 800, "height": 600, "nodes": [
                 shape("rect", "a", 0.0, 0.0, json!({})),

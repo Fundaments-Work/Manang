@@ -1,16 +1,18 @@
 //! Kernel plugin interface for the figure studio.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::Arc;
 
 use manang_kernel::{Context, EventBus, Hook, Manifest, Payload, Plugin, PluginError};
+use parking_lot::Mutex;
 use serde_json::{Value, json};
 
 use crate::error::FigureError;
+use crate::math::{self, MathError, MathSvg};
 use crate::ops::FigureOp;
 use crate::palette::Theme;
-use crate::scene::{FigureNode, FigureScene, ShapeNode, Vec2};
+use crate::scene::{FigureNode, FigureScene, MathLanguage, MathNode, ShapeNode, Vec2};
 use crate::store::{FigureId, FigureStore, resolve_figure_paths};
 use crate::svg::{SvgExportOptions, render_svg_with};
 use crate::tools::{self, Target, ToolError};
@@ -37,11 +39,20 @@ pub fn plugin_with_events(events: EventBus) -> impl Plugin {
     FigurePlugin::new().with_events(events)
 }
 
+/// Rendered formulas kept between calls: `(language, source, size)` to the
+/// rendering. Saving, exporting and the canvas ask for the same formulas
+/// again and again; a render is milliseconds, a lookup is not. Cleared when
+/// it grows past [`MATH_CACHE_LIMIT`].
+type MathCache = Arc<Mutex<HashMap<(MathLanguage, String, u64), MathSvg>>>;
+
+const MATH_CACHE_LIMIT: usize = 256;
+
 /// Exposes a [`FigureStore`] as kernel commands and agent tools.
 #[derive(Clone)]
 pub struct FigurePlugin {
     store: Arc<FigureStore>,
     events: Option<EventBus>,
+    math: MathCache,
 }
 
 impl Default for FigurePlugin {
@@ -53,10 +64,7 @@ impl Default for FigurePlugin {
 impl FigurePlugin {
     /// A plugin with an empty store.
     pub fn new() -> Self {
-        Self {
-            store: Arc::new(FigureStore::new()),
-            events: None,
-        }
+        Self::with_store(Arc::new(FigureStore::new()))
     }
 
     /// A plugin over an existing store.
@@ -64,6 +72,7 @@ impl FigurePlugin {
         Self {
             store,
             events: None,
+            math: MathCache::default(),
         }
     }
 
@@ -139,9 +148,140 @@ fn pdf_for(ctx: &Context<'_>, svg: &str, force: bool) -> Result<Option<String>, 
     }
 }
 
+/// Typst math through the Typst plugin (`typst.math-to-svg`).
+fn typst_math(ctx: &Context<'_>, source: &str, size: f64) -> Result<MathSvg, MathError> {
+    const COMMAND: &str = "typst.math-to-svg";
+    if !ctx.has_command(COMMAND) {
+        return Err(MathError::new(
+            "the Typst plugin is not available, so Typst formulas cannot be rendered",
+        ));
+    }
+    let answer = ctx.invoke(
+        COMMAND,
+        Payload::Json(json!({ "source": source, "size": size })),
+    );
+    match answer {
+        Ok(Payload::Binary(bytes)) => {
+            let svg = String::from_utf8(bytes.to_vec())
+                .map_err(|_| MathError::new("the Typst plugin answered with invalid text"))?;
+            let (width, height) =
+                math::svg_size(&svg).ok_or_else(|| MathError::new("the rendering has no size"))?;
+            Ok(MathSvg { svg, width, height })
+        }
+        Ok(_) => Err(MathError::new("the Typst plugin answered without an SVG")),
+        Err(e) => {
+            let text = e.to_string();
+            Err(MathError::from_tagged(&text).unwrap_or_else(|| MathError::new(text)))
+        }
+    }
+}
+
+impl FigurePlugin {
+    /// Renders a formula, through the cache.
+    pub fn render_formula(
+        &self,
+        ctx: &Context<'_>,
+        language: MathLanguage,
+        source: &str,
+        size: f64,
+    ) -> Result<MathSvg, MathError> {
+        let key = (language, source.to_owned(), size.to_bits());
+        if let Some(hit) = self.math.lock().get(&key) {
+            return Ok(hit.clone());
+        }
+        let rendered = math::render_math(language, source, size, |s, z| typst_math(ctx, s, z))?;
+        let mut cache = self.math.lock();
+        if cache.len() >= MATH_CACHE_LIMIT {
+            cache.clear();
+        }
+        cache.insert(key, rendered.clone());
+        Ok(rendered)
+    }
+
+    /// Renderings of every formula in `scene`, keyed by node id. Formulas
+    /// that fail draw as a placeholder.
+    fn math_embeds(&self, ctx: &Context<'_>, scene: &FigureScene) -> BTreeMap<String, String> {
+        let mut out = BTreeMap::new();
+        for node in &scene.nodes {
+            if let FigureNode::Math(m) = node
+                && let Ok(rendered) = self.render_formula(ctx, m.language, &m.source, m.size)
+            {
+                out.insert(m.id.clone(), rendered.svg);
+            }
+        }
+        out
+    }
+
+    /// Renders new and changed formulas of an operation and records their
+    /// measured box, so selection and arrow binding know their size.
+    fn measure_formulas(
+        &self,
+        ctx: &Context<'_>,
+        scene: &FigureScene,
+        op: &mut FigureOp,
+    ) -> Result<(), ToolError> {
+        let fail = |id: &str, e: MathError| ToolError {
+            code: "math_error",
+            message: format!("formula `{id}`: {e}"),
+        };
+        match op {
+            FigureOp::Add { nodes, .. } => {
+                for node in nodes {
+                    if let FigureNode::Math(m) = node {
+                        let r = self
+                            .render_formula(ctx, m.language, &m.source, m.size)
+                            .map_err(|e| fail(&m.id, e))?;
+                        m.width = r.width;
+                        m.height = r.height;
+                    }
+                }
+            }
+            FigureOp::Batch { ops } => {
+                for op in ops {
+                    self.measure_formulas(ctx, scene, op)?;
+                }
+            }
+            FigureOp::Update { id, set } => {
+                let Some(FigureNode::Math(current)) = scene.node_by_id(id) else {
+                    return Ok(());
+                };
+                if !["source", "language", "size"]
+                    .iter()
+                    .any(|k| set.contains_key(*k))
+                {
+                    return Ok(());
+                }
+                let mut next: MathNode = current.clone();
+                if let Some(s) = set.get("source").and_then(Value::as_str) {
+                    s.clone_into(&mut next.source);
+                }
+                if let Some(l) = set.get("language").and_then(Value::as_str)
+                    && let Ok(l) = l.parse()
+                {
+                    next.language = l;
+                }
+                if let Some(z) = set.get("size").and_then(Value::as_f64) {
+                    next.size = z;
+                }
+                let r = self
+                    .render_formula(ctx, next.language, &next.source, next.size)
+                    .map_err(|e| fail(id, e))?;
+                set.insert("width".to_owned(), json!(r.width));
+                set.insert("height".to_owned(), json!(r.height));
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
 /// Mermaid blocks rendered by the diagram plugin, for export. Blocks that
 /// fail (or no diagram plugin) draw as a labelled placeholder.
-fn embeds_for(ctx: &Context<'_>, scene: &FigureScene, theme: Theme) -> BTreeMap<String, String> {
+fn mermaid_embeds(
+    ctx: &Context<'_>,
+    scene: &FigureScene,
+    theme: Theme,
+) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     if !ctx.has_command("diagram.render") {
         return out;
@@ -167,6 +307,19 @@ fn embeds_for(ctx: &Context<'_>, scene: &FigureScene, theme: Theme) -> BTreeMap<
 }
 
 impl FigurePlugin {
+    /// Everything the renderer draws from other plugins: Mermaid blocks and
+    /// formulas, keyed by node id.
+    fn embeds_for(
+        &self,
+        ctx: &Context<'_>,
+        scene: &FigureScene,
+        theme: Theme,
+    ) -> BTreeMap<String, String> {
+        let mut out = mermaid_embeds(ctx, scene, theme);
+        out.extend(self.math_embeds(ctx, scene));
+        out
+    }
+
     fn target(&self, a: &Value) -> Result<FigureId, ToolError> {
         let target: Target = serde_json::from_value(json!({
             "figure": a.get("figure"),
@@ -214,7 +367,8 @@ impl FigurePlugin {
                 Ok(out)
             }
             "figure.add-shapes" => {
-                let (op, ids) = tools::add_shapes(&scene, a)?;
+                let (mut op, ids) = tools::add_shapes(&scene, a)?;
+                self.measure_formulas(ctx, &scene, &mut op)?;
                 let shapes: Vec<Value> = match &op {
                     FigureOp::Add { nodes, .. } => nodes.iter().map(tools::shape_summary).collect(),
                     _ => Vec::new(),
@@ -228,7 +382,8 @@ impl FigurePlugin {
                 self.commit(id, &op, ids)
             }
             "figure.update" => {
-                let (op, ids) = tools::update(&scene, a)?;
+                let (mut op, ids) = tools::update(&scene, a)?;
+                self.measure_formulas(ctx, &scene, &mut op)?;
                 self.commit(id, &op, ids)
             }
             "figure.remove" => {
@@ -370,7 +525,7 @@ impl FigurePlugin {
                 message: format!("unknown format `{format}`; use svg or pdf"),
             });
         }
-        let embeds = embeds_for(ctx, scene, Theme::Print);
+        let embeds = self.embeds_for(ctx, scene, Theme::Print);
         let saved = self.store.save(Some(id), None, &embeds)?;
         let pdf = if format == "pdf" || ctx.has_command("project.export-pdf") {
             pdf_for(ctx, &saved.svg, format == "pdf").map_err(|e| ToolError {
@@ -492,7 +647,7 @@ impl Plugin for FigurePlugin {
                 let fig_id = id(&a)?;
                 let path = a.get("path").and_then(Value::as_str).map(Path::new);
                 let scene = self.store.get(fig_id).map_err(failed)?;
-                let embeds = embeds_for(ctx, &scene, Theme::Print);
+                let embeds = self.embeds_for(ctx, &scene, Theme::Print);
                 let saved = self.store.save(fig_id, path, &embeds).map_err(failed)?;
                 let pdf = pdf_for(ctx, &saved.svg, false)?;
                 let mut out = serde_json::to_value(saved).map_err(failed)?;
@@ -533,7 +688,7 @@ impl Plugin for FigurePlugin {
                 let scene = FigureScene::from_value(scene_val.clone())
                     .map_err(|e| PluginError::Failed(format!("invalid `scene`: {e}")))?;
                 let options = export_options(&a)?;
-                let embeds = embeds_for(ctx, &scene, options.theme);
+                let embeds = self.embeds_for(ctx, &scene, options.theme);
                 let svg = render_svg_with(&scene, &options, &embeds);
                 Ok(Payload::Binary(Arc::from(svg.into_bytes())))
             }
@@ -541,9 +696,27 @@ impl Plugin for FigurePlugin {
                 let fig_id = id(&a)?;
                 let options = export_options(&a)?;
                 let scene = self.store.get(fig_id).map_err(failed)?;
-                let embeds = embeds_for(ctx, &scene, options.theme);
+                let embeds = self.embeds_for(ctx, &scene, options.theme);
                 let svg = render_svg_with(&scene, &options, &embeds);
                 Ok(Payload::Binary(Arc::from(svg.into_bytes())))
+            }
+            // Stateless: one formula to vector SVG (binary), for the canvas.
+            "figure.render-math" => {
+                let language: MathLanguage = match a.get("language").and_then(Value::as_str) {
+                    None => MathLanguage::Typst,
+                    Some(l) => l.parse().map_err(PluginError::Failed)?,
+                };
+                let source = string(&a, "source")?;
+                let size = match a.get("size") {
+                    None | Some(Value::Null) => 24.0,
+                    Some(v) => v
+                        .as_f64()
+                        .ok_or_else(|| PluginError::Failed("`size` must be a number".to_owned()))?,
+                };
+                let rendered = self
+                    .render_formula(ctx, language, source, size)
+                    .map_err(|e| PluginError::Failed(e.to_tagged()))?;
+                Ok(Payload::Binary(Arc::from(rendered.svg.into_bytes())))
             }
             "figure.hit-test" => {
                 let fig_id = id(&a)?;
