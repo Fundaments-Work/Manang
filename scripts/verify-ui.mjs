@@ -667,7 +667,11 @@ async function main() {
     );
 
     // Filter by LaTeX
-    await clickText(page, 'section[aria-label="Home"] button', "LaTeX");
+    await clickText(
+      page,
+      '[aria-label="Filter templates by language"] button',
+      "LaTeX",
+    );
     await sleep(150);
     const latexCount = await page.evaluate(
       `document.querySelectorAll('[data-template-card]').length`,
@@ -682,7 +686,7 @@ async function main() {
     );
 
     // Filter by All
-    await clickText(page, 'section[aria-label="Home"] button', "All");
+    await clickText(page, '[aria-label="Filter templates by language"] button', "All");
     await sleep(150);
     const allCount = await page.evaluate(
       `document.querySelectorAll('[data-template-card]').length`,
@@ -695,7 +699,11 @@ async function main() {
     );
     check("article-typst card is present", articleCardExists);
 
-    await click(page, '[data-template-card="article-typst"] button');
+    await clickText(
+      page,
+      '[data-template-card="article-typst"] button',
+      "Use template",
+    );
     await sleep(250);
 
     check(
@@ -709,7 +717,7 @@ async function main() {
     );
 
     // Create a new project from this template
-    await click(page, 'input[placeholder="entropy-paper"]');
+    await click(page, 'input[placeholder="Entropy paper"]');
     await insertText(page, "verify-template-paper");
     await sleep(150);
     await clickText(page, 'button[type="submit"]', "Create project");

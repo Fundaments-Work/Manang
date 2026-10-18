@@ -13,6 +13,7 @@
 <article
   class="group flex flex-col border border-line bg-surface p-3.5 transition-colors hover:bg-surface-hi"
   data-template={template.id}
+  data-template-card={template.id}
 >
   <!-- Thumbnail placeholder wireframe -->
   <div
