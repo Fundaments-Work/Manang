@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Beta Tester Guide
+    url: https://github.com/Fundaments-Work/Manang/blob/main/docs/beta/tester-guide.md
+    about: Read the onboarding guide, walk-through tour, and log file locations.
+  - name: Known Issues
+    url: https://github.com/Fundaments-Work/Manang/blob/main/docs/beta/known-issues.md
+    about: Check known issues and workarounds before opening a ticket.

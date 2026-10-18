@@ -1,0 +1,98 @@
+name: Bug Report
+description: File a bug report or regression encountered during beta testing.
+title: "[Bug]: "
+labels: ["bug", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing Manang and helping us stabilize the suite.
+        **Privacy promise:** Manang has zero telemetry. Never paste API keys, confidential research data, or private credentials in issue reports.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: Select your operating system and display environment.
+      options:
+        - Linux (Wayland)
+        - Linux (X11)
+        - macOS (Apple Silicon - M-series)
+        - macOS (Intel)
+        - Windows 11
+        - Windows 10
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Manang Version or Commit
+      description: Found in the Help > About dialog (or window title bar).
+      placeholder: "e.g. 0.1.0-beta.1 (commit 1dafc31)"
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Document Engine / Subsystem
+      description: Which authoring tool or compiler were you using?
+      options:
+        - Typst Compiler & Preview
+        - LaTeX (Tectonic / System TeX)
+        - Markdown & Outline
+        - Vector Figure Studio
+        - PDF Preview Viewer
+        - References & Citations
+        - Home & Projects / Trash
+        - Settings & Keybindings
+        - Plugin Manager
+        - Other / Workbench Shell
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do? (Steps to Reproduce)
+      description: Step-by-step instructions to reproduce the problem.
+      placeholder: |
+        1. Open project '...'
+        2. In main.typ, type '...'
+        3. Double-click the preview pane to jump back to source
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: "e.g. The editor caret should jump to line 42 in main.typ."
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      description: Describe unexpected behavior, frozen panes, or console messages.
+      placeholder: "e.g. The preview refreshed, but the editor caret did not move and an error banner appeared."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Log Excerpt (Manang.log)
+      description: |
+        Paste relevant error or panic lines from your log file.
+        - Linux: `~/.local/share/work.fundaments.manang/logs/Manang.log`
+        - macOS: `~/Library/Logs/work.fundaments.manang/Manang.log`
+        - Windows: `%LOCALAPPDATA%\work.fundaments.manang\logs\Manang.log`
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety & Search Acknowledgement
+      options:
+        - label: I verified that no personal data, credentials, or private keys are contained in the log excerpt.
+          required: true
+        - label: I searched existing issues and confirmed this problem has not already been reported.
+          required: true

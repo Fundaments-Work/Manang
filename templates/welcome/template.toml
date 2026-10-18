@@ -1,0 +1,6 @@
+id = "welcome"
+name = "Welcome to Manang"
+engine = "typst"
+description = "Interactive onboarding project teaching Manang's editor, preview, figures, citations, and shortcuts."
+tags = ["welcome", "onboarding", "tutorial", "typst"]
+main = "main.typ"

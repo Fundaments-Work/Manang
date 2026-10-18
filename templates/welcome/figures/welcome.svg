@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 180" width="540" height="180">
+  <defs>
+    <style>
+      .bg { fill: #141416; }
+      .box { fill: #1c1c1f; stroke: #3d3d42; stroke-width: 1; }
+      .box-active { fill: #1c1c1f; stroke: #c6f135; stroke-width: 1.5; }
+      .text-title { font-family: 'DM Sans', -apple-system, sans-serif; font-size: 13px; font-weight: 500; fill: #faf9f7; }
+      .text-sub { font-family: 'DM Mono', monospace; font-size: 10px; fill: #9e9ea0; }
+      .text-accent { font-family: 'DM Mono', monospace; font-size: 10px; fill: #c6f135; }
+      .arrow { stroke: #b3d17a; stroke-width: 1.5; fill: none; stroke-linecap: round; }
+      .arrow-head { fill: #b3d17a; }
+    </style>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="540" height="180" class="bg" />
+
+  <!-- Node 1: Text Editor -->
+  <g transform="translate(20, 30)">
+    <rect width="140" height="120" class="box" />
+    <text x="16" y="32" class="text-title">Text Editor</text>
+    <text x="16" y="54" class="text-sub">CodeMirror 6</text>
+    <text x="16" y="74" class="text-sub">Rope Buffer</text>
+    <text x="16" y="94" class="text-sub">Tree-sitter AST</text>
+    <rect x="16" y="108" width="6" height="6" fill="#c6f135" />
+    <text x="28" y="114" class="text-accent">&lt; 8ms latency</text>
+  </g>
+
+  <!-- Arrow 1 -> 2 -->
+  <path d="M 160 90 L 190 90" class="arrow" />
+  <polygon points="190,87 198,90 190,93" class="arrow-head" />
+
+  <!-- Node 2: Kernel Engine -->
+  <g transform="translate(200, 30)">
+    <rect width="140" height="120" class="box-active" />
+    <text x="16" y="32" class="text-title">Kernel Engine</text>
+    <text x="16" y="54" class="text-sub">Typst Compiler</text>
+    <text x="16" y="74" class="text-sub">LaTeX Tectonic</text>
+    <text x="16" y="94" class="text-sub">Rayon Pool</text>
+    <rect x="16" y="108" width="6" height="6" fill="#b3d17a" />
+    <text x="28" y="114" class="text-sub" fill="#b3d17a">zero-copy IPC</text>
+  </g>
+
+  <!-- Arrow 2 -> 3 -->
+  <path d="M 340 90 L 370 90" class="arrow" />
+  <polygon points="370,87 378,90 370,93" class="arrow-head" />
+
+  <!-- Node 3: Live Preview -->
+  <g transform="translate(380, 30)">
+    <rect width="140" height="120" class="box" />
+    <text x="16" y="32" class="text-title">Live Preview</text>
+    <text x="16" y="54" class="text-sub">Streaming SVG</text>
+    <text x="16" y="74" class="text-sub">PDF Text Layer</text>
+    <text x="16" y="94" class="text-sub">SyncTeX Jumps</text>
+    <rect x="16" y="108" width="6" height="6" fill="#c6f135" />
+    <text x="28" y="114" class="text-accent">60 / 120 FPS</text>
+  </g>
+</svg>
