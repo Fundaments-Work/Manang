@@ -340,6 +340,9 @@ fn disk_state(root: Option<&ProjectRoot>, snapshot: &Snapshot) -> DiskState {
     match file_hash(root, &snapshot.path) {
         Ok(hash) => match &snapshot.saved_hash {
             Some(saved) if *saved == hash => DiskState::Match,
+            // A figure's scene is saved by the figure plugin, which has no
+            // fingerprint to give: say nothing rather than guess.
+            None if snapshot.kind == Kind::Figure => DiskState::Unknown,
             _ => DiskState::Changed,
         },
         Err(ProjectError::NotFound(_)) => DiskState::Missing,
