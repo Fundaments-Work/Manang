@@ -27,6 +27,7 @@ A guide for authors in [`docs/user/`](docs/user/index.md):
 - **[References](docs/user/references.md)** — Bibliographies, citation styles, inserting citations, and online verification.
 - **[Projects and files](docs/user/projects-and-files.md)** — File tree, openers, system apps, and Git source control.
 - **[Settings and shortcuts](docs/user/settings-and-shortcuts.md)** — User vs project scope, preferences, and keyboard shortcuts.
+- **[Menus and shortcuts](docs/user/menus-and-shortcuts.md)** — Menu bar hierarchy, keyboard mnemonics, and surface keybindings.
 - **[Plugins](docs/user/plugins.md)** — Built-in and sandboxed WebAssembly plugins, permissions, and status indicators.
 - **[Troubleshooting](docs/user/troubleshooting.md)** — Log file locations, developer tools, and common problem fixes.
 
@@ -34,7 +35,7 @@ A guide for authors in [`docs/user/`](docs/user/index.md):
 
 ## Development
 
-Requires Rust 1.85+, Node 22+, and pnpm 10. On Linux the Tauri shell needs
+Requires Rust 1.95+, Node 22+, and pnpm 10. On Linux the Tauri shell needs
 `webkit2gtk-4.1`, `gtk3`, `libsoup-3.0`, and `glib-2.0` development packages.
 
 ```bash
