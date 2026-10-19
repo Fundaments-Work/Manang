@@ -193,3 +193,71 @@ jobs:
             dist/${{ matrix.file }}.sha256
           if-no-files-found: error
           retention-days: 30
+
+  version:
+    name: read the engine version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        run: |
+          set -euo pipefail
+          version="$(python3 -c "import json;print(json.load(open('engines/manifest.json'))['version'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # Attaches the built files to the `tectonic-<version>` release, which is
+  # where the app looks: with MANANG_ENGINE_BASE_URL set to
+  # https://github.com/Fundaments-Work/Manang/releases/download, the worker
+  # fetches <base>/tectonic-<version>/<file>, so the asset name and the tag
+  # have to be exactly these. Rerunning the workflow replaces the asset, which
+  # is how a rebuilt binary gets out (the embedded manifest in engines/
+  # manifest.json has to carry the new hash, or the app refuses it, so a
+  # rebuild only ships once that file is committed with the numbers printed
+  # in the job summary above).
+  publish:
+    name: publish to the tectonic-${{ needs.version.outputs.version }} release
+    needs: [build, version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Download what the build job produced
+        uses: actions/download-artifact@v6
+        with:
+          pattern: engine-*
+          path: dist
+          merge-multiple: true
+      - name: Create or update the release
+        run: |
+          set -euo pipefail
+          tag="tectonic-${VERSION}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            # Pre-release on purpose: this release is a download for the app,
+            # not something a person installs, and GitHub's "latest release"
+            # should keep pointing at the app. (scripts/install-linux.sh skips
+            # releases that carry no installer, so the flag cannot confuse it.)
+            gh release create "$tag" --verify-tag --prerelease --title "Tectonic ${VERSION} engine" \
+              --notes "The built-in LaTeX engine (Tectonic ${VERSION}) for Manang.
+
+          Downloaded by the app after the user agrees, verified against the size and
+          SHA-256 compiled into Manang (engines/manifest.json). See
+          docs/ops/engine-release.md. Nothing here is run by the app directly; the
+          host only serves bytes."
+          fi
+          for f in dist/manang-latex-worker-* dist/*.sha256; do
+            [ -e "$f" ] || continue
+            echo "uploading $(basename "$f")"
+            gh release upload "$tag" "$f" --clobber
+          done
+          gh release view "$tag" --json assets --jq '.assets[] | "\(.name)  \(.size)"'
