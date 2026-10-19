@@ -3,6 +3,7 @@
   import { formatShortcut } from "$lib/commands/shortcut";
   import { context } from "$lib/state/context.svelte";
   import { layout } from "$lib/state/layout.svelte";
+  import { market } from "$lib/state/market.svelte";
   import { settingsPage } from "$lib/state/settingsPage.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { sidePanelVisible, type SideView } from "$lib/workbench/layout";
@@ -132,6 +133,17 @@
         title="{changes} changed {changes === 1 ? 'file' : 'files'}"
       >
         {changes > 99 ? "99+" : changes}
+      </span>
+    {/if}
+    {#if item.view === "plugins" && market.updateCount > 0}
+      <span
+        class="absolute right-1.5 bottom-1.5 flex h-3.5 min-w-3.5 items-center justify-center bg-surface-hi px-0.5 font-mono text-[10px] leading-none text-text"
+        title="{market.updateCount} plugin {market.updateCount === 1
+          ? 'update'
+          : 'updates'}"
+        data-updates-badge
+      >
+        {market.updateCount}
       </span>
     {/if}
     <!-- Tooltip: instant, to the right of the rail, label then shortcut. -->

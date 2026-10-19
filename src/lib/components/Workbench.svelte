@@ -15,6 +15,7 @@
   import ProjectSwitcher from "./ProjectSwitcher.svelte";
   import EngineDialog from "./EngineDialog.svelte";
   import ConfirmDialog from "./ui/ConfirmDialog.svelte";
+  import ConsentDialog from "./plugins/ConsentDialog.svelte";
   import FeedbackDialog from "./FeedbackDialog.svelte";
   import RecoveryReview from "./RecoveryReview.svelte";
   import Resizer from "./ui/Resizer.svelte";
@@ -31,6 +32,7 @@
   import { helpPage } from "$lib/state/helpPage.svelte";
   import { home } from "$lib/state/home.svelte";
   import { layout } from "$lib/state/layout.svelte";
+  import { market } from "$lib/state/market.svelte";
   import { notice } from "$lib/state/notice.svelte";
   import { context } from "$lib/state/context.svelte";
   import { palette } from "$lib/state/palette.svelte";
@@ -101,6 +103,9 @@
   onMount(() => {
     keymap.start();
     installShellSurfaces();
+    // Plugin updates are looked for in the background (never installed).
+    market.start();
+    return () => market.stop();
   });
 
   /** Readable names for a conflict notice: the commands' titles. */
@@ -259,6 +264,7 @@
   <CommandPalette />
   <ProjectSwitcher />
   <ConfirmDialog />
+  <ConsentDialog />
   <EngineDialog />
   <FeedbackDialog />
   <RecoveryReview />

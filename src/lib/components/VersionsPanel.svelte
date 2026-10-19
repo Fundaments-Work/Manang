@@ -28,7 +28,11 @@
   const PAGE = 30;
 
   const projectRoot = $derived(workspace.project?.root ?? "");
-  const currentFile = $derived(tabs.active?.path ?? null);
+  const currentFile = $derived(
+    tabs.active === undefined || tabs.active.kind === "plugin"
+      ? null
+      : tabs.active.path,
+  );
 
   let scope = $state<"file" | "all">("all");
   const filterPath = $derived(scope === "file" ? currentFile : null);

@@ -11,10 +11,25 @@
  * system, so installing takes one of the canned paths below.
  */
 
-import { EMPTY_ACCESS, accessWithin } from "$lib/workbench/pluginManager";
+import { isNewer } from "$lib/workbench/market";
+import {
+  EMPTY_ACCESS,
+  accessDifference,
+  accessIsEmpty,
+  accessWithin,
+} from "$lib/workbench/pluginManager";
 
 import type { MockPlugin, MockPluginFactory } from "./mock";
+import type {
+  BrowseResult,
+  Contributions,
+  Freshness,
+  RegistryStatus,
+  UpdateCheck,
+  UpdateInfo,
+} from "./marketApi";
 import { MOCK_MANIFESTS } from "./mockManifests";
+import { MOCK_REGISTRY, latestOf, toBrowseEntry, toDetail } from "./mockRegistry";
 import type {
   PluginAccess,
   PluginInspect,
@@ -34,7 +49,28 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["plugins.reload", "Reload a plugin from disk"],
   ["plugins.permissions", "Show what a plugin may access"],
   ["plugins.use-project", "Apply the open project's plugin overrides"],
+  ["plugins.configure", "Apply plugin settings"],
+  ["plugins.registry-status", "Show whether the plugin registry is available"],
+  ["plugins.browse", "Browse the plugin registry"],
+  ["plugins.detail", "Show a registry plugin's page"],
+  ["plugins.check-updates", "Check for plugin updates"],
+  ["plugins.install-from-registry", "Install or update a plugin from the registry"],
+  ["plugins.cancel-install", "Cancel a plugin download"],
 ];
+
+/**
+ * How the sample registry behaves, for trying every state of the Browse tab:
+ * set `globalThis.__MANANG_MOCK_REGISTRY__` to one of these (default `ok`).
+ */
+export type MockRegistryMode =
+  "ok" | "offline" | "unreachable" | "signature" | "off" | "empty";
+
+function registryMode(): MockRegistryMode {
+  return (
+    (globalThis as { __MANANG_MOCK_REGISTRY__?: MockRegistryMode })
+      .__MANANG_MOCK_REGISTRY__ ?? "ok"
+  );
+}
 
 /** Built-ins that cannot be disabled or removed (`CORE_PLUGINS` in Rust). */
 export const MOCK_CORE_PLUGINS: readonly string[] = [
@@ -250,6 +286,76 @@ export function pluginsPlugin(): MockPluginFactory {
       return state;
     };
     const changed = (name: string) => emit("plugins.state-changed", { name });
+
+    // ---- the sample registry ----
+    const gate = (): void => {
+      switch (registryMode()) {
+        case "off":
+          throw fail(
+            "registry_off",
+            "the plugin registry is switched off (Settings, Plugins, Browse the plugin registry)",
+          );
+        case "unreachable":
+          throw fail(
+            "registry_unreachable",
+            "could not reach registry.manang.invalid: connection refused",
+          );
+        case "signature":
+          throw fail(
+            "registry_signature",
+            "the plugin list could not be verified; nothing was installed",
+          );
+        default:
+      }
+    };
+    const freshness = (): Freshness =>
+      registryMode() === "offline"
+        ? {
+            state: "offline",
+            reason: "could not reach registry.manang.invalid: connection refused",
+            fetched_at: now - 2 * 86_400,
+            generated: "2026-10-17T08:00:00Z",
+          }
+        : {
+            state: "fresh",
+            reason: null,
+            fetched_at: now,
+            generated: "2026-10-19T08:00:00Z",
+          };
+    const catalogue = () => (registryMode() === "empty" ? [] : MOCK_REGISTRY);
+    const versionOf = (id: string): string | null => {
+      const s = installed.get(id);
+      if (s === undefined) return null;
+      return s.update_pending ? s.version : (s.running_version ?? s.version);
+    };
+    const updatesNow = (): UpdateInfo[] =>
+      catalogue().flatMap((p) => {
+        const have = versionOf(p.id);
+        const latest = latestOf(p);
+        const state = installed.get(p.id);
+        if (
+          have === null ||
+          state === undefined ||
+          latest === undefined ||
+          latest.yanked ||
+          !isNewer(p.latest, have)
+        )
+          return [];
+        const added = accessDifference(latest.permissions, state.granted);
+        return [
+          {
+            id: p.id,
+            name: p.name,
+            installed: have,
+            latest: p.latest,
+            size: latest.size,
+            changelog: latest.changelog,
+            compatible: latest.compatible,
+            permissions_grew: !accessIsEmpty(added),
+            new_permissions: added,
+          },
+        ];
+      });
     const put = (state: PluginState): PluginState => {
       installed.set(state.name, state);
       return state;
@@ -395,6 +501,137 @@ export function pluginsPlugin(): MockPluginFactory {
         },
 
         "plugins.use-project": () => ({ changed: [] }),
+
+        "plugins.configure": (args) => ({ ...(args["values"] as object) }),
+
+        "plugins.registry-status": (): RegistryStatus => ({
+          enabled: registryMode() !== "off",
+          browse_setting: registryMode() !== "off",
+          configured: true,
+          reason: null,
+          url: "https://registry.manang.invalid",
+          host: "registry.manang.invalid",
+          custom_url: false,
+          fetched_at: now,
+          plugin_count: catalogue().length,
+          updates: updatesNow().length,
+        }),
+
+        "plugins.browse": (): BrowseResult => {
+          gate();
+          const list = catalogue();
+          const tags = new Map<string, number>();
+          for (const p of list)
+            for (const t of p.tags) tags.set(t, (tags.get(t) ?? 0) + 1);
+          return {
+            freshness: freshness(),
+            total: list.length,
+            plugins: list.map((p) => toBrowseEntry(p, versionOf(p.id), isNewer)),
+            tags: [...tags.entries()]
+              .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+              .map(([tag, count]) => ({ tag, count })),
+            updates: updatesNow().length,
+          };
+        },
+
+        "plugins.detail": (args) => {
+          gate();
+          const id = String(args["id"]);
+          const p = catalogue().find((c) => c.id === id);
+          if (p === undefined)
+            throw fail(
+              "registry_unknown_plugin",
+              `no plugin named \`${id}\` is in the registry`,
+            );
+          return toDetail(p, toBrowseEntry(p, versionOf(p.id), isNewer), freshness());
+        },
+
+        "plugins.check-updates": (): UpdateCheck => {
+          if (registryMode() === "off") return { enabled: false, updates: [] };
+          gate();
+          const updates = updatesNow();
+          emit("plugins.updates", { count: updates.length });
+          return { enabled: true, freshness: freshness(), updates };
+        },
+
+        "plugins.cancel-install": () => ({}),
+
+        "plugins.contributions": (): Contributions => ({
+          format_adapters: [],
+          editors: [],
+          toolbars: [],
+        }),
+
+        "plugins.install-from-registry": (args): PluginState => {
+          if (args["consent"] !== true)
+            throw fail(
+              "consent_required",
+              "installing from the plugin registry needs your consent",
+            );
+          gate();
+          const id = String(args["id"]);
+          const p = catalogue().find((c) => c.id === id);
+          if (p === undefined)
+            throw fail(
+              "registry_unknown_plugin",
+              `no plugin named \`${id}\` is in the registry`,
+            );
+          const wanted =
+            typeof args["version"] === "string" ? args["version"] : p.latest;
+          const v = p.versions.find((x) => x.version === wanted);
+          if (v === undefined)
+            throw fail(
+              "registry_unknown_version",
+              `\`${id}\` has no version ${wanted} in the registry`,
+            );
+          if (v.yanked)
+            throw fail(
+              "registry_withdrawn",
+              `\`${id}\` ${wanted} was withdrawn by the registry and cannot be installed`,
+            );
+          const progress = (phase: string, received: number) =>
+            emit("plugins.install-progress", { id, phase, received, total: v.size });
+          progress("downloading", 0);
+          progress("downloading", Math.floor(v.size / 2));
+          progress("verifying", v.size);
+          progress("installing", v.size);
+          const current = installed.get(id);
+          const state = put({
+            ...(current ?? {
+              tier: "wasm" as const,
+              core: false,
+              signed: false,
+              contexts: ["app"],
+              enabled: true,
+              settings: [],
+              installed_at: Math.floor(Date.now() / 1000),
+            }),
+            name: id,
+            version: wanted,
+            running_version: wanted,
+            description: p.description,
+            permissions: v.permissions,
+            granted: v.permissions,
+            new_permissions: EMPTY_ACCESS,
+            status: current?.enabled === false ? "disabled" : "loaded",
+            publisher: p.author,
+            source: "registry",
+            origin: {
+              registry: "https://registry.manang.invalid",
+              id,
+              version: wanted,
+            },
+            commands: current?.commands ?? [
+              { id: `${id}.run`, title: `Run ${p.name}` },
+            ],
+            update_pending: false,
+          } as PluginState);
+          progress("done", v.size);
+          emit("plugins.loaded", { name: id });
+          changed(id);
+          emit("plugins.updates", { count: updatesNow().length });
+          return state;
+        },
       },
     };
 
