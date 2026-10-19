@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mathematical Formulas in Figures:** Dedicated Typst and LaTeX formula nodes in the Figure Studio with docked properties and custom color palette.
 - **Text Diagram Support:** Integrated compilers for Mermaid (`.mmd`), Pikchr, and ASCII art (`svgbob`) generating standalone SVGs; automatic diagram rendering in Markdown code fences.
 - **Multi-Document Text Editor:** CodeMirror 6 editor powered by `manang-buffer` (`ropey::Rope`) with coordinate mapping, line indexing, and bounded transaction undo/redo history.
-- **Multi-Engine Compilation & Live Preview:** Sub-50ms incremental compilation and live streaming SVG preview for Typst, LaTeX (via system TeX or optional worker), and Markdown.
+- **Multi-Engine Compilation & Live Preview:** Incremental compilation and live streaming SVG preview for Typst, LaTeX (via system TeX or optional worker), and Markdown.
 - **Bidirectional SyncTeX Navigation:** Double-click or `Ctrl`-click (`Cmd`-click on macOS) in the preview jumps directly to the matching source line; `Ctrl+Alt+J` (`Cmd+Alt+J`) jumps forward from editor to preview.
 - **PDF Preview Viewer:** Native PDF viewer with text layer selection and copy (`Ctrl+C`), find bar (`Ctrl+F`) with match counter, zoom presets and continuous wheel zoom, page box navigation, dark pages mode, and outline navigation.
 - **Version History & Snapshots:** "Save a version" (`Ctrl+Alt+S`), commit history timeline, split and unified diffs, author identity setup, and dirty/clean file restoration.
