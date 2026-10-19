@@ -58,6 +58,8 @@ export interface IndexPlugin {
   latest: string;
   /** Newest first. */
   versions: PluginVersion[];
+  /** Withdrawn versions: never offered, but an installed copy can be flagged. */
+  yanked?: string[];
 }
 
 /** `index.json`, schema 1 (frozen). */
