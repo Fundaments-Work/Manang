@@ -44,6 +44,11 @@ async function freePort() {
 }
 
 function findBrowser() {
+  // CI names the browser: on Ubuntu runners `chromium-browser` is a snap stub
+  // that cannot run headless, so it must not win over the installed Chrome.
+  const named = process.env.MANANG_BROWSER;
+  if (named)
+    return spawnSync("which", [named], { stdio: "ignore" }).status === 0 ? named : null;
   for (const name of [
     "chromium",
     "chromium-browser",
@@ -139,7 +144,7 @@ class Cdp {
   }
 }
 
-async function waitForEndpoint(port, timeoutMs = 15000) {
+async function waitForEndpoint(port, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const reachable = await new Promise((resolve) => {
