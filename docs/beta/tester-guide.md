@@ -57,7 +57,7 @@ Launch Manang. You will see the **Home** view displaying your project workspace:
 3. Toggle between **User** and **Project** scopes, or try switching between Dark and Light themes.
 4. Press `Ctrl+/` (`Cmd+/` on macOS) to open the **Keyboard Shortcuts** reference sheet.
 
-5. **No TeX on your computer? (LaTeX testers)** Open a LaTeX project. The preview says "No TeX installation found" and offers **Download the built-in engine (about 14 MB)**. Please try it: read the window, press **Download**, watch the progress (try **Cancel** once too), and check that the document then compiles. Tell us how long the first compile took and whether any package was missing. Remove it again in Settings > **LaTeX** if you like.
+5. **No TeX on your computer? (LaTeX testers)** Open a LaTeX project. The preview says "No TeX installation found" and offers **Download the built-in engine (about 48 MB)**. Please try it: read the window, press **Download**, watch the progress (try **Cancel** once too), and check that the document then compiles. Tell us how long the first compile took and whether any package was missing. Remove it again in Settings > **LaTeX** if you like.
 6. Try **Save a version** (File menu, or `Ctrl+Alt+S`; `Cmd+Option+S` on macOS): it saves a named snapshot of your project. Open **Versions** (View menu) to see the timeline, compare a version with your files, and restore a file or the whole project. Restore never deletes anything, and it saves your current changes first if you ask it to.
 
 6. Try **Share this file live** (File menu). It needs a relay address first (Settings, section Live). Send the invite to a second tester, who chooses **Join a live session**. See [Edit together live](../user/edit-together-live.md).

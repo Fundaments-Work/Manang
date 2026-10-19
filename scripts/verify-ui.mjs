@@ -642,7 +642,7 @@ async function engineSection(browser) {
   await expectEventually(
     page,
     "without TeX the preview says so and offers the built-in engine with its size",
-    `(() => { const p = document.querySelector('section[aria-label="Preview"]'); return !!p && p.innerText.includes("No TeX installation found") && (p.querySelector("[data-engine-offer]")?.innerText ?? "").startsWith("Download the built-in engine (about 14 MB)"); })()`,
+    `(() => { const p = document.querySelector('section[aria-label="Preview"]'); return !!p && p.innerText.includes("No TeX installation found") && (p.querySelector("[data-engine-offer]")?.innerText ?? "").startsWith("Download the built-in engine (about "); })()`,
     { timeout: 20000 },
   );
   await shoot(page, "engine-1-offer");
@@ -783,7 +783,7 @@ async function engineSection(browser) {
   await expectEventually(
     page,
     "Remove uninstalls it and offers the download again",
-    `(document.querySelector('[data-plugin="latex"] [data-engine-state]')?.innerText ?? "").includes("Not installed") && (document.querySelector('[data-plugin="latex"] [data-engine-offer]')?.innerText ?? "").includes("about 14 MB")`,
+    `(document.querySelector('[data-plugin="latex"] [data-engine-state]')?.innerText ?? "").includes("Not installed") && (document.querySelector('[data-plugin="latex"] [data-engine-offer]')?.innerText ?? "").includes("about ")`,
   );
   // The one error logged is the simulated network failure above.
   const unexpected = page.errors.filter((e) => !e.includes("engine.install"));

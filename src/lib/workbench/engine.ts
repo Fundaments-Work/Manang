@@ -13,7 +13,7 @@ export function formatSize(bytes: number): string {
   return `${mb < 100 ? mb.toFixed(1) : Math.round(mb).toString()} MB`;
 }
 
-/** `about 14 MB`, for button labels. */
+/** `about 48 MB`, for button labels. */
 export function aboutSize(bytes: number): string {
   return `about ${Math.max(1, Math.round(bytes / MB))} MB`;
 }

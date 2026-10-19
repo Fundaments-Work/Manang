@@ -32,11 +32,11 @@ When compiling a LaTeX document (`.tex`), Manang delegates to the operating syst
    - **Arch Linux:** `sudo pacman -S texlive-meta`
    - **macOS:** `brew install --cask mactex-no-gui`
    - **Windows:** Install TeX Live or MiKTeX and ensure executables are on `PATH`.
-2. Or let Manang download its optional built-in engine (about 14 MB) when it offers it, in the preview pane, the Problems tab or Settings > **LaTeX**. It is XeTeX only, fetches LaTeX packages from the internet on first use, and is not available for every platform yet (see below).
+2. Or let Manang download its optional built-in engine (about 48 MB) when it offers it, in the preview pane, the Problems tab or Settings > **LaTeX**. It is XeTeX only, fetches LaTeX packages from the internet on first use, and is not available for every platform yet (see below).
 3. Restart Manang after installing TeX to ensure updated environment variables are inherited.
 
 ### Status
-The optional built-in engine (Tectonic, XeTeX only) is available as a consented download on **Linux x86-64** in this beta; Windows, macOS and Linux ARM builds are planned. It runs as a separate process, checks its download against a checksum shipped inside Manang, and needs the network once per new package. `pdflatex`-only packages, LuaLaTeX and `biber` need a real TeX installation. A self-contained WebAssembly engine is still being investigated.
+The optional built-in engine (Tectonic, XeTeX only) is available as a consented download on **Linux x86-64 and arm64** in this beta; Windows and macOS builds are planned. It runs as a separate process, checks its download against a checksum shipped inside Manang, and needs the network once per new package. `pdflatex`-only packages, LuaLaTeX and `biber` need a real TeX installation. A self-contained WebAssembly engine is still being investigated.
 
 ---
 

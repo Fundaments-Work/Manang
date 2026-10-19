@@ -348,4 +348,4 @@ if [[ "$(field "$release_json" prerelease)" == "true" ]]; then
     log "This is a pre-release: bugs are expected. Install a marked stable release with --stable once one exists."
 fi
 log "Typst and Markdown work out of the box. LaTeX uses a TeX installation (TeX Live, MiKTeX or MacTeX) if you have one;"
-log "otherwise open a .tex file and use Preview > Download the built-in engine (Linux only, about 15 MB, once)."
+log "otherwise open a .tex file and use Preview > Download the built-in engine (Linux only, about 48 MB, once)."

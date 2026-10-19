@@ -7,12 +7,14 @@
     "linux-x86_64": {
       "status": "built",
       "file": "manang-latex-worker-linux-x86_64",
-      "size": 14413816,
-      "sha256": "d15d3cb6391be939dd56dcd5cfb264207b3d927d8434e713a8fbf9bffd317f6e"
+      "size": 48178056,
+      "sha256": "0135c23b1e9958a2391e262e06e3ed5ec568a62c56c3ccad4b8d51fecd3330f5"
     },
     "linux-aarch64": {
-      "status": "planned",
-      "file": "manang-latex-worker-linux-aarch64"
+      "status": "built",
+      "file": "manang-latex-worker-linux-aarch64",
+      "size": 46514944,
+      "sha256": "88a2595820b6dc51d8a857fcd0be181178513b71c4ef1e96c37aff94de574192"
     },
     "windows-x86_64": {
       "status": "planned",

@@ -127,7 +127,7 @@ Typst compiles using Manang's built-in Rust engine and requires no external tool
 3. Run the installer and ensure the option to add TeX binaries to your system `PATH` is enabled.
 
 ### No TeX installed? Use the built-in engine
-If Manang finds no TeX on your computer, the preview, the **Problems** tab and the **Output** tab say "No TeX installation found" and offer **Download the built-in engine (about 14 MB)**. It is optional, and nothing is downloaded until you agree:
+If Manang finds no TeX on your computer, the preview, the **Problems** tab and the **Output** tab say "No TeX installation found" and offer **Download the built-in engine (about 48 MB)**. It is optional, and nothing is downloaded until you agree:
 
 1. Press the button. A window tells you exactly what will happen: the server the engine comes from, its size, its SHA-256 checksum, and the folder it will be saved in.
 2. Press **Download**. A progress line shows the download; **Cancel** stops it and leaves nothing behind. If the connection drops, press **Try again**: it continues where it stopped.
