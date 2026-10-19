@@ -11,10 +11,11 @@
 
 import { parseArgs } from "node:util";
 import { buildRegistry } from "./lib/build.mjs";
-import { DEFAULT_ENTRIES, pickSource, readJsonIfGiven } from "./lib/cli.mjs";
+import { DEFAULT_ENTRIES, cliArgs, pickSource, readJsonIfGiven } from "./lib/cli.mjs";
 import { out, warn } from "./lib/util.mjs";
 
 const { values } = parseArgs({
+  args: cliArgs(),
   options: {
     entries: { type: "string", default: DEFAULT_ENTRIES },
     fixtures: { type: "string" },

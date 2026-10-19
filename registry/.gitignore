@@ -5,3 +5,4 @@ dist
 demo-out
 *.key
 *.pem
+previous-index.json

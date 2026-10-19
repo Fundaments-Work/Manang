@@ -5,9 +5,10 @@
 //   node scripts/verify-index.mjs <dir> <public key base64>
 
 import { verifyRegistry } from "./lib/build.mjs";
+import { cliArgs } from "./lib/cli.mjs";
 import { out, warn } from "./lib/util.mjs";
 
-const [dir, publicKey] = process.argv.slice(2);
+const [dir, publicKey] = cliArgs();
 if (!dir || !publicKey) {
   warn("usage: node scripts/verify-index.mjs <dir> <public key base64>");
   process.exit(1);
