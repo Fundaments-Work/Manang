@@ -21,7 +21,9 @@
 > **Status: public beta.** Installers for Windows, macOS (Apple silicon and
 > Intel) and Linux are on the [releases page](https://github.com/Fundaments-Work/Manang/releases/latest);
 > they are not code-signed yet, so see [Install Manang](docs/user/install.md) for
-> what your system will say. The screenshots on this page come from the browser
+> what your system will say. On Linux, one command installs it:
+> `curl -fsSL https://raw.githubusercontent.com/Fundaments-Work/Manang/main/scripts/install-linux.sh | bash`.
+> The screenshots on this page come from the browser
 > build with sample data; the desktop app is the real product.
 
 ## Why Manang
