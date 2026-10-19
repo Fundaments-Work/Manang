@@ -15,10 +15,30 @@ The script picks the right package for your distribution (`.deb`, `.rpm` or an A
 | Option | What it does |
 | :--- | :--- |
 | `--user` | Install the AppImage under `~/.local`, no root needed |
-| `--version 0.1.0-beta.1` | Install a specific release |
-| `--stable` | Skip pre-releases (the default includes betas while Manang is in beta) |
+| `--version 0.1.0-beta.1` | Install one specific release (the tag with or without `v`) |
+| `--version beta` | Install the newest pre-release |
+| `--channel latest\|beta\|stable` | Which release to install when no version is given |
+| `--beta` / `--stable` | Shorthand for `--channel beta` / `--channel stable` |
+| `--list` | Print every published release, newest first, and stop |
+| `--print-latest` | Print the tag the default would install, and stop |
 | `--bundle deb\|rpm\|appimage` | Force a package format |
 | `--dry-run` | Show what would be downloaded and change nothing |
+
+### Beta and stable releases
+
+Manang is in beta, so the plain command installs the newest release, pre-releases
+included: that is `v0.1.0-beta.1` today. The two channels are always available:
+
+```bash
+curl -fsSL .../install-linux.sh | bash -s -- --beta    # newest pre-release
+curl -fsSL .../install-linux.sh | bash -s -- --stable  # newest marked stable
+curl -fsSL .../install-linux.sh | bash -s -- --list    # what has been published
+```
+
+While there is no stable release, `--stable` says so and installs nothing rather
+than quietly installing a beta. GitHub's API allows 60 anonymous requests an
+hour; if the script reports the limit, wait or set `GITHUB_TOKEN` to a token with
+no scopes.
 
 Remove it with `curl -fsSL https://raw.githubusercontent.com/Fundaments-Work/Manang/main/scripts/uninstall-linux.sh | bash` (add `-s -- --purge` to delete settings and plugins too). Read the script first if you like: it is short, and it is `scripts/install-linux.sh` in this repository.
 

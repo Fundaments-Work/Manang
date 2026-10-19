@@ -6,10 +6,15 @@
 # Picks .deb on Debian-like systems, .rpm on Fedora/openSUSE-like systems and an
 # AppImage everywhere else (or with --user, which needs no root). The download is
 # checked against the release's SHA256SUMS.txt before anything is installed.
+#
+# Manang is in beta, so the default is the newest release, pre-releases
+# included. --stable refuses pre-releases, --beta asks for the newest one.
+#
 # Needs: curl, sha256sum. No jq, no bsdtar.
 set -Eeuo pipefail
 
 GH_REPO="Fundaments-Work/Manang"
+API_BASE="${MANANG_API_BASE:-https://api.github.com/repos/${GH_REPO}}"
 APP_DIR="${HOME}/.local/lib/manang"
 BIN_DIR="${HOME}/.local/bin"
 APPS_DIR="${HOME}/.local/share/applications"
@@ -20,39 +25,62 @@ die() { log "error: $*"; exit 1; }
 
 usage() {
     cat <<'EOF'
-Usage: install-linux.sh [--version X.Y.Z[-beta.N]] [--stable] [--bundle deb|rpm|appimage] [--user] [--dry-run]
+Usage: install-linux.sh [options]
 
-  --version V     Install release tag vV (default: the newest release, betas included)
-  --stable        Only consider releases that are not marked pre-release
-  --bundle TYPE   deb, rpm or appimage (default: chosen from your distribution)
-  --user          Install the AppImage under ~/.local without root, whatever the distribution
-  --print-latest  Print the tag of the newest release and exit
-  --dry-run       Show what would be downloaded and installed, change nothing
-  -h, --help      This text
+  --version V       Install this release: 0.1.0-beta.1, a tag (v0.1.0-beta.1),
+                    "beta" (the newest pre-release) or "latest" (any release)
+  --channel C       Which release to install when no version is given:
+                    latest (newest, betas included), beta (newest pre-release),
+                    stable (newest release that is not a pre-release)
+  --stable          Shorthand for --channel stable
+  --beta            Shorthand for --channel beta
+  --bundle TYPE     deb, rpm or appimage (default: chosen from your distribution)
+  --user            Install the AppImage under ~/.local without root, whatever
+                    the distribution
+  --list            Print every published release, newest first, and exit
+  --print-latest    Print the tag the default would install, and exit
+  --dry-run         Show what would be downloaded and installed, change nothing
+  -h, --help        This text
+
+Environment: GITHUB_TOKEN (optional) raises GitHub's rate limit;
+MANANG_API_BASE (optional) points the script at another API for testing.
+
+While Manang is in beta, "latest" is a pre-release: --channel stable installs
+nothing yet and says so. A pre-release only reaches people who ask for it:
+the script never installs one on its own if --stable was passed.
 
 Remove it again with scripts/uninstall-linux.sh.
 EOF
 }
 
 VERSION=""
-STABLE=false
+CHANNEL="latest"
 BUNDLE="auto"
 USER_INSTALL=false
 DRY_RUN=false
 PRINT_LATEST=false
+LIST=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --version) [[ $# -ge 2 ]] || die "--version needs a value"; VERSION="${2#v}"; shift 2 ;;
-        --stable) STABLE=true; shift ;;
+        --channel) [[ $# -ge 2 ]] || die "--channel needs a value"; CHANNEL="$2"; shift 2 ;;
+        --stable) CHANNEL="stable"; shift ;;
+        --beta) CHANNEL="beta"; shift ;;
         --bundle|-b) [[ $# -ge 2 ]] || die "--bundle needs a value"; BUNDLE="$2"; shift 2 ;;
         --user) USER_INSTALL=true; shift ;;
+        --list) LIST=true; shift ;;
         --print-latest) PRINT_LATEST=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; die "unknown argument: $1" ;;
     esac
 done
+
+case "$CHANNEL" in
+    latest|beta|stable) ;;
+    *) die "unknown channel '$CHANNEL' (use latest, beta or stable)" ;;
+esac
 
 command -v curl >/dev/null 2>&1 || die "curl is required"
 command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required (coreutils)"
@@ -64,22 +92,113 @@ esac
 
 # ── Which release ──
 # MANANG_API_BASE is for testing the script against a local copy of the API.
-api() { curl -fsSL -H 'Accept: application/vnd.github+json' "${MANANG_API_BASE:-https://api.github.com/repos/${GH_REPO}}/$1"; }
+# GITHUB_TOKEN (a token with no scopes is enough) lifts the anonymous rate limit
+# of 60 requests an hour, which matters on shared addresses and in CI.
+#
+# `api` fills API_BODY instead of printing, so a failure can carry its own
+# message (API_ERR) and stop the script once, instead of once per subshell.
+API_BODY=""
+API_ERR=""
+api() {
+    local code
+    local -a auth=()
+    API_BODY=""
+    API_ERR=""
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+    fi
+    if API_BODY="$(curl -fsSL -H 'Accept: application/vnd.github+json' ${auth[@]+"${auth[@]}"} "${API_BASE}/$1" 2>/dev/null)"; then
+        return 0
+    fi
+    code="$(curl -sS -o /dev/null -w '%{http_code}' ${auth[@]+"${auth[@]}"} "${API_BASE}/$1" 2>/dev/null || echo 000)"
+    case "$code" in
+        401) API_ERR="GitHub refused GITHUB_TOKEN. Unset it to install anonymously." ;;
+        403 | 429)
+            API_ERR="GitHub's rate limit for this address is used up. Wait an hour, or set GITHUB_TOKEN to a token with no scopes: GITHUB_TOKEN=... bash install-linux.sh" ;;
+        000) API_ERR="could not reach GitHub. Check the network, then try again." ;;
+        *) API_ERR="" ;;
+    esac
+    return 1
+}
 
-if [[ -n "$VERSION" ]]; then
-    release_json="$(api "releases/tags/v${VERSION}")" || die "no release v${VERSION} found"
-elif [[ "$STABLE" == true ]]; then
-    release_json="$(api "releases/latest")" || die "no stable release published yet; drop --stable to include betas"
-else
-    # The first element of the list is the newest release, pre-releases included.
-    release_json="$(api "releases?per_page=1")" || die "could not read the release list from GitHub"
+field() {
+    printf '%s' "$1" | grep -o "\"$2\"[[:space:]]*:[[:space:]]*[^,}]*" | head -n1 \
+        | sed -E "s/\"$2\"[[:space:]]*:[[:space:]]*//; s/^\"(.*)\"\$/\\1/"
+}
+
+# One line per release, newest first, from the list endpoint: the tag and
+# whether GitHub marks it as a pre-release. GitHub orders the list by created
+# date and writes "tag_name" before "prerelease", so scanning the document for
+# those two keys in order finds each release exactly once, whatever the
+# nesting and line breaks of the rest of the JSON.
+scan_releases() {
+    printf '%s' "$API_BODY" | awk -v kind="$1" '
+        function emit(  pre) {
+            pre = ($0 ~ /"prerelease"[[:space:]]*:[[:space:]]*true/) ? "beta" : "stable"
+            if (kind == "" || kind == "latest" || kind == pre) {
+                print tag "\t" pre
+            }
+            pending = 0
+        }
+        /"tag_name"[[:space:]]*:/ {
+            tag = $0
+            sub(/.*"tag_name"[[:space:]]*:[[:space:]]*"/, "", tag)
+            sub(/".*/, "", tag)
+            pending = 1
+            # GitHub pretty-prints and puts "prerelease" on a later line; a
+            # compact reply has both on this one.
+            if ($0 ~ /"prerelease"[[:space:]]*:[[:space:]]*(true|false)/) emit()
+            next
+        }
+        pending && /"prerelease"[[:space:]]*:[[:space:]]*(true|false)/ { emit() }'
+}
+
+# Which tag does this channel mean? `latest` is the newest release whatever it
+# is, `beta` the newest pre-release, `stable` the newest release that GitHub
+# does not mark as a pre-release. PICKED is a global so that a failure stops
+# the script once, not once per subshell.
+PICKED=""
+pick_tag() {
+    api "releases?per_page=100" || return 1
+    PICKED="$(scan_releases "$1" | head -n1 | cut -f1 | sed -E 's/^v//')"
+}
+
+if [[ "$LIST" == true ]]; then
+    api "releases?per_page=100" || die "${API_ERR:-could not read the release list from GitHub}"
+    scan_releases "" | while IFS=$'\t' read -r t kind; do
+        printf '%-16s %s\n' "$t" "$kind"
+    done
+    exit 0
 fi
 
-tag="$(printf '%s' "$release_json" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+case "$VERSION" in
+    latest) VERSION="" ;;
+    beta)
+        pick_tag beta || die "${API_ERR:-could not read the release list from GitHub}"
+        VERSION="$PICKED"
+        [[ -n "$VERSION" ]] || die "no pre-release has been published yet"
+        ;;
+    *) ;;
+esac
+if [[ -z "$VERSION" ]]; then
+    pick_tag "$CHANNEL" || die "${API_ERR:-could not read the release list from GitHub}"
+    VERSION="$PICKED"
+    [[ -n "$VERSION" ]] || die "no ${CHANNEL} release has been published yet; see --list"
+fi
+
+api "releases/tags/v${VERSION}" \
+    || die "${API_ERR:-no release v${VERSION} found (see --list for what is published)}"
+release_json="$API_BODY"
+tag="$(field "$release_json" tag_name)"
 [[ -n "$tag" ]] || die "no release found"
 if [[ "$PRINT_LATEST" == true ]]; then
     printf '%s\n' "$tag"
     exit 0
+fi
+if [[ "$(field "$release_json" prerelease)" == "true" ]]; then
+    note=" (pre-release)"
+else
+    note=""
 fi
 
 asset_url() {
@@ -109,7 +228,7 @@ url="$(asset_url "$pattern")"
 sums_url="$(asset_url 'SHA256SUMS\.txt$')"
 file="${url##*/}"
 
-log "Manang ${tag}: ${file} (${BUNDLE})"
+log "Manang ${tag}${note}: ${file} (${BUNDLE})"
 if [[ "$DRY_RUN" == true ]]; then
     log "dry run: would download ${url}"
     exit 0
@@ -186,4 +305,8 @@ esac
 
 log ""
 log "Manang ${tag} is installed. Start it from your application menu, or run: manang"
-log "LaTeX needs a TeX installation (TeX Live); Typst and Markdown work out of the box."
+if [[ "$(field "$release_json" prerelease)" == "true" ]]; then
+    log "This is a pre-release: bugs are expected. Install a marked stable release with --stable once one exists."
+fi
+log "Typst and Markdown work out of the box. LaTeX uses a TeX installation (TeX Live, MiKTeX or MacTeX) if you have one;"
+log "otherwise open a .tex file and use Preview > Download the built-in engine (Linux only, about 15 MB, once)."

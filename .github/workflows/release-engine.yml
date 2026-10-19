@@ -121,10 +121,22 @@ jobs:
           set -euo pipefail
           f="dist/${{ matrix.file }}"
           ldd "$f" || true
-          # Only the C library and the compiler runtime may be dynamic. Anything
-          # else (libicu, libfreetype, ...) means a user without it cannot run
-          # the engine; fail here rather than at their first compile.
-          bad=$(ldd "$f" | awk '{print $1}' | grep -vE '^(linux-vdso|libc\.so|libm\.so|libgcc_s\.so|libstdc\+\+\.so|libpthread\.so|libdl\.so|librt\.so|/lib64/ld-linux|ld-linux)' || true)
+          # Only the C library, the compiler runtime and libgraphite2 may be
+          # dynamic. Anything else (libicu, libfreetype, ...) means a user
+          # without it cannot run the engine; fail here rather than at their
+          # first compile.
+          #
+          # libgraphite2 is the one exception. HarfBuzz (from the copy vendored
+          # in tectonic_bridge_harfbuzz) is compiled with HAVE_GRAPHITE2, and
+          # Debian and Ubuntu ship libgraphite2-dev without a static archive,
+          # so Tectonic's semi-static mode cannot fold it into the worker. It is
+          # a 200 KB library that a full desktop font stack already pulls in, and
+          # the app smoke-tests the binary before it keeps it, so a machine
+          # without it gets "the downloaded engine cannot start on this
+          # computer" rather than a broken install. Building a static graphite2
+          # in this job and dropping the archive where pkg-config points would
+          # remove the exception; see docs/ops/engine-release.md.
+          bad=$(ldd "$f" | awk '{print $1}' | grep -vE '^(linux-vdso|libc\.so|libm\.so|libgcc_s\.so|libstdc\+\+\.so|libpthread\.so|libdl\.so|librt\.so|libgraphite2\.so|/lib64/ld-linux|ld-linux)' || true)
           if [ -n "$bad" ]; then
             echo "::error::dynamic libraries that users may not have:"; echo "$bad"; exit 1
           fi
