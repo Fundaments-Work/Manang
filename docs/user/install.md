@@ -4,6 +4,26 @@ Download the installer for your system from the
 [latest release](https://github.com/Fundaments-Work/Manang/releases/latest). Every release lists its
 files and a `SHA256SUMS.txt` so you can check what you downloaded.
 
+## Linux: one command
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Fundaments-Work/Manang/main/scripts/install-linux.sh | bash
+```
+
+The script picks the right package for your distribution (`.deb`, `.rpm` or an AppImage), verifies it against the release's `SHA256SUMS.txt`, and installs it. Useful options (put them after `bash -s --`):
+
+| Option | What it does |
+| :--- | :--- |
+| `--user` | Install the AppImage under `~/.local`, no root needed |
+| `--version 0.1.0-beta.1` | Install a specific release |
+| `--stable` | Skip pre-releases (the default includes betas while Manang is in beta) |
+| `--bundle deb\|rpm\|appimage` | Force a package format |
+| `--dry-run` | Show what would be downloaded and change nothing |
+
+Remove it with `curl -fsSL https://raw.githubusercontent.com/Fundaments-Work/Manang/main/scripts/uninstall-linux.sh | bash` (add `-s -- --purge` to delete settings and plugins too). Read the script first if you like: it is short, and it is `scripts/install-linux.sh` in this repository.
+
+## All systems
+
 | System | File | Notes |
 | :--- | :--- | :--- |
 | Windows 10 / 11 (64-bit) | `Manang_<version>_x64-setup.exe` or `Manang_<version>_x64_en-US.msi` | The `.exe` installs for your user without admin rights. The `.msi` suits managed machines. |
