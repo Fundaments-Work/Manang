@@ -75,11 +75,20 @@ pub struct PluginEntry {
     pub readme: Option<String>,
     pub latest: String,
     pub versions: Vec<VersionEntry>,
+    /// Versions the registry withdrew: not offered for install or update,
+    /// shown as withdrawn for an installed copy. (A takedown does not remove
+    /// an installed copy: there is no revocation list yet, see ADR 0016.)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub yanked: Vec<String>,
 }
 
 impl PluginEntry {
     pub fn version(&self, version: &str) -> Option<&VersionEntry> {
         self.versions.iter().find(|v| v.version == version)
+    }
+
+    pub fn is_yanked(&self, version: &str) -> bool {
+        self.yanked.iter().any(|v| v == version)
     }
 
     /// The version `latest` names (validated to exist).
@@ -272,6 +281,9 @@ fn validate(index: &Index) -> Result<(), RegistryError> {
                 )));
             }
             check_permissions(id, &v.permissions)?;
+        }
+        if p.yanked.len() > MAX_VERSIONS || p.yanked.iter().any(|v| Version::parse(v).is_err()) {
+            return Err(invalid(format!("`{id}`: `yanked` must list versions")));
         }
         if p.latest_version().is_none() {
             return Err(invalid(format!(

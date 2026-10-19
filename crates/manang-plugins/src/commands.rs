@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 
 use crate::error::ManagerError;
 use crate::manager::PluginManager;
+use crate::marketplace::{Marketplace, MarketplaceConfig};
 
 const MANIFEST: &str = include_str!("../manifest.toml");
 
@@ -26,13 +27,21 @@ pub fn manifest() -> Result<Manifest, ManifestError> {
 /// Build the `plugins` plugin over `manager`. It holds the manager weakly:
 /// the manager owns the kernel that owns this plugin.
 pub fn plugin(manager: &Arc<PluginManager>) -> PluginsPlugin {
+    plugin_with(manager, MarketplaceConfig::default())
+}
+
+/// [`plugin`] with the marketplace pointed at a specific registry (the app
+/// gives it a cache folder; tests give it a local server and a test key).
+pub fn plugin_with(manager: &Arc<PluginManager>, market: MarketplaceConfig) -> PluginsPlugin {
     PluginsPlugin {
         manager: Arc::downgrade(manager),
+        market: Marketplace::new(market),
     }
 }
 
 pub struct PluginsPlugin {
     manager: Weak<PluginManager>,
+    market: Marketplace,
 }
 
 #[derive(Deserialize)]
@@ -80,6 +89,15 @@ fn parse<T: DeserializeOwned>(input: Payload) -> Result<T, PluginError> {
         Payload::Binary(_) => return Err(coded("bad_arguments", "expected a JSON payload")),
     };
     serde_json::from_value(value).map_err(|e| coded("bad_arguments", e))
+}
+
+/// The payload as a JSON object (empty for none).
+fn args_json(input: Payload) -> Result<Value, PluginError> {
+    match input {
+        Payload::Json(Value::Null) | Payload::Empty => Ok(json!({})),
+        Payload::Json(v) => Ok(v),
+        Payload::Binary(_) => Err(coded("bad_arguments", "expected a JSON payload")),
+    }
 }
 
 fn json_out<T: serde::Serialize>(value: &T) -> Result<Payload, PluginError> {
@@ -144,6 +162,40 @@ impl Plugin for PluginsPlugin {
                     "editors": kernel.editors(),
                     "toolbars": kernel.toolbars(),
                 })))
+            }
+            "plugins.configure" => self
+                .market
+                .configure(&args_json(input)?)
+                .map(Payload::Json)
+                .map_err(failed),
+            "plugins.registry-status" => {
+                parse::<NoArgs>(input)?;
+                Ok(Payload::Json(self.market.status(&manager)))
+            }
+            "plugins.browse" => self
+                .market
+                .browse(&manager, &args_json(input)?)
+                .map(Payload::Json)
+                .map_err(failed),
+            "plugins.detail" => self
+                .market
+                .detail(&manager, &args_json(input)?)
+                .map(Payload::Json)
+                .map_err(failed),
+            "plugins.check-updates" => self
+                .market
+                .check_updates(&manager, &args_json(input)?)
+                .map(Payload::Json)
+                .map_err(failed),
+            "plugins.install-from-registry" => self
+                .market
+                .install(&manager, &args_json(input)?)
+                .map(Payload::Json)
+                .map_err(failed),
+            "plugins.cancel-install" => {
+                parse::<NoArgs>(input)?;
+                self.market.cancel();
+                Ok(Payload::Json(json!({})))
             }
             "plugins.use-project" => {
                 let a: ProjectArgs = parse(input)?;

@@ -52,6 +52,19 @@ pub struct PluginRecord {
     /// Publisher, once signatures can vouch for one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publisher: Option<String>,
+    /// Set when it was installed from the plugin registry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Origin>,
+}
+
+/// Where a registry install came from: the registry's address, the plugin id
+/// in its index and the version that was installed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Origin {
+    pub registry: String,
+    pub id: String,
+    pub version: String,
 }
 
 impl Default for PluginRecord {
@@ -65,6 +78,7 @@ impl Default for PluginRecord {
             installed_at: 0,
             source: None,
             publisher: None,
+            origin: None,
         }
     }
 }
@@ -96,6 +110,7 @@ const RECORD_KEYS: &[&str] = &[
     "installed_at",
     "source",
     "publisher",
+    "origin",
 ];
 
 /// Keep only the keys this build knows, so a newer file's additions do not

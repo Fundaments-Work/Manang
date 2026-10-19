@@ -43,6 +43,19 @@ pub enum ManagerEvent {
     WatchError {
         error: String,
     },
+    /// A registry install is downloading or installing `id`.
+    InstallProgress {
+        id: String,
+        /// `downloading`, `verifying`, `installing` or `done`.
+        phase: &'static str,
+        received: u64,
+        total: u64,
+    },
+    /// An update check finished: how many installed plugins have a newer
+    /// version in the registry.
+    UpdatesAvailable {
+        count: usize,
+    },
 }
 
 impl ManagerEvent {
@@ -57,6 +70,8 @@ impl ManagerEvent {
             Self::NeedsApproval { .. } => "plugins.needs-approval",
             Self::StateChanged { .. } => "plugins.state-changed",
             Self::WatchError { .. } => "plugins.watch-error",
+            Self::InstallProgress { .. } => "plugins.install-progress",
+            Self::UpdatesAvailable { .. } => "plugins.updates",
         }
     }
 
@@ -69,7 +84,10 @@ impl ManagerEvent {
             | Self::Failed { name, .. }
             | Self::NeedsApproval { name, .. }
             | Self::StateChanged { name } => Some(name),
-            Self::Scanned { .. } | Self::WatchError { .. } => None,
+            Self::Scanned { .. }
+            | Self::WatchError { .. }
+            | Self::InstallProgress { .. }
+            | Self::UpdatesAvailable { .. } => None,
         }
     }
 
@@ -85,6 +103,13 @@ impl ManagerEvent {
             }
             Self::StateChanged { name } => json!({ "name": name }),
             Self::WatchError { error } => json!({ "error": error }),
+            Self::InstallProgress {
+                id,
+                phase,
+                received,
+                total,
+            } => json!({ "id": id, "phase": phase, "received": received, "total": total }),
+            Self::UpdatesAvailable { count } => json!({ "count": count }),
         }
     }
 }

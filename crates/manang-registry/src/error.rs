@@ -37,6 +37,8 @@ pub enum RegistryError {
         version: String,
         needs: String,
     },
+    #[error("`{id}` {version} was withdrawn by the registry and cannot be installed")]
+    Withdrawn { id: String, version: String },
     #[error("the download stopped after {received} of {expected} bytes")]
     Truncated { received: u64, expected: u64 },
     #[error("the download is not the size the registry lists; nothing was installed")]
@@ -67,6 +69,7 @@ impl RegistryError {
             Self::UnknownPlugin(_) => "registry_unknown_plugin",
             Self::UnknownVersion { .. } => "registry_unknown_version",
             Self::NeedsNewerApp { .. } => "registry_needs_newer_app",
+            Self::Withdrawn { .. } => "registry_withdrawn",
             Self::Truncated { .. } => "registry_truncated",
             Self::SizeMismatch => "registry_size_mismatch",
             Self::HashMismatch => "registry_hash_mismatch",

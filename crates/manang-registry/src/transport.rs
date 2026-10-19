@@ -91,6 +91,12 @@ pub trait Transport: Send + Sync {
     fn get(&self, url: &str, if_none_match: Option<&str>) -> Result<Response, RegistryError>;
 }
 
+impl<T: Transport + ?Sized> Transport for std::sync::Arc<T> {
+    fn get(&self, url: &str, if_none_match: Option<&str>) -> Result<Response, RegistryError> {
+        (**self).get(url, if_none_match)
+    }
+}
+
 /// The production transport: ureq with rustls on ring.
 #[cfg(feature = "native")]
 #[derive(Debug, Clone, Copy, Default)]
