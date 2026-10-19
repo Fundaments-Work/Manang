@@ -23,7 +23,6 @@ API_BASE="${MANANG_API_BASE:-https://api.github.com/repos/${GH_REPO}}"
 APP_DIR="${HOME}/.local/lib/manang"
 BIN_DIR="${HOME}/.local/bin"
 APPS_DIR="${HOME}/.local/share/applications"
-ICON_DIR="${HOME}/.local/share/icons/hicolor/128x128/apps"
 
 log() { printf '%s\n' "$*" >&2; }
 die() { log "error: $*"; exit 1; }
@@ -289,22 +288,39 @@ install_tar() {
     if ! tar -tJf "${work}/${file}" >/dev/null 2>&1; then
         die "tar cannot read ${file}; install xz-utils (Debian/Ubuntu) or use --bundle deb"
     fi
-    mkdir -p "$APP_DIR" "$BIN_DIR" "$APPS_DIR" "$ICON_DIR"
+    mkdir -p "$APP_DIR" "$BIN_DIR" "$APPS_DIR"
     rm -rf "${work}/unpack"
     mkdir -p "${work}/unpack"
     tar -C "${work}/unpack" -xJf "${work}/${file}"
     [[ -x "${work}/unpack/usr/bin/manang" ]] || die "${file} does not contain usr/bin/manang"
     install -Dm755 "${work}/unpack/usr/bin/manang" "${BIN_DIR}/manang"
-    for size in 32 128; do
-        if [[ -f "${work}/unpack/usr/share/icons/hicolor/${size}x${size}/apps/manang.png" ]]; then
-            install -Dm644 "${work}/unpack/usr/share/icons/hicolor/${size}x${size}/apps/manang.png" \
-                "${ICON_DIR}/manang.png"
-            break
+    # Every icon size goes into its own hicolor directory. Filing the 32x32
+    # image under 128x128 (and dropping the 256 and 512 sizes) is why the
+    # installed icon looked wrong or did not show in the window list. The
+    # tarball ships 32x32, 128x128 and 256x256@2; fetch the rest from the tag.
+    for entry in \
+        "32x32:src-tauri/icons/32x32.png" \
+        "128x128:src-tauri/icons/128x128.png" \
+        "256x256:src-tauri/icons/128x128@2x.png" \
+        "256x256@2:src-tauri/icons/128x128@2x.png" \
+        "512x512:src-tauri/icons/icon.png"; do
+        size="${entry%%:*}"
+        source_path="${entry#*:}"
+        target="${HOME}/.local/share/icons/hicolor/${size}/apps/manang.png"
+        packaged="${work}/unpack/usr/share/icons/hicolor/${size}/apps/manang.png"
+        if [[ -f "${packaged}" ]]; then
+            install -Dm644 "${packaged}" "${target}"
+        else
+            mkdir -p "${target%/*}"
+            if curl -fsSL -o "${target}.part" \
+                "https://raw.githubusercontent.com/${GH_REPO}/${tag}/${source_path}"; then
+                mv "${target}.part" "${target}"
+            else
+                rm -f "${target}.part"
+                log "note: could not fetch the ${size} icon; launchers will scale another size"
+            fi
         fi
     done
-    [[ -f "${ICON_DIR}/manang.png" ]] || curl -fsSL -o "${ICON_DIR}/manang.png" \
-        "https://raw.githubusercontent.com/${GH_REPO}/${tag}/src-tauri/icons/128x128.png" \
-        || log "note: could not fetch the icon; the launcher will use a generic one"
     cat > "${APPS_DIR}/manang.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
@@ -314,10 +330,15 @@ Exec=${BIN_DIR}/manang %F
 Icon=manang
 Terminal=false
 Categories=Office;Education;Science;
-StartupWMClass=Manang
+StartupWMClass=manang
 DESKTOP
     update-desktop-database "$APPS_DIR" 2>/dev/null || true
     gtk-update-icon-cache -q "${HOME}/.local/share/icons/hicolor" 2>/dev/null || true
+    # A running GNOME Shell stats icon theme directories and reloads them when
+    # one changes; a new file inside an existing size directory changes no
+    # directory it stats, so touch the theme directory to pick up the icons
+    # without logging out.
+    touch "${HOME}/.local/share/icons/hicolor" "${HOME}/.local/share/icons" 2>/dev/null || true
     log "Installed ${BIN_DIR}/manang for ${USER}"
     case ":${PATH}:" in
         *":${BIN_DIR}:"*) ;;
