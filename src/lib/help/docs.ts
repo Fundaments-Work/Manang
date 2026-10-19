@@ -27,6 +27,7 @@ const RAW_DOCS = import.meta.glob<string>("../../../docs/user/*.md", {
 
 const DOC_ORDER: Record<string, number> = {
   index: 0,
+  install: 0.5,
   "getting-started": 1,
   writing: 2,
   "preview-and-pdf": 3,

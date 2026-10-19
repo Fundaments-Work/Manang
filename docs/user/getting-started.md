@@ -2,9 +2,11 @@
 
 You can run Manang from source, create and organize authoring projects on the Home screen, and navigate the main window layout.
 
-## 1. Run Manang from source
+## 1. Install Manang
 
-Until pre-built installers are published, run Manang from source with the development toolchain.
+Download an installer for Windows, macOS or Linux from the [latest release](https://github.com/Fundaments-Work/Manang/releases/latest); [Install Manang](install.md) lists the files and what to expect from the first launch. To build it yourself from source instead, follow the steps below.
+
+### Build from source
 
 1. Ensure your system meets the requirements:
    - **Rust:** Version 1.95 or later (MSRV 1.95).

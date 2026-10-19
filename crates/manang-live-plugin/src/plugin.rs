@@ -19,11 +19,24 @@ use crate::driver::{Change, DriverHandle, DriverParams, PushOutcome};
 use crate::error::LiveHostError;
 use crate::invite::{InviteLink, normalize_relay, room_url};
 
+/// The relay run by Fundaments; the default of `live.relay-url`. It only ever
+/// sees ciphertext, and the setting can point anywhere or be emptied.
+const DEFAULT_RELAY: &str = "wss://relay.fundaments.work";
+
 /// Values of the plugin's settings.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct Settings {
     relay_url: String,
     display_name: String,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            relay_url: DEFAULT_RELAY.to_owned(),
+            display_name: String::new(),
+        }
+    }
 }
 
 struct Active {

@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="docs/user/install.md">Install</a> ·
   <a href="docs/user/index.md">User guide</a> ·
   <a href="docs/plugins.md">Plugins</a> ·
   <a href="docs/beta/tester-guide.md">Beta tester guide</a> ·
@@ -17,11 +18,11 @@
   <img src="docs/screenshots/editor-and-preview.png" alt="Manang: a Typst document with its live PDF preview" width="860">
 </p>
 
-> **Status: private beta.** Manang is being opened to invited testers on Linux,
-> Windows and macOS, and updated from their feedback. There is no public
-> download yet; invitations come from [Fundaments.work](https://fundaments.work).
-> The screenshots on this page come
-> from the browser build with sample data; the desktop app is the real product.
+> **Status: public beta.** Installers for Windows, macOS (Apple silicon and
+> Intel) and Linux are on the [releases page](https://github.com/Fundaments-Work/Manang/releases/latest);
+> they are not code-signed yet, so see [Install Manang](docs/user/install.md) for
+> what your system will say. The screenshots on this page come from the browser
+> build with sample data; the desktop app is the real product.
 
 ## Why Manang
 
