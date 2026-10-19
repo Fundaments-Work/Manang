@@ -163,7 +163,7 @@ jobs:
           cat vite.log
           exit 1
       - name: Run the suite
-        run: MANANG_ORIGIN=http://127.0.0.1:1431 node scripts/verify-ui.mjs
+        run: MANANG_BROWSER=google-chrome MANANG_ORIGIN=http://127.0.0.1:1431 node scripts/verify-ui.mjs
       - name: Screenshots
         if: always()
         uses: actions/upload-artifact@v7
