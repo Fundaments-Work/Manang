@@ -2863,6 +2863,8 @@ async function pluginsBody(page) {
     "turning it on again restores the list",
     `document.querySelectorAll('#side-panel [data-registry-plugin]').length === 5`,
   );
+  // The registry failures above were provoked on purpose and logged by the app.
+  page.errors.splice(0);
 
   // Design rules on the page, then a narrow window and the light theme.
   await tap(page, '#side-panel [data-registry-plugin="word-count"] [data-open-page]');
