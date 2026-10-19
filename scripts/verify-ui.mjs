@@ -845,6 +845,8 @@ async function liveSection(browser) {
   const original = await docText();
 
   // -- No relay: sharing explains itself and points at Settings. ----------
+  // The default is the hosted relay; this part of the suite is about an empty one.
+  await run("settings.set", { id: "live.relay-url", value: "" });
   await palette("Share this file live");
   // The palette opens late on a page that has just loaded in a long run.
   await sleep(1200);
