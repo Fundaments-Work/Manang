@@ -58,7 +58,7 @@ Local build (for measuring only; use the HDD target dir, never a second target o
 the SSD, and nothing else heavy running):
 
 ```bash
-CARGO_TARGET_DIR=/run/media/sapiens/Development/manang-release-target CARGO_BUILD_JOBS=4 \
+CARGO_TARGET_DIR=/run/media/sapiens/Development/Fundaments/manang-release-target CARGO_BUILD_JOBS=4 \
   cargo build --release --locked -p manang-latex --no-default-features --features engine \
   --bin manang-latex-worker
 ```

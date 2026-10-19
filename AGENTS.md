@@ -185,8 +185,8 @@ Agents (and humans) work in parallel on one machine with limited CPU and disk. A
 
 | Put it on the SSD | Put it on the HDD |
 | :--- | :--- |
-| The working repo: `~/Development/Manang` (the only checkout; GitHub is the backup) | Release/packaging builds (below) |
-| Its `target/` (dev builds) and `node_modules/` | `CARGO_TARGET_DIR=/run/media/sapiens/Development/manang-release-target pnpm app:build` |
+| The working repo: `~/Development/Fundaments/Manang` (the only checkout; GitHub is the backup; every Fundaments project lives under `~/Development/Fundaments/`) | Release/packaging builds (below) |
+| Its `target/` (dev builds) and `node_modules/` | `CARGO_TARGET_DIR=/run/media/sapiens/Development/Fundaments/manang-release-target pnpm app:build` |
 | Agent worktrees (`.claude/worktrees`, sharing the repo's `target/`) | Archives: old build caches, fuzz corpora, screenshots, datasets |
 | Toolchains and caches (`~/.cargo`, `~/.rustup`, the pnpm store) | Projects not being worked on this month |
 

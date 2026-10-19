@@ -8,12 +8,12 @@ task (its whole section) into Antigravity.
 Common rules for every task (also read AGENTS.md v1.3.0; it is binding):
 
 - Create your worktree from the current `main` on the SSD:
-  `cd ~/Development/Manang && git fetch && git worktree add -b antigravity/<topic> ../Manang-ag-<topic> main`
+  `cd ~/Development/Fundaments/Manang && git fetch && git worktree add -b antigravity/<topic> ../Manang-ag-<topic> main`
   then `cd ../Manang-ag-<topic> && pnpm install --frozen-lockfile --offline`.
 - Commit early and often on your branch with Conventional Commits; never
   commit to `main`, never push, never merge. Report your branch and commits
   when done, and append a short summary to `docs/notes/ag-progress.md`.
-- Rust: `export CARGO_TARGET_DIR=/home/sapiens/Development/Manang/target`,
+- Rust: `export CARGO_TARGET_DIR=/home/sapiens/Development/Fundaments/Manang/target`,
   always `-p <crate>`, never workspace-wide, never `cargo clean`. Gates:
   `cargo fmt --all -- --check`, `cargo clippy -p <crate> --all-targets --locked -- -D warnings`,
   `cargo test -p <crate> --locked`.
