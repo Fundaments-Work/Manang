@@ -61,7 +61,7 @@ WebKitGTK stack into the file: 120 MB, of which 91 MB was `libwebkit2gtk` and 32
 `libjavascriptcoregtk`, for a 46 MB `.deb`. That copy is a browser engine frozen at build
 time, so it never receives the security updates your system's does, and it breaks against
 newer GTK versions. Tauri has no switch to leave it out, so the tarball takes its place:
-30 MB, the same WebKitGTK 4.1 requirement as the packages, and no root.
+31 MB, the same WebKitGTK 4.1 requirement as the packages, and no root.
 
 ## Check the download
 
