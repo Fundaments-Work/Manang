@@ -102,9 +102,17 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_embedded_list_parses_and_trusts_nothing_until_a_real_key_is_set() {
+    fn the_embedded_list_parses_and_holds_the_production_key() {
         assert!(TrustedKeys::parse(EMBEDDED).is_ok());
-        assert!(TrustedKeys::embedded().is_empty());
+        assert!(!TrustedKeys::embedded().is_empty());
+        assert!(EMBEDDED.contains("registry-2026-10 "));
+    }
+
+    #[test]
+    fn a_list_with_only_the_placeholder_trusts_nothing() {
+        let only = "placeholder AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n";
+        let keys = TrustedKeys::parse(only).expect("parses");
+        assert!(keys.is_empty());
     }
 
     #[test]
