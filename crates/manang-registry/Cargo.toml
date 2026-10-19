@@ -1,0 +1,30 @@
+[package]
+name = "manang-registry"
+description = "Client for Manang's plugin registry: signed index, cache, search, verified downloads"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64 = "0.22"
+ed25519-dalek = { version = "3", default-features = false }
+semver = { version = "1", features = ["serde"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.11"
+thiserror = { workspace = true }
+# The HTTP client (rustls on ring: no OpenSSL, no aws-lc). Off for a web build,
+# which supplies its own `Transport` over `fetch`.
+ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
+
+[features]
+default = ["native"]
+native = ["dep:ureq"]
+# A local registry server and signing helpers, for other crates' tests only.
+testing = []
+
+[dev-dependencies]
+tempfile = "3"
