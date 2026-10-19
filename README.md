@@ -65,7 +65,8 @@ files as plain text on your own disk.
 Rust for the engine (Typst compiler, buffers, search, citations, agent
 orchestration), Tauri 2 for the desktop shell, Svelte 5 and CodeMirror 6 for the
 interface, Wasmtime for plugin sandboxes. LaTeX compiles with your installed TeX
-distribution; an optional built-in engine is planned for zero-install setups.
+distribution, or with the built-in Tectonic engine that Linux users can download
+once, with consent, from Settings > LaTeX.
 
 ## Documentation
 
