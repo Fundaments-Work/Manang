@@ -13,10 +13,14 @@ import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { cliArgs } from "./lib/cli.mjs";
 import { generateKeypair } from "./lib/sign.mjs";
 import { out, warn } from "./lib/util.mjs";
 
-const { values } = parseArgs({ options: { "private-out": { type: "string" } } });
+const { values } = parseArgs({
+  args: cliArgs(),
+  options: { "private-out": { type: "string" } },
+});
 const target = values["private-out"];
 if (!target) {
   warn("usage: node scripts/keygen.mjs --private-out <file outside the repository>");

@@ -414,3 +414,24 @@ test("an older broken release is skipped with a warning; a broken latest is fata
   });
   expectError(fatal, /not a zip/);
 });
+
+test("a yanked version is left out of the index, and yanking everything is an error", async () => {
+  const id = "demo-plugin";
+  const rel = (v) =>
+    release(id, validPlugin({ name: id, version: v }), {
+      tag: `v${v}`,
+      assetName: `${id}-${v}.manangplugin`,
+    });
+  const r = await run({
+    entry: { yanked: ["1.0.0"] },
+    releases: [rel("1.0.0"), rel("0.9.0")],
+  });
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.results[0].plugin.latest, "0.9.0");
+  assert.deepEqual(
+    r.results[0].plugin.versions.map((v) => v.version),
+    ["0.9.0"],
+  );
+  const all = await run({ entry: { yanked: ["1.0.0"] }, releases: [rel("1.0.0")] });
+  expectError(all, /no release of .* has an asset matching/);
+});

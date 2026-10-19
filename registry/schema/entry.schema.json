@@ -33,6 +33,16 @@
       "pattern": "^README([.-][A-Za-z0-9._-]*)?$",
       "maxLength": 64
     },
+    "yanked": {
+      "description": "Versions to leave out of the index (a takedown). Maintainers add to it; authors do not.",
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+      }
+    },
     "release_asset_pattern": {
       "description": "Which release asset is the plugin. `*` matches any run of characters. Must end in .manangplugin.",
       "type": "string",

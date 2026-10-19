@@ -70,7 +70,9 @@ export async function resolveEntry(entry, source, opts = {}) {
     .sort((a, b) => compareSemver(b.version, a.version));
 
   const candidates = [];
+  const yanked = new Set(entry.yanked ?? []);
   for (const { r, version } of releases) {
+    if (yanked.has(version)) continue;
     const assets = r.assets.filter((a) => pattern.test(a.name));
     if (assets.length === 0) continue;
     candidates.push({ r, version, assets });

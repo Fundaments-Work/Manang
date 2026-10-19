@@ -11,10 +11,11 @@
 import { parseArgs } from "node:util";
 import { describePermissions } from "./lib/archive.mjs";
 import { resolveAll } from "./lib/build.mjs";
-import { DEFAULT_ENTRIES, pickSource, readJsonIfGiven } from "./lib/cli.mjs";
+import { DEFAULT_ENTRIES, cliArgs, pickSource, readJsonIfGiven } from "./lib/cli.mjs";
 import { out, warn } from "./lib/util.mjs";
 
 const { values, positionals } = parseArgs({
+  args: cliArgs(),
   allowPositionals: true,
   options: {
     entries: { type: "string", default: DEFAULT_ENTRIES },

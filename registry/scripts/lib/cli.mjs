@@ -20,3 +20,9 @@ export async function readJsonIfGiven(file) {
   if (!file) return undefined;
   return JSON.parse(await readFile(file, "utf8"));
 }
+
+/** argv without a leading `--` (older pnpm passes it through to the script). */
+export function cliArgs() {
+  const args = process.argv.slice(2);
+  return args[0] === "--" ? args.slice(1) : args;
+}

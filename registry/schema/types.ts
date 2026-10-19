@@ -9,6 +9,8 @@ export interface RegistryEntry {
   tags: string[];
   /** File name of the readme inside the archive; defaults to the first README*. */
   readme?: string;
+  /** Versions left out of the index (a takedown by the maintainers). */
+  yanked?: string[];
   /** Glob (`*` only) selecting the release asset, ends in `.manangplugin`. */
   release_asset_pattern: string;
 }
