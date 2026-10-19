@@ -161,7 +161,7 @@ jobs:
           # recompresses the .deb with xz. Whatever it changes here has to
           # change on the release too, so diff the directory before and after.
           find . -maxdepth 1 -type f -printf '%f\n' | sort > ../before.txt
-          bash ../../scripts/pack-linux.sh
+          bash ../scripts/pack-linux.sh
           find . -maxdepth 1 -type f -printf '%f\n' | sort > ../after.txt
           while read -r f; do
             grep -qxF "$f" ../after.txt || { echo "removing $f"; gh release delete-asset "$TAG" "$f"; }
