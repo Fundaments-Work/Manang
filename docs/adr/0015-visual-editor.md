@@ -285,6 +285,13 @@ Reference implementation: `wit/format.wit`, `manang_visual::adapter`.
   style links and images (`[a][r]`, `[r]`) are left as source text because
   their meaning depends on definitions the window cannot see. Tables are
   reported as a `table` leaf.
+* **Markdown and link definitions.** A definition also decides whether an
+  *inline* link parses: in `[[r]: http://x\na](u)` the inner `[r]` closes on
+  its own and takes the outer `](u)` with it as soon as any `[r]:` definition
+  exists in the document. So an edit that can add, remove or invalidate a
+  definition (any line it touches, plus one on each side, or any inserted line,
+  is up to three spaces and a `[`) re-reads the whole document, as an edit that
+  can create or destroy frontmatter already does. Prose never takes that path.
 * **Typst** relies on `Source::edit`, which rescans the text after the edit to
   rebuild line starts (about 1.6 ms median on a 1 MB document, typst-syntax
   internals). For a document with a syntax error somewhere, Typst's incremental

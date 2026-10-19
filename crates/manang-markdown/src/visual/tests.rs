@@ -238,6 +238,53 @@ fn reference_links_stay_source_text() {
     assert_eq!(s.text, t.replacen("https", "ftp", 1));
 }
 
+/// A definition written or deleted far from the block it changes: `[[r]: x
+/// \na](u)` is a link only while no `[r]` definition exists, so the window
+/// around the edit cannot decide it (found by `incremental_equals_fresh`).
+#[test]
+fn an_edit_to_a_definition_far_away_reparses_what_it_changes() {
+    let before = "# Head\n[[r]: http://x\na](u)  b\n\n*\n[r]:x";
+    let insert = "[r]: http://x\n";
+    let at = before.len() - 1; // just before the closing `]`
+    let mut s = MarkdownSession::new(before);
+    s.edit(at..at, insert).expect("edit");
+    let mut after = before.to_owned();
+    after.insert_str(at, insert);
+    assert_eq!(
+        dump_session(&s),
+        dump_session(&MarkdownSession::new(&after))
+    );
+}
+
+/// The other direction: removing a definition brings the inline link back.
+#[test]
+fn deleting_a_definition_far_away_reparses_what_it_changes() {
+    let before = "# Head\n[[r]: http://x\na](u)  b\n\n*\n[r]:x";
+    let start = before.find("[r]:x").expect("definition");
+    let mut s = MarkdownSession::new(before);
+    s.edit(start..before.len(), "").expect("edit");
+    let after = before[..start].to_owned();
+    assert_eq!(
+        dump_session(&s),
+        dump_session(&MarkdownSession::new(&after))
+    );
+}
+
+/// A definition that stops being one because the line above it no longer ends
+/// in a blank line, without the edited bytes ever containing `]:`.
+#[test]
+fn joining_a_definition_to_the_paragraph_above_it_reparses() {
+    let before = "para\n\n[r]: x\ntext\n";
+    let blank = before.find("\n\n").expect("blank line") + 1;
+    let mut s = MarkdownSession::new(before);
+    s.edit(blank..blank + 1, "").expect("edit");
+    let after = before.replacen("\n\n", "\n", 1);
+    assert_eq!(
+        dump_session(&s),
+        dump_session(&MarkdownSession::new(&after))
+    );
+}
+
 #[test]
 fn rejects_edits_outside_the_text() {
     let mut s = MarkdownSession::new("héllo");

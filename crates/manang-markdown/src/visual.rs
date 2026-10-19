@@ -198,6 +198,9 @@ impl AdapterSession for MarkdownSession {
             )));
         }
         let old_front = frontmatter_end(&self.text);
+        // Link reference definitions decide how the whole document parses, not
+        // just the window: read this before the text changes.
+        let definitions_risk = definitions_at_risk(&self.text, &range, insert);
         self.text.replace_range(range.clone(), insert);
         let new_len = self.text.len();
         // Frontmatter is the one construct a distant edit can create or
@@ -205,7 +208,7 @@ impl AdapterSession for MarkdownSession {
         let new_front = frontmatter_end(&self.text);
         let frontmatter_risk = old_front.is_some() != new_front.is_some()
             || old_front.is_some_and(|end| range.start <= end);
-        if self.blocks.is_empty() || frontmatter_risk {
+        if self.blocks.is_empty() || frontmatter_risk || definitions_risk {
             self.blocks = parse_window(&self.text, 0, new_len);
             return Ok(0..new_len);
         }
@@ -417,6 +420,38 @@ fn frontmatter_end(text: &str) -> Option<usize> {
         at = end + 1;
     }
     None
+}
+
+/// Whether replacing `range` with `insert` can add or remove a link reference
+/// definition. A definition anywhere in the document decides whether an
+/// *inline* link parses as one at all: in `[[r]: http://x\na](u)` the inner
+/// `[r]` closes on its own and swallows the outer `](u)` as soon as some
+/// `[r]:` definition exists, so a block's spans depend on the whole document,
+/// not on the window that is reparsed.
+fn definitions_at_risk(text: &str, range: &Range<usize>, insert: &str) -> bool {
+    if insert.split('\n').any(opens_a_definition) {
+        return true;
+    }
+    // The lines the edit touches, plus one on each side: joining `[r]` with
+    // `: x`, or dropping the blank line that kept a definition out of the
+    // paragraph above it, changes a definition without the edited bytes ever
+    // containing `]:`.
+    let mut first = text::line_start(text, range.start);
+    if first > 0 {
+        first = text::line_start(text, first - 1);
+    }
+    let mut last = text::line_end(text, range.end);
+    if last < text.len() {
+        last = text::line_end(text, last + 1).max(last);
+    }
+    text[first..last].split('\n').any(opens_a_definition)
+}
+
+/// Whether a line could be a link reference definition: at most three spaces of
+/// indentation, then a `[` (which also covers `[^1]:` footnotes).
+fn opens_a_definition(line: &str) -> bool {
+    let indent = line.len() - line.trim_start_matches(' ').len();
+    indent <= 3 && line[indent.min(line.len())..].starts_with('[')
 }
 
 /// Whether the text ends with an empty (or blank) line.

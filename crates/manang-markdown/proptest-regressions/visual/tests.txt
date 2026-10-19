@@ -1,0 +1,2 @@
+# Minimal failing input found by proptest.
+cc 6f21ce1429f3e7fbb7fd5a0980bfbf9fc9a55e75caee2e85fa138336b5b856b8

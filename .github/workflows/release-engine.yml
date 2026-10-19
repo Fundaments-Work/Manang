@@ -21,11 +21,22 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  # Tectonic's C dependencies are found through pkg-config. Asking for static
-  # linking makes the worker carry ICU, FreeType, fontconfig and friends inside
-  # itself, so it runs on any Linux with a recent glibc instead of only on a
-  # machine with the same ICU version as the build machine.
+  # Tectonic's C dependencies are found through pkg-config, and the worker must
+  # carry ICU, FreeType, fontconfig and friends inside itself, so it runs on any
+  # Linux with a recent glibc instead of only on a machine with the same ICU
+  # version as the build machine.
+  #
+  # `PKG_CONFIG_ALL_STATIC` alone is NOT enough, and this was measured on
+  # 2026-10-19: pkg-config refuses to link a library it considers a system one
+  # statically even with that flag, so the worker still pulled in libicuuc.so,
+  # libfreetype, libfontconfig, libgraphite2, libpng16, libz, libexpat, libbz2
+  # and libbrotli (the check further down failed on exactly those).
+  # `TECTONIC_PKGCONFIG_FORCE_SEMI_STATIC` is Tectonic's own switch: it makes
+  # tectonic_dep_support emit `cargo:rustc-link-lib=static=...` itself, choosing
+  # the archive when the .pkg-config found one is on disk (libc, libm, libdl and
+  # libpthread stay dynamic, which is what we want).
   PKG_CONFIG_ALL_STATIC: "1"
+  TECTONIC_PKGCONFIG_FORCE_SEMI_STATIC: "1"
 
 jobs:
   build:
@@ -39,15 +50,14 @@ jobs:
           - platform: linux-x86_64
             os: ubuntu-24.04
             file: manang-latex-worker-linux-x86_64
+          # GitHub's arm runner is free for public repositories (it is), and
+          # the steps below are identical to x86_64.
+          - platform: linux-aarch64
+            os: ubuntu-24.04-arm
+            file: manang-latex-worker-linux-aarch64
           # Cost and notes for the platforms that are declared in
           # engines/manifest.json but not built yet. Enable one by removing the
           # leading "#", then add its system-library step below.
-          #
-          # linux-aarch64: GitHub's arm runner is free for public repos
-          # (ubuntu-24.04-arm), same steps as x86_64. Cheap; do it first.
-          # - platform: linux-aarch64
-          #   os: ubuntu-24.04-arm
-          #   file: manang-latex-worker-linux-aarch64
           #
           # windows-x86_64: needs vcpkg (freetype, icu, harfbuzz, graphite2,
           # fontconfig) with the x64-windows-static-md triplet and
