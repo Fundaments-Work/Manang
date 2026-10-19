@@ -70,7 +70,7 @@ jobs:
           #   os: macos-15-intel
           #   file: manang-latex-worker-macos-x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: System libraries (Linux)
         if: runner.os == 'Linux'
