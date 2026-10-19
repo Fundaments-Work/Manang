@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Contributing Guide & Architecture Map:** Comprehensive `CONTRIBUTING.md` with build instructions, port conventions, quality gates, and an exhaustive map of all crates and frontend directories.
 
 ### Changed
+- **`v0.1.0-beta.1` was rebuilt:** the original upload could not fetch the built-in engine and shipped a 120 MB AppImage. The tag now points at a build with the published engine URL, the tarball and xz `.deb` artifacts, and the Markdown link fix; the old AppImage is withdrawn.
 - **Agent panel is calmer:** one composer (Enter sends, `/` commands, `@` mentions) with one quiet context line instead of a chip tray; consecutive tool calls fold into one row; reasoning is a single "Thinking" line; a proposal is one row ("Edit to main.typ, 2 changes") while the diff lives in the editor; the usage footer, chips, cards and preview button moved into one header menu. Events are consolidated to `agent.text`, `agent.tool`, `agent.approval`, `agent.proposal`, `agent.usage`, `agent.error` and `agent.done`.
 - **Agent settings:** `agent.max-context-tokens` became `agent.context-window` (default 100,000); added `agent.reasoning-effort` and `agent.use-agents-md`; `agent.include-thinking` is now a developer flag. The round cap per message is 12.
 - **Minimum Supported Rust Version (MSRV):** Elevated workspace MSRV to Rust 1.95 (`edition = "2024"`).
@@ -57,7 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **The release workflow could not pack the Linux artifacts:** the publish job ran `pack-linux.sh` as `../../scripts/pack-linux.sh` from inside `assets/`, which resolves outside the checkout, so the step stopped before writing the tarball or the checksums. It now runs `../scripts/pack-linux.sh`.
-- **The install script can install `v0.1.0-beta.1`:** that release predates the tarball. Asking the script for `tar` on it now installs its AppImage, says why, and skips the built-in-engine hint that build cannot honour. `--bundle appimage` is accepted for the same reason.
 - **Linux Wayland + NVIDIA Stutter:** Automatically set `WEBKIT_DISABLE_DMABUF_RENDERER=1` at startup to eliminate WebKitGTK DMABUF rendering glitches under NVIDIA Wayland sessions.
 - **SVG Float Jitter:** Replaced floating-point output drift with stable 1-decimal coordinate formatting (`format_coord`) in headless figure export.
 - **Project Scaffolding Escaping:** Added escaping for special characters in project titles to prevent markup parse failures during scaffolding in Typst and LaTeX.
