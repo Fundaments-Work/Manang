@@ -1,34 +1,47 @@
+# Dependency updates are batched monthly into one pull request per ecosystem so
+# they cost few CI minutes and little review. Security updates are separate and
+# still arrive immediately.
 version: 2
 updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
     labels: [dependencies, rust]
     groups:
       # The npm @tauri-apps packages and the Rust tauri crates must share a
       # major.minor (AGENTS.md 7.4); the npm group below moves with this one.
       tauri:
         patterns: ["tauri", "tauri-*"]
-      rust-minor-patch:
-        update-types: [minor, patch]
+      rust:
+        patterns: ["*"]
+        exclude-patterns: ["tauri", "tauri-*"]
     ignore:
       # Pinned deliberately: the agent provider layer (docs/research Rig notes).
       - dependency-name: rig-core
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
     labels: [dependencies, frontend]
     groups:
       tauri:
         patterns: ["@tauri-apps/*"]
-      frontend-minor-patch:
-        update-types: [minor, patch]
+      frontend:
+        patterns: ["*"]
+        exclude-patterns: ["@tauri-apps/*"]
+    ignore:
+      # TypeScript 7 is not yet supported by svelte-check and typescript-eslint.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 1
     labels: [dependencies, ci]
+    groups:
+      actions:
+        patterns: ["*"]

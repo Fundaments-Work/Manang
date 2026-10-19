@@ -19,9 +19,9 @@ rayon = "1.12"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-toml = "0.8"
+toml = "1"
 # `.manangplugin` archives: pure Rust (zlib-rs inflate, no C library), MIT.
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dev-dependencies]
 insta = "1"

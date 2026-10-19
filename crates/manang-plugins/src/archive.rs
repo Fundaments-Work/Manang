@@ -204,7 +204,11 @@ pub fn extract_archive(archive: &Path, dest: &Path) -> Result<Option<String>, Ar
         let entry = zip
             .by_index_raw(i)
             .map_err(|e| ArchiveError::Zip(e.to_string()))?;
-        let name = entry.name().to_owned();
+        // zip 9 reports a name that is not valid UTF-8 as an error: refuse such an archive.
+        let name = entry
+            .name()
+            .map_err(|e| ArchiveError::Zip(e.to_string()))?
+            .into_owned();
         let clean = sanitize_entry(&name)?;
         if entry.is_dir() {
             continue;

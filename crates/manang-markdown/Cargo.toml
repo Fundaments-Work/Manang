@@ -15,7 +15,7 @@ pulldown-cmark = { version = "0.13.4", default-features = false, features = ["ht
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-toml = "0.8"
+toml = "1"
 yaml-rust = "0.4"
 
 [dev-dependencies]

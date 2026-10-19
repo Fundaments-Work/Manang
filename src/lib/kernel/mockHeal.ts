@@ -478,7 +478,7 @@ export function healPlugin(): MockPluginFactory {
           }
           if (!enabled) return { fixes: [], findings: [], enabled };
           const diagnostics = diagnosticsOf(args);
-          let fixes: HealFix[] = [];
+          let fixes: HealFix[];
           let findings: HealFinding[] = [];
           if (engine === "latex") fixes = latexFixes(text, diagnostics);
           else if (engine === "typst") fixes = typstFixes(text, diagnostics);
