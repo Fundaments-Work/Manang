@@ -1,27 +1,34 @@
 name: CI
 
-# The gates of AGENTS.md section 5, on Linux. macOS and Windows runners cost
-# more minutes and are used for release builds, not for every push.
+# Minutes are a budget on a private repository (the free quota ran out once),
+# so CI is in two tiers.
 #
-# Minutes are the budget on a private repository, so a change that touches only
-# documentation runs nothing, and the long UI suite runs on pull requests, every
-# night and on demand rather than on every push to main (it also runs locally
-# before each merge).
+#  * quick: every push to main and every pull request, about 4 minutes. Formatting,
+#    the banned-library check, the frontend, and the relay Worker.
+#  * full:  once a week, on demand (Actions > CI > Run workflow), and on a pull
+#    request labelled `full-ci`. Clippy and every Rust test, the wasm32 check,
+#    licences and bans, and the headless-Chromium UI suite (30 to 40 minutes).
+#
+# Every gate also runs locally before a merge (AGENTS.md section 5), so the full
+# tier is a safety net, not the first line. Run it before a release.
+# Documentation-only changes run nothing. macOS and Windows runners cost 2 to 10
+# times more per minute and are used for release builds only.
 on:
   push:
     branches: [main]
     paths-ignore:
       ["docs/**", "**/*.md", "LICENSE", "CITATION.cff", ".github/ISSUE_TEMPLATE/**"]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths-ignore:
       ["docs/**", "**/*.md", "LICENSE", "CITATION.cff", ".github/ISSUE_TEMPLATE/**"]
   schedule:
-    - cron: "23 3 * * *"
+    - cron: "23 3 * * 0"
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions:
   contents: read
@@ -35,8 +42,46 @@ env:
   # (the workspace's dev profile), which takes over 40 minutes.
 
 jobs:
+  quick:
+    name: Quick checks (format, tree, frontend, relay Worker)
+    # A labelled event only matters for the full tier.
+    if: github.event.action != 'labeled'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.96.0"
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+      - name: No bundled C libraries in the app binary (AGENTS.md 7.4)
+        run: |
+          if cargo tree -p manang --locked | grep -iE "tectonic|harfbuzz|freetype-sys|icu4c|openssl-sys|openssl v|aws-lc"; then
+            echo "::error::a banned crate is in the app's dependency tree"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run lint
+      - run: pnpm test
+      - name: Relay Worker
+        working-directory: relay/worker
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
+          pnpm test
+
   rust:
-    name: Rust (fmt, clippy, tests)
+    name: Rust (clippy, tests)
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: ubuntu-24.04
     timeout-minutes: 60 # a cold cache builds Typst and Wasmtime
     steps:
@@ -64,40 +109,23 @@ jobs:
           # Keep what was built even when a later step fails or times out, so
           # the next run starts warm instead of from scratch.
           cache-on-failure: true
-      - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked --no-fail-fast
-
-  web-capable:
-    name: wasm32 check of the web-capable crates
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.96.0"
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - run: >
+      - name: wasm32 check of the web-capable crates
+        run: >
           cargo check --locked --target wasm32-unknown-unknown
-          -p manang-agent-core -p manang-figure -p manang-diagram
+          -p manang-agent-core -p manang-figure -p manang-diagram -p manang-live
+          -p manang-visual -p manang-heal
 
   supply-chain:
-    name: Licences, bans, dependency tree
+    name: Licences and bans
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.96.0"
-      - name: No bundled C libraries in the app binary (AGENTS.md 7.4)
-        run: |
-          if cargo tree -p manang --locked | grep -iE "tectonic|harfbuzz|freetype-sys|icu4c|openssl-sys|openssl v|aws-lc"; then
-            echo "::error::a banned crate is in the app's dependency tree"
-            exit 1
-          fi
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check licenses bans sources
@@ -110,46 +138,11 @@ jobs:
           command: check advisories
           arguments: ""
 
-  frontend:
-    name: Frontend (typecheck, lint, unit tests)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run check
-      - run: pnpm run lint
-      - run: pnpm test
-
-  relay-worker:
-    name: Relay Worker (unit tests)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: relay/worker
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          package_json_file: relay/worker/package.json
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: relay/worker/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run typecheck
-      - run: pnpm test
-
   ui:
     name: UI suite (headless Chromium)
-    if: github.event_name != 'push'
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
