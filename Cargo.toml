@@ -5,6 +5,7 @@ members = [
     "crates/manang-kernel",
     "crates/manang-wasm-host",
     "crates/manang-plugins",
+    "crates/manang-registry",
     "crates/manang-editor",
     "crates/manang-typst",
     "crates/manang-latex",
