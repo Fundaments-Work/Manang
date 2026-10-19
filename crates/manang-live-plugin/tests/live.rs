@@ -339,6 +339,13 @@ fn wait_for(limit: Duration, what: &str, mut done: impl FnMut() -> bool) {
 #[test]
 fn start_needs_a_relay_and_one_session_at_a_time() {
     let mut a = Client::new("ada", None, SEED);
+    // The default is the relay run by Fundaments; emptying it turns sharing off.
+    assert_eq!(a.status()["relay_set"], json!(true));
+    a.call(
+        "live.configure",
+        json!({ "values": { "live.relay-url": "" } }),
+    )
+    .expect("clear the relay");
     let err = a
         .call("live.start", json!({ "doc": a.doc }))
         .expect_err("no relay set");

@@ -12,10 +12,10 @@ This is a living document of known issues, platform quirks, and workarounds veri
 | [2. Math formulas in Mermaid text diagrams](#2-math-formulas-in-mermaid-text-diagrams) | Diagrams | All | Low | Yes |
 | [3. Linux Wayland + NVIDIA display stutter](#3-linux-wayland-nvidia-display-stutter) | Desktop Shell | Linux | Low | Yes (Automatic) |
 | [4. macOS native top menu bar integration](#4-macos-native-top-menu-bar-integration) | Menus | macOS | Low | Yes |
-| [5. Plugin cryptographic signature verification](#5-plugin-cryptographic-signature-verification) | Plugins | All | Medium | Yes |
-| [6. Real-time co-editing & remote sharing](#6-real-time-co-editing-remote-sharing) | Collaboration | All | Low | Coming soon |
-| [7. AI agent assistant view](#7-ai-agent-assistant-view) | AI Assistant | All | Low | Coming soon |
-| [8. Unsaved external disk change prompt](#8-unsaved-external-disk-change-prompt) | Project / Buffer | All | Medium | Coming soon |
+| [5. Plugin signatures for local installs](#5-plugin-signatures-for-local-installs) | Plugins | All | Low | Yes |
+| [6. Real-time co-editing](#6-real-time-co-editing) | Collaboration | All | Low | Yes |
+| [7. AI assistant needs your own key](#7-ai-assistant-needs-your-own-key) | AI Assistant | All | Low | Yes |
+| [8. Files changed on disk by another program](#8-files-changed-on-disk-by-another-program) | Project / Buffer | All | Low | Yes |
 
 ---
 
@@ -78,58 +78,56 @@ On macOS, Manang currently renders its custom header menu bar (File, Edit, View,
 Use window menus directly or standard macOS keyboard shortcuts (`Cmd+K`, `Cmd+,`, `Cmd+E`, `Cmd+Shift+V`).
 
 ### Status
-Native macOS menu bar bridge is scheduled for platform polish before public Beta 1 release.
+Native macOS menu bar bridge is planned after the first beta.
 
 ---
 
-## 5. Plugin Cryptographic Signature Verification
+## 5. Plugin Signatures for Local Installs
 
 ### What
-The plugin manager (`Ctrl+Shift+X`) permits installing third-party plugins from local folders or `.manangplugin` zip archives. While capability consent prompts (checking filesystem and network host permissions) are enforced, cryptographic signature verification (`plugin.sig`) is not yet mandatory.
+Plugins from the **Browse** tab come from the signed registry at `registry.fundaments.work`: the index is signed, every archive is checked against its size and SHA-256, and the permissions in the archive must match the signed index. Plugins you install from a local folder or a `.manangplugin` file are not signed; only the permission prompt stands between you and them (they still run in the WebAssembly sandbox).
 
 ### How to Avoid
-Only install plugins from trusted sources and verified authors. Always review the permission prompt (e.g. read/write directories, network domains) before confirming installation.
+Install local plugins only from sources you trust, and read the permission prompt (folders, network hosts) before confirming.
 
 ### Status
-Ed25519 plugin signature verification is scheduled for Wave 5.
+By design. The registry is new and starts empty; first-party plugins arrive in the next releases.
 
 ---
 
-## 6. Real-time Co-Editing & Remote Sharing
+## 6. Real-time Co-Editing
 
 ### What
-Live co-editing (see [Edit together live](../user/edit-together-live.md)) works on **one text file per session** and needs a relay address. There is no hosted relay yet: someone has to run `manang-relay`, or you point Manang at one you were given. Figures, PDFs and several files at once are not shared. Cloud sync does not exist.
-
-While you are in a session, do not use **Get updates** on the live file (Manang does not block it yet). Joining with a copy that differs from the host's replaces your copy with the host's, after asking and after saving yours outside the project. Anyone holding the invite can edit and can use any name.
+Live co-editing (see [Edit together live](../user/edit-together-live.md)) works on **one text file per session**. It uses the hosted relay at `wss://relay.fundaments.work` by default (end-to-end encrypted; the relay sees only ciphertext and connection metadata), or your own relay. Do not use **Get updates** on the live file during a session. Joining with a copy that differs from the host's replaces your copy with the host's, after asking and saving the old copy.
 
 ### How to Avoid
-Use standard asynchronous Git collaboration via the **Source Control** side panel (`Ctrl+Shift+G`) for everything else, or store projects in shared network directories.
+For anything beyond one text file, use Git through the **Source Control** panel (`Ctrl+Shift+G`) or a shared folder.
 
 ### Status
-Beta 1: text files only. Merging a differing copy with the host's instead of replacing it, figures, and a hosted relay are planned.
+Beta 1: text files only. Merging a differing copy instead of replacing it, figures, comments and project-wide sessions are planned.
 
 ---
 
-## 7. AI Agent Assistant View
+## 7. AI Assistant Needs Your Own Key
 
 ### What
-The AI writing assistant, context tray, and automated compiler-error diff repairs are not yet present in the primary user interface.
+The assistant proposes edits as diffs and never changes a file without your approval. You pick a provider (Anthropic, OpenAI, DeepSeek, OpenRouter, Groq, or a local Ollama) and, for hosted ones, give an API key that is stored in your system keychain. Nothing is sent until you choose a provider, consent and press Send.
 
 ### How to Avoid
-Write and format documents using standard editing features. Check compiler diagnostics in the **Problems** panel (`Ctrl+Shift+M`).
+Nothing to avoid; set a provider in the assistant panel or Settings when you want it, or switch the agent off. Compile-error fixes that do not need AI are offered separately (the **Fix** actions in Problems).
 
 ### Status
-Foundation crates (`manang-agent-core`, `manang-keystore`, `manang-agent-rig`) are complete; UI view integration is scheduled for Wave 2.
+Available in this beta. Provider coverage and prompts are still being tuned.
 
 ---
 
-## 8. Unsaved External Disk Change Prompt
+## 8. Files Changed on Disk by Another Program
 
 ### What
-If a file currently open in Manang is modified simultaneously by an external program (e.g. Git command line, external script, or file synchronizer), the buffer does not yet pop up a merge/conflict prompt.
+If a file open in Manang is changed or removed by another program (Git on the command line, a sync client), Manang tells you and keeps your unsaved text; it does not merge automatically. Autosave and crash recovery protect your edits meanwhile.
 
 ### How to Avoid
-Save your files (`Ctrl+S`) before running external Git operations or running scripts that modify project files in place.
+Save before running external Git operations that rewrite project files, and choose Keep mine or Reload when Manang asks.
 
 ### Status
-Data safety snapshot engine (`manang-recovery`) is actively being wired into the workspace state.
+Handled in this beta; a three-way merge helper is planned.

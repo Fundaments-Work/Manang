@@ -6,7 +6,7 @@ Your file on disk stays an ordinary text file. The shared state lives only in me
 
 ## What you need
 
-- **A relay address**, once, to start a session. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). Whoever runs the relay for your group gives you its address, for example `wss://relay.example.org`. During the beta you can use the Manang team's relay at `wss://manang-relay.fundamentswork.workers.dev`: paste it into Settings, Collaboration, Relay address. It only sees encrypted data.
+- **A relay**, to start a session. Manang uses the relay run by Fundaments (`wss://relay.fundaments.work`) unless you change it. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). Whoever runs the relay for your group gives you its address, for example `wss://relay.example.org`. During the beta you can use the Manang team's relay at `wss://manang-relay.fundamentswork.workers.dev`: paste it into Settings, Collaboration, Relay address. It only sees encrypted data.
 - **An invite**, to join a session. The person who shares the file sends it to you. It already contains the relay address, so you do not need to set one to join.
 
 ## The Share button
@@ -29,15 +29,11 @@ While you are in a session you also see:
 
 When you are not in a session, none of these is shown.
 
-## Set the relay (to share)
+## The relay (to share)
 
-The first time, the Share panel shows what you need: a relay address and a name. If no relay is set it says *Ask whoever runs your team's relay for its address* and has an **Open Settings** button.
+Sharing works out of the box: **Relay address** in Settings > Collaboration starts as `wss://relay.fundaments.work`, the relay Fundaments runs. It only passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)).
 
-1. Open **Settings** (`Ctrl+,`) and go to **Collaboration** (or press **Open Settings** in the Share panel).
-2. Enter the address under **Relay address**. Use `wss://` for a relay behind TLS, or `ws://` for one you run on your own network.
-3. Optionally set **Name shown to collaborators**. If you leave it empty, your system user name is used.
-
-The Collaboration page also explains what the relay can and cannot see.
+To use your own relay, enter its address under **Relay address**: `wss://` for one behind TLS, or `ws://` for one on your own network. To turn sharing off, empty the field; the Share panel then says *Set a relay in Settings* and has an **Open Settings** button. Joining never needs the setting, because the invite carries the address.
 
 ## Share a file
 
@@ -50,7 +46,7 @@ An invite is a long link that starts with `manang-live://`. **Anyone who has it 
 
 ## Use a local relay for testing
 
-To try live editing yourself before your team has a relay, run one on your own computer. The relay is the `manang-relay` program in this repository; it needs no accounts and no internet.
+To try live editing without any network, or to keep even the metadata off a hosted server, run a relay on your own computer. The relay is the `manang-relay` program in this repository; it needs no accounts and no internet.
 
 1. In a terminal, from the Manang repository, start it:
 
@@ -122,7 +118,7 @@ What this does not give you:
 
 ## Troubleshooting
 
-- **"Set a relay in Settings to share live."** Sharing needs a relay address (joining does not). See [Set the relay](#set-the-relay-to-share).
+- **"Set a relay in Settings to share live."** Sharing needs a relay address (joining does not). See [Set the relay](#the-relay-to-share).
 - **"This invite is not valid."** The link was cut or changed. Ask for it again and paste it whole, including everything after the `#`.
 - **Stuck on Connecting or Reconnecting.** The relay is not reachable from your network (firewall, wrong address, relay down). Check the address in Settings; the person who shared can see the same state in their bar. Your edits are kept in the meantime.
 - **"The live document was re-read from the session."** A step could not be applied, so Manang replaced your view with the session's text to stay consistent. Edits you had typed in the last moments before may need to be typed again. This is rare; please report it.

@@ -311,10 +311,10 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
       {
         id: "live.relay-url",
         type: "string",
-        default: "",
+        default: "wss://relay.fundaments.work",
         title: "Relay address",
         description:
-          "Where live sessions meet, for example wss://relay.example.org. The relay forwards encrypted data and cannot read your text. Empty turns sharing off; joining uses the address in the invite.",
+          "Where live sessions meet. The default is the relay run by Fundaments; you can point this at your own, for example wss://relay.example.org. The relay forwards encrypted data and cannot read your text. Empty turns sharing off; joining uses the address in the invite.",
         scope: "user",
         "requires-restart": false,
       },
