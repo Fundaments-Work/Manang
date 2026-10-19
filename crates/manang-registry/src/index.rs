@@ -220,12 +220,14 @@ fn validate(index: &Index) -> Result<(), RegistryError> {
             return Err(invalid(format!("`{id}` is listed twice")));
         }
         check_text(id, "name", &p.name, 80)?;
-        check_text(id, "author", &p.author, 80)?;
+        check_text(id, "author", &p.author, 120)?;
         check_text(id, "description", &p.description, 1_000)?;
-        check_text(id, "license", &p.license, 64)?;
+        check_text(id, "license", &p.license, 120)?;
         check_link(id, "repo", &p.repo)?;
         if let Some(home) = &p.homepage {
-            check_link(id, "homepage", home)?;
+            // The schema allows http for a homepage; it is only ever opened
+            // in the person's own browser.
+            check_link(id, "homepage", &home.replacen("http://", "https://", 1))?;
         }
         if p.name.trim().is_empty() {
             return Err(invalid(format!("`{id}` has no name")));
@@ -234,7 +236,7 @@ fn validate(index: &Index) -> Result<(), RegistryError> {
             return Err(invalid(format!("`{id}` has too many tags")));
         }
         for tag in &p.tags {
-            check_text(id, "tags", tag, 32)?;
+            check_text(id, "tags", tag, 64)?;
         }
         if let Some(readme) = &p.readme
             && !is_safe_relative_path(readme)
@@ -391,6 +393,19 @@ pub(crate) mod tests {
             let json = sample_json().replace(from, to);
             assert!(parse_index(json.as_bytes()).is_err(), "{from} -> {to}");
         }
+    }
+
+    #[test]
+    fn limits_match_the_registry_schema() {
+        let long = "A".repeat(120);
+        let json = sample_json()
+            .replace("Fundaments.work", &long)
+            .replace("\"license\": \"MIT\"", &format!("\"license\": \"{long}\""))
+            .replace(
+                "\"tier\": \"wasm\"",
+                "\"tier\": \"wasm\", \"homepage\": \"http://example.org/x\"",
+            );
+        assert!(parse_index(json.as_bytes()).is_ok());
     }
 
     #[test]

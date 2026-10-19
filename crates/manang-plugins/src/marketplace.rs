@@ -8,6 +8,11 @@
 //! stage, consent and sandbox path a hand-picked `.manangplugin` takes
 //! ([`PluginManager::install`] and [`PluginManager::approve`]). Updates are
 //! looked for, never applied: every update needs its own consent.
+//!
+//! FOLLOW-UP (not built, see ADR 0016): there is no revocation list. A takedown
+//! (a version leaving the index or listed as `yanked`) stops new installs and
+//! updates only; it does not disable an installed copy. A signed revocation
+//! list is the planned fix.
 
 use std::collections::BTreeMap;
 use std::fs;

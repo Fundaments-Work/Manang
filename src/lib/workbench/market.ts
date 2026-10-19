@@ -11,6 +11,10 @@ import type {
   Freshness,
   RegistryAccess,
 } from "$lib/kernel/marketApi";
+import type { PluginAccess } from "$lib/kernel/pluginsApi";
+
+import { accessDifference, type AccessLine } from "./pluginManager";
+import { describeAccess } from "./plugins";
 
 /* -------------------------------------------------------------------------- */
 /* Versions                                                                    */
@@ -384,3 +388,21 @@ export const isPluginTabPath = (path: string): boolean =>
 
 export const pluginIdOf = (path: string): string =>
   path.slice(PLUGIN_TAB_PREFIX.length);
+
+/**
+ * The consent dialog's lines for an update: what it keeps, then what it adds,
+ * flagged New. Unlike `accessLines`, an update whose whole ask is new (the
+ * plugin had no access before) still flags every line.
+ */
+export function updateConsentLines(
+  requested: PluginAccess,
+  added: PluginAccess,
+): AccessLine[] {
+  return [
+    ...describeAccess(accessDifference(requested, added)).map((text) => ({
+      text,
+      isNew: false,
+    })),
+    ...describeAccess(added).map((text) => ({ text, isNew: true })),
+  ];
+}

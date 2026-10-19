@@ -23,6 +23,7 @@ import { accessLines } from "$lib/workbench/pluginManager";
 import {
   browseProblem,
   pluginTabPath,
+  updateConsentLines,
   type BrowseProblem,
 } from "$lib/workbench/market";
 
@@ -79,7 +80,9 @@ export class MarketState {
       .onEvent((event) => {
         if (event.topic === "plugins.install-progress") {
           const p = event.payload as InstallProgress;
-          this.progress = { ...this.progress, [p.id]: p };
+          // Events arrive a moment after the call: ignore a late one.
+          if (this.working.includes(p.id))
+            this.progress = { ...this.progress, [p.id]: p };
         }
       })
       .then((stop) => {
@@ -183,10 +186,10 @@ export class MarketState {
       description: options.description,
       publisher: options.author,
       mode: update === undefined ? "install" : "update",
-      lines: accessLines(
-        asAccess(options.permissions),
-        update === undefined ? undefined : asAccess(update.added),
-      ),
+      lines:
+        update === undefined
+          ? accessLines(asAccess(options.permissions))
+          : updateConsentLines(asAccess(options.permissions), asAccess(update.added)),
       running: update?.running ?? null,
     });
     if (!approved) return false;
