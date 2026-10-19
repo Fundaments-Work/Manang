@@ -2,10 +2,22 @@ name: CI
 
 # The gates of AGENTS.md section 5, on Linux. macOS and Windows runners cost
 # more minutes and are used for release builds, not for every push.
+#
+# Minutes are the budget on a private repository, so a change that touches only
+# documentation runs nothing, and the long UI suite runs on pull requests, every
+# night and on demand rather than on every push to main (it also runs locally
+# before each merge).
 on:
   push:
-    branches: [main, "ci/**"]
+    branches: [main]
+    paths-ignore:
+      ["docs/**", "**/*.md", "LICENSE", "CITATION.cff", ".github/ISSUE_TEMPLATE/**"]
   pull_request:
+    paths-ignore:
+      ["docs/**", "**/*.md", "LICENSE", "CITATION.cff", ".github/ISSUE_TEMPLATE/**"]
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -18,14 +30,23 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   RUSTFLAGS: "-D warnings"
+  # No debug info in CI builds: the target folder was filling the runner's disk
+  # (the cache step failed unpacking crates) and builds were slower for nothing.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   rust:
     name: Rust (fmt, clippy, tests)
     runs-on: ubuntu-24.04
-    timeout-minutes: 120 # a cold cache builds Typst and Wasmtime
+    timeout-minutes: 60 # a cold cache builds Typst and Wasmtime
     steps:
       - uses: actions/checkout@v4
+      - name: Free disk space
+        # The runner starts with little free space for a workspace this size.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
       - name: System libraries for the Tauri shell
         run: |
           sudo apt-get update
@@ -125,6 +146,7 @@ jobs:
 
   ui:
     name: UI suite (headless Chromium)
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

@@ -493,9 +493,10 @@ fn two_kernel_clients_converge_and_the_relay_sees_only_ciphertext() {
         "Ada Lovelace",
         "Grace Hopper",
         "main.typ",
-        "H3",
-        "G7",
     ];
+    // Only markers long enough that random ciphertext cannot contain them by
+    // chance: a 2-byte marker appears in any few kilobytes of random bytes, so
+    // checking one would fail the test at random (it did, in CI).
     for frame in &frames {
         assert!(frame.len() >= 42 && frame[0] == 1 && (frame[1] == 1 || frame[1] == 2));
         for s in secrets {
