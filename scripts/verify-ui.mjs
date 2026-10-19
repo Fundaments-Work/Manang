@@ -208,7 +208,7 @@ function section(title) {
 async function waitFor(cdp, expression, { timeout = 30000, label = expression } = {}) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    let value = false;
+    let value;
     try {
       value = await cdp.evaluate(expression);
     } catch {

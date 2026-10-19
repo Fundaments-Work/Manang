@@ -280,7 +280,7 @@ export class LiveState {
 
   /** The document an invite is for: the file it names if the project has it, else the open one. */
   async #joinTarget(invite: string): Promise<DocSession | null> {
-    let file: string | null = null;
+    let file: string | null;
     try {
       file = (await api.inspect(invite)).file;
     } catch (error) {
