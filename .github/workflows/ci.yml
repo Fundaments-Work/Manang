@@ -170,7 +170,7 @@ jobs:
         run: MANANG_ORIGIN=http://127.0.0.1:1431 node scripts/verify-ui.mjs
       - name: Screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-screenshots
           path: artifacts/screens/
