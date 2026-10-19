@@ -16,7 +16,9 @@ use crate::error::FigureError;
 use crate::geometry::{node_bounds, node_rect, normalize_rect, union_rect};
 use crate::palette;
 use crate::route::route;
-use crate::scene::{Binding, FigureNode, FigureScene, Rect, Style, Vec2, base36};
+use crate::scene::{
+    Binding, FigureNode, FigureScene, MAX_FORMULA_SIZE, MIN_FORMULA_SIZE, Rect, Style, Vec2, base36,
+};
 
 /// Where `reorder` moves nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -886,7 +888,12 @@ fn resize(tx: &mut Tx<'_>, id: &str, to: Rect) -> Result<(), FigureError> {
             } else {
                 kh
             };
-            m.size *= k;
+            // The font size stays in the range a scene accepts, so a drag cannot
+            // leave an invalid scene behind; the box follows the size it got.
+            let old = m.size;
+            let size = (old * k).clamp(MIN_FORMULA_SIZE, MAX_FORMULA_SIZE);
+            let k = if old > 0.0 { size / old } else { 1.0 };
+            m.size = size;
             m.width = from.width * k;
             m.height = from.height * k;
             m.x = to.x;
