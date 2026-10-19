@@ -432,6 +432,8 @@ test("a yanked version is left out of the index, and yanking everything is an er
     r.results[0].plugin.versions.map((v) => v.version),
     ["0.9.0"],
   );
+  // The withdrawn version is still named, so an installed copy can be flagged.
+  assert.deepEqual(r.results[0].plugin.yanked, ["1.0.0"]);
   const all = await run({ entry: { yanked: ["1.0.0"] }, releases: [rel("1.0.0")] });
   expectError(all, /no release of .* has an asset matching/);
 });
