@@ -20,7 +20,7 @@ Here is what you should expect:
 
 ## 2. Installation and Updates
 
-> **Note on Installers:** Signed native installers for Linux (AppImage, `.deb`, `.rpm`), macOS (`.dmg`), and Windows (`.msi`) will be provided directly with your private invitation link.
+> **Note on Installers:** Native installers for Linux (`.deb`, `.rpm`, tarball), macOS (`.dmg`) and Windows (`.msi`, `.exe`) are on the GitHub release. They are not code-signed yet, so macOS Gatekeeper and Windows SmartScreen warn on the first launch; the install guide explains the two clicks that get past it.
 
 ### Future In-App Updates
 Manang includes an automated beta update channel that checks for weekly bugfix releases using revocable per-tester private tokens. When an update is ready, Manang displays a release notification and summary ("What's New") before updating.

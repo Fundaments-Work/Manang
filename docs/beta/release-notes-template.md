@@ -2,7 +2,7 @@
 
 **Release Date:** [YYYY-MM-DD]  
 **Channel:** Beta (Invite-Only)  
-**Platforms:** Linux (AppImage, deb, rpm), macOS (dmg), Windows (msi)
+**Platforms:** Linux (deb, rpm, tarball), macOS (dmg), Windows (msi, exe)
 
 ---
 

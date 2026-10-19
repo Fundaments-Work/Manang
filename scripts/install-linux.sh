@@ -138,24 +138,39 @@ field() {
 # nesting and line breaks of the rest of the JSON.
 scan_releases() {
     printf '%s' "$API_BODY" | awk -v kind="$1" '
-        function emit(  pre) {
-            pre = ($0 ~ /"prerelease"[[:space:]]*:[[:space:]]*true/) ? "beta" : "stable"
-            if (kind == "" || kind == "latest" || kind == pre) {
+        function flush(  pre) {
+            if (tag == "") return
+            pre = preflag ? "beta" : "stable"
+            # Only releases that actually carry an installer. The same tag
+            # list also holds the LaTeX engine releases (tagged
+            # tectonic-<version>), which are downloads for the app and not
+            # something anybody can install.
+            if (have && (kind == "" || kind == "latest" || kind == pre)) {
                 print tag "\t" pre
             }
-            pending = 0
         }
         /"tag_name"[[:space:]]*:/ {
+            flush()
             tag = $0
             sub(/.*"tag_name"[[:space:]]*:[[:space:]]*"/, "", tag)
             sub(/".*/, "", tag)
+            preflag = 0
+            have = 0
             pending = 1
             # GitHub pretty-prints and puts "prerelease" on a later line; a
             # compact reply has both on this one.
-            if ($0 ~ /"prerelease"[[:space:]]*:[[:space:]]*(true|false)/) emit()
+            if ($0 ~ /"prerelease"[[:space:]]*:[[:space:]]*(true|false)/) read_pre()
             next
         }
-        pending && /"prerelease"[[:space:]]*:[[:space:]]*(true|false)/ { emit() }'
+        function read_pre() {
+            preflag = ($0 ~ /"prerelease"[[:space:]]*:[[:space:]]*true/) ? 1 : 0
+            pending = 0
+        }
+        pending && /"prerelease"[[:space:]]*:[[:space:]]*(true|false)/ { read_pre() }
+        # Asset URLs only: the release notes live in one JSON string, where
+        # every quote is escaped and cannot match this.
+        /"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*\.(deb|rpm|tar\.xz|dmg|msi|exe)"/ { have = 1 }
+        END { flush() }'
 }
 
 # Which tag does this channel mean? `latest` is the newest release whatever it
@@ -191,8 +206,10 @@ if [[ -z "$VERSION" ]]; then
     [[ -n "$VERSION" ]] || die "no ${CHANNEL} release has been published yet; see --list"
 fi
 
-api "releases/tags/v${VERSION}" \
-    || die "${API_ERR:-no release v${VERSION} found (see --list for what is published)}"
+# Releases are tagged v<version>; accept a tag without the prefix too.
+if ! api "releases/tags/v${VERSION}" && ! api "releases/tags/${VERSION}"; then
+    die "${API_ERR:-no release v${VERSION} found (see --list for what is published)}"
+fi
 release_json="$API_BODY"
 tag="$(field "$release_json" tag_name)"
 [[ -n "$tag" ]] || die "no release found"

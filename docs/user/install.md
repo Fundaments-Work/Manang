@@ -10,18 +10,18 @@ files and a `SHA256SUMS.txt` so you can check what you downloaded.
 curl -fsSL https://raw.githubusercontent.com/Fundaments-Work/Manang/main/scripts/install-linux.sh | bash
 ```
 
-The script picks the right package for your distribution (`.deb`, `.rpm` or an AppImage), verifies it against the release's `SHA256SUMS.txt`, and installs it. Useful options (put them after `bash -s --`):
+The script picks the right package for your distribution (`.deb`, `.rpm` or a tarball), verifies it against the release's `SHA256SUMS.txt`, and installs it. Useful options (put them after `bash -s --`):
 
 | Option | What it does |
 | :--- | :--- |
-| `--user` | Install the AppImage under `~/.local`, no root needed |
+| `--user` | Install the tarball into `~/.local`, no root needed |
 | `--version 0.1.0-beta.1` | Install one specific release (the tag with or without `v`) |
 | `--version beta` | Install the newest pre-release |
 | `--channel latest\|beta\|stable` | Which release to install when no version is given |
 | `--beta` / `--stable` | Shorthand for `--channel beta` / `--channel stable` |
 | `--list` | Print every published release, newest first, and stop |
 | `--print-latest` | Print the tag the default would install, and stop |
-| `--bundle deb\|rpm\|appimage` | Force a package format |
+| `--bundle deb\|rpm\|tar` | Force a package format |
 | `--dry-run` | Show what would be downloaded and change nothing |
 
 ### Beta and stable releases
@@ -51,7 +51,17 @@ Remove it with `curl -fsSL https://raw.githubusercontent.com/Fundaments-Work/Man
 | macOS, Intel | `Manang_<version>_x64.dmg` | |
 | Linux, Debian / Ubuntu | `Manang_<version>_amd64.deb` | `sudo apt install ./Manang_*.deb` |
 | Linux, Fedora / openSUSE | `Manang-<version>-1.x86_64.rpm` | `sudo dnf install ./Manang-*.rpm` |
-| Linux, any | `Manang_<version>_amd64.AppImage` | `chmod +x` it, then run it. |
+| Linux, any | `Manang_<version>_amd64.tar.xz` | Unpack it and run `usr/bin/manang`, or use the script with `--bundle tar --user`. |
+
+### Why there is no AppImage
+
+There was one in `v0.1.0-beta.1` and there is no longer one. Tauri builds AppImages with
+linuxdeploy, which follows the binary's shared libraries and copies the whole GTK and
+WebKitGTK stack into the file: 120 MB, of which 91 MB was `libwebkit2gtk` and 32 MB
+`libjavascriptcoregtk`, for a 46 MB `.deb`. That copy is a browser engine frozen at build
+time, so it never receives the security updates your system's does, and it breaks against
+newer GTK versions. Tauri has no switch to leave it out, so the tarball takes its place:
+30 MB, the same WebKitGTK 4.1 requirement as the packages, and no root.
 
 ## Check the download
 
@@ -83,7 +93,9 @@ the checksums above matter.
   optional built-in engine, which is a consented download offered on Linux x86-64 first.
   See [Fixing errors](fixing-errors.md) and [Known issues](../beta/known-issues.md).
 - **Linux** needs WebKitGTK 4.1 (`libwebkit2gtk-4.1`), which the `.deb` and `.rpm` pull in
-  for you.
+  for you. The tarball does not install it: on Debian and Ubuntu
+  `sudo apt install libwebkit2gtk-4.1-0`, on Fedora `sudo dnf install webkit2gtk4.1`, on Arch
+  `sudo pacman -S webkit2gtk-4.1`.
 
 ## Updating
 
