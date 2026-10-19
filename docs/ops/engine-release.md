@@ -26,33 +26,52 @@ Until a build sets a real one, `latex.engine-status` reports
 `downloadable: false, reason: engine_not_published` and the UI shows no download
 button (Settings > LaTeX says the engine is not available in this version yet).
 
-## 1. Build
+## 1. Build and publish
 
-CI (preferred; it is the only build that checks portability):
+One workflow does the whole thing: Actions > **release-engine** > Run workflow
+(or push a tag `engine-v0.17.0`). It builds the worker for every platform in its
+matrix, checks it, uploads it to the `tectonic-<version>` release and prints the
+lines to paste into `engines/manifest.json`. Then commit the manifest and cut the
+app release. Nothing is uploaded by hand.
 
-1. Actions > **release-engine** > Run workflow (or push a tag `engine-v0.17.0`).
-2. It builds on `ubuntu-24.04`, statically linking ICU, FreeType and friends
-   (`PKG_CONFIG_ALL_STATIC=1`), fails if the result needs any dynamic library
-   other than the C library and compiler runtime, runs `--version`, compiles
-   `testdata/corpus/latex-article` with it, and prints the manifest lines in the
-   job summary.
-3. Download the artifact `engine-linux-x86_64` (the binary and its `.sha256`).
+1. The job builds with `--no-default-features --features engine` (the sidecar
+   carries no HTTP stack of its own) and
+   `TECTONIC_PKGCONFIG_FORCE_SEMI_STATIC=1`, so ICU, FreeType, fontconfig,
+   brotli, bzip2, expat, png and z end up **inside** the binary.
+2. It fails if the result needs a dynamic library other than the C library, the
+   compiler runtime and `libgraphite2` (below), runs `--version`, and compiles
+   `testdata/corpus/latex-article` with the real package server.
+3. The `publish` job attaches `manang-latex-worker-<platform>` and its `.sha256`
+   to the release tagged `tectonic-<version>`, which is where the app looks
+   (`<base>/tectonic-<version>/<file>`).
 
-**Important, measured 2026-10-18:** a plain `cargo build` on Arch produced a
-14,413,816-byte binary that links these system libraries dynamically:
+**Measured 2026-10-19, both Linux architectures:** `PKG_CONFIG_ALL_STATIC=1`
+alone is *not* enough. pkg-config refuses to link a library it considers a
+system one statically even with that flag, so the first CI run produced a binary
+that still pulled in `libicuuc.so`, `libicudata.so`, `libfontconfig.so.1`,
+`libfreetype.so.6`, `libpng16.so.16`, `libexpat.so.1`, `libbz2.so.1.0`,
+`libbrotlidec.so.1`, `libbrotlicommon.so.1` and `libz.so.1`. The ICU version is
+part of its soname, so such a binary only runs on a machine with the ICU version
+of the build machine. Tectonic's own `TECTONIC_PKGCONFIG_FORCE_SEMI_STATIC=1`
+emits `static=` for every dependency it can find an archive for, and fixes it.
+
+**Do not publish a locally built binary.** On this machine (Arch) a plain
+`cargo build` produced a 14,413,816-byte binary that linked
 `libicuuc.so.78`, `libicudata.so.78`, `libfontconfig.so.1`, `libfreetype.so.6`,
 `libgraphite2.so.3`, `libpng16.so.16`, `libexpat.so.1`, `libbz2.so.1.0`,
-`libbrotlidec.so.1`, `libbrotlicommon.so.1`, `libz.so.1`, `libstdc++.so.6`,
-`libgcc_s.so.1`, `libm.so.6`, `libc.so.6` (HarfBuzz is already static). The ICU
-version is part of the soname, so that binary only runs on a machine with ICU 78.
-**Do not publish a locally built binary.** The workflow's static link step is
-written but has not been run (no static `.a` files on the dev machine). If it
-fails, the fallbacks are, in order: build inside a `manylinux`/old-Ubuntu
-container with the same static flags; or ship a `.tar.zst` containing the worker
-plus its `.so` files with `RPATH=$ORIGIN` (this needs a small installer change:
-unpack instead of rename). The installer already refuses to keep a binary that
-cannot start (`--version` smoke test, error `engine_wont_run`), so a bad
-publish fails safe at the user's machine, not silently.
+`libbrotlidec.so.1`, `libbrotlicommon.so.1` and `libz.so.1` dynamically, and
+Arch ships no static archives for most of them at all.
+
+**libgraphite2 stays dynamic, on purpose.** HarfBuzz is built from the copy
+vendored inside `tectonic_bridge_harfbuzz` with `HAVE_GRAPHITE2`, and Debian and
+Ubuntu ship `libgraphite2-dev` without a `libgraphite2.a` for the semi-static
+mode to find, so it is linked dynamically (about 200 KB, and present on any
+desktop with a full font stack). The workflow's check allows exactly that one
+library. The app starts the binary before it keeps it, so a machine without
+graphite2 gets `engine_wont_run` and a clear message instead of a broken
+install. Building a static graphite2 in the job (cmake, then drop the archive
+where `pkg-config --variable=libdir graphite2` points) would close the gap; that
+is the first thing to try if a tester reports it.
 
 Local build (for measuring only; use the HDD target dir, never a second target on
 the SSD, and nothing else heavy running):
@@ -76,34 +95,40 @@ wc -c < manang-latex-worker-linux-x86_64       # size in bytes
 
 ## 3. Host
 
-Upload the file to the host you choose, at exactly:
+The files live on the GitHub release tagged `tectonic-<version>`, which serves
+them at exactly:
 
 ```
 <base URL>/tectonic-<version>/<file name from the manifest>
 ```
 
-Requirements: HTTPS, `Range` requests supported (downloads resume; a server that
-ignores `Range` still works, it just restarts), no required headers or cookies,
-no login, no redirects needed (redirects are followed, up to ten). Any static
-host or object store works; a CDN is fine because the checksum, not the host,
-is trusted. Do not upload from here; the host decision is yours.
+with `base URL` = `https://github.com/Fundaments-Work/Manang/releases/download`
+(the value `release.yml` bakes in). GitHub redirects that to a signed
+`objects.githubusercontent.com` URL, and the downloader follows up to ten
+redirects, so this works. Requirements for any other host: HTTPS, `Range`
+requests supported (downloads resume; a server that ignores `Range` still works,
+it just restarts), no required headers or cookies, no login. A CDN is fine
+because the checksum, not the host, is trusted. If you pick a host whose URL
+shape differs, change `EnginePlan::url` in `builtin.rs`.
 
-Nothing here uses Cloudflare or GitHub credentials. (If you pick GitHub Releases
-or R2, the URL shape above still has to hold, or change `EnginePlan::url` in
-`builtin.rs`.)
+The release is marked as a **pre-release** so that GitHub's "latest release"
+keeps pointing at the app; `scripts/install-linux.sh` skips releases that carry
+no installer, so it never offers it to install.
 
-## 4. Publish
+## 4. Ship it in an app release
 
-1. Edit `engines/manifest.json`: set the platform entry to the printed lines
-   (`status`, `file`, `size`, `sha256`). **The checked-in linux-x86_64 numbers are
-   the 2026-10-18 local Arch build and must be replaced by the CI build's.**
-2. Build the app with the base URL baked in:
-   `MANANG_ENGINE_BASE_URL=https://<host>/<path> pnpm app:build`
-   (it is read with `option_env!` in `crates/manang-latex/src/builtin.rs`).
+1. Copy the numbers from the workflow's job summary into
+   `engines/manifest.json` (`status`, `file`, `size`, `sha256`), commit, and
+   merge. The manifest is the trust root, so it changes in a reviewed commit,
+   never from CI. Until this lands the app still reports `engine_not_published`
+   for the platforms you have not filled in, and shows no download button for
+   them.
+2. Tag the app release as usual. `release.yml` sets
+   `MANANG_ENGINE_BASE_URL=https://github.com/Fundaments-Work/Manang/releases/download`
+   (read with `option_env!` in `crates/manang-latex/src/builtin.rs`).
 3. Check on a clean machine without TeX: preview > Download the built-in engine >
-   consent window shows your host, size and hash > it installs > the document
+   the consent window shows your host, size and hash > it installs > the document
    compiles. Then `latex.engine-status` shows `installed: true`.
-4. Cut the app release as usual.
 
 ## Shipping a new engine version
 
@@ -162,8 +187,8 @@ remote one through `LatexConfig::bundle` (no UI for that yet).
 
 | Platform | Manifest | Built | Notes |
 | :--- | :--- | :--- | :--- |
-| linux-x86_64 | built | local only | CI static build untested; see above |
-| linux-aarch64 | planned | no | enable the arm runner in the workflow |
+| linux-x86_64 | built | CI (`ubuntu-24.04`) | static except libgraphite2 |
+| linux-aarch64 | built | CI (`ubuntu-24.04-arm`) | free for a public repository, same steps |
 | windows-x86_64 | planned | no | vcpkg static triplet; slow ICU build |
 | macos-aarch64 | planned | no | needs signing and notarisation |
 | macos-x86_64 | planned | no | same |

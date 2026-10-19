@@ -122,11 +122,15 @@ jobs:
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          # Addresses the app embeds (see docs/ops/registry.md). The engine host
-          # is left unset until the engine is published; with it unset the app
-          # says the engine is not available yet (the placeholder never resolves).
+          # Addresses the app embeds (see docs/ops/registry.md). The engine
+          # comes from the `tectonic-<version>` release of this repository:
+          # <base>/tectonic-0.17.0/manang-latex-worker-linux-x86_64 is the
+          # asset the release-engine workflow uploads there. Only the numbers in
+          # engines/manifest.json are trusted by the app, so this host may serve
+          # anything without the digest check noticing.
           MANANG_CHANNEL: beta
           MANANG_REGISTRY_URL: https://registry.fundaments.work
+          MANANG_ENGINE_BASE_URL: https://github.com/Fundaments-Work/Manang/releases/download
         with:
           projectPath: .
           releaseId: ${{ needs.prepare.outputs.release_id }}
