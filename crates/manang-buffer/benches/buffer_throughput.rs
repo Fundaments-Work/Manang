@@ -1,5 +1,6 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use manang_buffer::DocumentBuffer;
+use std::hint::black_box;
 
 fn generate_5mb_document() -> String {
     let paragraph = "In scientific authoring, high-performance interactive text buffers require sub-millisecond \

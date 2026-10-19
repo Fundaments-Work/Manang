@@ -9,10 +9,11 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use criterion::{Criterion, black_box};
+use criterion::Criterion;
 use manang_markdown::visual::MarkdownAdapter;
 use manang_typst::visual::TypstAdapter;
 use manang_visual::{Change, SessionHost};
+use std::hint::black_box;
 
 const TARGET_BYTES: usize = 1024 * 1024;
 const VIEWPORT: usize = 40_000;
