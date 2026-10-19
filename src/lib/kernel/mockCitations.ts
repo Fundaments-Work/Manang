@@ -458,7 +458,7 @@ export function citationsPlugin(host: MockProjectHost): MockPluginFactory {
       commands: COMMANDS,
       handlers: {
         "citations.load": (args) => {
-          let paths: string[] = [];
+          let paths: string[];
           if (Array.isArray(args["paths"])) {
             paths = args["paths"].filter((p): p is string => typeof p === "string");
           } else if (typeof args["path"] === "string") {
@@ -613,12 +613,9 @@ export function citationsPlugin(host: MockProjectHost): MockPluginFactory {
             throw { message: `entry \`${key}\` not found` };
           }
 
-          let formatted = "";
-          if (style.toLowerCase() === "numeric" || style.toLowerCase() === "ieee") {
-            formatted = formatNumericEntry(entry);
-          } else {
-            formatted = formatApaEntry(entry);
-          }
+          const numeric =
+            style.toLowerCase() === "numeric" || style.toLowerCase() === "ieee";
+          const formatted = numeric ? formatNumericEntry(entry) : formatApaEntry(entry);
 
           const response: CitationFormatResponse = {
             key,
