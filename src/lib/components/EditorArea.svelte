@@ -6,6 +6,7 @@
   import ExternalChangeBar from "./ExternalChangeBar.svelte";
   import FileViewer from "./FileViewer.svelte";
   import LiveBar from "./LiveBar.svelte";
+  import PluginPage from "./plugins/PluginPage.svelte";
   import Resizer from "./ui/Resizer.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
   import { reportError } from "$lib/kernel";
@@ -18,6 +19,7 @@
   import { visualMode } from "$lib/state/visual.svelte";
   import { detectPlatform } from "$lib/util/keyboard";
   import { DEFAULT_LAYOUT, SPLIT_MAX, SPLIT_MIN } from "$lib/workbench/layout";
+  import { pluginIdOf } from "$lib/workbench/market";
   import { basename } from "$lib/workbench/paths";
 
   /**
@@ -157,6 +159,8 @@
     {:else}
       <p class="m-auto text-xs text-text-muted" role="status">Opening figure</p>
     {/if}
+  {:else if tab.kind === "plugin"}
+    <PluginPage id={pluginIdOf(tab.path)} />
   {:else if tab.kind === "viewer"}
     <FileViewer path={tab.path} />
   {:else if tab.view === "slides"}

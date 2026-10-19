@@ -58,7 +58,7 @@ class ContextState {
     if (settingsPage.open) return { ...base, ...originEditor(settingsPage.origin) };
     const active = tabs.active;
     const editor: EditorKind | null =
-      active === undefined || active.kind === "viewer"
+      active === undefined || active.kind === "viewer" || active.kind === "plugin"
         ? null
         : active.kind === "figure"
           ? "figure"

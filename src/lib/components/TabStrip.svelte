@@ -24,6 +24,7 @@
   import { layout } from "$lib/state/layout.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
   import { visualMode } from "$lib/state/visual.svelte";
+  import { pluginIdOf } from "$lib/workbench/market";
   import { engineOf } from "$lib/workbench/paths";
   import { tabLabels, type Tab } from "$lib/workbench/tabs";
 
@@ -191,10 +192,12 @@
       });
     }
     items.push({
-      label: "Copy path",
+      label: tab.kind === "plugin" ? "Copy plugin id" : "Copy path",
       separated: true,
       onselect: () =>
-        void navigator.clipboard?.writeText(tab.path).catch(() => undefined),
+        void navigator.clipboard
+          ?.writeText(tab.kind === "plugin" ? pluginIdOf(tab.path) : tab.path)
+          .catch(() => undefined),
     });
     return items;
   }
@@ -294,6 +297,8 @@
         >
           {#if tab.kind === "figure"}
             <Icon name="figures" size={13} class="shrink-0 opacity-70" />
+          {:else if tab.kind === "plugin"}
+            <Icon name="plugins" size={13} class="shrink-0 opacity-70" />
           {:else if tab.view === "slides"}
             <Icon name="slides" size={13} class="shrink-0 opacity-70" />
           {/if}
