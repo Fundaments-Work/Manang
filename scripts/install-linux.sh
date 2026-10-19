@@ -323,7 +323,10 @@ DESKTOP
         *":${BIN_DIR}:"*) ;;
         *) log "note: ${BIN_DIR} is not on your PATH; start Manang from the application menu or add it" ;;
     esac
-    if ! ldconfig -p 2>/dev/null | grep -q 'libwebkit2gtk-4\.1'; then
+    # grep without -q on purpose: -q exits at the first match, and ldconfig
+    # then gets SIGPIPE while still writing its cache, which pipefail turns
+    # into a false "WebKitGTK is missing" on machines that have it.
+    if ! ldconfig -p 2>/dev/null | grep 'libwebkit2gtk-4\.1' >/dev/null; then
         log "note: Manang needs WebKitGTK 4.1 from your system (Debian/Ubuntu: libwebkit2gtk-4.1-0, Fedora: webkit2gtk4.1, Arch: webkit2gtk-4.1). Without it, run manang and read the error it prints."
     fi
 }

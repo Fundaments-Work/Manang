@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Agent v1 prompts and tools:** the per-feature system prompts and `Feature` modes, per-feature tool filtering, the seven context chip kinds, pinned notes, the `<manang_context>` envelope, the `doc_read`, `doc_outline`, `doc_diagnostics`, `doc_propose_edit` and `project_search` tools, and offset-based edit proposals.
 
 ### Fixed
+- **The install script no longer claims WebKitGTK is missing when it is installed:** its check ran `grep -q` inside a `pipefail` pipeline, so `ldconfig` received SIGPIPE and the script printed the warning on every machine that already had WebKitGTK 4.1. The check now lets `grep` read the whole cache.
 - **The release workflow could not pack the Linux artifacts:** the publish job ran `pack-linux.sh` as `../../scripts/pack-linux.sh` from inside `assets/`, which resolves outside the checkout, so the step stopped before writing the tarball or the checksums. It now runs `../scripts/pack-linux.sh`.
 - **Linux Wayland + NVIDIA Stutter:** Automatically set `WEBKIT_DISABLE_DMABUF_RENDERER=1` at startup to eliminate WebKitGTK DMABUF rendering glitches under NVIDIA Wayland sessions.
 - **SVG Float Jitter:** Replaced floating-point output drift with stable 1-decimal coordinate formatting (`format_coord`) in headless figure export.
