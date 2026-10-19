@@ -247,7 +247,10 @@ jobs:
             # not something a person installs, and GitHub's "latest release"
             # should keep pointing at the app. (scripts/install-linux.sh skips
             # releases that carry no installer, so the flag cannot confuse it.)
-            gh release create "$tag" --verify-tag --prerelease --title "Tectonic ${VERSION} engine" \
+            # --target rather than --verify-tag: the usual trigger is "Run
+            # workflow" on main, where tectonic-<version> does not exist yet;
+            # on a tag push the tag is already there and the flag is ignored.
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease --title "Tectonic ${VERSION} engine" \
               --notes "The built-in LaTeX engine (Tectonic ${VERSION}) for Manang.
 
           Downloaded by the app after the user agrees, verified against the size and
@@ -255,7 +258,7 @@ jobs:
           docs/ops/engine-release.md. Nothing here is run by the app directly; the
           host only serves bytes."
           fi
-          for f in dist/manang-latex-worker-* dist/*.sha256; do
+          for f in dist/*; do
             [ -e "$f" ] || continue
             echo "uploading $(basename "$f")"
             gh release upload "$tag" "$f" --clobber

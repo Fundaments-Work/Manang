@@ -76,9 +76,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: linux-x86_64 (deb, rpm; the AppImage is replaced by pack-linux.sh)
+          - label: linux-x86_64 (deb, rpm, tarball)
             os: ubuntu-24.04
-            args: ""
+            # No AppImage: tauri-bundler would run linuxdeploy and copy the
+            # whole GTK and WebKitGTK stack into the file (120 MB for
+            # v0.1.0-beta.1). scripts/pack-linux.sh writes the tarball that
+            # takes its place, from the .deb.
+            args: --bundles deb,rpm
             rust_targets: ""
           - label: windows-x86_64 (msi, exe)
             os: windows-2025
