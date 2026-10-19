@@ -30,6 +30,11 @@ import { editingSyntax, writingSyntax } from "./syntax";
 /* Snippet templates                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * CodeMirror's snippet grammar only treats a backslash as an escape before a
+ * brace, and this escapes every brace. A literal backslash must stay as-is;
+ * escaping it too would add a second backslash to the inserted text.
+ */
 const escapeBraces = (text: string): string => text.replace(/[{}]/g, "\\$&");
 
 /**

@@ -51,7 +51,7 @@ describe("WAI-ARIA & Accessibility audit", () => {
         const hasAriaLabel = /aria-label\s*=/i.test(attrs) || /aria-labelledby\s*=/i.test(attrs);
 
         const strippedBody = body
-          .replace(/<!--[\s\S]*?-->/g, "")
+          .replace(/<!--[\s\S]*?--!?>/g, "")
           .replace(/<svg[\s\S]*?<\/svg>/gi, "")
           .replace(/<[A-Z][a-zA-Z0-9]*Icon\b[^>]*\/>/g, "")
           .replace(/<[A-Z][a-zA-Z0-9]*Icon\b[^>]*>[\s\S]*?<\/[A-Z][a-zA-Z0-9]*Icon>/g, "")
