@@ -47,7 +47,11 @@ for path in \
     "${HOME}/.local/lib/manang" \
     "${HOME}/.local/bin/manang" \
     "${HOME}/.local/share/applications/manang.desktop" \
-    "${HOME}/.local/share/icons/hicolor/128x128/apps/manang.png"; do
+    "${HOME}/.local/share/icons/hicolor/32x32/apps/manang.png" \
+    "${HOME}/.local/share/icons/hicolor/128x128/apps/manang.png" \
+    "${HOME}/.local/share/icons/hicolor/256x256/apps/manang.png" \
+    "${HOME}/.local/share/icons/hicolor/256x256@2/apps/manang.png" \
+    "${HOME}/.local/share/icons/hicolor/512x512/apps/manang.png"; do
     if [[ -e "$path" || -L "$path" ]]; then
         rm -rf -- "$path"
         log "removed $path"
