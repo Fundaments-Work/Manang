@@ -4,6 +4,11 @@ name = "manang-relay"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 
+# Served at relay.fundaments.work (single-level name: the zone certificate covers it).
+routes = [
+  { pattern = "relay.fundaments.work", custom_domain = true },
+]
+
 # The relay only ever handles ciphertext and must not record who connected to
 # what: no request logs, no invocation logs, no traces.
 [observability]
