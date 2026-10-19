@@ -426,3 +426,42 @@ fn bad_colours_are_refused_with_the_palette() {
     assert!(err.to_string().contains("vermillion"), "{err}");
     assert!(doc.scene.nodes.is_empty());
 }
+
+/// Found by CI's random search: resizing a formula by a large ratio pushed its
+/// font size past the limit and left an invalid scene.
+#[test]
+fn resizing_a_formula_keeps_the_scene_valid() {
+    let mut doc = FigureDocument::new(1, 800.0, 600.0);
+    let math = MathNode {
+        id: "n4".to_owned(),
+        x: 0.0,
+        y: 0.0,
+        source: "^".to_owned(),
+        language: MathLanguage::Typst,
+        size: 18.0,
+        width: 1.0,
+        height: 1.0,
+        style: Style::default(),
+        groups: Vec::new(),
+        locked: false,
+        hidden: false,
+    };
+    doc.apply(&FigureOp::Add {
+        nodes: vec![FigureNode::Math(math)],
+        index: None,
+    })
+    .expect("add");
+    for (width, height) in [(0.0, 56.89), (5000.0, 5000.0), (0.001, 0.001)] {
+        doc.apply(&FigureOp::Resize {
+            id: "n4".to_owned(),
+            x: 0.0,
+            y: 0.0,
+            width,
+            height,
+        })
+        .expect("resize");
+        assert!(doc.scene.validate().is_ok(), "{:?}", doc.scene.validate());
+        assert!(doc.apply(&FigureOp::Undo).expect("undo").applied);
+        assert!(doc.scene.validate().is_ok());
+    }
+}

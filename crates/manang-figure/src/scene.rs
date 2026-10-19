@@ -6,6 +6,11 @@
 //! with at most two decimals ([`FigureScene::to_file_json`]).
 
 use serde::{Deserialize, Serialize};
+
+/// The largest font size a formula node may have.
+pub const MAX_FORMULA_SIZE: f64 = 1024.0;
+/// The smallest a resize will shrink a formula's font size to.
+pub const MIN_FORMULA_SIZE: f64 = 1.0;
 use serde_json::Value;
 
 use crate::error::FigureError;
@@ -971,7 +976,7 @@ impl FigureNode {
             return bad(&format!("`{c}` is not a valid #rrggbb colour"));
         }
         if let Self::Math(m) = self
-            && !(m.size.is_finite() && m.size > 0.0 && m.size <= 1024.0)
+            && !(m.size.is_finite() && m.size > 0.0 && m.size <= MAX_FORMULA_SIZE)
         {
             return bad("a formula's size must be between 0 and 1024");
         }
