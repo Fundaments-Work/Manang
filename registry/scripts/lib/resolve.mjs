@@ -198,6 +198,9 @@ export async function resolveEntry(entry, source, opts = {}) {
     ...(readmeFor ? { readme: `plugins/${entry.id}/README.md` } : {}),
     latest: versions[0].version,
     versions,
+    // Withdrawn versions are not offered; the list lets an app that already has
+    // one installed say so ("withdrawn") instead of silently showing nothing.
+    ...(yanked.size > 0 ? { yanked: [...yanked].sort(compareSemver) } : {}),
   };
   return { plugin, artifacts, warnings };
 }
