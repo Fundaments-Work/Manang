@@ -3,9 +3,14 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/Fundaments-Work/Manang/main/scripts/install-linux.sh | bash
 #
-# Picks .deb on Debian-like systems, .rpm on Fedora/openSUSE-like systems and an
-# AppImage everywhere else (or with --user, which needs no root). The download is
-# checked against the release's SHA256SUMS.txt before anything is installed.
+# Picks .deb on Debian-like systems, .rpm on Fedora/openSUSE-like systems and the
+# tarball everywhere else (or with --user, which needs no root). The download
+# is checked against the release's SHA256SUMS.txt before anything is installed.
+#
+# The tarball is used rather than an AppImage on purpose: Tauri's AppImage
+# bundles a private copy of WebKitGTK, which made it 120 MB against a 46 MB
+# .deb and left a browser engine frozen at build time. The tarball needs the
+# system's WebKitGTK 4.1, exactly like the packages do.
 #
 # Manang is in beta, so the default is the newest release, pre-releases
 # included. --stable refuses pre-releases, --beta asks for the newest one.
@@ -34,9 +39,9 @@ Usage: install-linux.sh [options]
                     stable (newest release that is not a pre-release)
   --stable          Shorthand for --channel stable
   --beta            Shorthand for --channel beta
-  --bundle TYPE     deb, rpm or appimage (default: chosen from your distribution)
-  --user            Install the AppImage under ~/.local without root, whatever
-                    the distribution
+  --bundle TYPE     deb, rpm or tar (default: chosen from your distribution)
+  --user            Install from the tarball into ~/.local, no root needed,
+                    whatever the distribution
   --list            Print every published release, newest first, and exit
   --print-latest    Print the tag the default would install, and exit
   --dry-run         Show what would be downloaded and installed, change nothing
@@ -210,17 +215,17 @@ asset_url() {
 
 # ── Which format ──
 if [[ "$BUNDLE" == "auto" ]]; then
-    if [[ "$USER_INSTALL" == true ]]; then BUNDLE="appimage"
+    if [[ "$USER_INSTALL" == true ]]; then BUNDLE="tar"
     elif command -v apt-get >/dev/null 2>&1 || command -v dpkg >/dev/null 2>&1; then BUNDLE="deb"
     elif command -v dnf >/dev/null 2>&1 || command -v zypper >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then BUNDLE="rpm"
-    else BUNDLE="appimage"
+    else BUNDLE="tar"
     fi
 fi
 case "$BUNDLE" in
     deb) pattern='\.deb$' ;;
     rpm) pattern='\.rpm$' ;;
-    appimage) pattern='\.AppImage$' ;;
-    *) die "unknown bundle '$BUNDLE' (use deb, rpm or appimage)" ;;
+    tar) pattern='_amd64\.tar\.xz$' ;;
+    *) die "unknown bundle '$BUNDLE' (use deb, rpm or tar)" ;;
 esac
 
 url="$(asset_url "$pattern")"
@@ -259,11 +264,28 @@ as_root() {
     fi
 }
 
-install_appimage() {
+install_tar() {
+    # The tarball carries usr/bin/manang, a .desktop file and the icons, and
+    # needs WebKitGTK 4.1 from the system (Debian/Ubuntu: libwebkit2gtk-4.1-0,
+    # Fedora: webkit2gtk4.1, Arch: webkit2gtk-4.1), the same as the packages.
+    command -v tar >/dev/null 2>&1 || die "tar is required for the tarball; use --bundle deb or rpm instead"
+    if ! tar -tJf "${work}/${file}" >/dev/null 2>&1; then
+        die "tar cannot read ${file}; install xz-utils (Debian/Ubuntu) or use --bundle deb"
+    fi
     mkdir -p "$APP_DIR" "$BIN_DIR" "$APPS_DIR" "$ICON_DIR"
-    install -Dm755 "${work}/${file}" "${APP_DIR}/Manang.AppImage"
-    ln -sf "${APP_DIR}/Manang.AppImage" "${BIN_DIR}/manang"
-    curl -fsSL -o "${ICON_DIR}/manang.png" \
+    rm -rf "${work}/unpack"
+    mkdir -p "${work}/unpack"
+    tar -C "${work}/unpack" -xJf "${work}/${file}"
+    [[ -x "${work}/unpack/usr/bin/manang" ]] || die "${file} does not contain usr/bin/manang"
+    install -Dm755 "${work}/unpack/usr/bin/manang" "${BIN_DIR}/manang"
+    for size in 32 128; do
+        if [[ -f "${work}/unpack/usr/share/icons/hicolor/${size}x${size}/apps/manang.png" ]]; then
+            install -Dm644 "${work}/unpack/usr/share/icons/hicolor/${size}x${size}/apps/manang.png" \
+                "${ICON_DIR}/manang.png"
+            break
+        fi
+    done
+    [[ -f "${ICON_DIR}/manang.png" ]] || curl -fsSL -o "${ICON_DIR}/manang.png" \
         "https://raw.githubusercontent.com/${GH_REPO}/${tag}/src-tauri/icons/128x128.png" \
         || log "note: could not fetch the icon; the launcher will use a generic one"
     cat > "${APPS_DIR}/manang.desktop" <<DESKTOP
@@ -279,13 +301,13 @@ StartupWMClass=Manang
 DESKTOP
     update-desktop-database "$APPS_DIR" 2>/dev/null || true
     gtk-update-icon-cache -q "${HOME}/.local/share/icons/hicolor" 2>/dev/null || true
-    log "Installed ${APP_DIR}/Manang.AppImage and ${BIN_DIR}/manang"
+    log "Installed ${BIN_DIR}/manang for ${USER}"
     case ":${PATH}:" in
         *":${BIN_DIR}:"*) ;;
         *) log "note: ${BIN_DIR} is not on your PATH; start Manang from the application menu or add it" ;;
     esac
-    if ! ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
-        log "note: AppImages need libfuse2 (Debian/Ubuntu: libfuse2t64). Without it run: ${BIN_DIR}/manang --appimage-extract-and-run"
+    if ! ldconfig -p 2>/dev/null | grep -q 'libwebkit2gtk-4\.1'; then
+        log "note: Manang needs WebKitGTK 4.1 from your system (Debian/Ubuntu: libwebkit2gtk-4.1-0, Fedora: webkit2gtk4.1, Arch: webkit2gtk-4.1). Without it, run manang and read the error it prints."
     fi
 }
 
@@ -300,7 +322,7 @@ case "$BUNDLE" in
         elif command -v yum >/dev/null 2>&1; then as_root yum localinstall -y "${work}/${file}"
         else as_root rpm -Uvh --replacepkgs "${work}/${file}"
         fi ;;
-    appimage) install_appimage ;;
+    tar) install_tar ;;
 esac
 
 log ""

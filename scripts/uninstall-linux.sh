@@ -40,7 +40,9 @@ elif command -v rpm >/dev/null 2>&1 && rpm -q manang >/dev/null 2>&1; then
     removed=true
 fi
 
-# The per-user AppImage install.
+# The per-user install (the tarball under ~/.local). ~/.local/lib/manang is
+# where the AppImage builds of v0.1.0-beta.1 put their payload, so it is still
+# removed.
 for path in \
     "${HOME}/.local/lib/manang" \
     "${HOME}/.local/bin/manang" \

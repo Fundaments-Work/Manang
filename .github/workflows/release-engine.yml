@@ -136,7 +136,10 @@ jobs:
           # computer" rather than a broken install. Building a static graphite2
           # in this job and dropping the archive where pkg-config points would
           # remove the exception; see docs/ops/engine-release.md.
-          bad=$(ldd "$f" | awk '{print $1}' | grep -vE '^(linux-vdso|libc\.so|libm\.so|libgcc_s\.so|libstdc\+\+\.so|libpthread\.so|libdl\.so|librt\.so|libgraphite2\.so|/lib64/ld-linux|ld-linux)' || true)
+          # The dynamic loader is /lib64/ld-linux-x86-64.so.2 on x86-64 and
+          # /lib/ld-linux-aarch64.so.1 on arm64, so match it by name rather
+          # than by directory.
+          bad=$(ldd "$f" | awk '{print $1}' | grep -vE '^(linux-vdso|libc|libm|libgcc_s|libstdc\+\+|libpthread|libdl|librt|libgraphite2)(\.so[0-9.]*)?$|(^|/)ld-?linux[^ ]*$' || true)
           if [ -n "$bad" ]; then
             echo "::error::dynamic libraries that users may not have:"; echo "$bad"; exit 1
           fi

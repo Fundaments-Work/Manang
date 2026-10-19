@@ -76,7 +76,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: linux-x86_64 (deb, rpm, AppImage)
+          - label: linux-x86_64 (deb, rpm; the AppImage is replaced by pack-linux.sh)
             os: ubuntu-24.04
             args: ""
             rust_targets: ""
@@ -136,16 +136,34 @@ jobs:
     name: publish
     needs: [prepare, build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
-      - name: Add checksums and publish
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Pack the Linux artifacts, checksum, publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           mkdir assets && cd assets
           gh release download "$TAG" --pattern '*' --dir .
-          rm -f SHA256SUMS.txt
+          # scripts/pack-linux.sh drops the AppImage (it bundled a 120 MB
+          # copy of WebKitGTK), writes the tarball that replaces it and
+          # recompresses the .deb with xz. Whatever it changes here has to
+          # change on the release too, so diff the directory before and after.
+          find . -maxdepth 1 -type f -printf '%f\n' | sort > ../before.txt
+          bash ../../scripts/pack-linux.sh
+          find . -maxdepth 1 -type f -printf '%f\n' | sort > ../after.txt
+          while read -r f; do
+            grep -qxF "$f" ../after.txt || { echo "removing $f"; gh release delete-asset "$TAG" "$f"; }
+          done < ../before.txt
+          for f in *.deb *.tar.xz; do
+            [ -e "$f" ] || continue
+            echo "replacing $f"
+            gh release upload "$TAG" "$f" --clobber
+          done
+          rm -f SHA256SUMS.txt ../before.txt ../after.txt
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
           gh release upload "$TAG" SHA256SUMS.txt --clobber
