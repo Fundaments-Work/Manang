@@ -3,8 +3,7 @@
 # listed so a key can be rotated: ship the new key in an app release, then
 # switch the registry to sign with it, then retire the old one.
 #
-# A key whose id starts with `placeholder` is never trusted. The line below is
-# a stand-in so the file parses; the lead replaces it with the real key (see
-# docs/adr/0016-plugin-registry.md) before a release that is meant to offer
-# plugins.
-placeholder AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+# A key whose id starts with `placeholder` is never trusted. `registry-2026-10`
+# is the production key (generated 2026-10-19; the private half is the CI secret
+# REGISTRY_SIGNING_KEY and an offline backup).
+registry-2026-10 pmltTzTVH4ykkJUsa+wLjSy5t/1tf/yObOjLfnhcIbM=

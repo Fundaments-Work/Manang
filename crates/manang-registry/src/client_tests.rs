@@ -184,7 +184,8 @@ fn only_the_placeholder_key_means_not_configured() {
     let r = Registry::new(
         HttpTransport,
         Base::parse(f.server.url()).expect("base"),
-        TrustedKeys::embedded(),
+        TrustedKeys::parse("placeholder AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n")
+            .expect("placeholder list"),
         Cache::default(),
     );
     assert!(matches!(r.refresh(1), Err(RegistryError::NotConfigured)));
