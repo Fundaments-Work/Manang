@@ -3,14 +3,16 @@
  * runes store can assign the result and tests can compare plain data.
  *
  * A tab holds a text document, a figure, a read-only viewer (an image or a
- * PDF), or (as a view of a `.typ` document) a slide deck. There is at most one tab per file; opening a file again focuses
- * its tab.
+ * PDF), a plugin's page (path `plugin:<id>`, not a file) or (as a view of a
+ * `.typ` document) a slide deck. There is at most one tab per file or plugin;
+ * opening one again focuses its tab.
  */
 
+import { isPluginTabPath, pluginIdOf } from "./market";
 import { openAsByName, tabKindOf } from "./opener";
 import { basename, dirname, isUnder, moved } from "./paths";
 
-export type TabKind = "document" | "figure" | "viewer";
+export type TabKind = "document" | "figure" | "viewer" | "plugin";
 export type DocumentView = "text" | "slides";
 
 export interface Tab {
@@ -37,6 +39,7 @@ export const tabId = (path: string): string => path;
  * the file's bytes when it was opened.
  */
 export function kindForPath(path: string, fallback: TabKind = "document"): TabKind {
+  if (isPluginTabPath(path)) return "plugin";
   const as = openAsByName(path);
   return as === null ? fallback : tabKindOf(as);
 }
@@ -175,7 +178,7 @@ export function moveTab(model: TabsModel, id: string, toIndex: number): TabsMode
 function renamedKind(tab: Tab, path: string): TabKind {
   const named = kindForPath(path, tab.kind);
   if (named === "figure" || tab.kind === "figure") return named;
-  return tab.kind === "viewer" ? "viewer" : named;
+  return tab.kind === "viewer" || tab.kind === "plugin" ? tab.kind : named;
 }
 
 /** A file or folder was renamed: keep its tabs, pointing at the new path. */
@@ -210,11 +213,15 @@ export function tabLabels(
 ): Map<string, { name: string; hint: string }> {
   const counts = new Map<string, number>();
   for (const tab of tabs)
-    counts.set(basename(tab.path), (counts.get(basename(tab.path)) ?? 0) + 1);
+    if (tab.kind !== "plugin")
+      counts.set(basename(tab.path), (counts.get(basename(tab.path)) ?? 0) + 1);
   return new Map(
     tabs.map((tab) => {
-      const name = basename(tab.path);
-      const hint = (counts.get(name) ?? 0) > 1 ? basename(dirname(tab.path)) : "";
+      const name = tab.kind === "plugin" ? pluginIdOf(tab.path) : basename(tab.path);
+      const hint =
+        tab.kind !== "plugin" && (counts.get(name) ?? 0) > 1
+          ? basename(dirname(tab.path))
+          : "";
       return [tab.id, { name, hint }];
     }),
   );
@@ -233,8 +240,13 @@ export interface SessionData {
 export function toSession(project: string | null, model: TabsModel): SessionData {
   return {
     project,
-    tabs: model.tabs.map((tab) => ({ path: tab.path, view: tab.view })),
-    active: model.active,
+    // A plugin's page is not a file: it is not brought back next time.
+    tabs: model.tabs
+      .filter((tab) => tab.kind !== "plugin")
+      .map((tab) => ({ path: tab.path, view: tab.view })),
+    active: model.tabs.some((t) => t.id === model.active && t.kind === "plugin")
+      ? null
+      : model.active,
   };
 }
 

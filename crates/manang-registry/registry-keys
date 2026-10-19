@@ -1,0 +1,10 @@
+# Public keys that may sign the plugin registry's index.json (ed25519).
+# One per line: `<id> <base64 of the 32-byte public key>`. Several keys may be
+# listed so a key can be rotated: ship the new key in an app release, then
+# switch the registry to sign with it, then retire the old one.
+#
+# A key whose id starts with `placeholder` is never trusted. The line below is
+# a stand-in so the file parses; the lead replaces it with the real key (see
+# docs/adr/0016-plugin-registry.md) before a release that is meant to offer
+# plugins.
+placeholder AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=

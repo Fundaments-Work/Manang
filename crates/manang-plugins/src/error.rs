@@ -103,6 +103,16 @@ pub enum ManagerError {
     Invalid(Box<LoadError>),
     #[error(transparent)]
     Registry(#[from] RegistryError),
+    #[error(transparent)]
+    Market(#[from] manang_registry::RegistryError),
+    #[error("installing from the plugin registry needs your consent")]
+    ConsentRequired,
+    #[error("the plugin registry is switched off{0}")]
+    BrowseOff(String),
+    #[error("{0}; nothing was installed")]
+    RegistryMismatch(String),
+    #[error("an install from the plugin registry is already running")]
+    Busy,
     #[error("cannot move `{from}` to the trash: {source}")]
     Trash {
         from: PathBuf,
@@ -134,6 +144,11 @@ impl ManagerError {
             Self::Invalid(_) => "invalid_plugin",
             Self::Registry(_) => "registry",
             Self::Trash { .. } => "trash",
+            Self::Market(e) => e.code(),
+            Self::ConsentRequired => "consent_required",
+            Self::BrowseOff(_) => "registry_off",
+            Self::RegistryMismatch(_) => "registry_mismatch",
+            Self::Busy => "registry_busy",
         }
     }
 }

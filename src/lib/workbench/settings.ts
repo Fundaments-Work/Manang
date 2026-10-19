@@ -309,7 +309,7 @@ export function scopeLabel(origin: SettingsOrigin): string {
 
 /** What an origin needs to know about the tab Settings opens over. */
 export interface OriginTab {
-  readonly kind: "document" | "figure" | "viewer";
+  readonly kind: "document" | "figure" | "viewer" | "plugin";
   readonly path: string;
 }
 
@@ -326,6 +326,8 @@ export function settingsOriginFor(
   switch (tab.kind) {
     case "figure":
       return { kind: "figure", path: tab.path };
+    case "plugin":
+      return APP_ORIGIN;
     case "viewer":
       return extension(tab.path) === "pdf"
         ? { kind: "pdf", path: tab.path }

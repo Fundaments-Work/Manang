@@ -103,7 +103,7 @@ export function initials(name: string): string {
 
 /** Text files only: a live session edits one text document. */
 export function canShareLive(
-  kind: "document" | "figure" | "viewer" | undefined,
+  kind: "document" | "figure" | "viewer" | "plugin" | undefined,
 ): boolean {
   return kind === "document";
 }

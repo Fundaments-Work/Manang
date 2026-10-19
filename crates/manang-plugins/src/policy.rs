@@ -10,6 +10,9 @@ use thiserror::Error;
 pub enum PolicyAction {
     Install,
     Enable,
+    /// Reading the plugin registry (Browse, update checks). The request's
+    /// `name` is `registry`.
+    Browse,
 }
 
 /// What the gate may judge a plugin on.

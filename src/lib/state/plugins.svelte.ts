@@ -248,6 +248,11 @@ export class PluginsState {
     }
   }
 
+  /** Show the consent dialog for `request`; resolves with the person's answer. */
+  askConsent(request: ConsentRequest): Promise<boolean> {
+    return this.#askConsent(request);
+  }
+
   #askConsent(request: ConsentRequest): Promise<boolean> {
     this.#consentResolve?.(false);
     this.consent = request;

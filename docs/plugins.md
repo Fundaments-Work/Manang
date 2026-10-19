@@ -365,10 +365,13 @@ the package is rejected with `IncompatibleApi`; rebuild it.
 
 ### The Plugins view and `.manangplugin` archives
 
-Users manage plugins in the **Plugins** view (activity bar, Ctrl+Shift+X), or
-through the `plugins.*` commands (`plugins.list`, `plugins.inspect`,
-`plugins.install`, `plugins.approve`, `plugins.enable`, `plugins.disable`,
-`plugins.uninstall`, `plugins.reload`).
+Users manage plugins in the **Plugins** view (activity bar, Ctrl+Shift+X): a
+compact list with **Installed** and **Browse** tabs, and a plugin page per
+plugin that opens as a tab in the editor area (Details, Features, Permissions,
+Changelog, Versions). The same operations are the `plugins.*` commands
+(`plugins.list`, `plugins.inspect`, `plugins.install`, `plugins.approve`,
+`plugins.enable`, `plugins.disable`, `plugins.uninstall`, `plugins.reload`, and
+the registry commands below).
 
 - **Distribute** a plugin as a `.manangplugin`: a plain **zip** of the plugin
   folder, either with the files at the archive root or all inside one folder
@@ -392,6 +395,34 @@ through the `plugins.*` commands (`plugins.list`, `plugins.inspect`,
   ask for no permissions, and wait for approval when they ask for any.
 - `publisher` in `[plugin]` is a claim, shown as unverified until signatures
   land (ADR 0003 follow-up).
+
+### Publishing to the plugin registry
+
+People find plugins in **Plugins > Browse**, which reads the plugin registry
+(ADR 0016): a signed `index.json` plus mirrored `.manangplugin` archives. To be
+listed, open a pull request that adds `registry/plugins/<id>.toml` (see
+`registry/README.md` for the entry format and the review criteria); everything
+else is read from your release's manifest, never typed by hand. What users see
+of your plugin comes from there:
+
+- The index lists each version's `[permissions]` **verbatim**. The Install
+  dialog shows them before anything is downloaded, and Manang refuses a download
+  whose manifest asks for anything different, so keep the manifest and the
+  release in step and ask for the least access you can. An update that asks for
+  more gets a new consent.
+- The plugin page shows your readme (the first `README*` in the archive, or the
+  file your entry names; Markdown, raw HTML is filtered), the changelog text of
+  each version, your licence (`license` in `[plugin]`, else the repository's)
+  and a repository link.
+- Versions are `MAJOR.MINOR.PATCH`. `min_app` says the oldest Manang the
+  version runs on.
+- Registry installs record where they came from in `plugins.toml`
+  (`[plugins.<name>.origin]`: registry address, id, version). The commands are
+  `plugins.browse`, `plugins.detail`, `plugins.check-updates`,
+  `plugins.install-from-registry {id, version?, consent}`,
+  `plugins.registry-status`, `plugins.cancel-install` and `plugins.configure`;
+  progress is the `plugins.install-progress` event. `consent` must be `true`:
+  the caller (the UI) is responsible for having shown the access.
 
 ## Cold start and integrity
 

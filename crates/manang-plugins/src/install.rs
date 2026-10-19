@@ -240,6 +240,21 @@ impl PluginManager {
         Ok(())
     }
 
+    /// Record that `name` came from the plugin registry.
+    pub(crate) fn set_origin(
+        &self,
+        name: &str,
+        origin: crate::registry::Origin,
+    ) -> Result<(), ManagerError> {
+        {
+            let mut reg = self.registry.lock();
+            let rec = reg.entry(name);
+            rec.source = Some("registry".to_owned());
+            rec.origin = Some(origin);
+        }
+        self.save_registry()
+    }
+
     /// Install a plugin from a folder or a `.manangplugin` archive. The files
     /// are validated, copied into place atomically and recorded as waiting for
     /// approval: nothing of the plugin is loaded or run. A newer version of an
