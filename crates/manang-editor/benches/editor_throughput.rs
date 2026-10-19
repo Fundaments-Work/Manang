@@ -1,5 +1,6 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use manang_editor::Editor;
+use std::hint::black_box;
 
 fn generate_5mb_text() -> String {
     let paragraph = "In scientific authoring, high-performance interactive text buffers require sub-millisecond \

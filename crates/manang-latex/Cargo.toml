@@ -15,7 +15,7 @@ manang-kernel = { path = "../manang-kernel" }
 parking_lot = "0.12"
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10"
+sha2 = "0.11"
 tectonic = { version = "=0.17.0", optional = true }
 tectonic_bundles = { version = "=0.4.2", optional = true }
 tempfile = "3"
@@ -43,7 +43,7 @@ path = "src/bin/manang-latex-worker.rs"
 required-features = ["engine"]
 
 [dev-dependencies]
-criterion = { version = "0.5", default-features = false }
+criterion = { version = "0.8", default-features = false }
 insta = { version = "1", features = ["json"] }
 proptest = "1"
 
