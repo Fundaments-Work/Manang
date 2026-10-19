@@ -1,11 +1,11 @@
 name: release-engine
 
 # Builds the optional built-in LaTeX engine (the `manang-latex-worker` sidecar,
-# Tectonic inside) for the platforms we ship, hashes it, and uploads it as a
-# workflow artifact. It does NOT publish anything: the lead downloads the
-# artifact, uploads it to the engine host, pastes the printed manifest lines
-# into engines/manifest.json and cuts an app release. See
-# docs/ops/engine-release.md.
+# Tectonic inside) for the platforms we ship, checks it, hashes it, and attaches
+# it to the `tectonic-<version>` GitHub release that the app downloads from. The
+# version comes from engines/manifest.json. The printed size and hash still go
+# into that file in a reviewed commit: it is the trust root, and the app refuses
+# a binary whose digest does not match it. See docs/ops/engine-release.md.
 #
 # Run it by hand (Actions > release-engine > Run workflow) or push a tag like
 # `engine-v0.17.0`.
