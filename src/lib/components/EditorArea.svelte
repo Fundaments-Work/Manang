@@ -160,7 +160,9 @@
       <p class="m-auto text-xs text-text-muted" role="status">Opening figure</p>
     {/if}
   {:else if tab.kind === "plugin"}
-    <PluginPage id={pluginIdOf(tab.path)} />
+    {#key tab.id}
+      <PluginPage id={pluginIdOf(tab.path)} />
+    {/key}
   {:else if tab.kind === "viewer"}
     <FileViewer path={tab.path} />
   {:else if tab.view === "slides"}

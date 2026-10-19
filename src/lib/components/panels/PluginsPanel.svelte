@@ -67,7 +67,7 @@
     event.preventDefault();
     pick(next.id);
     (event.currentTarget as HTMLElement)
-      .querySelector<HTMLElement>(`[data-tab="${next.id}"]`)
+      .querySelector<HTMLElement>(`[data-plugins-tab="${next.id}"]`)
       ?.focus();
   }
 
@@ -146,7 +146,7 @@
       aria-selected={market.tab === t.id}
       aria-controls="plugins-list"
       tabindex={market.tab === t.id ? 0 : -1}
-      data-tab={t.id}
+      data-plugins-tab={t.id}
       class="inset-focus -mb-px h-7 border-b text-xs {market.tab === t.id
         ? 'border-text text-text'
         : 'border-transparent text-text-60 hover:text-text'}"

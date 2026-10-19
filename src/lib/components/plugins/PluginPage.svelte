@@ -19,9 +19,11 @@
   import {
     NO_PERMISSIONS,
     browseProblem,
+    errorCode,
     errorText,
     formatCount,
     formatSize,
+    compareVersions,
     isNewer,
     isoDate,
     permissionItems,
@@ -101,7 +103,10 @@
       installedVersion !== null &&
       detail.versions.some((v) => v.version === installedVersion && v.yanked),
   );
-  const history = $derived([...(detail?.versions ?? [])].reverse());
+  /** Newest first, whatever order the registry lists them in. */
+  const history = $derived(
+    [...(detail?.versions ?? [])].sort((a, b) => compareVersions(b.version, a.version)),
+  );
 
   /** What the Permissions tab lists: the installed plugin's ask, else the registry's. */
   const requested = $derived(
@@ -539,9 +544,13 @@
               <p class="m-0 text-text">
                 {browseProblem(detailMessage) === "off"
                   ? "Browsing plugins is turned off."
-                  : "This plugin's page could not be loaded."}
+                  : errorCode(detailMessage) === "registry_unknown_plugin"
+                    ? "This plugin is not installed, and the registry does not list it."
+                    : "This plugin's page could not be loaded."}
               </p>
-              <p class="m-0 mt-1">{errorText(detailMessage)}</p>
+              {#if errorCode(detailMessage) !== "registry_unknown_plugin"}
+                <p class="m-0 mt-1">{errorText(detailMessage)}</p>
+              {/if}
             </div>
           {/if}
         {:else if tab === "features"}
@@ -789,3 +798,11 @@
     </div>
   </div>
 </section>
+
+<style>
+  /* The readme is rendered Markdown: keep its emphasis within the two weights
+     of the design system (300 and 400). */
+  :global([data-readme] :is(strong, b, th, dt)) {
+    font-weight: 400;
+  }
+</style>

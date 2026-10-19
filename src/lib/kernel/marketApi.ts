@@ -80,7 +80,7 @@ export interface PluginDetail {
   readonly tier: string;
   /** What the latest version asks for. */
   readonly permissions: RegistryAccess | null;
-  /** Newest last, as the registry lists them. */
+  /** In the registry's order (newest first); the page sorts by version itself. */
   readonly versions: readonly RegistryVersion[];
   /** Markdown, untrusted: render it through the sanitising renderer. */
   readonly readme: string | null;
