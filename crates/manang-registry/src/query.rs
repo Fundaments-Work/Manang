@@ -127,7 +127,7 @@ pub fn updates(index: &Index, installed: &[(String, String)]) -> Vec<Update> {
         .iter()
         .filter_map(|(id, version)| {
             let p = index.plugin(id)?;
-            is_newer(&p.latest, version).then(|| Update {
+            (is_newer(&p.latest, version) && !p.is_yanked(&p.latest)).then(|| Update {
                 id: id.clone(),
                 installed: version.clone(),
                 latest: p.latest.clone(),
@@ -152,6 +152,7 @@ mod tests {
             license: "MIT".to_owned(),
             tags: tags.iter().map(|t| (*t).to_owned()).collect(),
             tier: "wasm".to_owned(),
+            yanked: Vec::new(),
             readme: None,
             latest: latest.to_owned(),
             versions: vec![VersionEntry {

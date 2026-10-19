@@ -6530,9 +6530,11 @@ name = "manang-plugins"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "ed25519-dalek",
  "insta",
  "manang-formats",
  "manang-kernel",
+ "manang-registry",
  "manang-wasm-host",
  "notify",
  "parking_lot",

@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 manang-formats = { path = "../manang-formats" }
 manang-kernel = { path = "../manang-kernel" }
+manang-registry = { path = "../manang-registry" }
 manang-wasm-host = { path = "../manang-wasm-host" }
 blake3 = "1.8"
 notify = "8"
@@ -24,6 +25,8 @@ toml = "1"
 zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dev-dependencies]
+manang-registry = { path = "../manang-registry", features = ["testing"] }
+ed25519-dalek = { version = "3", default-features = false }
 insta = "1"
 proptest = "1"
 tempfile = "3"

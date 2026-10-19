@@ -33,13 +33,14 @@ mod error;
 mod events;
 mod install;
 mod manager;
+pub mod marketplace;
 mod perms;
 mod policy;
 pub mod registry;
 mod state;
 mod watch;
 
-pub use commands::{PluginsPlugin, manifest, plugin};
+pub use commands::{PluginsPlugin, manifest, plugin, plugin_with};
 pub use error::{LoadError, LoadFailure, ManagerError};
 pub use events::{Listener, ManagerEvent};
 pub use install::{InspectReport, UninstallReport};
@@ -48,6 +49,7 @@ pub use manager::{
     PluginInfo, PluginManager, ScanReport, SyncOutcome, cache_dir_in, plugins_dir_in,
     registry_path_in, trash_dir_in,
 };
+pub use marketplace::{Marketplace, MarketplaceConfig};
 pub use perms::{difference as permission_difference, is_subset as permissions_within};
 pub use policy::{Permissive, PolicyAction, PolicyDenied, PolicyGate, PolicyRequest};
 pub use state::{CommandRef, PermissionReport, PluginList, PluginState, PluginStatus};
