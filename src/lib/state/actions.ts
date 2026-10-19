@@ -460,7 +460,7 @@ export async function newFigure(): Promise<void> {
   await workspace.loadDir("figures");
   const taken = workspace.namesIn("figures");
   let name = figureStem(uniqueName(NEW_FIGURE_NAME, taken));
-  let path = "";
+  let path: string;
   for (;;) {
     const answer = await dialog.prompt(newFigureRequest(name));
     if (answer.id !== "create") return;

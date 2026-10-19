@@ -1,6 +1,10 @@
 <script lang="ts" module>
   /** Ids for focused-surface registrations: one per viewer instance. */
   let surfaceCount = 0;
+  const nextSurfaceId = (): number => {
+    surfaceCount += 1;
+    return surfaceCount;
+  };
 </script>
 
 <script lang="ts">
@@ -818,7 +822,7 @@
   // Edit > Copy, Select all and Find go to this viewer while it has the focus.
   // One id per instance: a preview and a PDF tab can both be open.
   const stopSurface = focusedSurface.register({
-    id: `pdf-${++surfaceCount}`,
+    id: `pdf-${nextSurfaceId()}`,
     contains: (element) => root?.contains(element as Node) ?? false,
     available: () => root !== undefined,
     actions: {
