@@ -18,7 +18,8 @@ const api = () => writingApi(createMockKernel({ plugins: [writingPlugin()] }));
 
 const stateAt = (text: string) => {
   const pos = text.indexOf("|");
-  const doc = text.replace("|", "");
+  if (pos < 0) throw new Error("stateAt expects a | cursor marker");
+  const doc = text.slice(0, pos) + text.slice(pos + 1);
   return { state: EditorState.create({ doc }), pos };
 };
 

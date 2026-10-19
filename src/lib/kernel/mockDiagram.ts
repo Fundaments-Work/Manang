@@ -283,7 +283,7 @@ export function mockMermaidLayout(source: string): Record<string, unknown> {
     return id;
   };
   for (const line of lines.slice(1)) {
-    const parts = line.split(/\s*(-\.->|-->)\s*/);
+    const parts = line.split(/\s*((?:--|-\.)->)\s*/);
     let previous: string | null = null;
     let dashed = false;
     for (const part of parts) {

@@ -728,7 +728,18 @@ function escapeTypstString(title: string): string {
 }
 
 function escapeLatex(title: string): string {
-  return title.replace(/([&%$#_{}])/g, "\\$1");
+  return title.replace(/[\\~^&%$#_{}]/g, (ch) => {
+    switch (ch) {
+      case "\\":
+        return "\\textbackslash{}";
+      case "~":
+        return "\\textasciitilde{}";
+      case "^":
+        return "\\textasciicircum{}";
+      default:
+        return `\\${ch}`;
+    }
+  });
 }
 
 function renderContent(engine: Engine, text: string, title: string): string {
