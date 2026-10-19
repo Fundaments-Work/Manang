@@ -48,3 +48,45 @@ title = "Apply the open project's plugin overrides"
 [[contributes.commands]]
 id = "plugins.contributions"
 title = "List the format adapters, editors and toolbars plugins contribute"
+
+[[contributes.commands]]
+id = "plugins.configure"
+title = "Apply plugin settings"
+
+[[contributes.commands]]
+id = "plugins.registry-status"
+title = "Show whether the plugin registry is available"
+
+[[contributes.commands]]
+id = "plugins.browse"
+title = "Browse the plugin registry"
+
+[[contributes.commands]]
+id = "plugins.detail"
+title = "Show a registry plugin's page"
+
+[[contributes.commands]]
+id = "plugins.check-updates"
+title = "Check for plugin updates"
+
+[[contributes.commands]]
+id = "plugins.install-from-registry"
+title = "Install or update a plugin from the registry"
+
+[[contributes.commands]]
+id = "plugins.cancel-install"
+title = "Cancel a plugin download"
+
+[[contributes.settings]]
+id = "plugins.browse"
+type = "bool"
+default = true
+title = "Browse the plugin registry"
+description = "Show the Browse tab in Plugins and check for plugin updates. Turn off to keep Manang from contacting the plugin registry."
+
+[[contributes.settings]]
+id = "plugins.registry-url"
+type = "string"
+default = ""
+title = "Plugin registry address"
+description = "Where the plugin list and downloads come from. Empty uses the address built into Manang. Must start with https://. The list must be signed by a key Manang trusts."

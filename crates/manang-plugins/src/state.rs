@@ -74,6 +74,9 @@ pub struct PluginState {
     pub contexts: Vec<String>,
     /// A newer version is waiting for approval beside the running one.
     pub update_pending: bool,
+    /// Set when it was installed from the plugin registry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<crate::registry::Origin>,
 }
 
 /// The answer to `plugins.list`.
@@ -136,6 +139,7 @@ fn builtin(m: &Manifest, core: bool, off: bool, disabled_by: Option<DisabledBy>)
             .collect(),
         contexts: m.settings_contexts(),
         update_pending: false,
+        origin: None,
     }
 }
 
@@ -300,6 +304,7 @@ impl PluginManager {
                 .unwrap_or_default(),
             contexts: m.map(Manifest::settings_contexts).unwrap_or_default(),
             update_pending: pending || (held && record.is_some()),
+            origin: record.as_ref().and_then(|r| r.origin.clone()),
         }
     }
 }

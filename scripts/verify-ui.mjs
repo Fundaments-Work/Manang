@@ -2116,6 +2116,889 @@ async function visualSection(browser) {
   page.close();
 }
 
+/**
+ * Plugins: the compact side list (Installed and Browse), the plugin page that
+ * opens as a tab in the editor area, the registry's states, consent and
+ * updates, in a narrow window and the light theme. Runs against the in-memory
+ * kernel (`mockPlugins.ts`, `mockRegistry.ts`); the Rust side is covered by
+ * `crates/manang-plugins/tests/marketplace.rs`. Expects a project to be open.
+ */
+async function pluginsBody(page) {
+  const bar = 'nav[aria-label="Workbench views"]';
+  const rows = () =>
+    page.evaluate(
+      `[...document.querySelectorAll('#side-panel [data-plugin]')].map((r) => r.dataset.plugin)`,
+    );
+  const row = (name) =>
+    page.evaluate(`(() => {
+      const r = document.querySelector('#side-panel [data-plugin="${name}"]');
+      if (!r) return null;
+      return { status: r.dataset.status, tier: r.dataset.tier, text: r.innerText,
+        hasSwitch: !!r.querySelector('button[role="switch"]'),
+        checked: r.querySelector('button[role="switch"]')?.getAttribute("aria-checked") ?? null,
+        error: r.querySelector("[data-plugin-error]")?.innerText ?? null };
+    })()`);
+  const rowsWhere = (selector) =>
+    page.evaluate(
+      `[...document.querySelectorAll('#side-panel [data-plugin]')].filter((r) => ${selector}).map((r) => r.dataset.plugin)`,
+    );
+  const registryRows = () =>
+    page.evaluate(
+      `[...document.querySelectorAll('#side-panel [data-registry-plugin]')].map((r) => r.dataset.registryPlugin)`,
+    );
+  const chip = (id) => click(page, `#side-panel button[data-filter="${id}"]`);
+  const searchField = '#side-panel input[type="search"]';
+  const setSearch = async (text) => {
+    await page.evaluate(
+      `(() => { const f = document.querySelector('${searchField}'); f.value = ${JSON.stringify(text)}; f.dispatchEvent(new Event("input", { bubbles: true })); })()`,
+    );
+    await sleep(150);
+  };
+  /** Scroll the element into view, then click it for real. */
+  const tap = async (cdp, selector) => {
+    await cdp.evaluate(
+      `document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: "center" })`,
+    );
+    await sleep(120);
+    await click(cdp, selector);
+  };
+  const toast = () =>
+    page.evaluate(
+      `document.querySelector('footer[aria-label="Status"]')?.innerText ?? ""`,
+    );
+  const pageText = (sel = "[data-plugin-page]") =>
+    page.evaluate(`document.querySelector(${JSON.stringify(sel)})?.innerText ?? ""`);
+  const setMode = (mode) =>
+    page.evaluate(`window.__MANANG_MOCK_REGISTRY__ = ${JSON.stringify(mode)}`);
+  const plugTab = (id) => click(page, `#side-panel button[data-plugins-tab="${id}"]`);
+  const pageTab = (id) =>
+    click(page, `[data-plugin-page] button[data-page-tab="${id}"]`);
+  const openPage = async (selector, id) => {
+    await tap(page, selector);
+    await expectEventually(
+      page,
+      `the page of ${id} opens in the editor area`,
+      `!!document.querySelector('#editor-area [data-plugin-page="${id}"]')`,
+    );
+  };
+  const limeIn = (sel) =>
+    page.evaluate(`(() => {
+      const root = document.querySelector(${JSON.stringify(sel)});
+      if (!root) return [];
+      return [...root.querySelectorAll("*")]
+        .filter((el) => getComputedStyle(el).backgroundColor === "rgb(198, 241, 53)")
+        .map((el) => el.innerText.trim());
+    })()`);
+
+  await shoot(page, "07e-before-plugins");
+  await click(page, `${bar} button[aria-label="Plugins"]`);
+  await expectEventually(
+    page,
+    "the Plugins view lists built-in and sample plugins",
+    `document.querySelectorAll('#side-panel [data-plugin]').length >= 15`,
+    { show: `document.querySelector("#side-panel")?.innerText.slice(0, 200)` },
+  );
+  check(
+    "its panel is named Plugins and the activity icon is pressed",
+    (await exists(page, 'aside[aria-label="Plugins panel"]')) &&
+      (await page.evaluate(
+        `document.querySelector('${bar} button[aria-label="Plugins"]').getAttribute("aria-pressed") === "true"`,
+      )),
+  );
+  check(
+    "the view has two tabs, Installed and Browse, and one search field",
+    (await page.evaluate(
+      `[...document.querySelectorAll('#side-panel [role="tab"]')].map((t) => t.innerText.replace(/\\s+\\d+$/, "").trim()).join()`,
+    )) === "Installed,Browse" &&
+      (await page.evaluate(
+        `document.querySelectorAll('#side-panel input[type="search"]').length`,
+      )) === 1,
+  );
+  check(
+    "rows are compact: no inline accordion",
+    !(await exists(page, "#side-panel [data-plugin] [aria-expanded]")),
+  );
+  await shoot(page, "07f-plugins");
+
+  const editor = await row("editor");
+  const git = await row("git");
+  const counter = await row("word-count");
+  const lint = await row("latex-lint");
+  const fetcher = await row("citation-fetch");
+  const themes = await row("slide-themes");
+  check(
+    "built-in plugins say Built in and are enabled",
+    editor?.tier === "native" &&
+      /Built in/.test(editor.text) &&
+      /Enabled/.test(editor.text) &&
+      git?.tier === "native" &&
+      /Built in/.test(git.text),
+  );
+  check(
+    "a row names its publisher, version and state",
+    /Manang/.test(editor?.text ?? "") &&
+      /0\.1\.0/.test(counter?.text ?? "") &&
+      /Sandboxed/.test(counter?.text ?? "") &&
+      /Sandboxed/.test(lint?.text ?? ""),
+    counter?.text,
+  );
+  check(
+    "states read Enabled, Failed, Needs approval and Disabled",
+    counter?.status === "loaded" &&
+      /Enabled/.test(counter.text) &&
+      lint?.status === "failed" &&
+      /Failed/.test(lint.text) &&
+      fetcher?.status === "needs_approval" &&
+      /Needs approval/.test(fetcher.text) &&
+      themes?.status === "disabled" &&
+      /Disabled/.test(themes.text),
+  );
+  check(
+    "a failed plugin shows its error, without opening it",
+    /imports/.test(lint?.error ?? ""),
+    lint?.error ?? "",
+  );
+  check(
+    "the core plugin has no switch; a built-in that may be switched off has one",
+    editor?.hasSwitch === false && /Core/.test(editor.text) && git?.hasSwitch === true,
+  );
+  check(
+    "Install is the one lime action of the view",
+    await page.evaluate(`(() => {
+      const lime = (el) => getComputedStyle(el).backgroundColor === "rgb(198, 241, 53)";
+      const all = [...document.querySelectorAll("#side-panel *")].filter(lime);
+      return all.length === 1 && all[0].hasAttribute("data-install") && all[0].innerText.trim() === "Install";
+    })()`),
+  );
+
+  // Updates: a row, a badge on the activity bar, a mark on the plugin.
+  await expectEventually(
+    page,
+    "the Installed tab says how many updates there are, with Update all",
+    `(() => { const r = document.querySelector("[data-updates-row]"); return !!r && /2 updates available/.test(r.innerText) && !!r.querySelector("[data-update-all]"); })()`,
+  );
+  check(
+    "the Plugins icon carries an updates badge",
+    (await page.evaluate(
+      `document.querySelector('${bar} [data-updates-badge]')?.innerText.trim() ?? ""`,
+    )) === "2",
+  );
+  check(
+    "a plugin with an update says to which version",
+    /Update to 0\.2\.0/.test(
+      await page.evaluate(
+        `document.querySelector('#side-panel [data-plugin="word-count"] [data-update-badge]')?.innerText ?? ""`,
+      ),
+    ),
+  );
+
+  // Search and filter chips.
+  await setSearch("latex-li");
+  check(
+    "searching narrows the list (name, description, command)",
+    (await rows()).join() === "latex-lint",
+    (await rows()).join(),
+  );
+  await setSearch("count words");
+  check("a command title matches too", (await rows()).join() === "word-count");
+  await setSearch("zzzz");
+  check(
+    "no match says so",
+    (await rows()).length === 0 &&
+      (await page.evaluate(
+        `document.querySelector("#side-panel").innerText.includes("No plugin matches")`,
+      )),
+  );
+  await setSearch("");
+  await chip("attention");
+  check(
+    "Needs attention lists the failed and waiting ones only",
+    (await rows()).join() === "citation-fetch,latex-lint,plot-export",
+    (await rows()).join(),
+  );
+  await chip("builtin");
+  check(
+    "Built in lists first-party plugins only",
+    (await rows()).length > 5 &&
+      (await rowsWhere(`r.dataset.tier !== "native"`)).length === 0,
+  );
+  await chip("installed");
+  check(
+    "Installed lists sandboxed plugins only",
+    (await rows()).length === 5 &&
+      (await rowsWhere(`r.dataset.tier !== "wasm"`)).length === 0,
+    (await rows()).join(),
+  );
+  await chip("all");
+
+  // Enable and disable from the list.
+  await tap(page, '#side-panel [data-plugin="word-count"] button[role="switch"]');
+  await expectEventually(
+    page,
+    "turning a plugin off updates its state",
+    `document.querySelector('#side-panel [data-plugin="word-count"]')?.dataset.status === "disabled"`,
+  );
+  check("and the switch follows", (await row("word-count"))?.checked === "false");
+  check("with a notice", /Disabled word-count/.test(await toast()), await toast());
+  await tap(page, '#side-panel [data-plugin="word-count"] button[role="switch"]');
+  await expectEventually(
+    page,
+    "turning it on again loads it",
+    `document.querySelector('#side-panel [data-plugin="word-count"]')?.dataset.status === "loaded"`,
+  );
+
+  // The plugin page: an installed plugin.
+  await openPage(
+    '#side-panel [data-plugin="word-count"] [data-open-page]',
+    "word-count",
+  );
+  await expectEventually(
+    page,
+    "the page has the name, publisher and version in its header",
+    `(() => { const p = document.querySelector('[data-plugin-page="word-count"]'); return !!p && /Word count/.test(p.querySelector("[data-page-title]").innerText) && /Fundaments\\.work/.test(p.querySelector("[data-page-author]").innerText) && /0\\.1\\.0/.test(p.querySelector("[data-page-version]").innerText) && !!p.querySelector("[data-plugin-icon]"); })()`,
+  );
+  check(
+    "it has an icon made from the initials",
+    (await page.evaluate(
+      `document.querySelector('[data-plugin-page] [data-plugin-icon]')?.innerText.trim() ?? ""`,
+    )) === "WC",
+  );
+  check(
+    "the tab strip holds a tab for it, once, even when opened again",
+    await (async () => {
+      await tap(page, '#side-panel [data-plugin="word-count"] [data-open-page]');
+      return page.evaluate(
+        `[...document.querySelectorAll('[role="tab"][data-tab]')].filter((t) => t.dataset.tab === "plugin:word-count").length === 1`,
+      );
+    })(),
+  );
+  await expectEventually(
+    page,
+    "Details shows the readme, rendered",
+    `(() => { const r = document.querySelector("[data-readme]"); return !!r && /Counts/.test(r.innerText) && !!r.querySelector("h1"); })()`,
+  );
+  await shoot(page, "07g-plugin-page");
+  const facts = await pageText("[data-facts]");
+  check(
+    "the facts column lists version, publisher, repository, licence, size, last updated, id, type, min app",
+    [
+      "Version",
+      "Publisher",
+      "Repository",
+      "Licence",
+      "Size",
+      "Last updated",
+      "Id",
+      "Type",
+    ].every((k) => facts.includes(k)) &&
+      /MIT/.test(facts) &&
+      /word-count/.test(facts) &&
+      /Sandboxed/.test(facts) &&
+      /2026-10-10/.test(facts),
+    facts,
+  );
+  check(
+    "the repository is a link that opens outside the app",
+    await page.evaluate(
+      `document.querySelector('[data-facts] [data-repo-link]')?.getAttribute("title") === "https://github.com/Fundaments-Work/manang-word-count"`,
+    ),
+  );
+  check(
+    "the actions are Update (the one lime action), Disable and Uninstall",
+    (await limeIn("[data-plugin-page] [data-page-actions]")).join() ===
+      "Update to 0.2.0" &&
+      (await exists(page, '[data-plugin-page] [data-action="toggle"]')) &&
+      (await exists(page, '[data-plugin-page] [data-action="uninstall"]')),
+    (await limeIn("[data-plugin-page]")).join(),
+  );
+  await pageTab("permissions");
+  await expectEventually(
+    page,
+    "Permissions says in plain words what it may do, and what that means",
+    `(() => { const p = document.querySelector("[data-permissions]"); return !!p && /Read the open document/.test(p.innerText) && /Allowed/.test(p.innerText) && /text you are writing/.test(p.innerText); })()`,
+  );
+  await pageTab("features");
+  await expectEventually(
+    page,
+    "Features lists its commands with their ids",
+    `(() => { const f = document.querySelector("[data-features-commands]"); return !!f && /Count words/.test(f.innerText) && /word-count\\.count/.test(f.innerText); })()`,
+  );
+  await pageTab("changelog");
+  check(
+    "Changelog lists the versions, newest first",
+    await page.evaluate(
+      `(() => { const c = document.querySelector("[data-changelog]"); return !!c && /Fixes counting of CJK/.test(c.innerText) && c.innerText.indexOf("0.2.0") < c.innerText.indexOf("0.1.0"); })()`,
+    ),
+  );
+  await pageTab("versions");
+  check(
+    "Versions marks the installed one and offers the newer",
+    await page.evaluate(
+      `(() => { const v1 = document.querySelector('[data-version="0.1.0"]'); const v2 = document.querySelector('[data-version="0.2.0"]'); return !!v1 && /Installed/.test(v1.innerText) && !!v2 && /Latest/.test(v2.innerText) && !!v2.querySelector("[data-install-version]") && !v1.querySelector("[data-install-version]"); })()`,
+    ),
+  );
+
+  // An update that asks for nothing new.
+  await pageTab("details");
+  await tap(page, '[data-plugin-page] [data-action="update"]');
+  await expectEventually(
+    page,
+    "Update asks for consent, saying which version is running and flagging nothing new",
+    `(() => { const t = document.querySelector('[role="alertdialog"]')?.innerText ?? ""; return /Update Word count\\?/.test(t) && /Version 0\\.1\\.0 is running now/.test(t) && !document.querySelector("[data-consent-new]"); })()`,
+  );
+  await shoot(page, "07h-plugin-update-consent");
+  await press(page, "Escape");
+  check(
+    "Escape cancels the update",
+    !(await exists(page, '[role="alertdialog"]')) &&
+      /0\.1\.0/.test(await pageText("[data-page-version]")),
+  );
+  await tap(page, '[data-plugin-page] [data-action="update"]');
+  await waitFor(page, `!!document.querySelector('[data-consent-approve]')`, {
+    label: "consent dialog",
+  });
+  await tap(page, "[data-consent-approve]");
+  await expectEventually(
+    page,
+    "approving updates it in place",
+    `/0\\.2\\.0/.test(document.querySelector('[data-plugin-page="word-count"] [data-page-version]')?.innerText ?? "")`,
+  );
+  check(
+    "with a notice",
+    /Updated Word count to 0\.2\.0/.test(await toast()),
+    await toast(),
+  );
+  await expectEventually(
+    page,
+    "and one update fewer in the list and on the badge",
+    `/1 update available/.test(document.querySelector("[data-updates-row]")?.innerText ?? "") && document.querySelector('${bar} [data-updates-badge]')?.innerText.trim() === "1"`,
+  );
+
+  // An update that asks for more access.
+  await openPage(
+    '#side-panel [data-plugin="slide-themes"] [data-open-page]',
+    "slide-themes",
+  );
+  await expectEventually(
+    page,
+    "an update that asks for more says so on the page",
+    `!!document.querySelector("[data-permissions-grew]")`,
+  );
+  await tap(page, '[data-plugin-page="slide-themes"] [data-action="update"]');
+  await expectEventually(
+    page,
+    "its consent lists the new access, marked New",
+    `(() => { const d = document.querySelector('[role="alertdialog"]'); return !!d && !!d.querySelector("[data-consent-new]") && /fonts\\.example\\.org/.test(d.innerText); })()`,
+  );
+  await shoot(page, "07i-plugin-permission-increase");
+  await press(page, "Escape");
+  check(
+    "cancelling leaves the old version",
+    /0\.1\.0/.test(
+      await pageText('[data-plugin-page="slide-themes"] [data-page-version]'),
+    ),
+  );
+  await tap(page, '[data-plugin-page="slide-themes"] [data-action="update"]');
+  await waitFor(page, `!!document.querySelector('[data-consent-approve]')`, {
+    label: "consent dialog",
+  });
+  await tap(page, "[data-consent-approve]");
+  await expectEventually(
+    page,
+    "approving installs it, and Permissions shows the new access as allowed",
+    `/0\\.2\\.0/.test(document.querySelector('[data-plugin-page="slide-themes"] [data-page-version]')?.innerText ?? "")`,
+  );
+  await pageTab("permissions");
+  await expectEventually(
+    page,
+    "Connect to fonts.example.org is listed and allowed",
+    `/Connect to fonts\\.example\\.org/.test(document.querySelector("[data-permissions]")?.innerText ?? "")`,
+  );
+  check(
+    "no update is left",
+    !(await exists(page, "[data-updates-row]")) &&
+      !(await exists(page, `${bar} [data-updates-badge]`)),
+  );
+
+  // Built-in and core plugins.
+  await openPage('#side-panel [data-plugin="git"] [data-open-page]', "git");
+  check(
+    "a built-in plugin says it can be switched off but not removed",
+    /Built in: can be switched off but not removed/.test(await pageText()) &&
+      (await exists(page, '[data-plugin-page="git"] [data-action="toggle"]')) &&
+      !(await exists(page, '[data-plugin-page="git"] [data-action="uninstall"]')),
+  );
+  await openPage('#side-panel [data-plugin="editor"] [data-open-page]', "editor");
+  check(
+    "a core plugin says it is required, with no disable or uninstall",
+    /Required by Manang/.test(await pageText()) &&
+      !(await exists(page, '[data-plugin-page="editor"] [data-action="toggle"]')) &&
+      !(await exists(page, '[data-plugin-page="editor"] [data-action="uninstall"]')),
+  );
+  check(
+    "a built-in plugin has no registry page content: Details falls back to its description",
+    await exists(page, '[data-plugin-page="editor"] [data-no-readme]'),
+  );
+
+  // Review a plugin that waits for consent.
+  await tap(page, '#side-panel [data-plugin="plot-export"] button[data-review]');
+  await expectEventually(
+    page,
+    "reviewing an update lists its access with the new line marked New",
+    `(() => { const d = document.querySelector('[data-consent="plot-export"]'); return !!d && d.querySelector("[data-consent-new]") !== null && /plots\\.example\\.org/.test(d.innerText); })()`,
+  );
+  await press(page, "Escape");
+  check(
+    "Escape cancels without approving",
+    !(await exists(page, '[role="alertdialog"]')) &&
+      (await row("plot-export"))?.status === "needs_approval",
+  );
+
+  // Uninstall, with confirmation and the trash message.
+  await openPage(
+    '#side-panel [data-plugin="latex-lint"] [data-open-page]',
+    "latex-lint",
+  );
+  check(
+    "a failed plugin shows its error on its page",
+    /imports/.test(
+      await pageText('[data-plugin-page="latex-lint"] [data-plugin-error]'),
+    ),
+  );
+  await tap(page, '[data-plugin-page="latex-lint"] [data-action="uninstall"]');
+  await expectEventually(
+    page,
+    "uninstalling asks first and says the files go to the trash",
+    `(() => { const t = document.querySelector('[role="alertdialog"]')?.innerText ?? ""; return /Uninstall latex-lint\\?/.test(t) && /trash/.test(t); })()`,
+  );
+  await press(page, "Escape");
+  check("cancelling keeps the plugin", (await rows()).includes("latex-lint"));
+  await tap(page, '[data-plugin-page="latex-lint"] [data-action="uninstall"]');
+  await clickText(page, '[role="alertdialog"] button', "Uninstall");
+  await expectEventually(
+    page,
+    "confirming removes it from the list",
+    `!document.querySelector('#side-panel [data-plugin="latex-lint"]')`,
+  );
+  check("with a notice", /Uninstalled latex-lint/.test(await toast()), await toast());
+
+  // The hand-picked install flow still works: pick, read out the access, approve, load.
+  check("word-stats is not installed yet", !(await rows()).includes("word-stats"));
+  await tap(page, "#side-panel [data-install]");
+  await expectEventually(
+    page,
+    "Install shows what the plugin asks for before anything is installed",
+    `(() => { const d = document.querySelector('[data-consent="word-stats"]'); return !!d && /Reads the open document/.test(d.innerText) && /Install word-stats/.test(d.innerText); })()`,
+  );
+  check(
+    "nothing was installed while the dialog is open",
+    !(await rows()).includes("word-stats"),
+  );
+  await press(page, "Escape");
+  check(
+    "cancelling installs nothing",
+    !(await rows()).includes("word-stats") &&
+      !(await exists(page, '[role="alertdialog"]')),
+  );
+  await tap(page, "#side-panel [data-install]");
+  await waitFor(page, `!!document.querySelector('[data-consent-approve]')`, {
+    label: "consent dialog",
+  });
+  await tap(page, "[data-consent-approve]");
+  await expectEventually(
+    page,
+    "approving installs the plugin and loads it",
+    `document.querySelector('#side-panel [data-plugin="word-stats"]')?.dataset.status === "loaded"`,
+  );
+  check("with a notice", /Installed word-stats/.test(await toast()), await toast());
+
+  // ---- Browse ----------------------------------------------------------
+  await plugTab("browse");
+  await expectEventually(
+    page,
+    "Browse lists the registry's plugins",
+    `document.querySelectorAll('#side-panel [data-registry-plugin]').length === 5`,
+  );
+  check(
+    "the same single search field serves Browse",
+    (await page.evaluate(
+      `document.querySelectorAll('#side-panel input[type="search"]').length`,
+    )) === 1 &&
+      /registry/i.test(
+        await page.evaluate(
+          `document.querySelector('#side-panel input[type="search"]').placeholder`,
+        ),
+      ),
+  );
+  await shoot(page, "07j-plugins-browse");
+  const tableRow = await page.evaluate(
+    `document.querySelector('#side-panel [data-registry-plugin="table-tools"]')?.innerText ?? ""`,
+  );
+  check(
+    "a Browse row shows name, author, latest version, description, tags, downloads and Install",
+    /Table tools/.test(tableRow) &&
+      /A\. Author/.test(tableRow) &&
+      /1\.0\.0/.test(tableRow) &&
+      /Align, sort and convert/.test(tableRow) &&
+      /tables/.test(tableRow) &&
+      /12k downloads/.test(tableRow) &&
+      /Install/.test(tableRow),
+    tableRow,
+  );
+  check(
+    "installed plugins say so, and the one with an update says that",
+    (await page.evaluate(
+      `document.querySelector('#side-panel [data-registry-plugin="word-count"]')?.dataset.installed`,
+    )) === "yes" &&
+      /Installed/.test(
+        await page.evaluate(
+          `document.querySelector('#side-panel [data-registry-plugin="word-count"]').innerText`,
+        ),
+      ),
+  );
+  check(
+    "sorted by name",
+    (await registryRows()).join() ===
+      "crossref-lookup,plot-export,slide-themes,table-tools,word-count",
+    (await registryRows()).join(),
+  );
+  await click(page, '#side-panel button[data-sort="downloads"]');
+  check(
+    "sorted by downloads",
+    (await registryRows()).join() ===
+      "table-tools,word-count,plot-export,slide-themes,crossref-lookup",
+    (await registryRows()).join(),
+  );
+  await click(page, '#side-panel button[data-sort="newest"]');
+  check(
+    "sorted by newest",
+    (await registryRows()).join() ===
+      "slide-themes,word-count,plot-export,crossref-lookup,table-tools",
+    (await registryRows()).join(),
+  );
+  await click(page, '#side-panel button[data-sort="name"]');
+  await click(page, '#side-panel button[data-tag="writing"]');
+  check(
+    "a tag narrows the list",
+    (await registryRows()).join() === "table-tools,word-count",
+    (await registryRows()).join(),
+  );
+  await click(page, '#side-panel button[data-tag="writing"]');
+  await setSearch("crossref");
+  check(
+    "searching finds a plugin by name",
+    (await registryRows()).join() === "crossref-lookup",
+  );
+  await setSearch("open refs");
+  check("or by author", (await registryRows()).join() === "crossref-lookup");
+  await setSearch("zzzz");
+  check(
+    "an empty search says so and offers to clear it",
+    (await registryRows()).length === 0 &&
+      /No plugin matches/.test(await pageText("[data-browse-empty]")) &&
+      (await exists(page, "[data-browse-empty] button")),
+  );
+  await setSearch("");
+
+  // Install from the list: consent first, nothing without it.
+  await tap(
+    page,
+    '#side-panel [data-registry-plugin="table-tools"] [data-install-registry]',
+  );
+  await expectEventually(
+    page,
+    "Install from Browse reads out the access before anything is downloaded",
+    `(() => { const t = document.querySelector('[role="alertdialog"]')?.innerText ?? ""; return /Install Table tools\\?/.test(t) && /Reads and changes the open document/.test(t); })()`,
+  );
+  await press(page, "Escape");
+  check(
+    "cancelling installs nothing",
+    (await page.evaluate(
+      `document.querySelector('#side-panel [data-registry-plugin="table-tools"]').dataset.installed`,
+    )) === "no" && !(await rows()).includes("table-tools"),
+  );
+  await tap(
+    page,
+    '#side-panel [data-registry-plugin="table-tools"] [data-install-registry]',
+  );
+  await waitFor(page, `!!document.querySelector('[data-consent-approve]')`, {
+    label: "consent dialog",
+  });
+  await tap(page, "[data-consent-approve]");
+  await expectEventually(
+    page,
+    "approving installs it from the registry",
+    `document.querySelector('#side-panel [data-registry-plugin="table-tools"]')?.dataset.installed === "yes"`,
+  );
+  check(
+    "with a notice",
+    /Installed Table tools 1\.0\.0/.test(await toast()),
+    await toast(),
+  );
+
+  // A registry plugin that is not installed has a page too.
+  await openPage(
+    '#side-panel [data-registry-plugin="crossref-lookup"] [data-open-page]',
+    "crossref-lookup",
+  );
+  check(
+    "its page offers Install as the one lime action",
+    (await limeIn("[data-plugin-page]")).join() === "Install" &&
+      (await exists(
+        page,
+        '[data-plugin-page="crossref-lookup"] [data-action="install"]',
+      )) &&
+      !(await exists(
+        page,
+        '[data-plugin-page="crossref-lookup"] [data-action="uninstall"]',
+      )),
+    (await limeIn("[data-plugin-page]")).join(),
+  );
+  await expectEventually(
+    page,
+    "with its readme, tags and registry facts",
+    `(() => { const p = document.querySelector('[data-plugin-page="crossref-lookup"]'); return !!p && /Paste a DOI/.test(p.querySelector("[data-readme]")?.innerText ?? "") && /references/.test(p.innerText) && /BSD-3-Clause/.test(p.querySelector("[data-facts]").innerText) && /Needs Manang/.test(p.querySelector("[data-facts]").innerText); })()`,
+  );
+  await pageTab("permissions");
+  const perms = await pageText("[data-permissions]");
+  check(
+    "Permissions lists each capability in plain words, changes first, without Allowed marks",
+    /Connect to api\.crossref\.org/.test(perms) &&
+      /Read and change files in your project/.test(perms) &&
+      perms.indexOf("Read and change") < perms.indexOf("Read files in your project") &&
+      !/Allowed/.test(perms),
+    perms,
+  );
+  await shoot(page, "07k-plugin-page-permissions");
+  await pageTab("features");
+  check(
+    "Features says what it adds once it is installed",
+    await exists(page, "[data-features-later]"),
+  );
+  await pageTab("versions");
+  check(
+    "Versions shows a withdrawn version without an install button",
+    await page.evaluate(
+      `(() => { const v = document.querySelector('[data-version="0.4.1"]'); return !!v && !!v.querySelector("[data-version-withdrawn]") && !v.querySelector("[data-install-version]") && !!document.querySelector('[data-install-version="0.5.0"]'); })()`,
+    ),
+  );
+  await tap(page, '[data-plugin-page="crossref-lookup"] [data-action="install"]');
+  await expectEventually(
+    page,
+    "installing from the page asks for consent too",
+    `/Install Crossref lookup\\?/.test(document.querySelector('[role="alertdialog"]')?.innerText ?? "")`,
+  );
+  await press(page, "Escape");
+  check(
+    "the withdrawn version cannot be installed even by command",
+    await page.evaluate(
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("plugins.install-from-registry", { id: "crossref-lookup", version: "0.4.1", consent: true })).then(() => false, (e) => /withdrawn/.test(String(e?.message ?? e)))`,
+    ),
+  );
+
+  // Keyboard: the arrow keys move between tabs.
+  await page.evaluate(
+    `document.querySelector('[data-plugin-page] button[data-page-tab="versions"]').focus()`,
+  );
+  await press(page, "ArrowLeft");
+  check(
+    "arrow keys move between the page's tabs",
+    (await page.evaluate(
+      `document.querySelector('[data-plugin-page] [role="tab"][aria-selected="true"]').dataset.pageTab`,
+    )) === "changelog",
+  );
+  await page.evaluate(
+    `document.querySelector('#side-panel button[data-plugins-tab="browse"]').focus()`,
+  );
+  await press(page, "ArrowLeft");
+  check(
+    "and between the list's tabs",
+    (await page.evaluate(
+      `document.querySelector('#side-panel [role="tab"][aria-selected="true"]').dataset.pluginsTab`,
+    )) === "installed",
+  );
+  await plugTab("browse");
+
+  // The registry's states.
+  await setMode("offline");
+  await click(page, '#side-panel button[aria-label="Refresh the plugin list"]');
+  await expectEventually(
+    page,
+    "offline, the cached list is shown with its date",
+    `(() => { const n = document.querySelector("[data-offline-notice]"); return !!n && /Showing the list from \\d{4}-\\d{2}-\\d{2}/.test(n.innerText) && document.querySelectorAll('#side-panel [data-registry-plugin]').length === 5; })()`,
+  );
+  await setMode("unreachable");
+  await click(page, '#side-panel button[aria-label="Refresh the plugin list"]');
+  await expectEventually(
+    page,
+    "an unreachable registry says so and offers Retry",
+    `(() => { const p = document.querySelector('[data-browse-problem="unreachable"]'); return !!p && /could not be reached/.test(p.innerText) && !!p.querySelector("[data-retry]"); })()`,
+  );
+  await setMode("ok");
+  await click(page, "#side-panel [data-retry]");
+  await expectEventually(
+    page,
+    "Retry brings the list back",
+    `document.querySelectorAll('#side-panel [data-registry-plugin]').length === 5 && !document.querySelector("[data-browse-problem]")`,
+  );
+  await setMode("signature");
+  await click(page, '#side-panel button[aria-label="Refresh the plugin list"]');
+  await expectEventually(
+    page,
+    "a list that fails verification says so and that nothing was installed",
+    `(() => { const p = document.querySelector('[data-browse-problem="signature"]'); return !!p && /could not be verified/.test(p.innerText) && /Nothing was installed/.test(p.innerText); })()`,
+  );
+  check("and shows no plugins from it", (await registryRows()).length === 0);
+  await setMode("off");
+  await click(page, '#side-panel button[aria-label="Refresh the plugin list"]');
+  await expectEventually(
+    page,
+    "with browsing turned off it says so and no list is shown",
+    `/turned off/.test(document.querySelector('[data-browse-problem="off"]')?.innerText ?? "")`,
+  );
+  await setMode("ok");
+  await click(page, '#side-panel button[aria-label="Refresh the plugin list"]');
+  await expectEventually(
+    page,
+    "turning it on again restores the list",
+    `document.querySelectorAll('#side-panel [data-registry-plugin]').length === 5`,
+  );
+  // The registry failures above were provoked on purpose and logged by the app.
+  page.errors.splice(0);
+
+  // Design rules on the page, then a narrow window and the light theme.
+  await tap(page, '#side-panel [data-registry-plugin="word-count"] [data-open-page]');
+  await expectEventually(
+    page,
+    "the word-count page is back",
+    `!!document.querySelector('#editor-area [data-plugin-page="word-count"] [data-readme]')`,
+  );
+  check(
+    "the page is square, flat and tonal: no rounded corners, no shadows",
+    await page.evaluate(`(() => {
+      const root = document.querySelector("[data-plugin-page]");
+      return [...root.querySelectorAll("*")].every((el) => {
+        const s = getComputedStyle(el);
+        return s.borderRadius === "0px" && s.boxShadow === "none";
+      });
+    })()`),
+  );
+  const heavy = await page.evaluate(`(() => {
+    const root = document.querySelector("[data-plugin-page]");
+    return [...root.querySelectorAll("*")]
+      .filter((el) => !["300", "400"].includes(getComputedStyle(el).fontWeight))
+      .map((el) => el.tagName + ":" + getComputedStyle(el).fontWeight).slice(0, 5);
+  })()`);
+  check(
+    "it uses only the two font weights, 300 and 400",
+    heavy.length === 0,
+    heavy.join(),
+  );
+  // Close the list so the page has the window (it floats over the editor when narrow).
+  await click(page, `${bar} button[aria-label="Plugins"]`);
+  await resize(page, 640, 760);
+  await sleep(300);
+  check(
+    "at 640px the page uses the full width, with the facts folded under the header",
+    await page.evaluate(`(() => {
+      const p = document.querySelector("[data-plugin-page]").getBoundingClientRect();
+      const f = document.querySelector("[data-facts]").getBoundingClientRect();
+      const t = document.querySelector('[data-plugin-page] [role="tablist"]').getBoundingClientRect();
+      return f.bottom <= t.top + 1 && f.width >= p.width - 2 && document.documentElement.scrollWidth <= window.innerWidth;
+    })()`),
+  );
+  await shoot(page, "07l-plugin-page-640");
+  await page.evaluate(
+    `document.documentElement.classList.replace("theme-dark", "theme-light")`,
+  );
+  await sleep(250);
+  check(
+    "in the light theme the page keeps its structure and does not scroll sideways",
+    await page.evaluate(
+      `document.documentElement.scrollWidth <= window.innerWidth && !!document.querySelector("[data-plugin-page] [data-readme]")`,
+    ),
+  );
+  await shoot(page, "07m-plugin-page-light");
+  await page.evaluate(
+    `document.documentElement.classList.replace("theme-light", "theme-dark")`,
+  );
+  await resize(page, 1280, 820);
+  await click(page, `${bar} button[aria-label="Plugins"]`);
+
+  // Live: a change from elsewhere shows without reloading the page.
+  await plugTab("installed");
+  // The panel was just mounted again (the window grew): let it subscribe.
+  await sleep(600);
+  await page.evaluate(
+    `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("plugins.disable", { name: "search" }))`,
+  );
+  await expectEventually(
+    page,
+    "a plugin switched off elsewhere updates the list by itself",
+    `document.querySelector('#side-panel [data-plugin="search"]')?.dataset.status === "disabled"`,
+    {
+      show: `JSON.stringify([document.querySelector("#side-panel [data-plugin=search]")?.dataset.status, document.querySelectorAll("#side-panel [data-plugin]").length, !!document.querySelector("#side-panel")])`,
+    },
+  );
+  await page.evaluate(
+    `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("plugins.enable", { name: "search" }))`,
+  );
+  await expectEventually(
+    page,
+    "and back",
+    `document.querySelector('#side-panel [data-plugin="search"]')?.dataset.status === "loaded"`,
+  );
+
+  // Close the plugin pages like any tab.
+  const pageTabs = () =>
+    page.evaluate(
+      `[...document.querySelectorAll('[role="tab"][data-tab]')].filter((t) => t.dataset.tab.startsWith("plugin:")).length`,
+    );
+  check("several plugin pages are open as tabs", (await pageTabs()) >= 5);
+  for (let i = 0; i < 12 && (await pageTabs()) > 0; i++) {
+    await page.evaluate(
+      `document.querySelector('[role="tab"][data-tab^="plugin:"] ~ button[aria-label^="Close"]')?.click()`,
+    );
+    await sleep(120);
+  }
+  check("and each closes like any tab", (await pageTabs()) === 0);
+
+  // The shortcut and the command open this view.
+  await click(page, `${bar} button[aria-label="Plugins"]`);
+  check("the icon collapses the panel", !(await exists(page, "#side-panel")));
+  await press(page, "x", { ctrl: true, shift: true, wait: 400 });
+  check(
+    "Ctrl+Shift+X opens the Plugins view",
+    await exists(page, 'aside[aria-label="Plugins panel"]'),
+  );
+  check(
+    "and no Settings page is opened for it",
+    !(await exists(page, 'section[aria-label="Settings"]')),
+  );
+  check(
+    "the page does not scroll sideways",
+    await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth`),
+  );
+}
+
+/**
+ * Self-contained, so `MANANG_ONLY=plugins node scripts/verify-ui.mjs` runs only
+ * the Plugins section (no slot needed).
+ */
+async function pluginsSection(browser) {
+  section("Plugins");
+  const page = await newPage(browser);
+  current = page;
+  await clickText(page, "[data-project] button", "Entropy paper");
+  await waitFor(
+    page,
+    `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+    { label: "editor shows main.typ" },
+  );
+  await press(page, "Escape", { wait: 150 });
+  await pluginsBody(page);
+}
+
 async function main() {
   const browserBin = findBrowser();
   if (browserBin === null) {
@@ -2169,9 +3052,11 @@ async function main() {
       process.env.MANANG_ONLY === "engine" ||
       process.env.MANANG_ONLY === "autosave" ||
       process.env.MANANG_ONLY === "visual" ||
-      process.env.MANANG_ONLY === "feedback"
+      process.env.MANANG_ONLY === "feedback" ||
+      process.env.MANANG_ONLY === "plugins"
     ) {
-      if (process.env.MANANG_ONLY === "feedback") await feedbackSection(browser);
+      if (process.env.MANANG_ONLY === "plugins") await pluginsSection(browser);
+      else if (process.env.MANANG_ONLY === "feedback") await feedbackSection(browser);
       else if (process.env.MANANG_ONLY === "visual") await visualSection(browser);
       else if (process.env.MANANG_ONLY === "engine") await engineSection(browser);
       else if (process.env.MANANG_ONLY === "autosave") await autosaveSection(browser);
@@ -3220,308 +4105,7 @@ async function main() {
 
     /* ------------------------------------------------------------------ */
     section("Plugins");
-    {
-      const bar = 'nav[aria-label="Workbench views"]';
-      const rows = () =>
-        page.evaluate(
-          `[...document.querySelectorAll('#side-panel [data-plugin]')].map((r) => r.dataset.plugin)`,
-        );
-      const row = (name) =>
-        page.evaluate(`(() => {
-          const r = document.querySelector('#side-panel [data-plugin="${name}"]');
-          if (!r) return null;
-          return { status: r.dataset.status, tier: r.dataset.tier, text: r.innerText,
-            hasSwitch: !!r.querySelector('button[role="switch"]'),
-            checked: r.querySelector('button[role="switch"]')?.getAttribute("aria-checked") ?? null,
-            error: r.querySelector("[data-plugin-error]")?.innerText ?? null };
-        })()`);
-      const rowsWhere = (selector) =>
-        page.evaluate(
-          `[...document.querySelectorAll('#side-panel [data-plugin]')].filter((r) => ${selector}).map((r) => r.dataset.plugin)`,
-        );
-      const chip = (id) => click(page, `#side-panel button[data-filter="${id}"]`);
-      const filterField = 'input[aria-label="Filter plugins"]';
-      const setFilter = async (text) => {
-        await page.evaluate(
-          `(() => { const f = document.querySelector('${filterField}'); f.value = ${JSON.stringify(text)}; f.dispatchEvent(new Event("input", { bubbles: true })); })()`,
-        );
-        await sleep(150);
-      };
-      /** Scroll the element into the panel's view, then click it for real. */
-      const tap = async (cdp, selector) => {
-        await cdp.evaluate(
-          `document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: "center" })`,
-        );
-        await sleep(120);
-        await click(cdp, selector);
-      };
-      const toast = () =>
-        page.evaluate(
-          `document.querySelector('footer[aria-label="Status"]')?.innerText ?? ""`,
-        );
-
-      await click(page, `${bar} button[aria-label="Plugins"]`);
-      await expectEventually(
-        page,
-        "the Plugins view lists built-in and sample plugins",
-        `document.querySelectorAll('#side-panel [data-plugin]').length >= 15`,
-        { show: `document.querySelector("#side-panel")?.innerText.slice(0, 200)` },
-      );
-      check(
-        "its panel is named Plugins and the activity icon is pressed",
-        (await exists(page, 'aside[aria-label="Plugins panel"]')) &&
-          (await page.evaluate(
-            `document.querySelector('${bar} button[aria-label="Plugins"]').getAttribute("aria-pressed") === "true"`,
-          )),
-      );
-      await shoot(page, "07f-plugins");
-
-      const editor = await row("editor");
-      const git = await row("git");
-      const counter = await row("word-count");
-      const lint = await row("latex-lint");
-      const fetcher = await row("citation-fetch");
-      const themes = await row("slide-themes");
-      check(
-        "built-in plugins say Built in and are enabled",
-        editor?.tier === "native" &&
-          /Built in/.test(editor.text) &&
-          /Enabled/.test(editor.text) &&
-          git?.tier === "native" &&
-          /Built in/.test(git.text),
-      );
-      check(
-        "installed plugins say Sandboxed",
-        /Sandboxed/.test(counter?.text ?? "") && /Sandboxed/.test(lint?.text ?? ""),
-      );
-      check(
-        "states read Enabled, Failed, Needs approval and Disabled",
-        counter?.status === "loaded" &&
-          /Enabled/.test(counter.text) &&
-          lint?.status === "failed" &&
-          /Failed/.test(lint.text) &&
-          fetcher?.status === "needs_approval" &&
-          /Needs approval/.test(fetcher.text) &&
-          themes?.status === "disabled" &&
-          /Disabled/.test(themes.text),
-      );
-      check(
-        "a failed plugin shows its error, without opening it",
-        /imports/.test(lint?.error ?? ""),
-        lint?.error ?? "",
-      );
-      check(
-        "the core plugin has no switch; a built-in that may be switched off has one",
-        editor?.hasSwitch === false &&
-          /Core/.test(editor.text) &&
-          git?.hasSwitch === true,
-      );
-      check(
-        "Install is the one lime action of the view",
-        await page.evaluate(`(() => {
-          const lime = (el) => getComputedStyle(el).backgroundColor === "rgb(198, 241, 53)";
-          const all = [...document.querySelectorAll("#side-panel *")].filter(lime);
-          return all.length === 1 && all[0].hasAttribute("data-install") && all[0].innerText.trim() === "Install";
-        })()`),
-      );
-
-      // Search and filter chips.
-      await setFilter("latex-li");
-      check(
-        "searching narrows the list (name, description, command)",
-        (await rows()).join() === "latex-lint",
-        (await rows()).join(),
-      );
-      await setFilter("count words");
-      check("a command title matches too", (await rows()).join() === "word-count");
-      await setFilter("zzzz");
-      check(
-        "no match says so",
-        (await rows()).length === 0 &&
-          (await page.evaluate(
-            `document.querySelector("#side-panel").innerText.includes("No plugin matches")`,
-          )),
-      );
-      await setFilter("");
-      await chip("attention");
-      check(
-        "Needs attention lists the failed and waiting ones only",
-        (await rows()).join() === "citation-fetch,latex-lint,plot-export",
-        (await rows()).join(),
-      );
-      await chip("builtin");
-      check(
-        "Built in lists first-party plugins only",
-        (await rows()).length > 5 &&
-          (await rowsWhere(`r.dataset.tier !== "native"`)).length === 0,
-      );
-      await chip("installed");
-      check(
-        "Installed lists sandboxed plugins only",
-        (await rows()).length === 5 &&
-          (await rowsWhere(`r.dataset.tier !== "wasm"`)).length === 0,
-        (await rows()).join(),
-      );
-      await chip("all");
-
-      // Enable and disable.
-      await tap(page, '#side-panel [data-plugin="word-count"] button[role="switch"]');
-      await expectEventually(
-        page,
-        "turning a plugin off updates its state",
-        `document.querySelector('#side-panel [data-plugin="word-count"]')?.dataset.status === "disabled"`,
-      );
-      check(
-        "and the switch follows",
-        (await row("word-count"))?.checked === "false",
-        JSON.stringify(await row("word-count")),
-      );
-      check("with a notice", /Disabled word-count/.test(await toast()), await toast());
-      await tap(page, '#side-panel [data-plugin="word-count"] button[role="switch"]');
-      await expectEventually(
-        page,
-        "turning it on again loads it",
-        `document.querySelector('#side-panel [data-plugin="word-count"]')?.dataset.status === "loaded"`,
-      );
-
-      // Details.
-      await tap(page, '#side-panel [data-plugin="word-count"] button[aria-expanded]');
-      await expectEventually(
-        page,
-        "opening a plugin shows what it can access and its commands",
-        `(() => { const d = document.querySelector('[data-details="word-count"]'); return !!d && /Reads the open document/.test(d.innerText) && /Count words/.test(d.innerText) && /word-count\\.count/.test(d.innerText); })()`,
-      );
-      check(
-        "an installed plugin can be reloaded and uninstalled",
-        (await exists(page, '[data-details="word-count"] [data-action="reload"]')) &&
-          (await exists(page, '[data-details="word-count"] [data-action="uninstall"]')),
-      );
-      await tap(page, '#side-panel [data-plugin="editor"] button[aria-expanded]');
-      await expectEventually(
-        page,
-        "a core plugin's details say it is required",
-        `/Required by Manang/.test(document.querySelector('[data-details="editor"]')?.innerText ?? "")`,
-      );
-      check(
-        "and offer no uninstall, disable or reload",
-        !(await exists(page, '[data-details="editor"] [data-action="uninstall"]')) &&
-          !(await exists(page, '[data-details="editor"] [data-action="toggle"]')) &&
-          !(await exists(page, '[data-details="editor"] [data-action="reload"]')),
-      );
-      await tap(page, '#side-panel [data-plugin="git"] button[aria-expanded]');
-      await expectEventually(
-        page,
-        "a built-in plugin can be switched off but not uninstalled",
-        `!!document.querySelector('[data-details="git"] [data-action="toggle"]') && !document.querySelector('[data-details="git"] [data-action="uninstall"]')`,
-      );
-      await shoot(page, "07g-plugin-details");
-
-      // An update that asks for more shows the new access.
-      await tap(page, '#side-panel [data-plugin="plot-export"] button[data-review]');
-      await expectEventually(
-        page,
-        "reviewing an update lists its access with the new line marked New",
-        `(() => { const d = document.querySelector('[data-consent="plot-export"]'); return !!d && d.querySelector("[data-consent-new]") !== null && /plots\\.example\\.org/.test(d.innerText); })()`,
-      );
-      await shoot(page, "07h-plugin-update-consent");
-      await press(page, "Escape");
-      check(
-        "Escape cancels without approving",
-        !(await exists(page, '[role="alertdialog"]')) &&
-          (await row("plot-export"))?.status === "needs_approval",
-      );
-
-      // Uninstall, with confirmation.
-      await tap(page, '#side-panel [data-plugin="slide-themes"] button[aria-expanded]');
-      await tap(page, '[data-details="slide-themes"] [data-action="uninstall"]');
-      await expectEventually(
-        page,
-        "uninstalling asks first",
-        `/Uninstall slide-themes\\?/.test(document.querySelector('[role="alertdialog"]')?.innerText ?? "")`,
-      );
-      await press(page, "Escape");
-      check("cancelling keeps the plugin", (await rows()).includes("slide-themes"));
-      await tap(page, '[data-details="slide-themes"] [data-action="uninstall"]');
-      await clickText(page, '[role="alertdialog"] button', "Uninstall");
-      await expectEventually(
-        page,
-        "confirming removes it from the list",
-        `!document.querySelector('#side-panel [data-plugin="slide-themes"]')`,
-      );
-
-      // The install flow: pick, read out the access, approve, load.
-      check("word-stats is not installed yet", !(await rows()).includes("word-stats"));
-      await tap(page, "#side-panel [data-install]");
-      await expectEventually(
-        page,
-        "Install shows what the plugin asks for before anything is installed",
-        `(() => { const d = document.querySelector('[data-consent="word-stats"]'); return !!d && /Reads the open document/.test(d.innerText) && /Install word-stats/.test(d.innerText); })()`,
-      );
-      await shoot(page, "07i-plugin-install-consent");
-      check(
-        "nothing was installed while the dialog is open",
-        !(await rows()).includes("word-stats"),
-      );
-      await press(page, "Escape");
-      check(
-        "cancelling installs nothing",
-        !(await rows()).includes("word-stats") &&
-          !(await exists(page, '[role="alertdialog"]')),
-      );
-      await tap(page, "#side-panel [data-install]");
-      await waitFor(page, `!!document.querySelector('[data-consent-approve]')`, {
-        label: "consent dialog",
-      });
-      await tap(page, "[data-consent-approve]");
-      await expectEventually(
-        page,
-        "approving installs the plugin and loads it",
-        `document.querySelector('#side-panel [data-plugin="word-stats"]')?.dataset.status === "loaded"`,
-      );
-      check(
-        "with a notice and its details open",
-        /Installed word-stats/.test(await toast()) &&
-          (await exists(page, '[data-details="word-stats"]')),
-        await toast(),
-      );
-
-      // Live: a change from elsewhere shows without reloading the page.
-      await page.evaluate(
-        `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("plugins.disable", { name: "search" }))`,
-      );
-      await expectEventually(
-        page,
-        "a plugin switched off elsewhere updates the list by itself",
-        `document.querySelector('#side-panel [data-plugin="search"]')?.dataset.status === "disabled"`,
-      );
-      await page.evaluate(
-        `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run("plugins.enable", { name: "search" }))`,
-      );
-      await expectEventually(
-        page,
-        "and back",
-        `document.querySelector('#side-panel [data-plugin="search"]')?.dataset.status === "loaded"`,
-      );
-
-      // The shortcut and the command open this view.
-      await click(page, `${bar} button[aria-label="Plugins"]`);
-      check("the icon collapses the panel", !(await exists(page, "#side-panel")));
-      await press(page, "x", { ctrl: true, shift: true, wait: 400 });
-      check(
-        "Ctrl+Shift+X opens the Plugins view",
-        await exists(page, 'aside[aria-label="Plugins panel"]'),
-      );
-      check(
-        "and no Settings page is opened for it",
-        !(await exists(page, 'section[aria-label="Settings"]')),
-      );
-      check(
-        "the page does not scroll sideways",
-        await page.evaluate(
-          `document.documentElement.scrollWidth <= window.innerWidth`,
-        ),
-      );
-    }
+    await pluginsBody(page);
 
     /* ------------------------------------------------------------------ */
     section("AI agent");

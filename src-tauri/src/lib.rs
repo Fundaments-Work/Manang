@@ -340,7 +340,14 @@ fn start_plugins(
     let manager = Arc::new(PluginManager::new(Arc::clone(kernel), config)?);
     kernel.register(
         manang_plugins::manifest()?,
-        Arc::new(manang_plugins::plugin(&manager)),
+        Arc::new(manang_plugins::plugin_with(
+            &manager,
+            manang_plugins::MarketplaceConfig {
+                // The verified plugin list, kept for offline Browse.
+                cache_dir: Some(dirs.cache.join("registry")),
+                ..manang_plugins::MarketplaceConfig::default()
+            },
+        )),
     )?;
     // Built-ins the user switched off last time stay off.
     manager.reconcile_builtins();

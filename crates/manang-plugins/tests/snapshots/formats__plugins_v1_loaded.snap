@@ -28,5 +28,6 @@ Some(
             "/home/ada/plugins/word-count",
         ),
         publisher: None,
+        origin: None,
     },
 )

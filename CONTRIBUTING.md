@@ -58,7 +58,8 @@ All compute-intensive operations (parsing, AST indexing, compilation, sandboxing
 | `src-tauri` | Desktop application entry point, window lifecycle, system tray, and native shell registration |
 | `crates/manang-kernel` | Extensible plugin kernel, command registry, message bus, and capability verification |
 | `crates/manang-wasm-host` | WebAssembly component-model runtime (Wasmtime) executing sandboxed third-party plugins |
-| `crates/manang-plugins` | Plugin management lifecycle (install, verify consent, enable/disable, uninstall) |
+| `crates/manang-plugins` | Plugin management lifecycle (install, verify consent, enable/disable, uninstall) and the marketplace commands (browse, install and update from the registry) |
+| `crates/manang-registry` | Plugin registry client: signed index, cache, search, verified downloads (web-capable; ADR 0016) |
 | `crates/manang-editor` | Multi-document text buffer service, transactional edits, and coordinate conversions |
 | `crates/manang-typst` | High-performance Typst compiler, streaming SVG preview, and SyncTeX jump mapping |
 | `crates/manang-latex` | LaTeX compilation pipeline using system TeX distributions or optional worker sidecar |

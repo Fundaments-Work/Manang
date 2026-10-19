@@ -54,6 +54,12 @@ export interface PluginState {
   readonly contexts: readonly string[];
   /** A newer version waits beside the running one. */
   readonly update_pending: boolean;
+  /** Set when it was installed from the plugin registry. */
+  readonly origin?: {
+    readonly registry: string;
+    readonly id: string;
+    readonly version: string;
+  };
 }
 
 export interface PluginList {
