@@ -21,13 +21,13 @@ The script picks the right package for your distribution (`.deb`, `.rpm` or a ta
 | `--beta` / `--stable` | Shorthand for `--channel beta` / `--channel stable` |
 | `--list` | Print every published release, newest first, and stop |
 | `--print-latest` | Print the tag the default would install, and stop |
-| `--bundle deb\|rpm\|tar\|appimage` | Force a package format (`appimage` exists only in `v0.1.0-beta.1` and older) |
+| `--bundle deb\|rpm\|tar` | Force a package format |
 | `--dry-run` | Show what would be downloaded and change nothing |
 
 ### Beta and stable releases
 
 Manang is in beta, so the plain command installs the newest release, pre-releases
-included: that is `v0.1.0-beta.2` today. The two channels are always available:
+included: that is `v0.1.0-beta.1` today. The two channels are always available:
 
 ```bash
 curl -fsSL .../install-linux.sh | bash -s -- --beta    # newest pre-release
@@ -55,8 +55,7 @@ Remove it with `curl -fsSL https://raw.githubusercontent.com/Fundaments-Work/Man
 
 ### Why there is no AppImage
 
-There was one in `v0.1.0-beta.1` and there is no longer one. Asking for a tarball on
-that release falls back to its AppImage and says so; newer releases never do. Tauri builds AppImages with
+The first upload of `v0.1.0-beta.1` had one; this release does not. Tauri builds AppImages with
 linuxdeploy, which follows the binary's shared libraries and copies the whole GTK and
 WebKitGTK stack into the file: 120 MB, of which 91 MB was `libwebkit2gtk` and 32 MB
 `libjavascriptcoregtk`, for a 46 MB `.deb`. That copy is a browser engine frozen at build

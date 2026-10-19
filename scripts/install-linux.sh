@@ -10,9 +10,7 @@
 # The tarball is used rather than an AppImage on purpose: Tauri's AppImage
 # bundles a private copy of WebKitGTK, which made it 120 MB against a 46 MB
 # .deb and left a browser engine frozen at build time. The tarball needs the
-# system's WebKitGTK 4.1, exactly like the packages do. Releases up to
-# v0.1.0-beta.1 only have the AppImage; asking one of those for a tarball
-# installs the AppImage and says so.
+# system's WebKitGTK 4.1, exactly like the packages do.
 #
 # Manang is in beta, so the default is the newest release, pre-releases
 # included. --stable refuses pre-releases, --beta asks for the newest one.
@@ -41,9 +39,7 @@ Usage: install-linux.sh [options]
                     stable (newest release that is not a pre-release)
   --stable          Shorthand for --channel stable
   --beta            Shorthand for --channel beta
-  --bundle TYPE     deb, rpm, tar or appimage (default: chosen from your
-                    distribution; appimage only exists for releases up to
-                    v0.1.0-beta.1)
+  --bundle TYPE     deb, rpm or tar (default: chosen from your distribution)
   --user            Install from the tarball into ~/.local, no root needed,
                     whatever the distribution
   --list            Print every published release, newest first, and exit
@@ -173,7 +169,7 @@ scan_releases() {
         pending && /"prerelease"[[:space:]]*:[[:space:]]*(true|false)/ { read_pre() }
         # Asset URLs only: the release notes live in one JSON string, where
         # every quote is escaped and cannot match this.
-        /"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*\.(deb|rpm|tar\.xz|AppImage|dmg|msi|exe)"/ { have = 1 }
+        /"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*\.(deb|rpm|tar\.xz|dmg|msi|exe)"/ { have = 1 }
         END { flush() }'
 }
 
@@ -246,22 +242,10 @@ case "$BUNDLE" in
     deb) pattern='\.deb$' ;;
     rpm) pattern='\.rpm$' ;;
     tar) pattern='_amd64\.tar\.xz$' ;;
-    appimage) pattern='\.AppImage$' ;;
-    *) die "unknown bundle '$BUNDLE' (use deb, rpm, tar or appimage)" ;;
+    *) die "unknown bundle '$BUNDLE' (use deb, rpm or tar)" ;;
 esac
 
 url="$(asset_url "$pattern")"
-if [[ -z "$url" && "$BUNDLE" == "tar" ]]; then
-    # v0.1.0-beta.1 and older only have the AppImage. Install it, but say what
-    # it is: it carries its own WebKitGTK (91 MB of the 120 MB file) and gets no
-    # security updates, which is why later releases ship the tarball instead.
-    url="$(asset_url '\.AppImage$')"
-    if [[ -n "$url" ]]; then
-        BUNDLE="appimage"
-        log "note: ${tag} has no tarball; it ships an AppImage, which bundles its own"
-        log "      WebKitGTK (120 MB). v0.1.0-beta.2 and later do not."
-    fi
-fi
 [[ -n "$url" ]] || die "release ${tag} has no ${BUNDLE} file; see https://github.com/${GH_REPO}/releases/tag/${tag}"
 sums_url="$(asset_url 'SHA256SUMS\.txt$')"
 file="${url##*/}"
@@ -294,38 +278,6 @@ as_root() {
     if [[ "${EUID}" -eq 0 ]]; then "$@"
     elif command -v sudo >/dev/null 2>&1; then sudo "$@"
     else die "root is needed for the ${BUNDLE} package; run as root, install sudo, or use --user"
-    fi
-}
-
-install_appimage() {
-    # Releases up to v0.1.0-beta.1 ship this instead of the tarball. It carries
-    # the whole GTK and WebKitGTK stack, so it needs libfuse2 to run.
-    mkdir -p "$APP_DIR" "$BIN_DIR" "$APPS_DIR" "$ICON_DIR"
-    install -Dm755 "${work}/${file}" "${APP_DIR}/Manang.AppImage"
-    ln -sf "${APP_DIR}/Manang.AppImage" "${BIN_DIR}/manang"
-    curl -fsSL -o "${ICON_DIR}/manang.png" \
-        "https://raw.githubusercontent.com/${GH_REPO}/${tag}/src-tauri/icons/128x128.png" \
-        || log "note: could not fetch the icon; the launcher will use a generic one"
-    cat > "${APPS_DIR}/manang.desktop" <<DESKTOP
-[Desktop Entry]
-Type=Application
-Name=Manang
-Comment=Write papers, theses and slides in Typst, LaTeX or Markdown, and draw the figures too.
-Exec=${BIN_DIR}/manang %F
-Icon=manang
-Terminal=false
-Categories=Office;Education;Science;
-StartupWMClass=Manang
-DESKTOP
-    update-desktop-database "$APPS_DIR" 2>/dev/null || true
-    gtk-update-icon-cache -q "${HOME}/.local/share/icons/hicolor" 2>/dev/null || true
-    log "Installed ${APP_DIR}/Manang.AppImage and ${BIN_DIR}/manang"
-    case ":${PATH}:" in
-        *":${BIN_DIR}:"*) ;;
-        *) log "note: ${BIN_DIR} is not on your PATH; start Manang from the application menu or add it" ;;
-    esac
-    if ! ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
-        log "note: AppImages need libfuse2 (Debian/Ubuntu: libfuse2t64). Without it run: ${BIN_DIR}/manang --appimage-extract-and-run"
     fi
 }
 
@@ -388,7 +340,6 @@ case "$BUNDLE" in
         else as_root rpm -Uvh --replacepkgs "${work}/${file}"
         fi ;;
     tar) install_tar ;;
-    appimage) install_appimage ;;
 esac
 
 log ""
@@ -397,6 +348,4 @@ if [[ "$(field "$release_json" prerelease)" == "true" ]]; then
     log "This is a pre-release: bugs are expected. Install a marked stable release with --stable once one exists."
 fi
 log "Typst and Markdown work out of the box. LaTeX uses a TeX installation (TeX Live, MiKTeX or MacTeX) if you have one;"
-if [[ "$BUNDLE" != "appimage" ]]; then
-    log "otherwise open a .tex file and use Preview > Download the built-in engine (Linux only, about 48 MB, once)."
-fi
+log "otherwise open a .tex file and use Preview > Download the built-in engine (Linux only, about 48 MB, once)."
