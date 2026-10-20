@@ -346,3 +346,208 @@ fn divergence_is_reported_not_silent() {
     divergence_is_detected::<LoroEngine>();
     divergence_is_detected::<YrsEngine>();
 }
+
+// ---------------------------------------------------------------------------
+// Waiting for a host (S2) and resync (S5)
+// ---------------------------------------------------------------------------
+
+mod waiting {
+    use manang_live::bridge::LiveDoc;
+    use manang_live::envelope::RoomSecret;
+    use manang_live::session::{Input, Output, Session, SessionConfig, SessionState};
+    use manang_live::sim::Rng;
+    use manang_live::{LoroEngine, TextCrdt};
+    use ropey::Rope;
+
+    const TEXT: &str = "host text\n";
+
+    type S = Session<LoroEngine, Rng>;
+
+    fn pair(
+        host_text: &str,
+        joiner_doc: LiveDoc<LoroEngine>,
+        joiner_rope: &str,
+    ) -> (S, S, Rope, Rope) {
+        let secret = RoomSecret::generate(&mut Rng(9)).expect("secret");
+        let host = Session::new(
+            LiveDoc::<LoroEngine>::seeded(10, host_text).expect("doc"),
+            secret.derive().expect("keys"),
+            Rng(1),
+            SessionConfig::default(),
+        );
+        let joiner = Session::new(
+            joiner_doc,
+            secret.derive().expect("keys"),
+            Rng(2),
+            SessionConfig {
+                await_host: true,
+                ..SessionConfig::default()
+            },
+        );
+        (
+            host,
+            joiner,
+            Rope::from_str(host_text),
+            Rope::from_str(joiner_rope),
+        )
+    }
+
+    fn sends(out: &[Output]) -> Vec<Vec<u8>> {
+        out.iter()
+            .filter_map(|o| match o {
+                Output::Send(f) => Some(f.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_joiner_alone_in_the_room_waits_and_reports_a_timeout_once() {
+        let (_, mut joiner, _, mut rope) = pair(TEXT, LiveDoc::empty(11).expect("doc"), "");
+        let _ = joiner.start();
+        let up = joiner.handle(0, Input::Up, &mut rope);
+        assert!(up.contains(&Output::State(SessionState::Waiting)));
+        let mut timeouts = 0;
+        let mut requests = 0;
+        for t in (100..=60_000u64).step_by(100) {
+            let out = joiner.handle(t, Input::Tick, &mut rope);
+            timeouts += out
+                .iter()
+                .filter(|o| matches!(o, Output::HostTimeout))
+                .count();
+            requests += sends(&out).len();
+            assert_eq!(joiner.state(), SessionState::Waiting, "never live alone");
+        }
+        assert_eq!(timeouts, 1);
+        assert!(requests >= 10, "it keeps asking: {requests}");
+        assert!(joiner.awaiting_host());
+        assert_eq!(rope.to_string(), "");
+    }
+
+    #[test]
+    fn an_answer_from_the_host_ends_the_wait_even_after_the_timeout() {
+        let (mut host, mut joiner, mut hrope, mut jrope) =
+            pair(TEXT, LiveDoc::empty(11).expect("doc"), "");
+        let _ = host.start();
+        let _ = joiner.start();
+        let _ = joiner.handle(0, Input::Up, &mut jrope);
+        for t in (100..=25_000u64).step_by(100) {
+            let _ = joiner.handle(t, Input::Tick, &mut jrope);
+        }
+        assert_eq!(joiner.state(), SessionState::Waiting);
+
+        // The host shows up late; the joiner's next request reaches it.
+        let mut to_joiner = sends(&host.handle(25_000, Input::Up, &mut hrope));
+        let mut to_host = sends(&joiner.handle(27_000, Input::Tick, &mut jrope));
+        for _ in 0..4 {
+            for f in std::mem::take(&mut to_joiner) {
+                let out = joiner.handle(25_100, Input::Frame(&f), &mut jrope);
+                to_host.extend(sends(&out));
+            }
+            for f in std::mem::take(&mut to_host) {
+                let out = host.handle(25_100, Input::Frame(&f), &mut hrope);
+                to_joiner.extend(sends(&out));
+            }
+        }
+        assert_eq!(joiner.state(), SessionState::Live);
+        assert!(!joiner.awaiting_host());
+        assert_eq!(jrope.to_string(), TEXT);
+    }
+
+    #[test]
+    fn a_waiting_joiner_does_not_answer_requests() {
+        let (mut host, mut joiner, mut hrope, mut jrope) =
+            pair(TEXT, LiveDoc::empty(11).expect("doc"), "");
+        let _ = host.start();
+        let _ = joiner.start();
+        let from_host = sends(&host.handle(0, Input::Up, &mut hrope));
+        let _ = joiner.handle(0, Input::Up, &mut jrope);
+        // The host's request reaches the waiting joiner: it may announce
+        // itself, but must not send sync data (an empty document would
+        // mislead the host).
+        let mut data_frames = 0;
+        for f in from_host {
+            let out = joiner.handle(10, Input::Frame(&f), &mut jrope);
+            for o in &out {
+                assert!(!matches!(o, Output::Remote(_)));
+            }
+            data_frames += sends(&out).len();
+        }
+        // Only presence frames are allowed: one at most.
+        assert!(data_frames <= 1, "sent {data_frames} frames");
+        assert_eq!(joiner.state(), SessionState::Waiting);
+    }
+
+    #[test]
+    fn a_joiner_with_the_same_seed_still_waits_for_an_answer() {
+        let (mut host, mut joiner, mut hrope, mut jrope) = pair(
+            TEXT,
+            LiveDoc::<LoroEngine>::seeded(11, TEXT).expect("doc"),
+            TEXT,
+        );
+        let _ = host.start();
+        let _ = joiner.start();
+        let _ = joiner.handle(0, Input::Up, &mut jrope);
+        for t in (100..=10_000u64).step_by(100) {
+            let _ = joiner.handle(t, Input::Tick, &mut jrope);
+        }
+        assert_eq!(joiner.state(), SessionState::Waiting, "no timer promotion");
+        let mut to_joiner = sends(&host.handle(10_000, Input::Up, &mut hrope));
+        let mut to_host = sends(&joiner.handle(12_000, Input::Tick, &mut jrope));
+        for _ in 0..4 {
+            for f in std::mem::take(&mut to_joiner) {
+                to_host.extend(sends(&joiner.handle(10_100, Input::Frame(&f), &mut jrope)));
+            }
+            for f in std::mem::take(&mut to_host) {
+                to_joiner.extend(sends(&host.handle(10_100, Input::Frame(&f), &mut hrope)));
+            }
+        }
+        assert_eq!(joiner.state(), SessionState::Live);
+        assert_eq!(jrope.to_string(), TEXT);
+    }
+
+    #[test]
+    fn resync_rebuilds_the_document_from_the_room() {
+        let (mut host, mut joiner, mut hrope, mut jrope) = pair(
+            TEXT,
+            LiveDoc::<LoroEngine>::seeded(11, TEXT).expect("doc"),
+            TEXT,
+        );
+        let _ = host.start();
+        let _ = joiner.start();
+        let mut to_host = sends(&joiner.handle(0, Input::Up, &mut jrope));
+        let mut to_joiner = sends(&host.handle(0, Input::Up, &mut hrope));
+        for _ in 0..4 {
+            for f in std::mem::take(&mut to_joiner) {
+                to_host.extend(sends(&joiner.handle(1, Input::Frame(&f), &mut jrope)));
+            }
+            for f in std::mem::take(&mut to_host) {
+                to_joiner.extend(sends(&host.handle(1, Input::Frame(&f), &mut hrope)));
+            }
+        }
+        assert_eq!(joiner.state(), SessionState::Live);
+
+        // The host types; the joiner is told to rebuild.
+        host.doc_mut()
+            .local_replace_chars(&mut hrope, 0, 0, "more ")
+            .expect("edit");
+        let _ = host.flush_local();
+        jrope = Rope::new();
+        let out = joiner.resync(100, LiveDoc::empty(12).expect("doc"));
+        assert!(out.contains(&Output::State(SessionState::Waiting)));
+        assert!(joiner.awaiting_host());
+        to_host = sends(&out);
+        for _ in 0..4 {
+            for f in std::mem::take(&mut to_host) {
+                to_joiner.extend(sends(&host.handle(110, Input::Frame(&f), &mut hrope)));
+            }
+            for f in std::mem::take(&mut to_joiner) {
+                to_host.extend(sends(&joiner.handle(110, Input::Frame(&f), &mut jrope)));
+            }
+        }
+        assert_eq!(joiner.state(), SessionState::Live);
+        assert_eq!(jrope.to_string(), hrope.to_string());
+        assert_eq!(jrope.to_string(), format!("more {TEXT}"));
+        assert_eq!(joiner.doc().engine().text(), hrope.to_string());
+    }
+}

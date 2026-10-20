@@ -14,6 +14,14 @@
 //!   any --leave--> Closed
 //! ```
 //!
+//! A session that joins somebody else's room (`SessionConfig::await_host`)
+//! has nothing to show until a peer answers, so it enters [`SessionState::Waiting`]
+//! instead of `Syncing` and leaves it only on a real answer, never on a timer:
+//! a joiner alone in an empty room must not look "live". It keeps asking, and
+//! reports [`Output::HostTimeout`] once if nobody answers within
+//! `host_timeout_ms`. Answering later still works. While waiting it does not
+//! answer other peers' requests (its document is empty and would mislead them).
+//!
 //! Local edits flow `rope -> LiveDoc -> flush_local() -> sealed Update frame`.
 //! While disconnected, edits accumulate in the CRDT; the Request/Reply/Final
 //! exchange on reconnect (and a periodic anti-entropy request) delivers them,
@@ -26,6 +34,13 @@ use crate::error::LiveError;
 use crate::presence::{Presence, PresenceBook, PresenceMessage, Selection};
 use crate::protocol::{Message, SyncStage, text_digest};
 use crate::vcs::{ContributionLog, Contributor};
+
+/// Marker carried in the (otherwise empty) `update` of a Request sent by a
+/// session that is still waiting for its first answer. A peer that sees it
+/// always replies, even when the versions match and the sender is already
+/// known, so a joiner with an identical copy learns that somebody is there.
+/// Older peers ignore the field of a Request.
+const WAITING_MARK: [u8; 1] = [1];
 
 /// Tunables, in milliseconds.
 #[derive(Debug, Clone)]
@@ -43,8 +58,15 @@ pub struct SessionConfig {
     /// Silence after which a peer's presence is dropped.
     pub presence_ttl_ms: u64,
     /// How long to wait for a first Reply before declaring ourselves live
-    /// (we may be alone in the room).
+    /// (we may be alone in the room). Not used when `await_host` is set.
     pub sync_timeout_ms: u64,
+    /// This session joins a room somebody else started: stay in
+    /// [`SessionState::Waiting`] until a peer answers (never go live alone).
+    pub await_host: bool,
+    /// While waiting, how long before [`Output::HostTimeout`] is reported.
+    pub host_timeout_ms: u64,
+    /// While waiting, how often the request is repeated.
+    pub waiting_request_ms: u64,
     /// First reconnect delay; doubles per failed attempt.
     pub backoff_base_ms: u64,
     /// Reconnect delay ceiling.
@@ -63,6 +85,9 @@ impl Default for SessionConfig {
             presence_interval_ms: 5_000,
             presence_ttl_ms: 20_000,
             sync_timeout_ms: 3_000,
+            await_host: false,
+            host_timeout_ms: 20_000,
+            waiting_request_ms: 2_000,
             backoff_base_ms: 500,
             backoff_max_ms: 15_000,
             pending_request_gap_ms: 1_000,
@@ -79,6 +104,10 @@ pub enum SessionState {
     Connecting,
     /// Connected; exchanging state with the room.
     Syncing,
+    /// Connected to the room but no peer has answered yet, and the local
+    /// document is not the room's (an empty joiner). Nothing is replaced and
+    /// nothing is shown as live until someone answers.
+    Waiting,
     /// Connected and caught up (eventually: updates keep flowing).
     Live,
     /// Connection lost; a retry is scheduled.
@@ -130,6 +159,9 @@ pub enum Output {
         /// The peer whose digest disagrees.
         peer: u64,
     },
+    /// Nobody answered within `host_timeout_ms` while waiting. Reported once
+    /// per connection; the session keeps asking and recovers if someone answers.
+    HostTimeout,
     /// A frame was dropped (wrong key, tampered, malformed). Informational:
     /// never fatal, because the relay and other peers are not trusted to send
     /// well-formed data.
@@ -165,6 +197,10 @@ pub struct Session<E: TextCrdt, N: Entropy> {
     next_resync: u64,
     next_presence: u64,
     sync_deadline: u64,
+    host_deadline: u64,
+    next_wait_request: u64,
+    host_timeout_reported: bool,
+    awaiting_host: bool,
     last_pending_request: Option<u64>,
     failed_attempts: u32,
     digest_cache: Option<(Vec<u8>, u64)>,
@@ -174,6 +210,7 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     /// A session over `doc` in the room identified by `keys`.
     pub fn new(doc: LiveDoc<E>, keys: RoomKeys, entropy: N, config: SessionConfig) -> Self {
         let ttl = config.presence_ttl_ms;
+        let awaiting_host = config.await_host;
         Self {
             doc,
             keys,
@@ -187,6 +224,10 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             next_resync: 0,
             next_presence: 0,
             sync_deadline: 0,
+            host_deadline: 0,
+            next_wait_request: 0,
+            host_timeout_reported: false,
+            awaiting_host,
             last_pending_request: None,
             failed_attempts: 0,
             digest_cache: None,
@@ -203,6 +244,36 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     #[must_use]
     pub fn state(&self) -> SessionState {
         self.state
+    }
+
+    /// Whether the session still waits for a first answer from the room (its
+    /// document is not yet the room's).
+    #[must_use]
+    pub fn awaiting_host(&self) -> bool {
+        self.awaiting_host
+    }
+
+    /// Replace the document with `doc` (normally empty, with a fresh peer id)
+    /// and ask the room for its state again. The caller owns the text target
+    /// and must reset it to match `doc`. Used to recover from
+    /// [`Output::Diverged`]: the next answer from the room rebuilds the
+    /// document and arrives as ordinary remote changes.
+    pub fn resync(&mut self, now_ms: u64, doc: LiveDoc<E>) -> Vec<Output> {
+        let mut out = Vec::new();
+        if self.state == SessionState::Closed {
+            return out;
+        }
+        self.doc = doc;
+        self.digest_cache = None;
+        self.local_selection = None;
+        self.awaiting_host = true;
+        if matches!(
+            self.state,
+            SessionState::Syncing | SessionState::Waiting | SessionState::Live
+        ) {
+            self.on_up(now_ms, &mut out);
+        }
+        out
     }
 
     /// The bridged document (read access).
@@ -235,7 +306,7 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                 return out;
             }
         };
-        if !matches!(self.state, SessionState::Syncing | SessionState::Live) {
+        if !self.is_connected() {
             return out; // the reconnect exchange will carry them
         }
         let from = self.peer();
@@ -258,10 +329,17 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             })
         });
         let mut out = Vec::new();
-        if matches!(self.state, SessionState::Syncing | SessionState::Live) {
+        if self.is_connected() && !self.awaiting_host {
             self.push_presence(&mut out);
         }
         out
+    }
+
+    fn is_connected(&self) -> bool {
+        matches!(
+            self.state,
+            SessionState::Syncing | SessionState::Waiting | SessionState::Live
+        )
     }
 
     /// Remote carets resolved against the current text.
@@ -328,9 +406,17 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     fn on_up(&mut self, now: u64, out: &mut Vec<Output>) {
         self.failed_attempts = 0;
         self.sync_deadline = now + self.config.sync_timeout_ms;
+        self.host_deadline = now + self.config.host_timeout_ms;
+        self.next_wait_request = now + self.config.waiting_request_ms;
+        self.host_timeout_reported = false;
         self.next_resync = now + self.config.resync_interval_ms;
         self.next_presence = now + self.config.presence_interval_ms;
-        self.set_state(SessionState::Syncing, out);
+        let next = if self.awaiting_host {
+            SessionState::Waiting
+        } else {
+            SessionState::Syncing
+        };
+        self.set_state(next, out);
         self.push_request(out);
         self.push_presence(out);
     }
@@ -362,6 +448,17 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             SessionState::Syncing if now >= self.sync_deadline => {
                 self.set_state(SessionState::Live, out);
             }
+            SessionState::Waiting => {
+                if now >= self.host_deadline && !self.host_timeout_reported {
+                    self.host_timeout_reported = true;
+                    out.push(Output::HostTimeout);
+                }
+                if now >= self.next_wait_request {
+                    self.next_wait_request = now + self.config.waiting_request_ms;
+                    self.push_request(out);
+                    self.push_presence(out);
+                }
+            }
             SessionState::Live => {
                 if now >= self.next_resync {
                     self.next_resync = now + self.config.resync_interval_ms;
@@ -380,7 +477,7 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     }
 
     fn on_leave(&mut self, out: &mut Vec<Output>) {
-        if matches!(self.state, SessionState::Syncing | SessionState::Live) {
+        if self.is_connected() {
             let msg = PresenceMessage::Leave { peer: self.peer() };
             if let Ok(plain) = msg.encode() {
                 self.push_sealed(Kind::Presence, &plain, out);
@@ -459,9 +556,20 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                 update,
             } if from != me && to.is_none_or(|t| t == me) => match stage {
                 SyncStage::Request => {
-                    self.check_divergence(from, &version, digest, out);
                     let known = self.presence.iter().any(|p| p.peer == from);
-                    if version != self.doc.engine().version() {
+                    if self.awaiting_host {
+                        // Not the room's document yet: answering would mislead.
+                        if !known {
+                            self.push_presence(out);
+                        }
+                        return;
+                    }
+                    self.check_divergence(from, &version, digest, out);
+                    // A peer we have not heard from yet gets an answer even
+                    // when the versions match, so a waiting joiner learns
+                    // that somebody is here.
+                    let waiting_peer = update == WAITING_MARK;
+                    if version != self.doc.engine().version() || !known || waiting_peer {
                         self.push_reply(from, &version, out);
                     }
                     if !known {
@@ -469,9 +577,10 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                     }
                 }
                 SyncStage::Reply => {
+                    self.awaiting_host = false;
                     self.apply(now, &update, target, out);
                     self.check_divergence(from, &version, digest, out);
-                    if self.state == SessionState::Syncing {
+                    if matches!(self.state, SessionState::Syncing | SessionState::Waiting) {
                         self.set_state(SessionState::Live, out);
                     }
                     if version != self.doc.engine().version() {
@@ -554,7 +663,11 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             stage: SyncStage::Request,
             digest,
             version: self.doc.engine().version(),
-            update: Vec::new(),
+            update: if self.awaiting_host {
+                WAITING_MARK.to_vec()
+            } else {
+                Vec::new()
+            },
         };
         self.push_data(msg, out);
     }
