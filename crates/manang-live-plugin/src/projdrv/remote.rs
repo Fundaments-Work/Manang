@@ -16,7 +16,7 @@ use manang_live::session::Output;
 use serde_json::{Value, json};
 
 use super::files::Load;
-use super::{Driver, PeerAt, Phase};
+use super::{Driver, PROGRESS_GAP_MS, PeerAt, Phase};
 use crate::disk::{Deleted, Observed, read_capped};
 
 impl Driver {
@@ -25,7 +25,7 @@ impl Driver {
         match output {
             Output::Remote(applied) => self.on_remote(&applied),
             Output::DocChanged(id) => {
-                self.dirty_docs.insert(id);
+                        self.dirty_docs.insert(id);
             }
             Output::Tree(changes) => return self.on_tree(changes),
             Output::DocWanted(id) => return self.on_doc_wanted(id),
@@ -34,7 +34,14 @@ impl Driver {
             } => self.on_diverged(doc, refetching),
             Output::Progress { done, total } => {
                 self.status.lock().progress = (done < total).then_some((done, total));
-                self.emit("live.progress", json!({ "done": done, "total": total }));
+                // A bulk join reports thousands of steps: the view needs a
+                // few a second and the last one.
+                if done >= total
+                    || self.now.saturating_sub(self.last_progress_ms) >= PROGRESS_GAP_MS
+                {
+                    self.last_progress_ms = self.now;
+                    self.emit("live.progress", json!({ "done": done, "total": total }));
+                }
             }
             Output::Manifest { entries, .. } => self.on_manifest(entries),
             Output::BlobRequested { peer, hash } => return self.on_blob_requested(peer, hash),
@@ -274,7 +281,7 @@ impl Driver {
         if self.files.get(&id).is_some_and(|f| f.excluded) {
             return Vec::new(); // never answer for a copy we kept private
         }
-        let (state, out) = self.ensure_loaded(id);
+        let (state, out) = self.ensure_loaded_with(id, false);
         if state == Load::Unavailable
             && self.role == super::Role::Host
             && !self.files.get(&id).is_some_and(|f| f.excluded)

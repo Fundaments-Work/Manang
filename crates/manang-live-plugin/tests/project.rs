@@ -61,6 +61,22 @@ impl Relay {
     fn url(&self) -> String {
         format!("ws://{}", self.addr)
     }
+
+    /// Take the relay down: every connection drops.
+    fn stop(&mut self) {
+        if let Some(running) = self.running.take() {
+            self.rt.block_on(running.stop());
+        }
+    }
+
+    /// Bring it back on the same port.
+    fn restart(&mut self) {
+        let running = self
+            .rt
+            .block_on(manang_relay::spawn(self.addr, RelayConfig::default()))
+            .expect("relay binds again");
+        self.running = Some(running);
+    }
 }
 
 impl Drop for Relay {
@@ -325,7 +341,7 @@ impl Peer {
                 Arc::new(plugin),
             )
             .expect("register live");
-        let sub = events.subscribe("live.*");
+        let sub = events.subscribe_with_capacity("live.*", 100_000);
         let peer = Self {
             kernel,
             events,
@@ -1474,4 +1490,275 @@ fn the_manifest_lists_the_commands_the_frontend_mock_lists() {
         .collect();
     ids.sort_unstable();
     assert_eq!(ids, expected);
+}
+
+#[test]
+fn people_and_carets_name_the_file_they_are_in() {
+    let (_relay, host, guest) = connected_pair();
+    host.attach("main.typ");
+    guest.attach("main.typ");
+    // The guest has the file in front of them and a caret in it.
+    let sid = guest.sid.lock().clone();
+    guest
+        .call(
+            "live.selection",
+            json!({ "session": sid, "path": "main.typ", "version": 0, "anchor": 2, "head": 7 }),
+        )
+        .expect("selection");
+    wait_for(
+        LONG,
+        "the host to see the guest's caret in main.typ",
+        || {
+            host.events_of("live.presence").iter().any(|e| {
+                e["path"] == "main.typ"
+                    && e["selections"].as_array().is_some_and(|s| {
+                        s.iter()
+                            .any(|c| c["anchor"] == 2 && c["head"] == 7 && c["name"] == "Guest")
+                    })
+            })
+        },
+    );
+    wait_for(LONG, "the host's people list to name the file", || {
+        host.events_of("live.peers").iter().any(|e| {
+            e["peers"].as_array().is_some_and(|p| {
+                p.iter()
+                    .any(|x| x["name"] == "Guest" && x["path"] == "main.typ")
+            })
+        })
+    });
+    // Joined notices came with the people.
+    assert!(
+        host.events_of("live.notice")
+            .iter()
+            .any(|n| n["kind"] == "joined"),
+        "a joined notice"
+    );
+    // The file list says who has what open.
+    let files = host.call("live.files", json!({})).expect("files");
+    let main = files["files"]
+        .as_array()
+        .expect("files")
+        .iter()
+        .find(|f| f["path"] == "main.typ")
+        .expect("main");
+    assert_eq!(main["peers"].as_array().map(Vec::len), Some(1));
+    // Re-reading an open file gives its version and text.
+    let snap = host
+        .call(
+            "live.snapshot",
+            json!({ "session": host.sid.lock().clone(), "path": "main.typ" }),
+        )
+        .expect("snapshot");
+    assert_eq!(snap["text"], json!("= Title\nhello é😀\n"));
+    // The guest closes the tab: the host's list no longer puts them in it.
+    guest
+        .call("live.detach", json!({ "path": "main.typ" }))
+        .expect("detach");
+    wait_for(LONG, "the guest to leave the file", || {
+        host.events_of("live.peers").last().is_some_and(|e| {
+            e["peers"]
+                .as_array()
+                .is_some_and(|p| p.iter().all(|x| x["path"] != "main.typ"))
+        })
+    });
+    guest.leave();
+    host.leave();
+}
+
+#[test]
+fn a_file_deleted_or_renamed_under_an_open_tab_keeps_the_tab_working() {
+    let (_relay, host, guest) = connected_pair();
+    host.watch();
+    guest.watch();
+    settle(400);
+    guest.attach("notes.md");
+    guest.attach("chapters/two.typ");
+
+    // A rename under the open tab: the tab follows the new path.
+    fs::rename(
+        host.root.join("chapters/two.typ"),
+        host.root.join("chapters/zwei.typ"),
+    )
+    .expect("rename");
+    wait_for(LONG, "the rename to reach the guest's tree", || {
+        guest.events_of("live.tree").iter().any(|e| {
+            e["ops"].as_array().is_some_and(|ops| {
+                ops.iter()
+                    .any(|o| o["from"] == "chapters/two.typ" && o["path"] == "chapters/zwei.typ")
+            })
+        })
+    });
+    // Pushes name the new path from now on.
+    let sid = guest.sid.lock().clone();
+    let out = guest
+        .call(
+            "live.push",
+            json!({
+                "session": sid,
+                "path": "chapters/zwei.typ",
+                "version": 0,
+                "changes": [{ "start": 0, "delete": 0, "insert": "x" }],
+            }),
+        )
+        .expect("push to the new path");
+    assert_eq!(out["accepted"], json!(true));
+
+    // A delete under the open tab: the tab keeps its text, the file stays on
+    // disk until the tab closes, and the person is told.
+    fs::remove_file(host.root.join("notes.md")).expect("delete");
+    wait_for(LONG, "the delete notice", || {
+        guest
+            .events_of("live.notice")
+            .iter()
+            .any(|n| n["kind"] == "deleted" && n["path"] == "notes.md")
+    });
+    settle(800);
+    assert_eq!(guest.read("notes.md").as_deref(), Some("# notes\n"));
+    // Restoring brings it back for everyone, from what the tab holds.
+    guest
+        .call("live.restore", json!({ "path": "notes.md" }))
+        .expect("restore");
+    wait_for(LONG, "the restored file on the host", || {
+        host.read("notes.md").as_deref() == Some("# notes\n")
+    });
+    // The tab still works on the restored file.
+    guest.type_at_end("notes.md", "after the restore\n");
+    guest
+        .call("live.detach", json!({ "path": "notes.md" }))
+        .expect("detach");
+    wait_for(LONG, "the edit after the restore to reach the host", || {
+        host.read("notes.md").as_deref() == Some("# notes\nafter the restore\n")
+    });
+    // The file was not moved to the trash by the closing tab.
+    assert!(guest.trash_text("notes.md").is_empty());
+    guest.leave();
+    host.leave();
+}
+
+#[test]
+fn edits_made_while_the_relay_is_down_merge_when_it_comes_back() {
+    let (mut relay, host, guest) = {
+        let (relay, host, invite) = host_with_project();
+        let guest = Peer::new("Guest", Some(&relay.url()), None);
+        guest.join_project(&invite).expect("join");
+        guest.plan();
+        guest.resolve(json!([])).expect("resolve");
+        wait_for(LONG, "the guest to have every file", || {
+            guest.read("main.typ").is_some() && guest.read_bytes("fig.png").is_some()
+        });
+        (relay, host, guest)
+    };
+    host.attach("main.typ");
+    guest.attach("main.typ");
+    relay.stop();
+    wait_for(LONG, "both to notice", || {
+        host.status()["state"] == json!("reconnecting")
+            && guest.status()["state"] == json!("reconnecting")
+    });
+    // Both type in the same file while apart.
+    host.type_at_end("main.typ", "host, offline\n");
+    guest.type_at_end("main.typ", "guest, offline\n");
+    relay.restart();
+    wait_for(LONG, "both to be connected again", || {
+        host.status()["state"] == json!("connected")
+            && guest.status()["state"] == json!("connected")
+    });
+    wait_for(LONG, "the views to converge", || {
+        let (a, b) = (host.view_text("main.typ"), guest.view_text("main.typ"));
+        a == b && a.contains("host, offline") && a.contains("guest, offline")
+    });
+    guest.leave();
+    host.leave();
+}
+
+#[test]
+fn a_file_edited_on_disk_while_parked_is_shared_without_losing_its_history() {
+    let relay = Relay::start();
+    let host = Peer::new("Host", Some(&relay.url()), Some(2));
+    for i in 0..6 {
+        host.write(&format!("f{i}.typ"), &format!("file {i}\n"));
+    }
+    let invite = host.start_project();
+    let guest = Peer::new("Guest", Some(&relay.url()), Some(2));
+    guest.join_project(&invite).expect("join");
+    guest.plan();
+    guest.resolve(json!([])).expect("resolve");
+    wait_for(LONG, "everything to settle", || {
+        (0..6).all(|i| guest.read(&format!("f{i}.typ")).is_some())
+            && host.sidecar_files() >= 3
+            && guest.sidecar_files() >= 3
+    });
+    host.watch();
+    guest.watch();
+    settle(400);
+    // An outside tool rewrites files whose documents are parked on both sides.
+    for i in [0, 1, 2] {
+        host.write(&format!("f{i}.typ"), &format!("file {i}\nedited outside\n"));
+        guest.write(
+            &format!("f{}.typ", i + 3),
+            &format!("file {}\nguest outside\n", i + 3),
+        );
+    }
+    wait_for(LONG, "the outside edits to cross over", || {
+        (0..3).all(|i| {
+            guest.read(&format!("f{i}.typ")).as_deref()
+                == Some(&format!("file {i}\nedited outside\n"))
+        }) && (3..6).all(|i| {
+            host.read(&format!("f{i}.typ")).as_deref()
+                == Some(&format!("file {i}\nguest outside\n"))
+        })
+    });
+    guest.leave();
+    host.leave();
+}
+
+#[test]
+fn a_project_of_many_files_joins_within_the_memory_budget() {
+    let relay = Relay::start();
+    let host = Peer::new("Host", Some(&relay.url()), Some(8));
+    for i in 0..150 {
+        host.write(
+            &format!("part{}/file{i:03}.typ", i % 7),
+            &format!("= File {i}\n{}\n", "text ".repeat(40)),
+        );
+    }
+    host.write_bytes("big.bin", &png_like(300_000));
+    let invite = host.start_project();
+    let guest = Peer::new("Guest", Some(&relay.url()), Some(8));
+    let started = Instant::now();
+    guest.join_project(&invite).expect("join");
+    let plan = guest.plan();
+    assert_eq!(plan.len(), 151);
+    guest.resolve(json!([])).expect("resolve");
+    wait_for(
+        Duration::from_secs(60),
+        "all 150 files and the image",
+        || {
+            (0..150).all(|i| {
+                guest
+                    .read(&format!("part{}/file{i:03}.typ", i % 7))
+                    .is_some_and(|t| t.starts_with(&format!("= File {i}\n")))
+            }) && guest
+                .read_bytes("big.bin")
+                .is_some_and(|b| b.len() == 300_008)
+        },
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(30),
+        "150 files joined in {:?}",
+        started.elapsed()
+    );
+    // Progress ran to the end.
+    wait_for(LONG, "progress to finish", || {
+        guest
+            .events_of("live.progress")
+            .last()
+            .is_some_and(|p| p["done"] == p["total"])
+    });
+    // Almost everything is parked: only a handful of documents are in memory.
+    wait_for(LONG, "documents to be parked", || {
+        guest.sidecar_files() >= 100
+    });
+    guest.leave();
+    host.leave();
 }

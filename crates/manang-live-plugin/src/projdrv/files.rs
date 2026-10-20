@@ -13,10 +13,10 @@
 use manang_live::TextCrdt;
 use manang_live::bridge::LiveDoc;
 use manang_live::envelope::seed_fingerprint;
-use manang_live::project::{FileId, NodeKind};
+use manang_live::project::{FileId, NodeKind, ProjectView};
 use manang_live::session::Output;
 
-use super::{Driver, META_QUIET_MS};
+use super::{CATCH_UP_MS, Driver, META_QUIET_MS};
 use crate::disk::{Observed, read_capped, sha256};
 use crate::fsbridge::text_edits;
 use crate::sidecar::Rehydrated;
@@ -49,6 +49,9 @@ impl Driver {
 
     /// Mark a document used; park the ones that fell out of the cap.
     pub(super) fn touch(&mut self, id: FileId) {
+        if !self.session.is_loaded(id) {
+            return;
+        }
         let evicted = self.residency.touch(id);
         self.evict_all(evicted);
     }
@@ -68,6 +71,7 @@ impl Driver {
         let busy = self.files.get(&id).is_some_and(|f| f.attached)
             || self.arriving.contains(&id)
             || self.pending_text.contains_key(&id)
+            || self.is_catching_up(id)
             || !self.doc_usable(id);
         let Some(path) = self.path_of(id) else {
             self.drop_doc(id);
@@ -77,6 +81,19 @@ impl Driver {
             self.residency.pin(id);
             self.deferred_evict.insert(id);
         }
+    }
+
+    /// Whether a document restored from this machine still waits for the
+    /// room's answer (so it must stay loaded to receive it).
+    fn is_catching_up(&mut self, id: FileId) -> bool {
+        let Some(until) = self.catching_up.get(&id).copied() else {
+            return false;
+        };
+        if until <= self.now || self.session.is_doc_synced(id) {
+            self.catching_up.remove(&id);
+            return false;
+        }
+        true
     }
 
     /// Write the document to the sidecar and unload it. `false` if the disk
@@ -100,6 +117,15 @@ impl Driver {
         let sha = sha256(text.as_bytes());
         if !matches!(self.disk.observe(path), Ok(Observed::Content(h)) if h == sha) {
             return false;
+        }
+        // The node's size and hash are announced before the document leaves
+        // memory: peers that parked it too learn of the change that way.
+        if self.meta_due.remove(&id).is_some() {
+            let view = self.view();
+            if self.write_meta(id, &text, &view) {
+                let out = self.session.flush_project();
+                self.perform(out);
+            }
         }
         if self
             .sidecar
@@ -150,6 +176,13 @@ impl Driver {
     /// or fetch it from the room (guests). Loading answers whatever peers
     /// asked for while it was missing.
     pub(super) fn ensure_loaded(&mut self, id: FileId) -> (Load, Vec<Output>) {
+        self.ensure_loaded_with(id, true)
+    }
+
+    /// [`Driver::ensure_loaded`]; `catch_up` is false when a peer's request
+    /// is what loads the document (the peer is answered at once and nothing
+    /// is awaited from the room).
+    pub(super) fn ensure_loaded_with(&mut self, id: FileId, catch_up: bool) -> (Load, Vec<Output>) {
         if self.session.is_loaded(id) {
             self.touch(id);
             let state = if self.doc_usable(id) {
@@ -183,6 +216,9 @@ impl Driver {
                                 false,
                             );
                             self.file(id).local_origin = true;
+                            if catch_up {
+                                self.catching_up.insert(id, now + CATCH_UP_MS);
+                            }
                             self.touch(id);
                             return (Load::Ready, out);
                         }
@@ -199,6 +235,9 @@ impl Driver {
             let state = self.file(id);
             state.local_origin = true;
             state.synced_sha = None;
+            if catch_up {
+                self.catching_up.insert(id, now + CATCH_UP_MS);
+            }
             self.touch(id);
             return (Load::Ready, out);
         }
@@ -358,6 +397,23 @@ impl Driver {
         self.session.flush_doc(id)
     }
 
+    /// Record the new size and hash of a file in the tree. `false` when
+    /// there is nothing to record.
+    fn write_meta(&mut self, id: FileId, text: &str, view: &ProjectView) -> bool {
+        let Some(entry) = view.get(id) else {
+            return false;
+        };
+        let sha = sha256(text.as_bytes());
+        if entry.meta.sha256 == sha {
+            return false;
+        }
+        self.session.project_mut().is_some_and(|project| {
+            project
+                .set_content(id, text.len() as u64, sha, entry.meta.seed_fp)
+                .is_ok()
+        })
+    }
+
     /// Record the new size and hash of files edited here, once the typing
     /// pauses, so a late joiner's plan compares against the current text.
     pub(super) fn update_metas(&mut self) {
@@ -375,21 +431,10 @@ impl Driver {
         let mut changed = false;
         for id in due {
             self.meta_due.remove(&id);
-            let Some(entry) = view.get(id) else { continue };
             let Some(text) = self.doc_text(id) else {
                 continue;
             };
-            let sha = sha256(text.as_bytes());
-            if entry.meta.sha256 == sha {
-                continue;
-            }
-            if let Some(project) = self.session.project_mut()
-                && project
-                    .set_content(id, text.len() as u64, sha, entry.meta.seed_fp)
-                    .is_ok()
-            {
-                changed = true;
-            }
+            changed |= self.write_meta(id, &text, &view);
         }
         if changed {
             let out = self.session.flush_project();

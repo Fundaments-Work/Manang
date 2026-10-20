@@ -83,8 +83,13 @@ const ATTACH_WAIT_MS: u64 = 8_000;
 const META_QUIET_MS: u64 = 1_500;
 /// Minimum gap between presence events.
 const PRESENCE_GAP_MS: u64 = 40;
+/// Minimum gap between progress events (the last one is always sent).
+const PROGRESS_GAP_MS: u64 = 100;
 /// Gap between retries of deferred evictions and the statistics refresh.
 const SLOW_GAP_MS: u64 = 1_000;
+/// How long a document restored from this machine waits for the room's
+/// answer before it may be parked again.
+const CATCH_UP_MS: u64 = 10_000;
 /// Most skipped paths remembered for the status.
 const MAX_SKIPPED: usize = 32;
 
@@ -307,6 +312,7 @@ impl ProjectHandle {
             pending_text: BTreeMap::new(),
             pending_attach: Vec::new(),
             deferred_evict: BTreeSet::new(),
+            catching_up: BTreeMap::new(),
             deleted_trash: BTreeMap::new(),
             blob_served: BTreeMap::new(),
             known_peers: BTreeMap::new(),
@@ -315,6 +321,7 @@ impl ProjectHandle {
             peers_dirty: true,
             presence_dirty: true,
             last_presence_ms: 0,
+            last_progress_ms: 0,
             last_presence: BTreeMap::new(),
             last_slow_ms: 0,
             closed: false,
@@ -534,6 +541,10 @@ struct Driver {
     pending_attach: Vec<PendingAttach>,
     /// Evictions put off until the disk caught up.
     deferred_evict: BTreeSet<FileId>,
+    /// Documents just loaded from this machine that still wait for the room's
+    /// answer (until the time given): parking them now would throw the
+    /// answer away.
+    catching_up: BTreeMap<FileId, u64>,
     /// Where a remote delete put the file (path -> trash path).
     deleted_trash: BTreeMap<String, String>,
     /// Peers each blob was served to (blobs have no document to confirm them).
@@ -544,6 +555,7 @@ struct Driver {
     peers_dirty: bool,
     presence_dirty: bool,
     last_presence_ms: u64,
+    last_progress_ms: u64,
     last_presence: BTreeMap<FileId, Value>,
     last_slow_ms: u64,
     closed: bool,
