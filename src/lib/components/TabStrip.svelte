@@ -3,6 +3,7 @@
 
   import { keymap } from "$lib/commands/keymap.svelte";
   import { formatShortcut } from "$lib/commands/shortcut";
+  import PresenceSwatches from "$lib/components/PresenceSwatches.svelte";
   import SharePopover from "$lib/components/SharePopover.svelte";
   import ContextMenu, { type MenuItem } from "$lib/components/ui/ContextMenu.svelte";
   import { SLOT_COLOURS, SLOT_COUNT, SLOT_STROKES } from "$lib/editor/live/remote";
@@ -225,6 +226,8 @@
       {@const label = labels.get(tab.id)}
       {@const active = tab.id === tabs.active?.id}
       {@const dirty = isTabDirty(tab.path)}
+      {@const here = live.active ? live.peersAt(tab.path) : []}
+      {@const gone = live.active ? live.deletedBy(tab.path) : null}
       <div
         role="presentation"
         class="group relative flex shrink-0 items-stretch border-r border-line {active
@@ -268,7 +271,11 @@
           data-tab={tab.id}
           aria-selected={active}
           aria-controls="editor-area"
-          aria-label="{label?.name ?? tab.path}{dirty ? ', unsaved changes' : ''}"
+          aria-label="{label?.name ?? tab.path}{dirty
+            ? ', unsaved changes'
+            : ''}{gone !== null ? `, deleted by ${gone}` : ''}{here.length > 0
+            ? `, here now: ${here.map((p) => p.name).join(', ')}`
+            : ''}"
           tabindex={active ? 0 : -1}
           class="inset-focus flex max-w-56 min-w-0 cursor-default items-center gap-1.5 pr-1 pl-3 text-xs {active
             ? 'text-text'
@@ -302,11 +309,28 @@
           {:else if tab.view === "slides"}
             <Icon name="slides" size={13} class="shrink-0 opacity-70" />
           {/if}
-          <span class="truncate">{label?.name ?? tab.path}</span>
+          <span class="truncate" class:line-through={gone !== null}
+            >{label?.name ?? tab.path}</span
+          >
           {#if label?.hint !== undefined && label.hint !== ""}
             <span class="truncate text-text-muted">{label.hint}</span>
           {/if}
+          {#if gone !== null}
+            <span class="truncate text-text-60" data-testid="tab-deleted"
+              >deleted by {gone}</span
+            >
+          {/if}
+          <PresenceSwatches peers={here} where="tab" />
         </div>
+        {#if gone !== null}
+          <button
+            type="button"
+            class="inset-focus shrink-0 px-2 text-[11px] text-math hover:underline"
+            data-testid="tab-restore"
+            aria-label="Restore {label?.name ?? tab.path}"
+            onclick={() => void live.restore(tab.path)}>Restore</button
+          >
+        {/if}
         <button
           type="button"
           tabindex="-1"
