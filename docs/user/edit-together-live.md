@@ -1,8 +1,8 @@
 # Edit together live
 
-Live editing lets two or more people type in the same text file at the same time and see each other's edits and carets as they happen. It works on one text file per session (Typst, LaTeX, Markdown or any other text file). Figures and PDFs are not shared yet.
+Live editing lets two or more people type in the same text file at the same time and see each other's edits and carets as they happen. You can share **one file** or the **whole project**. In a whole-project session everyone also sees files appear, move and disappear, and images, figures and PDFs are shared too (with limits, see [Limits of whole-project sessions](#limits-of-whole-project-sessions)).
 
-Your file on disk stays an ordinary text file. The shared state lives only in memory while the session runs. When you press `Ctrl+S` (`Cmd+S`), Manang saves exactly what you see; nothing about the session is written into your project.
+Your files on disk stay ordinary files. The shared state lives in memory while the session runs, plus a disposable copy in Manang's data folder. When you press `Ctrl+S` (`Cmd+S`), Manang saves exactly what you see; nothing about the session is written into your project except the files themselves (and, if something is replaced or deleted, a copy in the project's trash, see [Whole-project sessions](#whole-project-sessions)).
 
 ## What you need
 
@@ -38,11 +38,65 @@ To use your own relay, enter its address under **Relay address**: `wss://` for o
 ## Share a file
 
 1. Open the text file you want to work on together.
-2. Press **Share**, then **Share this file**. (Or use **File > Share this file live…**, or the command palette, `Ctrl+K`.)
+2. Press **Share**, make sure **This file** is chosen, then **Share this file**. (Or use **File > Share this file live…**, or the command palette, `Ctrl+K`.)
 3. A bar appears above the editor. It says **Connecting**, then **Live** once it is connected. The invite has been copied to your clipboard. If the clipboard is not available, the invite appears in a field in the bar, already selected.
 4. Send the invite to the people you want to work with. Use **Copy invite** in the bar to copy it again.
 
 An invite is a long link that starts with `manang-live://`. **Anyone who has it can edit the file with you**, so send it only to the people you mean, through a channel you trust.
+
+## Whole-project sessions
+
+To work on a whole thesis or paper, press **Share**, choose **Whole project**, and share. Everyone who joins gets the host's files and sees every file that is created, renamed, moved or deleted in the session. Open files show who else is in them.
+
+**What is shared.** Every file in the project folder, except:
+
+- files and folders whose name starts with a dot (so `.git`, `.env`), `manang.toml`, and the `.manang` folder;
+- folders named `target`, `node_modules` or `__pycache__`;
+- anything your project's `.gitignore` ignores;
+- links to other places (shortcuts, symbolic links), and files over 64 MiB.
+
+These rules apply on both sides. The same rules keep other people from creating such files on your disk.
+
+**Everyone with the invite can change your files.** In a whole-project session, anyone with the invite can create, change, rename and delete shared files on your computer, inside the project folder. They cannot reach anything outside it. Send the invite only to people you would let edit the project.
+
+**Nothing is deleted for good.** A file deleted in the session, or replaced by someone else's version, is first moved to the project's trash (the folder `.manang/trash` inside your project). Leaving the session never deletes your files.
+
+### Join a whole-project session
+
+1. Press **Share** and choose **Join with an invite**, then paste the invite. Joining needs an open project folder, because the files are written into it (create an empty folder and open it if you want a clean copy).
+2. Manang connects and fetches the list of the host's files. Nothing on your disk changes yet.
+3. The **Join the shared project** dialog shows how your files compare with the host's:
+   - **Different on your disk**: files that exist on both sides with different content. For each, choose **Use the host's** (your copy goes to the trash and is replaced) or **Keep mine** (the file stays out of the session on your side: it is never sent, never overwritten and not listed). If more than one file would be replaced, tick the single confirmation that replaces all of them. Without it, the **Join** button stays off.
+   - **Only on your disk**: files the host does not have. They stay private unless you choose **Share it**.
+   - **New for you** and **The same on both sides**: nothing to decide. New files are added to your project; identical files are left alone.
+4. Press **Join**. Files arrive in the background, the status bar shows progress, and the files you have open are fetched first.
+
+If the host is not there, the bar says **Waiting for host**, and nothing changes until someone answers.
+
+### A large rewrite on your disk
+
+If many files change at once on your disk while you are in the session, for example after a Git checkout (more than 25 files at once, or more than half the lines of the changed text files), Manang does not send them. It asks, in **Many files changed at once**:
+
+- **Share these changes** sends them to everyone.
+- **Put my folder back** restores your folder to what the session has. The copies you have now go to the trash.
+- **Decide later** keeps the changes held; the status bar offers the question again.
+
+Smaller edits made with other programs, such as saving a file in another editor, are shared as ordinary edits.
+
+### Leaving as the host
+
+If you started the session and press **Leave** while some files have not reached anyone else, Manang warns you: *N files have not reached anyone else yet. If you leave now, the others will not have them. Nothing on your disk is deleted.* **Stay** keeps the session; **Leave anyway** ends it. The warning never blocks you.
+
+### Limits of whole-project sessions
+
+- **Images, figures and other non-text files: last writer wins.** If two people change the same image or figure at nearly the same time, one version replaces the other. Text files merge edit by edit as usual.
+- **Text files over 8 MiB** are treated like images (last writer wins).
+- **A session needs someone in it.** When everyone has left, the session is gone: you cannot join an empty room, and an invite to it does not bring anything back. Keep your own copy (the files on your disk are yours); to continue, someone starts a new session and shares a new invite.
+- **Nobody can be removed from a session.** To stop sharing with someone, leave and start a new session; the old invite then does nothing.
+- **Names are claims.** There are no accounts, and every member has the same rights: nobody can be set to read-only.
+- **Case-only differences** (`Fig.png` and `fig.png`) are refused on Windows and macOS when they would collide with an existing file. This has been tested on Linux only.
+- **Closing a file's tab** in a whole-project session does not leave the session. **Leave** does.
+- A file the host's computer saved but nobody else has opened can briefly lag: its latest text reaches others about a second and a half after typing stops.
 
 ## Use a local relay for testing
 
@@ -86,7 +140,7 @@ If everyone left a session and you open the same invite again with the file unch
 - The bar shows the state of the connection and who is in the session. Each collaborator has a name and a mark next to it; the same mark (a colour mix and a line style) is drawn at their caret in the text, with their name above it. Selections are tinted in the same colour.
 - Everyone's edits merge. If two people type at the same spot at the same moment, both edits are kept.
 - **Undo is yours.** `Ctrl+Z` takes back your own edits only, never someone else's.
-- Only one file can be live at a time. Closing the file's tab leaves the session.
+- In a one-file session, closing the file's tab leaves the session.
 
 ### States
 
@@ -110,7 +164,7 @@ Choose **Leave** in the bar (or **Leave live session** in the File menu). Edits 
 
 ## What the relay can see
 
-The invite contains a secret key. The key is part of the link after the `#`, so it is never sent to the relay. Everything that goes through the relay is encrypted with it (XChaCha20-Poly1305) before it leaves your computer.
+The invite contains a secret key. The key is part of the link after the `#`, so it is never sent to the relay. Everything that goes through the relay (text, file names, file contents) is encrypted with it (XChaCha20-Poly1305) before it leaves your computer.
 
 - The relay can see: that a connection to a room exists, how large and how frequent the messages are, and when people connect and leave. A room is named by a number derived from the key; the relay cannot turn it back into the key.
 - The relay cannot see: your text, your edits, your name, your caret, the file name, or the key.
