@@ -6504,8 +6504,9 @@ dependencies = [
  "manang-editor",
  "manang-kernel",
  "manang-live",
+ "manang-live-testkit",
  "manang-project",
- "manang-relay",
+ "manang-relay-client",
  "parking_lot",
  "proptest",
  "ropey",
@@ -6516,6 +6517,15 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "manang-live-testkit"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]
@@ -6622,19 +6632,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "manang-relay"
+name = "manang-relay-client"
 version = "0.1.0"
 dependencies = [
  "futures-util",
  "manang-live",
- "parking_lot",
- "ropey",
+ "manang-live-testkit",
  "rustls",
- "thiserror 2.0.21",
  "tokio",
  "tokio-tungstenite",
- "tracing",
- "tracing-subscriber",
  "webpki-roots 1.0.9",
 ]
 
@@ -11826,16 +11832,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-serde"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
-dependencies = [
- "serde",
- "tracing-core",
-]
-
-[[package]]
 name = "tracing-subscriber"
 version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11845,15 +11841,12 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex-automata",
- "serde",
- "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
- "tracing-serde",
 ]
 
 [[package]]

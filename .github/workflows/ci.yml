@@ -4,7 +4,7 @@ name: CI
 # so CI is in two tiers.
 #
 #  * quick: every push to main and every pull request, about 4 minutes. Formatting,
-#    the banned-library check, the frontend, and the relay Worker.
+#    the banned-library check and the frontend.
 #  * full:  once a week, on demand (Actions > CI > Run workflow), and on a pull
 #    request labelled `full-ci`. Clippy and every Rust test, the wasm32 check,
 #    licences and bans, and the headless-Chromium UI suite (30 to 40 minutes).
@@ -43,7 +43,7 @@ env:
 
 jobs:
   quick:
-    name: Quick checks (format, tree, frontend, relay Worker)
+    name: Quick checks (format, tree, frontend)
     # A labelled event only matters for the full tier.
     if: github.event.action != 'labeled'
     runs-on: ubuntu-24.04
@@ -70,12 +70,6 @@ jobs:
       - run: pnpm run check
       - run: pnpm run lint
       - run: pnpm test
-      - name: Relay Worker
-        working-directory: relay/worker
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run typecheck
-          pnpm test
 
   rust:
     name: Rust (clippy, tests)

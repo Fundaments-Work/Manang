@@ -1,6 +1,6 @@
 [package]
-name = "manang-relay"
-description = "Ciphertext-only WebSocket relay for Manang live editing"
+name = "manang-relay-client"
+description = "WebSocket client transport for Manang live editing (talks to a ciphertext-only relay)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,23 +8,15 @@ authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-[[bin]]
-name = "manang-relay"
-path = "src/main.rs"
-
 [dependencies]
 manang-live = { path = "../manang-live" }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "signal", "io-util"] }
+tokio = { version = "1", default-features = false, features = ["rt", "net", "sync", "macros"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-parking_lot = "0.12"
-thiserror = { workspace = true }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
 
-# `wss://` for the client. Off by default so the relay binary stays free of TLS
-# and C code; the desktop app turns it on. rustls runs on ring (never aws-lc,
-# AGENTS.md 7.4), with the bundled Mozilla roots.
+# `wss://`. Off by default so a plain build has no TLS and no C code; the
+# desktop app turns it on. rustls runs on ring (never aws-lc, AGENTS.md 7.4),
+# with the bundled Mozilla roots.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
 webpki-roots = { version = "1.0", optional = true }
 
@@ -33,4 +25,5 @@ default = []
 tls = ["tokio-tungstenite/rustls-tls-webpki-roots", "dep:rustls", "dep:webpki-roots"]
 
 [dev-dependencies]
-ropey = "1.6"
+manang-live-testkit = { path = "../manang-live-testkit" }
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }

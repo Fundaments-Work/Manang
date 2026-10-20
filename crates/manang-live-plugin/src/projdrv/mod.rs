@@ -59,7 +59,7 @@ use manang_live::project::{FileId, ProjectDoc, ProjectView};
 use manang_live::session::{Input, Output, Session, SessionConfig};
 use manang_live::transport::{SyncTransport, TransportEvent};
 use manang_live::vcs::Contributor;
-use manang_relay::RelayClient;
+use manang_relay_client::RelayClient;
 use parking_lot::Mutex;
 use ropey::Rope;
 use serde_json::{Value, json};

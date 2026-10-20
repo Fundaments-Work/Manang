@@ -1,7 +1,7 @@
 //! The `live` plugin: real-time co-editing of one open file.
 //!
 //! `manang-live` (the CRDT, the encrypted envelope, the session state machine)
-//! is pure and web-capable; `manang-relay` carries the encrypted frames. This
+//! is pure and web-capable; `manang-relay-client` carries the encrypted frames. This
 //! crate is the OS-side glue that makes them a first-party plugin: it runs a
 //! session on its own thread, keeps the editor plugin's shared copy of the
 //! file in step with it, and talks to the web view through commands and

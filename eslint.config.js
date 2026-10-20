@@ -41,7 +41,6 @@ export default ts.config(
   {
     ignores: [
       ".claude/",
-      "relay/worker/",
       "dist/",
       "node_modules/",
       "src-tauri/",

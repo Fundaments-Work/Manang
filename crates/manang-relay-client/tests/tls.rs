@@ -6,7 +6,7 @@
 use std::time::{Duration, Instant};
 
 use manang_live::transport::{SyncTransport, TransportEvent};
-use manang_relay::RelayClient;
+use manang_relay_client::RelayClient;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
