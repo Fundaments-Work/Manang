@@ -17,6 +17,7 @@ pub mod envelope;
 pub mod error;
 pub mod loro_engine;
 pub mod manifest;
+pub mod pacer;
 pub mod presence;
 pub mod project;
 pub mod protocol;

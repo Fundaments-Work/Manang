@@ -154,10 +154,41 @@ impl PresenceMessage {
     }
 }
 
+/// One remote peer as the book knows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Entry {
+    presence: Presence,
+    doc: Option<FileId>,
+    open: Vec<FileId>,
+    seen: u64,
+}
+
+/// A peer's presence together with where it is in the project.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PeerState<'a> {
+    /// Name, colour and caret (the caret belongs to `doc`).
+    pub presence: &'a Presence,
+    /// The file the peer is editing, if any (always `None` for a peer that
+    /// speaks the single-document protocol).
+    pub doc: Option<FileId>,
+    /// Files the peer has open.
+    pub open: &'a [FileId],
+}
+
+/// A peer that has a given file open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FilePeer<'a> {
+    /// The peer.
+    pub presence: &'a Presence,
+    /// Whether this is the file the peer is editing right now (as opposed to
+    /// merely having it open).
+    pub active: bool,
+}
+
 /// The set of remote peers currently believed present.
 #[derive(Debug, Default)]
 pub struct PresenceBook {
-    peers: BTreeMap<u64, (Presence, u64)>,
+    peers: BTreeMap<u64, Entry>,
     ttl_ms: u64,
 }
 
@@ -171,23 +202,55 @@ impl PresenceBook {
         }
     }
 
-    /// Record a state seen at `now_ms`. Returns whether the book changed.
+    /// Record a single-document state seen at `now_ms`. Returns whether the
+    /// book changed.
     pub fn update(&mut self, presence: Presence, now_ms: u64) -> bool {
+        self.upsert(presence, None, Vec::new(), now_ms)
+    }
+
+    /// Record a project-session state seen at `now_ms`. The message is
+    /// sanitised again here (the book never trusts its caller to have done
+    /// it). Returns whether the book changed.
+    pub fn update_v2(&mut self, state: PresenceV2, now_ms: u64) -> bool {
+        let Some(state) = state.sanitised() else {
+            return false;
+        };
+        self.upsert(state.presence, state.doc, state.open, now_ms)
+    }
+
+    fn upsert(
+        &mut self,
+        presence: Presence,
+        doc: Option<FileId>,
+        open: Vec<FileId>,
+        now_ms: u64,
+    ) -> bool {
         let Some(presence) = presence.sanitised() else {
             return false;
         };
         match self.peers.get_mut(&presence.peer) {
-            Some((existing, seen)) => {
-                if presence.seq <= existing.seq {
+            Some(existing) => {
+                if presence.seq <= existing.presence.seq {
                     return false;
                 }
-                *seen = now_ms;
-                let changed = *existing != presence;
-                *existing = presence;
+                existing.seen = now_ms;
+                let changed =
+                    existing.presence != presence || existing.doc != doc || existing.open != open;
+                existing.presence = presence;
+                existing.doc = doc;
+                existing.open = open;
                 changed
             }
             None => {
-                self.peers.insert(presence.peer, (presence, now_ms));
+                self.peers.insert(
+                    presence.peer,
+                    Entry {
+                        presence,
+                        doc,
+                        open,
+                        seen: now_ms,
+                    },
+                );
                 true
             }
         }
@@ -203,7 +266,7 @@ impl PresenceBook {
         let ttl = self.ttl_ms;
         let before = self.peers.len();
         self.peers
-            .retain(|_, (_, seen)| now_ms.saturating_sub(*seen) <= ttl);
+            .retain(|_, e| now_ms.saturating_sub(e.seen) <= ttl);
         before - self.peers.len()
     }
 
@@ -214,7 +277,31 @@ impl PresenceBook {
 
     /// Current peers, ordered by peer id.
     pub fn iter(&self) -> impl Iterator<Item = &Presence> {
-        self.peers.values().map(|(p, _)| p)
+        self.peers.values().map(|e| &e.presence)
+    }
+
+    /// Current peers with their place in the project, ordered by peer id.
+    pub fn iter_v2(&self) -> impl Iterator<Item = PeerState<'_>> {
+        self.peers.values().map(|e| PeerState {
+            presence: &e.presence,
+            doc: e.doc,
+            open: &e.open,
+        })
+    }
+
+    /// Peers that have `file` open or are editing it, ordered by peer id.
+    #[must_use]
+    pub fn peers_by_file(&self, file: FileId) -> Vec<FilePeer<'_>> {
+        self.peers
+            .values()
+            .filter_map(|e| {
+                let active = e.doc == Some(file);
+                (active || e.open.contains(&file)).then_some(FilePeer {
+                    presence: &e.presence,
+                    active,
+                })
+            })
+            .collect()
     }
 
     /// Number of remote peers present.
@@ -284,6 +371,35 @@ mod tests {
             head: vec![],
         });
         assert!(!b.update(huge, 0));
+    }
+
+    #[test]
+    fn v2_state_indexes_peers_by_file() {
+        let (a, b) = (FileId(1), FileId(2));
+        let mut book = PresenceBook::new(100);
+        let v2 = |peer, seq, doc, open: Vec<FileId>| PresenceV2 {
+            presence: p(peer, seq),
+            doc,
+            open,
+        };
+        assert!(book.update_v2(v2(1, 1, Some(a), vec![a, b]), 0));
+        assert!(book.update_v2(v2(2, 1, None, vec![b]), 0));
+        assert!(book.update(p(3, 1), 0));
+        let on_a = book.peers_by_file(a);
+        assert_eq!(on_a.len(), 1);
+        assert!(on_a[0].active);
+        let on_b = book.peers_by_file(b);
+        assert_eq!(on_b.len(), 2);
+        assert!(on_b.iter().all(|x| !x.active));
+        // Moving the caret to b changes the book even though the name is equal.
+        assert!(book.update_v2(v2(1, 2, Some(b), vec![a, b]), 1));
+        assert!(book.peers_by_file(b).iter().any(|x| x.active));
+        // Stale and duplicated opens are clamped.
+        let flood: Vec<FileId> = (0..100).map(|i| FileId(i % 40)).collect();
+        assert!(book.update_v2(v2(4, 1, None, flood), 2));
+        let held = book.iter_v2().find(|s| s.presence.peer == 4).expect("peer");
+        assert!(held.open.len() <= MAX_OPEN);
+        assert_eq!(book.iter_v2().count(), 4);
     }
 
     #[test]
