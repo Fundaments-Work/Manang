@@ -20,6 +20,8 @@ Install it by copying the directory to `<config>/manang/plugins/my-plugin/`
 hot-reloads it whenever the files change. The directory name must equal the
 plugin name.
 
+> Today (2026-10-20) the template, the build script and the WIT live in this repository, so an author needs a clone of it. A standalone SDK and a command-line tool are proposed in ADR 0017 and are not built; this section will change when they ship.
+
 Start from the template:
 
 ```sh
