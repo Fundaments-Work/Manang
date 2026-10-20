@@ -98,7 +98,7 @@ By design. The registry is new and starts empty; first-party plugins arrive in t
 ## 6. Real-time Co-Editing
 
 ### What
-Live co-editing (see [Edit together live](../user/edit-together-live.md)) shares **one text file** or the **whole project** per session. It uses the hosted relay at `wss://relay.fundaments.work` by default (end-to-end encrypted; the relay sees only ciphertext and connection metadata), or your own relay. **Get updates** and restoring the live file are refused during a session; leave first. Joining a single file or project with copies that differ from the host's replaces your copies with the host's, only after asking, saving the old copies (single file: `live-trash` in Manang's settings folder; project: `.manang/trash` in the project) and, for a project, after one confirmation when more than one file is replaced.
+Live co-editing (see [Edit together live](../user/edit-together-live.md)) shares **one text file** or the **whole project** per session. It uses the hosted relay at `wss://relay.fundaments.work` by default (end-to-end encrypted; the relay sees only ciphertext and connection metadata). **Get updates** and restoring the live file are refused during a session; leave first. Joining a single file or project with copies that differ from the host's replaces your copies with the host's, only after asking, saving the old copies (single file: `live-trash` in Manang's settings folder; project: `.manang/trash` in the project) and, for a project, after one confirmation when more than one file is replaced.
 
 Whole-project sessions have limits:
 

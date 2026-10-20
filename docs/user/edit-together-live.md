@@ -8,7 +8,7 @@ Your files on disk stay ordinary files. The shared state lives in memory while t
 
 ## What you need
 
-- **A relay**, to start a session. Manang uses the relay run by Fundaments (`wss://relay.fundaments.work`) unless you change it. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). To use a relay run by your group instead, whoever runs it gives you its address, for example `wss://relay.example.org`: paste it into Settings, Collaboration, Relay address.
+- **A relay**, to start a session. Manang uses the relay run by Fundaments (`wss://relay.fundaments.work`) unless you change it. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). If your organisation provides a compatible relay, paste its address into Settings, Collaboration, Relay address.
 - **An invite**, to join a session. The person who shares the file sends it to you. It already contains the relay address, so you do not need to set one to join.
 
 ## The Share button
@@ -35,7 +35,7 @@ When you are not in a session, none of these is shown.
 
 Sharing works out of the box: **Relay address** in Settings > Collaboration starts as `wss://relay.fundaments.work`, the relay Fundaments runs. It only passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)).
 
-To use your own relay, enter its address under **Relay address**: `wss://` for one behind TLS, or `ws://` for one on your own network. To turn sharing off, empty the field; the Share panel then says *Set a relay in Settings* and has an **Open Settings** button. Joining never needs the setting, because the invite carries the address.
+If your organisation provides a compatible relay, enter its address under **Relay address**. To turn sharing off, empty the field; the Share panel then says *Set a relay in Settings* and has an **Open Settings** button. Joining never needs the setting, because the invite carries the address.
 
 ## Share a file
 
@@ -100,28 +100,18 @@ If you started the session and press **Leave** while some files have not reached
 - **Closing a file's tab** in a whole-project session does not leave the session. **Leave** does.
 - A file the host's computer saved but nobody else has opened can briefly lag: its latest text reaches others about a second and a half after typing stops.
 
-## Use a local relay for testing
+## Try it on one computer
 
-To try live editing without any network, or to keep even the metadata off a hosted server, run a relay on your own computer. The relay is the `manang-relay` program in this repository; it needs no accounts and no internet.
+You can test live editing with two windows on the same computer. The windows still use the relay set in Settings.
 
-1. In a terminal, from the Manang repository, start it:
-
-   ```
-   cargo run --release -p manang-relay -- --listen 127.0.0.1:8787
-   ```
-
-   It prints a log line and keeps running; stop it with `Ctrl+C`. Use `0.0.0.0:8787` instead to let other computers on your network connect, and give them `ws://YOUR-IP:8787`.
-2. In Settings > Collaboration, set **Relay address** to `ws://127.0.0.1:8787`.
-3. Share a file as above and copy the invite.
-4. To join from a second copy of Manang on the same computer, start it with its own settings folder, and allow a second instance (normally a second launch just brings the first window forward):
+1. Share a file as above and copy the invite.
+2. Start a second copy of Manang with its own settings folder, and allow a second instance (normally a second launch just brings the first window forward):
 
    ```
    MANANG_MULTI_INSTANCE=1 XDG_CONFIG_HOME=$HOME/.manang-second/config XDG_DATA_HOME=$HOME/.manang-second/data XDG_CACHE_HOME=$HOME/.manang-second/cache manang
    ```
 
-   Open a copy of the project in it (a different folder, or the same file opened there), choose **Share > Join with an invite** and paste the invite. Joining needs no relay setting: the address is in the invite. Both windows now show each other's cursors.
-
-On two computers, run the relay on one, use `ws://ITS-IP:8787` as the relay address on the host, and send the invite as usual.
+3. Open a copy of the project in it (a different folder, or the same file opened there), choose **Share > Join with an invite** and paste the invite. Joining needs no relay setting: the address is in the invite. Both windows now show each other's cursors.
 
 ## Join a session
 
@@ -176,7 +166,7 @@ What this does not give you:
 
 - **No accounts.** Everyone holding the invite is trusted equally. A name in the bar is a claim, not a login: anyone with the invite could use another person's name.
 - **No forward secrecy.** Someone who obtains the invite later and recorded the encrypted traffic earlier could read it. To rotate the key, leave and start a new session.
-- If you do not trust a relay operator with the *metadata* above, run your own: the relay is a small program (`manang-relay`) with no dependencies on a cloud service.
+- The relay operator can see the *metadata* above. If that is not acceptable for a project, do not share it live: share versions with Git instead (see [Share and get updates](share-and-get-updates.md)).
 
 ## Troubleshooting
 
