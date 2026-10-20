@@ -59,7 +59,7 @@ Design summary (full reasoning in the agent report, reproduced as work packages)
 | P4 | Plugin/driver, commands and events, two-instance tests through an in-process relay | heavy | P1-P3 |
 | P5 | Frontend state and bindings (per-path), vitest | light | contract only |
 | P6 | Frontend UI, verify-ui live section | light | P5 |
-| P7 | Fuzzing, ADR 0014, relay conformance with bulk traffic | heavy, last | P4, P6 |
+| P7 | Fuzzing, ADR 0018, relay conformance with bulk traffic | heavy, last | P4, P6 |
 
 Schedule (at most two build-heavy agents at once): wave 0 together with P1;
 then P2 with P5/P6; then P3 with P4; then P7; the lead runs the full section 5
@@ -117,7 +117,7 @@ session.
 | P3 path policy, disk and tree bridge, sidecar, join classification | Done |
 | P4 plugin and project driver | Done |
 | P5 frontend state, P6 UI, P8 real plugin contract (leave warning, held-change dialog, plain errors) | Done |
-| P7 fuzzing, ADR 0014 | Done: seven targets clean, two findings (see Gate result). The relay conformance part moved with the relay |
+| P7 fuzzing, ADR 0018 | Done: seven targets clean, two findings (see Gate result). The relay conformance part moved with the relay |
 
 **Relay removal (2026-10-20).** The relay server (the Rust `manang-relay` crate and the Cloudflare Worker in `relay/worker`) now lives in a separate private repository. This repository keeps `manang-relay-client` and `manang-live-testkit` (a fixture, not a relay). Organisations can no longer self-host the relay from here; the wire contract (ADR 0013) is the public contract.
 

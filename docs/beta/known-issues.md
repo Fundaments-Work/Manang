@@ -112,7 +112,7 @@ Whole-project sessions have limits:
 Send a whole-project invite only to people you would let edit the project, and keep Git commits of your own before a session. For anything else, use Git through the **Versions** view (View menu) or a shared folder.
 
 ### Status
-Beta: one file or the whole project. Merging a differing copy instead of replacing it, member roles and removal, comments, a room that outlives its members, and merging figure edits are planned. Design and threat model: ADR 0014.
+Beta: one file or the whole project. Merging a differing copy instead of replacing it, member roles and removal, comments, a room that outlives its members, and merging figure edits are planned. Design and threat model: ADR 0018.
 
 ---
 
