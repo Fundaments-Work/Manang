@@ -401,7 +401,8 @@ the registry commands below).
 People find plugins in **Plugins > Browse**, which reads the plugin registry
 (ADR 0016): a signed `index.json` plus mirrored `.manangplugin` archives. To be
 listed, open a pull request that adds `registry/plugins/<id>.toml` (see
-`registry/README.md` for the entry format and the review criteria); everything
+`registry/README.md` for the entry format and `docs/plugins-publishing.md`
+section 5 for the review criteria); everything
 else is read from your release's manifest, never typed by hand. What users see
 of your plugin comes from there:
 

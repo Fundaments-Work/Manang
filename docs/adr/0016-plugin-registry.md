@@ -100,7 +100,8 @@ quietly asks for more access in an update is the classic abuse.
   turn. That is fine for a handful of keys.
 - A plugin installed by hand is outside these guarantees; the install dialog and
   the user guide say so.
-- Review criteria for submissions are in `registry/README.md`.
+- Review criteria for submissions are in `docs/plugins-publishing.md`, section 5
+  (`registry/README.md` describes the entry format only).
 
 ## Rejected alternatives
 
