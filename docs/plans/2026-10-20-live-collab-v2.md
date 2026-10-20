@@ -107,7 +107,7 @@ session.
 
 Merged on `feat/live-collab-v2` (not yet on `main`): wave 0 (S1-S6), P1
 (project tree, blobs, manifest, wire v2), P5 (frontend state), P6 (UI; verify-ui
-live section 96/96 re-run on the merge) P2 (multi-doc session router) and P4 (plugin and project driver; 70 + 18 + 12 plugin tests, tauri crate compiles) and P3 (path policy, disk and tree bridge, sidecar,
+live section 96/96 re-run on the merge) P2 (multi-doc session router) and P8 (frontend speaks the real plugin contract, leave warning, held-change dialog, plain errors; verify-ui live 106/106 run by the agent, frontend gates re-run on the merge), P4 (plugin and project driver; 70 + 18 + 12 plugin tests, tauri crate compiles) and P3 (path policy, disk and tree bridge, sidecar,
 join classification; tests green on the merge, clippy clean). The
 single-file driver is untouched; P4 (below) adds a separate project driver. Gates on the merge result: fmt, clippy
 and tests for `manang-live`, `manang-live-plugin`, `manang-git`; `pnpm run check`,
