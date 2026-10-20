@@ -23,7 +23,7 @@
     {
       id: "provider",
       title: "Provider",
-      note: "Who answers your requests. Offline mode allows only a model on this computer.",
+      note: "Who answers. Offline mode allows only local models.",
       ids: [
         "agent.enabled",
         "agent.provider",
@@ -42,7 +42,7 @@
     {
       id: "privacy",
       title: "Privacy",
-      note: "Nothing is sent until you press Send. These control what leaves your computer and how long chats are kept.",
+      note: "What leaves your computer and how long chats are kept.",
       ids: ["agent.redact-emails", "agent.redact-paths", "agent.retention-days"],
     },
     {
