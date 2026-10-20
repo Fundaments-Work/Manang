@@ -60,8 +60,8 @@ describe("join plan", () => {
   });
 
   it("says plainly where the old copies go", () => {
-    expect(replaceSentence(1)).toMatch(/old copy is saved to a trash folder/);
-    expect(replaceSentence(3)).toMatch(/old copies are saved to a trash folder/);
+    expect(replaceSentence(1)).toMatch(/old copy is saved to the project's trash/);
+    expect(replaceSentence(3)).toMatch(/old copies are saved to the project's trash/);
     expect(replaceSentence(0)).toMatch(/kept as they are/);
     expect(confirmLabel(2)).toBe("Replace 2 of my files with the host's versions");
     expect(progressText(12, 80)).toBe("Fetching files 12/80");
