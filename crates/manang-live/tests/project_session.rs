@@ -72,6 +72,9 @@ fn join_by_manifest<E: TextCrdt>() {
         let manifest = guest.manifest.as_ref().expect("manifest");
         assert_eq!(manifest.len(), 5, "3 texts + 1 blob + 1 dir");
         assert_eq!(guest.counters.blobs_received, 1);
+        // Files without an editor buffer are applied to the CRDT only and
+        // reported for the disk bridge.
+        assert!(guest.counters.doc_changes >= 3);
         // Progress reported and ended at done == total.
         let (done, total) = guest.counters.progress.expect("progress");
         assert_eq!(done, total);
