@@ -107,7 +107,8 @@ session.
 
 Merged on `feat/live-collab-v2` (not yet on `main`): wave 0 (S1-S6), P1
 (project tree, blobs, manifest, wire v2), P5 (frontend state), P6 (UI; verify-ui
-live section 96/96 re-run on the merge) and P2 (multi-doc session router). The
+live section 96/96 re-run on the merge) P2 (multi-doc session router) and P3 (path policy, disk and tree bridge, sidecar,
+join classification; tests green on the merge, clippy clean). The
 plugin driver ignores the new project outputs until P4 wires them. Gates on the merge result: fmt, clippy
 and tests for `manang-live`, `manang-live-plugin`, `manang-git`; `pnpm run check`,
 vitest (1051), eslint. Build note: worktrees with the same layout must not share
