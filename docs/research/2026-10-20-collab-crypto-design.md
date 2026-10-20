@@ -281,3 +281,98 @@ analysis of join and rekey events; the Loro metadata API for peer-id checks is u
 2. After C3 is code-complete and before any marketing of roles or removal: a full external
    review of C1-C3 and the relay token code.
 3. Until then "remove member" is not presented as secure and the moat sentence is not advertised.
+
+---
+
+# Revision 2 (after the hostile review, 2026-10-20)
+
+Status: this section SUPERSEDES the draft above wherever they differ. A fresh agent attacked the
+draft from the document and the code, and verified from source: Loro 1.16.2 exposes
+`LoroDoc::decode_import_blob_meta` (peer ids and counter ranges of a blob without a document,
+O(blob) cost, no authentication: peer ids are plaintext claims); postcard 1.1.3 accepts non-minimal
+varints and ignores trailing bytes (so `encode(decode(b)) == b` on the body slice is needed and
+sufficient); `ed25519-dalek` `verify_strict` is strict but `verify_batch` is NOT (drop batch
+verification: 10,000 entries at about 60 microseconds is 0.6 s); `hpke 0.14.1` aligns on paper.
+Not verified: hpke audit status, x25519-dalek's curve25519-dalek requirement, Loro behaviour on
+adversarial container ids, a full RustSec query (run `cargo audit`).
+
+## Breaks found (ranked) and what changes
+
+| # | Break | Severity | Revision |
+| :--- | :--- | :--- | :--- |
+| 1 | A snapshot carries every peer's ops with unauthenticated peer ids: an editor can seal ops under Bob's id at counters Bob has not used yet, so Bob's real later ops are ignored, and history is rewritable for new devices (affects sync replies, welcome, durable snapshots, `export_snapshot`/`export_trimmed`) | critical | **R2**: import only original `SignedUpdate`s, each verified; never trust a peer's snapshot; the signed-update store is mandatory; a snapshot is only a local cache of your own verified state |
+| 2 | Demotion and admin revocation have no cutoff: a demoted editor signs with a backdated `log_head` forever | high | **R2**: every authority-lowering entry carries a cutoff |
+| 3 | `cutoff_seq` does not pin content: a removed member signs an alternative chain below the cutoff | high | **R2**: cutoff is `(seq, update_hash)` per (author, doc); first update seen at (author, seq) wins; a second with another hash is a self-verifying equivocation proof that freezes the author locally |
+| 4 | Lowest-hash fork rule can be ground with the free nonce: a malicious admin beats the owner's Remove at every height; a late deep fork freezes the room | high | **R1**: owner-only linear log, no forks |
+| 5 | Log validity reads the local clock (invite expiry): a replay next month rejects what online peers accepted | high | **R2**: `apply()` never reads the clock; expiry is enforced at admin approval time; `ts` is display-only and non-decreasing |
+| 6 | Wraps and epoch key are not committed in the entry: a rekeyer can wrap different keys to different members; a welcome can carry an attacker-chosen key | high | **R3**: `key_commit` in Add, Rekey and Remove, verified after unwrap; welcomes must match the entry |
+| 7 | Joiner bootstrap is circular (no cap before admission) and the invite race is unspecified; auto-admit lets a leaked link win | high | **R3**: join-only cap in the invite; always ask in v1 |
+| 8 | Pending and quarantine buffers can be starved by anyone holding an epoch key | medium-high | **R11** |
+| 9 | Reorg versus an irreversible CRDT (accepted updates stay after a losing branch) | high with multi-admin | **R1** removes it |
+| 10 | Kind-3 epoch floor can be raised by a removed admin's cert, killing the room | medium-high | **R5**: drop kind 3 in v1 |
+| 11 | A crash before persisting reuses `author_seq` with different content | medium-high | **R9** |
+| 12 | Annotation elements inside a Loro container: a commenter's raw op can delete another's record; self-assigned lamport wins | high | **R8** |
+| 13 | A `w` token holder can fill the durable quota or evict good snapshots | high | **R7**: defer C4 |
+| 14-21 | kid and issuer visible to the relay; cap in the URL reaches edge logs; ambiguous signed bytes; per-device gapless chain vs lazy doc loading; downgrade by stripping `proto=3`; peer-id grinding; version skew on payload types; one key signing several contexts | medium to low | **R4**, **R9**, **R12** |
+
+The promises were also wrong as drafted: (1) authorship is not bound for snapshot-imported ops or the
+seeded doc (`SEED_PEER`); (2) "same decision for the same bytes" failed under buffer eviction, reorgs,
+clock expiry, version skew and missing epoch keys; (3) "removed cannot write" failed for demotion and
+below-cutoff chains. Invariants I1, I4, I5, I7 and I8 as stated were false or incomplete (I1 ill-defined
+across branches; I4 and I5 broken by reorgs; I7 false for the unsigned outer wrapper; I8 true for the log,
+not the document). Added: epoch monotonicity, key-commit match, nonce uniqueness, cutoff pinned to a hash,
+validity never reads the clock.
+
+## Revised design (binding for C1-C3)
+
+* **R1 Owner-only linear log (v1).** One writer, the owner. Admins submit requests; the owner signs.
+  No forks, no equivocation freeze for the log, no reorg window. Multi-admin is a later redesign: the
+  owner's entry must beat an admin's at the same height and the tie-break must not be grindable.
+* **R2 Acceptance semantics.** Only original `SignedUpdate`s are imported (replayed, each verified);
+  never a peer's snapshot or Loro blob. The seed document is an owner-signed log commitment (`seed_fp`)
+  with a defined seed rule instead of the unauthenticated `SEED_PEER`. Cutoffs are pinned to
+  `(seq, update_hash)` per (author, doc) and carried by Remove, SetRole-down and AdminRevoke; updates past
+  a cutoff are rejected and the user is told which offline edits were lost. No Ratify, no quarantine.
+  Validity never reads the local clock.
+* **R3 Join and bootstrap.** The invite carries an owner-signed join-only cap (mailbox kind only, short
+  expiry). Join is always approved by the owner in v1, and the approval screen shows the device
+  fingerprint to confirm out of band. `key_commit = SHA-256("manang-live/kc/v1\0" || room_id || epoch ||
+  key)` is part of Add, Rekey and Remove and is checked after unwrap. A `sign_pub` that is not torsion-free
+  is refused at Add.
+* **R4 Relay caps are an anti-abuse measure, not an integrity boundary** (peers re-check everything).
+  Owner-signed, lifetime days not minutes (the owner may be offline), a random per-session cap id with no
+  kid, carried in a header (`Authorization: Bearer`) for the native client, not in the URL query; a
+  browser client later uses a first-message form. Revocation is bounded by expiry plus log removal and is
+  documented as such. Delegation certs and in-band refresh are dropped.
+* **R5 Deferred:** kind 3 and the relay epoch floor, checkpoints, `UpdateKey`, `AdminGrant`, `history: all`,
+  signed presence (presence is cosmetic and spoofable by members; a stated residual), batch verification.
+* **R6 Removal in v1:** Remove carries the new epoch, `key_commit`, wraps and a pinned cutoff; clients drop
+  frames of retired epochs after a grace period; the relay does not enforce epochs.
+* **R7 C4 durable rooms:** deferred and to be redesigned to store signed updates only, a separate
+  snapshot-upload role, a per-member quota, and pinned oldest generation.
+* **R8 Annotations:** an append-only stream of signed records outside the Loro document, folded locally;
+  `ann_id = H(kid || author counter)`; hybrid lamport (max seen + 1, tie-break by hash); a delete that
+  arrives before its create waits until the owner is known; text is never touched.
+* **R9 Encoding and chains:** signed bytes are `domain || postcard(explicit struct)`; canonical-decode check
+  on the body slice only; no `HashMap`, floats or `untagged`; every `Vec` bounded; an unknown log payload type
+  halts the log with "update required" (never silently rejects); author chains are per (device, doc); persist
+  `author_seq` and the peer id before sending; a new `session_nonce` per restart; payloads are built with
+  `updates_in_range` over the author's own spans; re-derive when the derived peer id is `u64::MAX`; the envelope
+  epoch must equal the signed epoch; a test asserts every signing site has a distinct domain label.
+* **R11 Buffers:** per-member quotas; buffer only items whose kid is a known-ever member and whose signature
+  verifies; cap anything per removed member.
+* **R12 Downgrade:** a v3 client refuses a relay that does not answer `x-relay-caps: enforced` by default;
+  `strict_relay` travels in the invite fragment.
+
+Package verdicts after the review: C1 and C2 ready after R1-R4, R9, R11, R12; C3 simplified as R6; C4 deferred
+(R7); C5-C7 redesigned as R8. Additional tests required beyond the 32: demoted editor backdates `log_head`;
+removed member signs an alternative chain below the cutoff; replay of an Add a month later reaches the same
+state; a rekeyer wraps different keys to different members; a forged welcome; two join requests on one leaked
+link; a snapshot with forged ops at Bob's future counters is refused; a commenter raw-deletes another's
+annotation; junk `author_kid` floods and honest pending updates still land; a small-order or torsioned
+`sign_pub` at Add; a non-minimal varint inside a nested `Option<Vec<enum>>`; `author_seq` reuse after a crash;
+a derived peer id of `u64::MAX`; the seeded document; an unknown payload variant halts the log; an update signed
+in epoch e inside an epoch e+1 envelope; a signature from one domain label replayed under another.
+
+Still open for the owner: when the external cryptographer reviews this revision (before C1 code, as
+recommended), and whether v3 rooms coexist with v1/v2 rooms (recommended: coexist, v3 opt-in).
