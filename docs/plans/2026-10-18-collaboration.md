@@ -1,5 +1,7 @@
 # Collaboration: design and work packages
 
+> Note (2026-10-20): The relay server moved to a separate private repository on 2026-10-20 (`crates/manang-relay` and `relay/worker` no longer exist here; the app keeps `crates/manang-relay-client`). Paths below describe the state when this was written.
+
 Date: 2026-10-18. Refines "Collaboration: git-based first" in
 `2026-10-18-roadmap.md`. Facts verified on 2026-10-18 on crates.io and primary
 docs; unverified items are marked.

@@ -40,7 +40,7 @@ use manang_live::envelope::{OsEntropy, RoomKeys};
 use manang_live::session::{Input, Output, Session, SessionConfig, SessionState, pump};
 use manang_live::transport::SyncTransport;
 use manang_live::vcs::Contributor;
-use manang_relay::RelayClient;
+use manang_relay_client::RelayClient;
 use parking_lot::Mutex;
 use ropey::Rope;
 use serde_json::{Value, json};

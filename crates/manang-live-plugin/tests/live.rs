@@ -1,4 +1,4 @@
-//! Two kernel clients through a real relay, no UI.
+//! Two kernel clients through the in-process fan-out fixture, no UI.
 //!
 //! Each `Client` is a whole kernel (editor plugin + live plugin) and plays the
 //! web view's part of the edit protocol (see `driver.rs`): it keeps a model of
@@ -19,7 +19,8 @@ use manang_live::session::{Input, Output, Session, SessionConfig};
 use manang_live::transport::{SyncTransport, TransportEvent};
 use manang_live::{LoroEngine, TextCrdt};
 use manang_live_plugin::LivePlugin;
-use manang_relay::{RelayClient, RelayConfig, RunningRelay};
+use manang_live_testkit::Handle;
+use manang_relay_client::RelayClient;
 use parking_lot::Mutex;
 use ropey::Rope;
 use serde_json::{Value, json};
@@ -29,7 +30,7 @@ const SEED: &str = "Abstract. We study the mÃ©thode of confidential reviewers ðŸ
 
 struct Relay {
     rt: Runtime,
-    running: Option<RunningRelay>,
+    running: Option<Handle>,
     addr: SocketAddr,
     frames: Arc<Mutex<Vec<Vec<u8>>>>,
 }
@@ -51,18 +52,14 @@ impl Relay {
         rt: &Runtime,
         addr: SocketAddr,
         frames: &Arc<Mutex<Vec<Vec<u8>>>>,
-    ) -> (RunningRelay, SocketAddr) {
+    ) -> (Handle, SocketAddr) {
         let store = Arc::clone(frames);
-        let config = RelayConfig {
-            tap: Some(Arc::new(move |frame: &[u8]| {
-                store.lock().push(frame.to_vec())
-            })),
-            ..RelayConfig::default()
-        };
+        let tap: manang_live_testkit::Tap =
+            Arc::new(move |frame: &[u8]| store.lock().push(frame.to_vec()));
         let running = rt
-            .block_on(manang_relay::spawn(addr, config))
-            .expect("relay binds");
-        let bound = running.addr;
+            .block_on(manang_live_testkit::spawn_with_tap(addr, tap))
+            .expect("fixture binds");
+        let bound = running.local_addr();
         (running, bound)
     }
 

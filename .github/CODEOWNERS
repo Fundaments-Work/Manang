@@ -4,7 +4,7 @@
 /crates/manang-plugins/            @sapienskid
 /crates/manang-keystore/           @sapienskid
 /crates/manang-live/               @sapienskid
-/crates/manang-relay/              @sapienskid
+/crates/manang-relay-client/             @sapienskid
 /crates/manang-agent*/             @sapienskid
 /.github/                          @sapienskid
 /SECURITY.md                       @sapienskid

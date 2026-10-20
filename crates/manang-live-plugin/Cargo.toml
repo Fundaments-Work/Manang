@@ -13,7 +13,7 @@ manang-kernel = { path = "../manang-kernel" }
 manang-editor = { path = "../manang-editor" }
 manang-live = { path = "../manang-live" }
 manang-project = { path = "../manang-project" }
-manang-relay = { path = "../manang-relay", features = ["tls"] }
+manang-relay-client = { path = "../manang-relay-client", features = ["tls"] }
 parking_lot = "0.12"
 ropey = "1.6"
 similar = "3"
@@ -26,6 +26,7 @@ tokio = { version = "1", default-features = false, features = ["rt-multi-thread"
 url = "2"
 
 [dev-dependencies]
+manang-live-testkit = { path = "../manang-live-testkit" }
 proptest = "1"
 tempfile = "3"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "time", "sync", "macros"] }

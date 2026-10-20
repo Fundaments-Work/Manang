@@ -1,5 +1,7 @@
 # Release day: core things for Beta 1
 
+> Note (2026-10-20): The relay server moved to a separate private repository on 2026-10-20 (`crates/manang-relay` and `relay/worker` no longer exist here; the app keeps `crates/manang-relay-client`). Paths below describe the state when this was written.
+
 Goal for today: a build the owner can install and hand to the first invited testers, with everything a tester touches on day one working. Scope is what `phase-2.md` calls Beta 1 minus what needs accounts we do not have yet.
 
 ## Where we are (main)

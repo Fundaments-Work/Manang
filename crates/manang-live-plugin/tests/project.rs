@@ -27,9 +27,9 @@ use manang_live::project::{FileId, LoroTreeEngine, NodeKind, NodeMeta, ProjectDo
 use manang_live::session::{Input, Output, Session, SessionConfig};
 use manang_live::transport::{SyncTransport, TransportEvent};
 use manang_live_plugin::{InviteLink, InviteScope, LivePlugin};
+use manang_live_testkit::Handle;
 use manang_project::watch::ProjectWatcher;
-use manang_relay::RelayClient;
-use manang_relay::{RelayConfig, RunningRelay};
+use manang_relay_client::RelayClient;
 use parking_lot::Mutex;
 use ropey::Rope;
 use serde_json::{Value, json};
@@ -37,7 +37,7 @@ use tokio::runtime::Runtime;
 
 struct Relay {
     rt: Runtime,
-    running: Option<RunningRelay>,
+    running: Option<Handle>,
     addr: SocketAddr,
 }
 
@@ -45,12 +45,11 @@ impl Relay {
     fn start() -> Self {
         let rt = Runtime::new().expect("runtime");
         let running = rt
-            .block_on(manang_relay::spawn(
+            .block_on(manang_live_testkit::spawn(
                 "127.0.0.1:0".parse().expect("addr"),
-                RelayConfig::default(),
             ))
-            .expect("relay binds");
-        let addr = running.addr;
+            .expect("fixture binds");
+        let addr = running.local_addr();
         Self {
             rt,
             running: Some(running),
@@ -73,7 +72,7 @@ impl Relay {
     fn restart(&mut self) {
         let running = self
             .rt
-            .block_on(manang_relay::spawn(self.addr, RelayConfig::default()))
+            .block_on(manang_live_testkit::spawn(self.addr))
             .expect("relay binds again");
         self.running = Some(running);
     }

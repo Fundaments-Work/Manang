@@ -1,5 +1,7 @@
 # How Cloudflare optimises Rust for memory and speed, and what Manang can take from it
 
+> Note (2026-10-20): The relay server moved to a separate private repository on 2026-10-20 (`crates/manang-relay` and `relay/worker` no longer exist here; the app keeps `crates/manang-relay-client`). Paths below describe the state when this was written.
+
 Date: 2026-10-18. Status: research, no code changed. Method: primary sources only (Cloudflare blog posts and docs, the `cloudflare/pingora` repository), read on 2026-10-18. Where only a secondary source or nothing exists, the text says so. Figures are quoted as published; none are invented or extrapolated.
 
 ## Summary

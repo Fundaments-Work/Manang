@@ -1,5 +1,7 @@
 # Live co-editing spike (collaboration WP5)
 
+> Note (2026-10-20): The relay server moved to a separate private repository on 2026-10-20 (`crates/manang-relay` and `relay/worker` no longer exist here; the app keeps `crates/manang-relay-client`). Paths below describe the state when this was written.
+
 Date: 2026-10-18. Branch `agent/live-spike`. Code: `crates/manang-live`,
 `crates/manang-relay`, `src/lib/editor/live/`. Decision record:
 `docs/adr/0013-live-editing.md`.
