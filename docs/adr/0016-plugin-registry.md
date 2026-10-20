@@ -5,6 +5,8 @@ Status: **accepted for the first version**, 2026-10-19. Plan:
 runtime and capabilities), ADR 0007 (plugin settings), ADR 0014 (web version),
 AGENTS.md invariants 4 and 5.
 
+Note (2026-10-20): moving the registry's entries, schemas, validator and review tooling into a separate public repository, together with the plugin SDK, is proposed in ADR 0017 and not built. The in-tree `registry/` directory described here remains the current state.
+
 ## Context
 
 Plugins are sandboxed WebAssembly components with declared capabilities

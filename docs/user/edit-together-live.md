@@ -8,7 +8,7 @@ Your files on disk stay ordinary files. The shared state lives in memory while t
 
 ## What you need
 
-- **A relay**, to start a session. Manang uses the relay run by Fundaments (`wss://relay.fundaments.work`) unless you change it. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). If your organisation provides a compatible relay, paste its address into Settings, Collaboration, Relay address.
+- **A relay**, to start a session. Manang uses the relay run by Fundaments (`wss://relay.fundaments.work`) unless you change it. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). If you were given a different relay address, paste it into Settings > Collaboration > Relay address.
 - **An invite**, to join a session. The person who shares the file sends it to you. It already contains the relay address, so you do not need to set one to join.
 
 ## The Share button
@@ -17,6 +17,7 @@ Everything about working with other people is behind one button: **Share**, at t
 
 - **Edit together live**: share the open file, or join with an invite.
 - **Invite link** and **Leave live session**, while a session is running.
+- **Participants and Follow**, while a session runs: pick **Follow** next to a person to follow where they work (it only moves your view; **Stop following** ends it).
 - **Share versions**: send your saved versions to co-authors and get theirs (see [Share and get updates](share-and-get-updates.md)).
 
 ![The Share panel during a live session](../screenshots/share-popover.png)
@@ -35,7 +36,7 @@ When you are not in a session, none of these is shown.
 
 Sharing works out of the box: **Relay address** in Settings > Collaboration starts as `wss://relay.fundaments.work`, the relay Fundaments runs. It only passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)).
 
-If your organisation provides a compatible relay, enter its address under **Relay address**. To turn sharing off, empty the field; the Share panel then says *Set a relay in Settings* and has an **Open Settings** button. Joining never needs the setting, because the invite carries the address.
+If you were given a different relay address, enter it under **Relay address**. To turn sharing off, empty the field; the Share panel then says *Set a relay in Settings* and has an **Open Settings** button. Joining never needs the setting, because the invite carries the address.
 
 ## Share a file
 
@@ -48,7 +49,7 @@ An invite is a long link that starts with `manang-live://`. **Anyone who has it 
 
 ## Whole-project sessions
 
-To work on a whole thesis or paper, press **Share**, choose **Whole project**, and share. Everyone who joins gets the host's files and sees every file that is created, renamed, moved or deleted in the session. Open files show who else is in them.
+To work on a whole thesis or paper, press **Share**, choose **Whole project**, and share. Everyone who joins gets the host's files and sees every file that is created, renamed, moved or deleted in the session. Open files show who else is in them, with a small coloured mark on the tab and in the file list.
 
 **What is shared.** Every file in the project folder, except:
 
@@ -68,7 +69,7 @@ These rules apply on both sides. The same rules keep other people from creating 
 1. Press **Share** and choose **Join with an invite**, then paste the invite. Joining needs an open project folder, because the files are written into it (create an empty folder and open it if you want a clean copy).
 2. Manang connects and fetches the list of the host's files. Nothing on your disk changes yet.
 3. The **Join the shared project** dialog shows how your files compare with the host's:
-   - **Different on your disk**: files that exist on both sides with different content. For each, choose **Use the host's** (your copy goes to the trash and is replaced) or **Keep mine** (the file stays out of the session on your side: it is never sent, never overwritten and not listed). If more than one file would be replaced, tick the single confirmation that replaces all of them. Without it, the **Join** button stays off.
+   - **Different on your disk**: files that exist on both sides with different content. For each, choose **Use the host's** (your copy goes to the trash and is replaced) or **Keep mine** (the file stays out of the session on your side: it is never sent, never overwritten and not listed). If more than one file would be replaced, tick the single confirmation (**Replace N of my files with the host's versions**). Without it, the **Join** button stays off.
    - **Only on your disk**: files the host does not have. They stay private unless you choose **Share it**.
    - **New for you** and **The same on both sides**: nothing to decide. New files are added to your project; identical files are left alone.
 4. Press **Join**. Files arrive in the background, the status bar shows progress, and the files you have open are fetched first.
@@ -77,17 +78,17 @@ If the host is not there, the bar says **Waiting for host**, and nothing changes
 
 ### A large rewrite on your disk
 
-If many files change at once on your disk while you are in the session, for example after a Git checkout (more than 25 files at once, or more than half the lines of the changed text files), Manang does not send them. It asks, in **Many files changed at once**:
+If many files change at once on your disk while you are in the session, for example after a Git checkout (more than 25 files at once, or more than half the lines of the changed text files), Manang does not send them. A **Changes on hold** button appears in the status bar and a window called **Many files changed at once** asks:
 
 - **Share these changes** sends them to everyone.
 - **Put my folder back** restores your folder to what the session has. The copies you have now go to the trash.
-- **Decide later** keeps the changes held; the status bar offers the question again.
+- **Decide later** keeps the changes held; the **Changes on hold** button in the status bar opens the question again.
 
 Smaller edits made with other programs, such as saving a file in another editor, are shared as ordinary edits.
 
 ### Leaving as the host
 
-If you started the session and press **Leave** while some files have not reached anyone else, Manang warns you: *N files have not reached anyone else yet. If you leave now, the others will not have them. Nothing on your disk is deleted.* **Stay** keeps the session; **Leave anyway** ends it. The warning never blocks you.
+If you started the session and press **Leave** while some files have not reached anyone else, Manang warns you: *N files have not reached anyone else yet. If you leave now, the others will not have them. Nothing on your disk is deleted.* The window is called **Leave the session?**. **Stay** keeps the session; **Leave anyway** ends it. The warning never blocks you.
 
 ### Limits of whole-project sessions
 
@@ -174,4 +175,4 @@ What this does not give you:
 - **"This invite is not valid."** The link was cut or changed. Ask for it again and paste it whole, including everything after the `#`.
 - **Stuck on Connecting or Reconnecting.** The relay is not reachable from your network (firewall, wrong address, relay down). Check the address in Settings; the person who shared can see the same state in their bar. Your edits are kept in the meantime.
 - **"The live document was re-read from the session."** A step could not be applied, so Manang replaced your view with the session's text to stay consistent. Edits you had typed in the last moments before may need to be typed again. This is rare; please report it.
-- **Both people see different text after reconnecting.** Press **Re-sync** in the bar. If it keeps happening, please report it with the relay address kind (`ws://` or `wss://`) and what you were doing.
+- **Both people see different text after reconnecting.** Manang normally notices and re-syncs by itself. If the bar says **Session stopped** or **Waiting for host**, press **Re-sync**. If it keeps happening, please report it with the relay address kind (`ws://` or `wss://`) and what you were doing.

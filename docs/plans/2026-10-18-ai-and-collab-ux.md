@@ -1,5 +1,7 @@
 # Making the AI agent and live editing discoverable and professional
 
+> Status (2026-10-20): built (Agent view, Share button and popover, presence, status chips). The live-editing parts are extended by `2026-10-20-live-collab-v2.md`.
+
 ## Problem
 
 Both features work but are hidden. The agent is a tab in the bottom panel (closed by default); live editing exists only in File > Share this file live and the palette. There is no activity-bar entry, no status indicator, no Share button, and Git sharing (Versions view) and live sessions are two unrelated places. A new tester cannot find either.

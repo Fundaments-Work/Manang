@@ -2,6 +2,8 @@
 
 Status: accepted, 2026-10-17
 
+Note (2026-10-20): extraction of the plugin interface (the WIT package, the componentize tool and the author CLI) into a separate SDK is proposed in ADR 0017 and not built. Paths such as `sdk/` and `scripts/build-plugin.sh` below describe how things work today.
+
 ## Context
 
 Every Manang feature is a plugin, in two tiers behind one `Plugin` trait

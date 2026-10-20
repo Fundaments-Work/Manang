@@ -1,6 +1,6 @@
 # ADR 0014: Project-wide live sessions
 
-Status: accepted and implemented on `feat/live-collab-v2`, 2026-10-20. Extends
+Status: accepted, implemented and merged to `main` (merge of `feat/live-collab-v2`), 2026-10-20. Extends
 ADR 0013 (one text file per session), which stays valid for single-file
 invites. Plan and work packages: `docs/plans/2026-10-20-live-collab-v2.md`.
 Fuzzing and relay conformance (work package P7) are described under
@@ -242,13 +242,13 @@ Findings, all fixed or recorded (seeds in `fuzz/regressions/live_text_apply/`):
 * The fuzz invariant for the project tree is that same-named directories may
   share a path (they merge) and every other node has its own.
 
-The relay test `crates/manang-relay/tests/bulk_sync.rs` replays the pacer's output
+Historical: the relay test `crates/manang-relay/tests/bulk_sync.rs` (it moved to the private relay repository with the relay server; this repository keeps `manang-live-testkit`, a fixture without limits, and the plugin's own project tests) replayed the pacer's output
 for a 100-file join (170 messages, 4.9 MiB) through the Rust relay with its default
-limits and asserts that no peer is dropped, order is kept, and no second of the
+limits and asserted that no peer is dropped, order is kept, and no second of the
 traffic exceeds 200 messages or 4 MiB (measured on the run of 2026-10-20: 170
-frames, 4.89 MiB in 3.3 s, at most 118 messages and 2.97 MiB in any one second). The same test runs against the Cloudflare
+frames, 4.89 MiB in 3.3 s, at most 118 messages and 2.97 MiB in any one second). The same test ran against the Cloudflare
 Worker under `wrangler dev` when `MANANG_RELAY_URL` names its `ws://` address
-(see `relay/worker/README.md`; `pnpm conformance` runs it). Not run against the
+(`relay/worker/README.md`, now in the private relay repository). It was not run against the
 Worker as part of P7.
 
 ## Consequences

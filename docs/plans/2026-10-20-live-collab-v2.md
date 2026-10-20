@@ -1,5 +1,7 @@
 # Live collaboration v2: from one file to a project
 
+> Status (2026-10-20): waves 0-4 and every work package (P1-P8) are built and merged to `main`; the relay server has since moved to a private repository. See the Status section. The "Beyond project sessions" list is still only planned.
+
 Date: 2026-10-20. Builds on ADR 0013 and `2026-10-18-collaboration.md`. Inputs:
 a read-only code audit, a state-of-the-art survey and a project-session design,
 all done on 2026-10-20 by agents. The audit's claims were spot-checked
@@ -33,7 +35,7 @@ Design summary (full reasoning in the agent report, reproduced as work packages)
 * **Model.** One project doc (Loro movable tree keyed by stable file id) plus one
   Loro doc per text file, loaded lazily and evicted to a disposable sidecar.
   Binary and figure files are tree nodes plus content-addressed, chunked blobs.
-* **Wire.** Envelope version and kinds unchanged (both relays untouched). New
+* **Wire.** Envelope version and kinds unchanged (both relays untouched at the time; the relay server has since moved out of this repository). New
   postcard `Message` variants appended (`DocSync`, `DocUpdate`, `Manifest`,
   `BlobGet`, `BlobChunk`), a separate room id for project rooms, invite v2;
   old single-file invites keep working.
@@ -103,16 +105,25 @@ WebSocket billing under bulk sync (pace the sender); case-insensitive file
 systems and Windows names; git checkouts that rewrite hundreds of files during a
 session.
 
-## Status (2026-10-20)
+## Status (2026-10-20, after the merge to `main`)
 
-Merged on `feat/live-collab-v2` (not yet on `main`): wave 0 (S1-S6), P1
-(project tree, blobs, manifest, wire v2), P5 (frontend state), P6 (UI; verify-ui
-live section 96/96 re-run on the merge) P2 (multi-doc session router) and P8 (frontend speaks the real plugin contract, leave warning, held-change dialog, plain errors; verify-ui live 106/106 run by the agent, frontend gates re-run on the merge), P4 (plugin and project driver; 70 + 18 + 12 plugin tests, tauri crate compiles) and P3 (path policy, disk and tree bridge, sidecar,
-join classification; tests green on the merge, clippy clean). The
-single-file driver is untouched; P4 (below) adds a separate project driver. Gates on the merge result: fmt, clippy
-and tests for `manang-live`, `manang-live-plugin`, `manang-git`; `pnpm run check`,
-vitest (1051), eslint. Build note: worktrees with the same layout must not share
-one `CARGO_TARGET_DIR` at the same time (artifact names collide).
+**Done and merged to `main`** (merge `e73a923` of `feat/live-collab-v2`):
+
+| Package | State |
+| :--- | :--- |
+| Wave 0, S1-S6 (stabilise) | Done: guards on Get updates, restore and external reload; Waiting for host; disposable snapshot; `Co-authored-by` trailers and `live.email`; Re-sync and automatic resync on divergence; docs aligned |
+| P1 data model, wire v2 | Done |
+| P2 multi-document router, paced sync | Done |
+| P3 path policy, disk and tree bridge, sidecar, join classification | Done |
+| P4 plugin and project driver | Done |
+| P5 frontend state, P6 UI, P8 real plugin contract (leave warning, held-change dialog, plain errors) | Done |
+| P7 fuzzing, ADR 0014 | Done: seven targets clean, two findings (see Gate result). The relay conformance part moved with the relay |
+
+**Relay removal (2026-10-20).** The relay server (the Rust `manang-relay` crate and the Cloudflare Worker in `relay/worker`) now lives in a separate private repository. This repository keeps `manang-relay-client` and `manang-live-testkit` (a fixture, not a relay). Organisations can no longer self-host the relay from here; the wire contract (ADR 0013) is the public contract.
+
+**Follow-ups, not built** (see `2026-10-20-collab-program.md` and `2026-10-20-moat-collab-v3-visual-v2.md`): member identity and roles, epoch-key revocation and expiring links, anchored comments, an optional durable room, version history inside a session, figures as a CRDT, peer-to-peer transport, policy keys `collab.live` and `collab.relays`, a second fuzz round kept in CI, a check of case-folding on Windows and macOS. The draft cryptographic design (`docs/research/2026-10-20-collab-crypto-design.md`) is research only.
+
+Gates on the merge result: fmt, clippy and tests for `manang-live`, `manang-live-plugin`, `manang-git`; `pnpm run check`, vitest (1051), eslint; then the whole-workspace gate below. Build note: worktrees with the same layout must not share one `CARGO_TARGET_DIR` at the same time (artifact names collide).
 
 ## Contract for P2-P6 (commands and events)
 

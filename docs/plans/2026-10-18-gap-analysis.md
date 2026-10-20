@@ -1,5 +1,7 @@
 # Manang: Feature Gap Analysis
 
+> Status (2026-10-20): a snapshot of 2026-10-18. Many gaps listed here have since been closed; see `2026-10-18-roadmap.md` and the CHANGELOG.
+
 Date: 2026-10-18. Sources: a read-only audit of the code at `main` (cde7b2d)
 and research on comparable tools (Overleaf, the Typst web app, VS Code, common
 whiteboard tools). Companion to `2026-10-18-platform-v2.md`.

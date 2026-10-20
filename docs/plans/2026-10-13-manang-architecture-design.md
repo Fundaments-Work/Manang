@@ -1,5 +1,7 @@
 # Manang: Architecture & System Design Specification
 
+> Status (2026-10-20): historical. The shell and plugin sections are superseded by `2026-10-18-platform-v2.md` and ADR 0003; read the ADRs for current decisions.
+
 **Document Version:** 1.1.0  
 **Date:** 2026-10-17  
 **Status:** Validated  
