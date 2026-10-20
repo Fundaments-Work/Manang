@@ -150,7 +150,7 @@
       {/if}
       <div class="flex flex-wrap justify-end gap-2">
         <button type="button" class="mng-btn" onclick={() => dialog.answer("cancel")}
-          >Cancel</button
+          >{request.cancelLabel ?? "Cancel"}</button
         >
         {#each request.actions as action (action.id)}
           <button

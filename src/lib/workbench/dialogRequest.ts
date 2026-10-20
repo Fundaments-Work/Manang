@@ -28,6 +28,8 @@ export interface DialogRequest {
   readonly message: string;
   /** The buttons after Cancel; the first is also what Enter in the field picks. */
   readonly actions: readonly DialogAction[];
+  /** What the cancelling button says (default "Cancel"); it still answers "cancel". */
+  readonly cancelLabel?: string;
   /** A one-line text field shown above the actions. */
   readonly input?: DialogInput;
   /** A second one-line field under the first (an email beside a name). */

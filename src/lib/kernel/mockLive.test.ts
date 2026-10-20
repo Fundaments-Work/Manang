@@ -263,7 +263,7 @@ describe("the mock live plugin, project sessions", () => {
 
   it("starts a project: the invite says so and the tree is listed", async () => {
     const { live, kernel } = await host();
-    const started = await live.start({ scope: "project" });
+    const started = await live.start({ scope: "project", root: "/p" });
     expect(started).toMatchObject({ scope: "project", role: "host" });
     expect(started.invite).toContain("scope=project");
     expect(await live.inspect(started.invite ?? "")).toMatchObject({
@@ -285,7 +285,7 @@ describe("the mock live plugin, project sessions", () => {
 
   it("keeps a document per file, each with its own version and path on its events", async () => {
     const { live, kernel, tick, topics } = await host();
-    const { session } = await live.start({ scope: "project" });
+    const { session } = await live.start({ scope: "project", root: "/p" });
     const a = await live.attach("main.typ");
     const b = await live.attach("chapters/one.typ");
     expect([a, b]).toEqual([
@@ -321,7 +321,7 @@ describe("the mock live plugin, project sessions", () => {
 
   it("detaches and re-attaches", async () => {
     const { live } = await host();
-    await live.start({ scope: "project" });
+    await live.start({ scope: "project", root: "/p" });
     await live.attach("main.typ");
     expect(await live.detach("main.typ")).toEqual({ detached: true });
     expect(await live.detach("main.typ")).toEqual({ detached: false });
@@ -343,7 +343,7 @@ describe("the mock live plugin, project sessions", () => {
         "notes.txt": "mine\n",
       },
     });
-    const joined = await live.join({ invite: made.invite });
+    const joined = await live.join({ invite: made.invite, root: "/p" });
     expect(joined).toMatchObject({ scope: "project", role: "guest" });
     await new Promise((r) => setTimeout(r, 60));
     const plan = topics("live.plan").at(-1)?.payload as {
@@ -356,7 +356,9 @@ describe("the mock live plugin, project sessions", () => {
       "notes.txt": "guest-only",
     });
     // Nothing is in the session until the guest decides.
-    expect((await live.files()).files).toEqual([]);
+    expect(await live.files().catch((e: unknown) => liveError(e))).toMatchObject({
+      code: "invalid",
+    });
     // A differing file with no answer is refused: never silent.
     const refused = await live.resolve([]).catch((e: unknown) => liveError(e));
     expect(refused).toMatchObject({ code: "unresolved" });
@@ -387,7 +389,7 @@ describe("the mock live plugin, project sessions", () => {
       files: { "a.typ": "host\n" },
     });
     await kernel.run("dev.live-local", { files: { "a.typ": "mine\n" } });
-    await live.join({ invite: made.invite });
+    await live.join({ invite: made.invite, root: "/p" });
     await new Promise((r) => setTimeout(r, 60));
     const out = await live.resolve([{ path: "a.typ", action: "keep-mine" }]);
     expect(out).toEqual({ applied: 0, trashed: [] });
@@ -398,7 +400,7 @@ describe("the mock live plugin, project sessions", () => {
 
   it("shows two scripted peers, where they are, and what they do to the tree", async () => {
     const { live, kernel, tick, topics } = await host();
-    await live.start({ scope: "project" });
+    await live.start({ scope: "project", root: "/p" });
     const ada = (
       await kernel.run<{ peer: string }>("dev.live-peer-join", { name: "Ada", slot: 1 })
     ).peer;
@@ -480,7 +482,7 @@ describe("the mock live plugin, project sessions", () => {
 
   it("accepts follow and file exclusion as session commands", async () => {
     const { live } = await host();
-    await live.start({ scope: "project" });
+    await live.start({ scope: "project", root: "/p" });
     expect(await live.follow("7001")).toEqual({ following: "7001" });
     expect(await live.follow(null)).toEqual({ following: null });
     await live.exclude("refs.bib");
@@ -488,6 +490,122 @@ describe("the mock live plugin, project sessions", () => {
     expect(await live.include("refs.bib")).toEqual({ included: true });
     const err = await live.restore("main.typ").catch((e: unknown) => liveError(e));
     expect(err).toMatchObject({ code: "not-deleted" });
+  });
+
+  it("needs the open folder to start or join a project", async () => {
+    const { live, kernel } = await host();
+    const none = await live
+      .start({ scope: "project" })
+      .catch((e: unknown) => liveError(e));
+    expect(none).toMatchObject({ code: "no-project" });
+    const made = await kernel.run<{ invite: string }>("dev.live-make-invite", {
+      files,
+    });
+    const noJoin = await live
+      .join({ invite: made.invite })
+      .catch((e: unknown) => liveError(e));
+    expect(noJoin).toMatchObject({ code: "no-project" });
+    expect((await live.status()).active).toBe(false);
+  });
+
+  it("reports phase, unsynced files and no doc in project status", async () => {
+    const { live, kernel, tick, topics } = await host();
+    await live.start({ scope: "project", root: "/p" });
+    const alone = await live.status();
+    expect(alone).toMatchObject({
+      scope: "project",
+      phase: "live",
+      unsynced_files: 3,
+      paused: null,
+      skipped: [],
+      following: null,
+    });
+    expect(alone).not.toHaveProperty("doc");
+    await kernel.run("dev.live-peer-join", { name: "Ada", slot: 1 });
+    expect((await live.status()).unsynced_files).toBe(0);
+    await kernel.run("dev.live-unsynced", { files: 2 });
+    await tick();
+    expect((await live.status()).unsynced_files).toBe(2);
+    expect(topics("live.peers").at(-1)?.payload).toMatchObject({ unsynced_files: 2 });
+  });
+
+  it("walks a guest through the phases and refuses commands out of turn", async () => {
+    const { kernel, live } = await rig("");
+    const made = await kernel.run<{ invite: string }>("dev.live-make-invite", {
+      files,
+    });
+    await live.join({ invite: made.invite, root: "/p" });
+    expect((await live.status()).phase).toBe("manifest");
+    expect(await live.files().catch((e: unknown) => liveError(e))).toMatchObject({
+      code: "waiting",
+    });
+    await new Promise((r) => setTimeout(r, 60));
+    expect((await live.status()).phase).toBe("plan");
+    expect(
+      await live.attach("main.typ").catch((e: unknown) => liveError(e)),
+    ).toMatchObject({
+      code: "invalid",
+    });
+    await live.resolve([]);
+    expect((await live.status()).phase).toBe("live");
+  });
+
+  it("refuses replacing several files without the all-files confirmation", async () => {
+    const { kernel, live } = await rig("");
+    const made = await kernel.run<{ invite: string }>("dev.live-make-invite", {
+      files: { "a.typ": "h1", "b.typ": "h2" },
+    });
+    await kernel.run("dev.live-local", { files: { "a.typ": "m1", "b.typ": "m2" } });
+    await live.join({ invite: made.invite, root: "/p" });
+    await new Promise((r) => setTimeout(r, 60));
+    const explicit = [
+      { path: "a.typ", action: "take-host" as const },
+      { path: "b.typ", action: "take-host" as const },
+    ];
+    expect(
+      await live.resolve(explicit).catch((e: unknown) => liveError(e)),
+    ).toMatchObject({
+      code: "needs-confirmation",
+    });
+    const out = await live.resolve([...explicit, { path: "*", action: "take-host" }]);
+    expect(out.trashed).toEqual(["a.typ", "b.typ"]);
+  });
+
+  it("holds a large change until it is shared or discarded", async () => {
+    const { live, kernel, tick, topics } = await host();
+    await live.start({ scope: "project", root: "/p" });
+    await kernel.run("dev.live-paused", {
+      files: 12,
+      changed_lines: 300,
+      total_lines: 800,
+    });
+    await tick();
+    expect(topics("live.paused").at(-1)?.payload).toMatchObject({
+      files: 12,
+      changed_lines: 300,
+      total_lines: 800,
+    });
+    expect((await live.status()).paused).toMatchObject({ files: 12 });
+    expect(await live.resync().catch((e: unknown) => liveError(e))).toMatchObject({
+      code: "paused",
+    });
+    expect(await live.resync({ paused: "discard" })).toEqual({ resyncing: true });
+    expect((await live.status()).paused).toBeNull();
+  });
+
+  it("can delete a file without saying who did it", async () => {
+    const { live, kernel, tick, topics } = await host();
+    await live.start({ scope: "project", root: "/p" });
+    const ada = (await kernel.run<{ peer: string }>("dev.live-peer-join", {})).peer;
+    await kernel.run("dev.live-peer-delete", {
+      peer: ada,
+      path: "refs.bib",
+      anonymous: true,
+    });
+    await tick();
+    expect(topics("live.tree").at(-1)?.payload).toMatchObject({
+      ops: [{ op: "delete", path: "refs.bib", by: "" }],
+    });
   });
 
   it("refuses project commands in a single-file session", async () => {

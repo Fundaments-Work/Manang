@@ -79,7 +79,7 @@ async function projectRig(files: Record<string, string>) {
   });
   await kernel.run("dev.live-seed", { files });
   await api.configure({ "live.relay-url": "wss://relay.example.org" });
-  const started = await api.start({ scope: "project" });
+  const started = await api.start({ scope: "project", root: "/p" });
   bindings.begin(started.session);
   const peer = (
     await kernel.run<{ peer: string }>("dev.live-peer-join", { name: "Ada" })

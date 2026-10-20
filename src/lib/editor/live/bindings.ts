@@ -34,6 +34,8 @@ export interface BindingsOptions {
   readonly api: Pick<LiveApi, "push" | "selection" | "snapshot" | "attach" | "detach">;
   readonly onResync?: (path: string, reason: string) => void;
   readonly onLocalEdit?: (path: string) => void;
+  /** `live.attach` was refused or timed out: the file stays a plain document. */
+  readonly onAttachFailed?: (path: string, error: unknown) => void;
   /** Events kept per file while it has no binding. */
   readonly cap?: number;
   readonly watchdogMs?: number;
@@ -192,7 +194,8 @@ export class LiveBindings {
           });
         }
         return this.#make(doc, session, answer.version);
-      } catch {
+      } catch (error) {
+        if (this.#session === session) this.#opts.onAttachFailed?.(doc.path, error);
         return null;
       } finally {
         this.#attaching.delete(doc.path);

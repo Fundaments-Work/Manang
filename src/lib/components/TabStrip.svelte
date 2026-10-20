@@ -11,7 +11,7 @@
   import { share } from "$lib/state/share.svelte";
   import { sharePopover } from "$lib/state/sharePopover.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
-  import { initials } from "$lib/workbench/live";
+  import { deletedTag, initials } from "$lib/workbench/live";
   import { detectPlatform } from "$lib/util/keyboard";
   import Icon from "$lib/components/ui/Icon.svelte";
   import {
@@ -273,7 +273,7 @@
           aria-controls="editor-area"
           aria-label="{label?.name ?? tab.path}{dirty
             ? ', unsaved changes'
-            : ''}{gone !== null ? `, deleted by ${gone}` : ''}{here.length > 0
+            : ''}{gone !== null ? `, ${deletedTag(gone)}` : ''}{here.length > 0
             ? `, here now: ${here.map((p) => p.name).join(', ')}`
             : ''}"
           tabindex={active ? 0 : -1}
@@ -317,7 +317,7 @@
           {/if}
           {#if gone !== null}
             <span class="truncate text-text-60" data-testid="tab-deleted"
-              >deleted by {gone}</span
+              >{deletedTag(gone)}</span
             >
           {/if}
           <PresenceSwatches peers={here} where="tab" />
