@@ -6483,6 +6483,7 @@ dependencies = [
  "criterion",
  "getrandom 0.4.3",
  "hkdf",
+ "insta",
  "loro",
  "manang-buffer",
  "parking_lot",

@@ -7,7 +7,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::blob::{BlobHash, CHUNK_SIZE, MAX_CHUNKS};
 use crate::error::LiveError;
+use crate::manifest::{DocId, MAX_MANIFEST_PAGES, MAX_PAGE_ENTRIES, ManifestEntry};
 
 /// Position in the three-step state exchange.
 ///
@@ -54,7 +56,86 @@ pub enum Message {
         /// CRDT update bytes.
         update: Vec<u8>,
     },
+    // Wire v2 (project sessions). Appended: the variant indices above must
+    // never change.
+    /// The three-step state exchange for one document of a project session.
+    DocSync {
+        /// Which document.
+        doc: DocId,
+        /// Sender's peer id.
+        from: u64,
+        /// Intended recipient; `None` broadcasts.
+        to: Option<u64>,
+        /// Step of the exchange.
+        stage: SyncStage,
+        /// Sender's encoded version of that document.
+        version: Vec<u8>,
+        /// Divergence digest ([`text_digest`] for text, 0 for the tree).
+        digest: u64,
+        /// CRDT update bytes (may be empty).
+        update: Vec<u8>,
+    },
+    /// An incremental local edit of one document of a project session.
+    DocUpdate {
+        /// Which document.
+        doc: DocId,
+        /// Sender's peer id.
+        from: u64,
+        /// CRDT update bytes.
+        update: Vec<u8>,
+    },
+    /// One page of the project manifest.
+    Manifest {
+        /// Sender's peer id.
+        from: u64,
+        /// Intended recipient; `None` broadcasts.
+        to: Option<u64>,
+        /// [`crate::manifest::manifest_root`] of the whole manifest.
+        root: [u8; 16],
+        /// This page, from 0.
+        page: u32,
+        /// Total pages.
+        pages: u32,
+        /// At most [`MAX_PAGE_ENTRIES`] entries.
+        entries: Vec<ManifestEntry>,
+    },
+    /// Ask for one chunk of a blob.
+    BlobGet {
+        /// Requester's peer id.
+        from: u64,
+        /// Peer asked; `None` asks everyone.
+        to: Option<u64>,
+        /// Content address.
+        hash: BlobHash,
+        /// Chunk index.
+        chunk: u32,
+    },
+    /// One chunk of a blob.
+    BlobChunk {
+        /// Sender's peer id.
+        from: u64,
+        /// Intended recipient; `None` broadcasts.
+        to: Option<u64>,
+        /// Content address of the whole blob.
+        hash: BlobHash,
+        /// Chunk index.
+        chunk: u32,
+        /// Total chunks.
+        count: u32,
+        /// At most [`CHUNK_SIZE`] bytes.
+        data: Vec<u8>,
+    },
+    /// Ask for the manifest.
+    ManifestGet {
+        /// Requester's peer id.
+        from: u64,
+        /// Peer asked; `None` asks everyone.
+        to: Option<u64>,
+    },
 }
+
+/// Largest accepted encoded version vector.
+pub const MAX_VERSION_BYTES: usize = 64 * 1024;
 
 /// 64-bit FNV-1a of the document text: a cheap divergence detector (not a
 /// security feature; every room member is trusted equally).
@@ -74,9 +155,54 @@ impl Message {
         postcard::to_allocvec(self).map_err(|e| LiveError::Protocol(e.to_string()))
     }
 
-    /// Parse; trailing bytes are an error.
+    /// Parse; trailing bytes are an error. Wire v2 messages are also checked
+    /// against their size bounds.
     pub fn decode(bytes: &[u8]) -> Result<Self, LiveError> {
-        postcard::from_bytes(bytes).map_err(|e| LiveError::Protocol(e.to_string()))
+        let msg: Self =
+            postcard::from_bytes(bytes).map_err(|e| LiveError::Protocol(e.to_string()))?;
+        msg.check_bounds()?;
+        Ok(msg)
+    }
+
+    /// Enforce the bounds of the v2 variants (`Sync`/`Update` are bounded by
+    /// the envelope's plaintext cap alone, as before).
+    fn check_bounds(&self) -> Result<(), LiveError> {
+        let bad = |m: &str| Err(LiveError::Protocol(m.to_owned()));
+        match self {
+            Self::DocSync { version, .. } if version.len() > MAX_VERSION_BYTES => {
+                bad("version too large")
+            }
+            Self::Manifest {
+                page,
+                pages,
+                entries,
+                ..
+            } => {
+                if *pages == 0 || *pages > MAX_MANIFEST_PAGES || page >= pages {
+                    bad("manifest page out of range")
+                } else if entries.len() > MAX_PAGE_ENTRIES {
+                    bad("manifest page too large")
+                } else {
+                    entries
+                        .iter()
+                        .try_for_each(ManifestEntry::validate)
+                        .map_err(|e| LiveError::Protocol(e.to_string()))
+                }
+            }
+            Self::BlobGet { chunk, .. } if *chunk >= MAX_CHUNKS => bad("chunk index too large"),
+            Self::BlobChunk {
+                chunk, count, data, ..
+            } => {
+                if *count == 0 || *count > MAX_CHUNKS || chunk >= count {
+                    bad("chunk index out of range")
+                } else if data.len() > CHUNK_SIZE {
+                    bad("chunk too large")
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Ok(()),
+        }
     }
 }
 

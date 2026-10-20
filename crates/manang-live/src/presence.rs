@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::error::LiveError;
+use crate::project::FileId;
 
 /// Number of distinct colour slots. The UI maps a slot to one of the existing
 /// design tokens; presence never carries a colour value.
@@ -87,6 +88,47 @@ pub enum PresenceMessage {
         /// The peer that left.
         peer: u64,
     },
+    /// Wire v2: presence in a project session (appended: variant indices
+    /// above must never change).
+    StateV2(PresenceV2),
+}
+
+/// Most open files a peer announces.
+pub const MAX_OPEN: usize = 16;
+
+/// Presence in a project session: the v1 state plus where the peer is in the
+/// project. `presence.selection` refers to the document `doc`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PresenceV2 {
+    /// Name, colour, caret (in `doc`), as in v1.
+    pub presence: Presence,
+    /// The file the peer is editing, if any.
+    pub doc: Option<FileId>,
+    /// Files the peer has open, at most [`MAX_OPEN`], without repeats.
+    pub open: Vec<FileId>,
+}
+
+impl PresenceV2 {
+    /// Clamp hostile values: v1 rules, the open list deduplicated and cut to
+    /// [`MAX_OPEN`], and `doc` counted among the open files only if listed.
+    #[must_use]
+    pub fn sanitised(self) -> Option<Self> {
+        let presence = self.presence.sanitised()?;
+        let mut open: Vec<FileId> = Vec::with_capacity(self.open.len().min(MAX_OPEN));
+        for f in self.open {
+            if open.len() == MAX_OPEN {
+                break;
+            }
+            if !open.contains(&f) {
+                open.push(f);
+            }
+        }
+        Some(Self {
+            presence,
+            doc: self.doc,
+            open,
+        })
+    }
 }
 
 impl PresenceMessage {
@@ -95,9 +137,18 @@ impl PresenceMessage {
         postcard::to_allocvec(self).map_err(|e| LiveError::Protocol(e.to_string()))
     }
 
-    /// Parse.
+    /// Parse. A `StateV2` comes back sanitised ([`PresenceV2::sanitised`]) or
+    /// is rejected.
     pub fn decode(bytes: &[u8]) -> Result<Self, LiveError> {
-        postcard::from_bytes(bytes).map_err(|e| LiveError::Protocol(e.to_string()))
+        let msg: Self =
+            postcard::from_bytes(bytes).map_err(|e| LiveError::Protocol(e.to_string()))?;
+        match msg {
+            Self::StateV2(p) => p
+                .sanitised()
+                .map(Self::StateV2)
+                .ok_or_else(|| LiveError::Protocol("presence rejected".into())),
+            other => Ok(other),
+        }
     }
 }
 

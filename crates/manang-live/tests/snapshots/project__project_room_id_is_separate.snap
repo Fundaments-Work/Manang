@@ -1,0 +1,5 @@
+---
+source: crates/manang-live/tests/project.rs
+expression: "format!(\"{} {}\", single.room_id_hex(), project.room_id_hex())"
+---
+b84194cc1a3db5ba4bc1b7af4aa50e16 ed9828f668ca5d42a0f07e7c4b4c6424
