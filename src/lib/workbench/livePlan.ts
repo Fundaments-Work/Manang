@@ -121,7 +121,7 @@ export function planSummary(groups: PlanGroups): string {
 /** The sentence under the differing files: what happens to the old copies. */
 export function replaceSentence(replaced: number): string {
   if (replaced === 0) return "Your versions of these files are kept as they are.";
-  return `The host's ${replaced === 1 ? "version is" : "versions are"} used. Your old ${replaced === 1 ? "copy is" : "copies are"} saved to a trash folder (live-trash) first, so nothing is lost.`;
+  return `The host's ${replaced === 1 ? "version is" : "versions are"} used. Your old ${replaced === 1 ? "copy is" : "copies are"} saved to the project's trash (.manang/trash) first, so nothing is lost.`;
 }
 
 /** The label of the all-files confirmation. */

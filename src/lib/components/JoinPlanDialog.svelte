@@ -247,7 +247,7 @@
                 <span>
                   {confirmLabel(replaced)}.
                   <span class="text-text-60"
-                    >Your old copies are saved to a trash folder first.</span
+                    >Your old copies are saved to the project's trash first.</span
                   >
                 </span>
               </label>

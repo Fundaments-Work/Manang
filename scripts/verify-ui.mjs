@@ -1627,7 +1627,7 @@ async function liveProjectSection(browser) {
   check(
     "differing files default to the host's version, with the trash folder said plainly",
     await ev(
-      `(() => { const d = ${dlg}; return [...d.querySelectorAll('[data-testid="plan-differing"] [aria-checked="true"]')].every((b) => b.dataset.choice === "take-host") && d.querySelector('[data-testid="plan-replace-note"]').innerText.includes("saved to a trash folder"); })()`,
+      `(() => { const d = ${dlg}; return [...d.querySelectorAll('[data-testid="plan-differing"] [aria-checked="true"]')].every((b) => b.dataset.choice === "take-host") && d.querySelector('[data-testid="plan-replace-note"]').innerText.includes("saved to the project's trash"); })()`,
     ),
   );
   check(
