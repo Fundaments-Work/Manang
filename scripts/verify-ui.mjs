@@ -1506,7 +1506,11 @@ async function liveProjectSection(browser) {
     `import("/src/lib/state/live.svelte.ts").then((m) => { m.live.progress = null; })`,
   );
   // -- A deleter the session cannot name: no "by". ------------------------
-  await run("dev.live-peer-delete", { peer: ada.peer, path: "extra.typ", anonymous: true });
+  await run("dev.live-peer-delete", {
+    peer: ada.peer,
+    path: "extra.typ",
+    anonymous: true,
+  });
   await ev(
     `import("/src/lib/state/live.svelte.ts").then((m) => m.live.deleted.get("extra.typ") === "")`,
   );
