@@ -78,21 +78,21 @@ gate on each merge result.
 6. Figures as a Loro map keyed by node id (ADR L9).
 7. Deferred: iroh transport (blobs, LAN), chat, voice, MLS/BeeKEM.
 
-## Owner decisions needed before wave 3 (P3/P4)
+## Owner decisions (resolved 2026-10-20: "yes do the best", proposed defaults accepted)
 
-1. **Trust.** An invite holder can create, overwrite and delete project files on
-   every guest's disk. Proposed deny-list: no dotfiles, `manang.toml`, `.manang/`,
-   `.git/`; size caps. Read-only guests are not cryptographically enforceable
-   until identity and roles exist.
-2. **Destructive join.** Per-file "host wins, old copy to live-trash" or require
-   a clean git tree / explicit all-files confirmation? (No three-way merge until
-   `manang-merge` exists.)
-3. **Guest-only files.** Proposed: keep private, ask once.
-4. **Figures and binaries.** Last-writer-wins blobs are lossy for concurrent
-   figure edits: accept for beta, or exclude figures until L9?
-5. **Host leaving.** Warn, or block until a peer holds every file?
-6. **Dead rooms.** The manifest comes from a live peer, so joining an empty room
-   is impossible until the durable-room option. Acceptable?
+1. **Trust.** Remote paths are validated and the deny-list applies: no dotfiles,
+   `manang.toml`, `.manang/`, `.git/`, no `..`/absolute/symlink escape; size caps.
+   Read-only guests stay a UI courtesy until identity and roles exist.
+2. **Destructive join.** Per file, the host's version wins and the guest's old
+   copy goes to `live-trash` first; a join that would replace more than one file
+   needs one explicit all-files confirmation. No three-way merge until
+   `manang-merge` exists.
+3. **Guest-only files.** Kept private; asked once whether to share.
+4. **Figures and binaries.** Last-writer-wins blobs for the beta, documented as
+   lossy for concurrent figure edits until the Loro figure model (L9).
+5. **Host leaving.** Warn ("N files not yet synced to others"); do not block.
+6. **Dead rooms.** Joining an empty room is not possible until the durable-room
+   option; the UI says so plainly (S2).
 
 ## Risks
 
