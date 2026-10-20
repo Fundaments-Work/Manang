@@ -1508,17 +1508,16 @@ async function liveProjectSection(browser) {
   // -- A deleter the session cannot name: no "by". ------------------------
   await run("dev.live-peer-delete", {
     peer: ada.peer,
-    path: "extra.typ",
+    path: "talk.typ",
     anonymous: true,
   });
-  await ev(
-    `import("/src/lib/state/live.svelte.ts").then((m) => m.live.deleted.get("extra.typ") === "")`,
-  );
-  check(
-    "an unnamed deleter is stored as empty",
-    await ev(
-      `import("/src/lib/state/live.svelte.ts").then((m) => m.live.deletedBy("extra.typ") === "")`,
-    ),
+  await expectEventually(
+    page,
+    "an unnamed deleter is shown without 'by' on the tab",
+    `import("/src/lib/state/live.svelte.ts").then((m) => m.live.deletedBy("talk.typ") === "") && (() => { const t = document.querySelector('${tabSel("talk.typ")}'); return !!t && t.innerText.includes("deleted") && !t.innerText.includes("deleted by") && !t.getAttribute("aria-label").includes("deleted by"); })()`,
+    {
+      show: `document.querySelector('${tabSel("talk.typ")}')?.outerHTML.slice(0, 300)`,
+    },
   );
 
   // -- A large change on disk is held until answered. ---------------------
