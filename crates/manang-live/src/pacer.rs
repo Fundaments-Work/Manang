@@ -49,7 +49,7 @@ impl Default for PaceConfig {
     fn default() -> Self {
         Self {
             bytes_per_sec: 2 * 1024 * 1024,
-            burst_bytes: 1024 * 1024,
+            burst_bytes: 512 * 1024,
             msgs_per_sec: 100,
             burst_msgs: 20,
         }
@@ -234,7 +234,7 @@ mod tests {
             sent += out.iter().map(Vec::len).sum::<usize>();
         }
         // 10 s at 2 MiB/s plus the burst and one frame of debt.
-        let cap = 10 * 2 * 1024 * 1024 + 1024 * 1024 + 100 * 1024;
+        let cap = 10 * 2 * 1024 * 1024 + 512 * 1024 + 100 * 1024;
         assert!(sent <= cap, "{sent} > {cap}");
         assert!(sent > 10 * 1024 * 1024, "{sent}");
     }

@@ -567,6 +567,8 @@ pub struct Session<E: TextCrdt, N: Entropy> {
     deferred: BTreeMap<FileId, BTreeMap<u64, Deferred>>,
     wanted_reported: BTreeSet<FileId>,
     rr_cursor: Option<FileId>,
+    unsynced_cursor: Option<FileId>,
+    next_unsynced_retry: u64,
     manifest_wanted: bool,
     manifest_asm: BTreeMap<u64, ManifestAssembler>,
     manifest_served: BTreeMap<u64, u64>,
@@ -647,6 +649,8 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             deferred: BTreeMap::new(),
             wanted_reported: BTreeSet::new(),
             rr_cursor: None,
+            unsynced_cursor: None,
+            next_unsynced_retry: 0,
             manifest_wanted: awaiting_host,
             manifest_asm: BTreeMap::new(),
             manifest_served: BTreeMap::new(),
@@ -1202,6 +1206,7 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
         self.host_timeout_reported = false;
         self.next_resync = now + self.config.resync_interval_ms;
         self.next_presence = now + self.config.presence_interval_ms;
+        self.next_unsynced_retry = now + self.config.waiting_request_ms * 2;
         let next = if self.awaiting_host {
             SessionState::Waiting
         } else {
@@ -1295,6 +1300,15 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                         self.push_request(Key::Single, out);
                     }
                 }
+                if self.project.is_some() && now >= self.next_unsynced_retry {
+                    self.next_unsynced_retry = now + self.config.waiting_request_ms * 2;
+                    self.retry_unsynced(out);
+                }
+                if self.project.is_some() && self.manifest_wanted && now >= self.next_wait_request {
+                    // Some page of the manifest was lost: ask again.
+                    self.next_wait_request = now + self.config.waiting_request_ms;
+                    self.push_manifest_get(out);
+                }
                 if now >= self.next_presence {
                     self.next_presence = now + self.config.presence_interval_ms;
                     self.push_presence(out);
@@ -1307,6 +1321,34 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
         }
         if self.presence.expire(now) > 0 {
             out.push(Output::PresenceChanged);
+        }
+    }
+
+    /// Ask again for documents no peer has answered for yet (the request or
+    /// its answer was lost, or nobody had the file loaded), round-robin.
+    fn retry_unsynced(&mut self, out: &mut Vec<Output>) {
+        let batch = self.config.doc_resync_batch.max(1) * 4;
+        let after = self.unsynced_cursor;
+        let mut ids: Vec<FileId> = self
+            .docs
+            .iter()
+            .filter(|(k, s)| !s.synced && after.is_none_or(|c| **k > c))
+            .map(|(k, _)| *k)
+            .take(batch)
+            .collect();
+        if ids.len() < batch {
+            let more: Vec<FileId> = self
+                .docs
+                .iter()
+                .filter(|(k, s)| !s.synced && !ids.contains(k))
+                .map(|(k, _)| *k)
+                .take(batch - ids.len())
+                .collect();
+            ids.extend(more);
+        }
+        self.unsynced_cursor = ids.last().copied();
+        for id in ids {
+            self.push_request(Key::File(id), out);
         }
     }
 
@@ -1699,8 +1741,10 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                     self.awaiting_host = false;
                 }
                 self.apply(key, now, m.update, targets, out);
-                self.check_divergence(key, &req, now, targets, out);
+                // Before the divergence check: a refetch installs a fresh,
+                // unsynced document that must stay unsynced.
                 self.mark_synced(key);
+                self.check_divergence(key, &req, now, targets, out);
                 if matches!(key, Key::Single | Key::Project)
                     && matches!(self.state, SessionState::Syncing | SessionState::Waiting)
                 {
@@ -1715,8 +1759,8 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
                     return;
                 }
                 self.apply(key, now, m.update, targets, out);
-                self.check_divergence(key, &req, now, targets, out);
                 self.mark_synced(key);
+                self.check_divergence(key, &req, now, targets, out);
             }
         }
     }
