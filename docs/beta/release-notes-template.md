@@ -1,7 +1,7 @@
 # Manang Release Notes — [Version]
 
 **Release Date:** [YYYY-MM-DD]  
-**Channel:** Beta (Invite-Only)  
+**Channel:** Public beta  
 **Platforms:** Linux (deb, rpm, tarball), macOS (dmg), Windows (msi, exe)
 
 ---
@@ -51,4 +51,4 @@
 ## Upgrade Instructions
 
 - **In-App:** If running on the beta update channel, click "Update now" when prompted.
-- **Manual:** Download the appropriate installer package from your private invitation link and run the installer. All existing projects, settings, and templates are preserved in your user configuration directory.
+- **Manual:** Download the appropriate installer package from the [GitHub releases page](https://github.com/Fundaments-Work/Manang/releases/latest) and run the installer. All existing projects, settings, and templates are preserved in your user configuration directory.

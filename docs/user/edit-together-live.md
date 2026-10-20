@@ -1,4 +1,6 @@
-# Edit together live
+# Edit Together Live
+
+Edit one file or a whole project with other people at the same time, see their carets, and keep an end-to-end encrypted session that the relay cannot read.
 
 Live editing lets two or more people type in the same text file at the same time and see each other's edits and carets as they happen. You can share **one file** or the **whole project**. In a whole-project session everyone also sees files appear, move and disappear, and images, figures and PDFs are shared too (with limits, see [Limits of whole-project sessions](#limits-of-whole-project-sessions)).
 

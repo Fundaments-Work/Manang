@@ -1,10 +1,10 @@
 # Preview and PDF
 
-You can preview compiled documents beside your code, switch layout modes, jump bidirectionally between source text and rendered output with SyncTeX, use the built-in PDF viewer, export publication-grade PDFs, and configure your LaTeX TeX environment.
+Preview your document beside the editor, jump between source and page with SyncTeX, use the PDF viewer, export a PDF and set up a LaTeX engine.
 
 ## 1. Control preview layouts
 
-The preview pane shows the rendered document output (SVG pages for Typst, PDF rendering for LaTeX, and formatted HTML for Markdown).
+The preview pane shows the rendered document output (pages for Typst and LaTeX, and a formatted preview for Markdown). Its header holds the page, zoom and find controls for paged documents, a refresh button, an **Export PDF** button, and the layout buttons.
 
 1. Select your preferred preview layout:
    - **Split layout:** Displays the source editor on the left and the preview on the right.
@@ -12,8 +12,10 @@ The preview pane shows the rendered document output (SVG pages for Typst, PDF re
    - **Preview only (Maximize preview):** Maximizes the preview pane across the full editor area.
 2. To cycle between these three layouts:
    - Press `Ctrl+Shift+V` (`Cmd+Shift+V`).
-   - Or click the preview layout button located on the right side of the tab bar.
    - Or choose **View > Cycle preview layout** from the menu bar.
+   - Or pick one layout directly from the **View** menu: **Editor and preview**, **Editor only** or **Preview only**.
+   - Or use the buttons in the preview header: **Maximise preview** (it becomes **Restore split**) and **Close preview**. After you close the preview, a **Show preview** button appears at the right of the tab strip to bring it back.
+   - In a window narrower than 900 pixels the preview takes the whole editor area instead of sitting beside it.
 3. To adjust the split width:
    - Click and drag the vertical divider line between the editor and preview panes.
 
@@ -28,6 +30,7 @@ When compiling documents or opening standalone `.pdf` files, Manang uses a fast,
    - Press `Ctrl+F` (`Cmd+F`) while focused in the PDF viewer to open the find bar (or click the magnifying glass icon in the preview header).
    - Type your search query. The viewer highlights all matches and displays the current match index and total match count (e.g. `1 of 14`).
    - Press `Enter` or click the down arrow to jump to the next match; press `Shift+Enter` or click the up arrow to move to the previous match.
+   - Use the **Match case** button to make the search case-sensitive.
    - Press `Escape` to close the find bar.
 3. **Follow links:**
    - Click internal citation references or section links to scroll directly to the target destination.
@@ -76,8 +79,8 @@ Manang recompiles your document incrementally in the background as you write.
    - Or choose **Build > Compile** from the menu bar.
 5. To configure auto-compilation:
    - Open Settings (`Ctrl+,` (`Cmd+,`)).
-   - Toggle **Recompile automatically while typing** (`preview.auto-compile`).
-   - Adjust the delay in milliseconds under **Compile debounce** (`preview.debounce-ms`, default is `300` ms).
+   - Toggle **Auto compile** (`preview.auto-compile`), which recompiles while you type. With it off, press `Ctrl+Shift+B` (`Cmd+Shift+B`) or the refresh button in the preview header to compile.
+   - Adjust the delay in milliseconds under **Debounce ms** (`preview.debounce-ms`, default is `300` ms).
 
 ## 5. Export PDF
 
@@ -85,6 +88,7 @@ You can export standalone, publication-ready PDF documents from Typst and LaTeX 
 
 1. Open the Typst or LaTeX document you want to publish.
 2. Press `Ctrl+E` (`Cmd+E`).
+   - Or click **Export PDF** in the preview header.
    - Or choose **File > Export PDF** (or **Build > Export PDF**) from the menu bar.
    - Or open the command palette (`Ctrl+K` (`Cmd+K`)), type `Export PDF`, and press `Enter`.
 3. A native system save dialog appears.
@@ -127,7 +131,8 @@ Typst compiles using Manang's built-in Rust engine and requires no external tool
 3. Run the installer and ensure the option to add TeX binaries to your system `PATH` is enabled.
 
 ### No TeX installed? Use the built-in engine
-If Manang finds no TeX on your computer, the preview, the **Problems** tab and the **Output** tab say "No TeX installation found" and offer **Download the built-in engine (about 48 MB)**. It is optional, and nothing is downloaded until you agree:
+If Manang finds no TeX on your computer, the preview, the **Problems** tab and the **Output** tab say "No TeX installation found" and offer **Download the built-in engine (about 48 MB)**. It is optional, and nothing is downloaded until you agree. In this beta the built-in engine is available on Linux (x86-64 and arm64); on Windows and macOS, install TeX Live, MiKTeX or MacTeX instead.
+
 
 1. Press the button. A window tells you exactly what will happen: the server the engine comes from, its size, its SHA-256 checksum, and the folder it will be saved in.
 2. Press **Download**. A progress line shows the download; **Cancel** stops it and leaves nothing behind. If the connection drops, press **Try again**: it continues where it stopped.
@@ -143,7 +148,7 @@ Things to know about the built-in engine:
 
 ### Configure LaTeX settings in Manang
 1. Open Settings (`Ctrl+,` (`Cmd+,`)).
-2. Scroll to the **LaTeX** section:
+2. Under **Plugins**, open the **LaTeX** section:
    - **LaTeX engine:** **Automatic** uses your TeX installation and falls back to the built-in engine. **System TeX** uses only your installation. **Built-in engine** uses only the downloaded one.
    - **Engine:** Choose `pdflatex`, `xelatex`, or `lualatex` for your own TeX installation (the built-in engine always uses XeTeX).
    - **Built-in engine** (below the settings): shows whether it is installed and which version, lets you download or remove it, and says which engine the last compile used. The Compile button's tooltip also names it (for example "xelatex, built-in engine").

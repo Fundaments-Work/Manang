@@ -1,6 +1,6 @@
 # Plugins
 
-You can browse and install plugins from the plugin registry, update and remove them, understand what each plugin is allowed to do, and read the plugin status lines.
+Browse, install, update and remove plugins, review the permissions each one asks for, and understand how built-in and sandboxed plugins differ.
 
 ## 1. What plugins are
 
@@ -81,9 +81,9 @@ You can also install a plugin without the registry, for example one you built yo
 1. In the Plugins view press **Install** (a `.manangplugin` archive) or the folder icon (a plugin folder).
 2. Manang reads the plugin, shows its access in the same consent window, and installs it only when you approve.
 3. Or place the plugin folder in your user configuration directory by hand:
-   - **Linux:** `~/.config/manang/plugins/`
-   - **macOS:** `~/Library/Application Support/manang/plugins/`
-   - **Windows:** `%APPDATA%\manang\plugins\`
+   - **Linux:** `~/.config/work.fundaments.manang/manang/plugins/`
+   - **macOS:** `~/Library/Application Support/work.fundaments.manang/manang/plugins/`
+   - **Windows:** `%APPDATA%\work.fundaments.manang\manang\plugins\`
    The folder is named exactly after the plugin and holds `manifest.toml` and `plugin.wasm`. Manang detects it at launch and hot-reloads it when the files change.
 
 A plugin installed this way is not covered by the registry's checks. Install only what you trust.
@@ -112,17 +112,19 @@ Two settings (**Settings > Plugins**) control the registry:
 
 Privacy: fetching the list is a plain request that sends no identifier, account or list of your plugins. Download counters are counts per plugin; no address or personal data is stored.
 
-## 10. What the indicator lines mean
+## 10. What the status words mean
 
-Plugin listings and status cards use tonal color indicator lines to reflect operational health:
+Each plugin in the Installed list shows who made it, whether it is **Built in** or **Sandboxed**, and one of four states:
 
-1. **Green indicator line:**
-   - **Loaded and active.**
-   - The plugin's WebAssembly component compiled cleanly, its manifest is valid, and all requested host interfaces are linked and ready.
-2. **Amber indicator line:**
-   - **Warning or restricted.**
-   - The plugin is functional but operating with limitations (for example: a newly installed version requested additional permissions awaiting user consent, or an optional dependency is missing).
-3. **Red indicator line:**
-   - **Failed to load or compile.**
+1. **Enabled:**
+   - The plugin loaded cleanly and is running.
+2. **Disabled:**
+   - You or your project switched it off. Its files and approvals are kept.
+   - A plugin switched off by a project's settings cannot be switched on from the row.
+3. **Needs approval:**
+   - The plugin asks for access that you have not approved yet, for example after an update. Open it and approve its permissions to start it.
+4. **Failed:**
    - The plugin could not be started. Common causes include a malformed `manifest.toml`, an ungranted import (the WebAssembly component imports a host interface not declared under `[permissions]`), or an execution crash.
    - Check the **Problems** tab (`Ctrl+Shift+M` (`Cmd+Shift+M`)) or the application log file for the exact failure message.
+
+The **Needs attention** filter lists plugins that are **Failed** or **Needs approval**.

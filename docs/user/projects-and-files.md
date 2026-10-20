@@ -1,6 +1,6 @@
 # Projects and Files
 
-You can organize project directories in the tree view, preview images and PDFs, launch external system applications, delete files safely, use Home trash, and track revisions with Git.
+Manage files in the project tree, open images and PDFs, move files to the trash safely, and use the Source control panel to stage, commit and sync with Git.
 
 ## 1. Use the Files view
 
@@ -11,27 +11,29 @@ The Files sidebar displays your project's folder structure as an accessible tree
    - Or choose **View > Files** from the menu bar.
    - Or press `Ctrl+Shift+E` (`Cmd+Shift+E`).
    - Toggle the entire sidebar on or off with `Ctrl+B` (`Cmd+B`).
-2. Search and filter files:
-   - Type in the filter field at the top of the panel to quickly filter visible items.
-   - To fuzzy-find and open any file by name across the project, press `Ctrl+P` (`Cmd+P`) or choose **Go > Go to file**.
+2. Find files:
+   - To fuzzy-find and open any file by name across the project, press `Ctrl+P` (`Cmd+P`), press `/` while no text field has focus, or choose **Go > Go to file**.
+   - To search inside files, use the Search panel; see [Search and Replace](search-and-replace.md).
+   - The header of the Files panel also has **Refresh files** and **Collapse all folders** buttons.
 3. Create new files and folders:
    - **New file:** Click the **+** (New file) icon in the header, choose **File > New file**, or press `Ctrl+N` (`Cmd+N`). Type the file name and press `Enter`.
    - **New folder:** Click the **New folder** icon in the header, type the directory name, and press `Enter`.
 4. Rename files:
    - Right-click any file or folder and select **Rename**.
    - Type the new name and press `Enter`, or press `Escape` to cancel.
+   - Other items in the same menu are **Open**, **New file**, **New folder**, **Move to trash** and **Copy path**.
 5. Set main file:
-   - In projects with multiple documents, right-click your root document (`main.typ` or `main.tex`) and choose **Set as main file**. Manang compiles this file regardless of which tab you currently view.
+   - In projects with multiple documents, right-click your root document (for example `main.typ` or `main.tex`) and choose **Set as main file**. The choice is saved as `main` in the project's `manang.toml`, and Manang compiles that file regardless of which tab you currently view. The item is offered for files of the project's language that are not already the main file.
 
 ## 2. Open any file type
 
-Manang routes files to the appropriate viewer based on their format:
+Manang routes files to the appropriate viewer based on their format. [Supported File Types](file-types.md) has the full list.
 
-1. **Text documents (`.typ`, `.tex`, `.md`, `.bib`, `.json`, `.toml`, `.yaml`, `.txt`):**
-   - Open directly in the CodeMirror text editor.
+1. **Text documents (`.typ`, `.tex`, `.md`, `.bib`, `.json`, `.toml`, `.yaml`, `.txt` and many more):**
+   - Open directly in the CodeMirror text editor. Text files larger than 5 MiB open in a read-only viewer instead.
 2. **Vector figures (`.figure`, `.figure.json`):**
    - Open in the interactive figure editor canvas with vector drawing tools and bound connectors.
-3. **Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`):**
+3. **Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.avif`, `.ico`):**
    - Open in a dedicated File Viewer tab.
    - View dimensions and file size in the top toolbar.
    - Click the image (or click the **1:1** toolbar button) to switch between fit-to-window and full original resolution.
@@ -49,10 +51,11 @@ Manang ensures that both individual files and entire authoring projects can be d
 ### Delete individual files safely
 1. Right-click any file or directory in the Files tree.
 2. Select **Move to trash**.
-3. Manang moves the item to your operating system's Recycle Bin or Trash (`files.trash-on-delete: true` by default). Unsaved tab changes in the deleted file are discarded.
-4. To restore an accidentally deleted file, open your operating system's Trash or Recycle Bin folder.
+3. Manang first saves any unsaved edits in the file, then moves the item into the project's own trash folder, `.manang/trash/<id>/`, keeping its original path. It does not go to your operating system's Recycle Bin.
+4. To restore an accidentally deleted file, copy or move it back from `.manang/trash/` in your project folder. See [The Trash](trash.md).
 
 ### Manage projects with Home trash
+Deleting projects from the Home screen works differently from deleting files; the steps are summarized here and explained in [The Trash](trash.md).
 1. To remove a project from your workspace:
    - On the Home screen, right-click any project card (or click its menu button) and choose **Move to trash**.
    - If the project is currently open in the workbench, Manang prompts you to close the project and save any pending changes before moving it to trash.
@@ -78,26 +81,27 @@ For detailed workflows on deleting and restoring projects, see [The Trash](trash
 Manang includes a built-in Git client powered by the pure-Rust `gix` engine.
 
 1. Open the **Source control** panel by clicking the branch icon in the Activity bar (or choose **View > Source control** from the menu bar).
-2. If your project folder is not yet a Git repository:
+2. The panel has two parts, **Changes** and **Versions**; this section describes **Changes**, and [Version History and Restore](version-history.md) describes **Versions**.
+3. If your project folder is not yet a Git repository:
    - Click **Initialize repository**. Manang sets up a clean Git repository in your project directory.
-3. Inspect pending changes:
+4. Inspect pending changes:
    - Changes are categorized into **Changes**, **Staged Changes**, and **Untracked**.
    - Click any modified file to open an interactive diff view displaying exact line additions and deletions.
-4. Stage and unstage files:
+5. Stage and unstage files:
    - Click the **+** (Stage) button next to a file, or click **Stage all** on the section header.
    - Click **-** (Unstage) to move a file back to the unstaged changes list.
-5. Discard changes:
+6. Discard changes:
    - Click the trash icon next to an unstaged file to discard modifications and revert to the last commit.
    - Confirm the prompt to prevent accidental data loss.
-6. Commit changes:
+7. Commit changes:
    - Enter a descriptive summary in the commit message text box.
    - (Optional) Check the **Amend** box to update the most recent commit.
    - Click **Commit** (or press `Ctrl+Enter` (`Cmd+Enter`)).
-7. Manage branches:
+8. Manage branches:
    - Click the branch dropdown button at the top of the panel to see local branches.
    - Select another branch to check it out.
-   - Or type a new name and click **Create branch** to branch your work.
-8. Synchronize with remote repositories:
+   - Or click **+ Create new branch…**, type a name and click **Create** to branch your work.
+9. Synchronize with remote repositories:
    - Click **Sync** in the panel header to pull upstream commits and push local commits to your remote Git forge (e.g. GitHub, GitLab).
-9. View commit history:
+10. View commit history:
    - Scroll through previous commits in the history list. Click **Load more** to inspect earlier revisions.

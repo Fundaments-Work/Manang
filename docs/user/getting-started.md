@@ -1,6 +1,6 @@
 # Getting Started
 
-You can run Manang from source, create and organize authoring projects on the Home screen, and navigate the main window layout.
+Install Manang, create or open a project from the Home screen, and learn the main window: activity bar, sidebar, editor, preview and bottom panel.
 
 ## 1. Install Manang
 
@@ -48,39 +48,39 @@ The Home view lets you manage all your projects in one place. When you start Man
    - **Archive:** Stores older projects you have hidden from the main list.
    - **Templates:** Browse starter templates for Typst, LaTeX, and Markdown. Filter by language using the filter chips (**All**, **Typst**, **LaTeX**, **Markdown**) or search by template name. Click **Use template** on any card to launch the New Project dialog with that template preselected.
    - **Trash:** Recover accidentally deleted projects. Trashed projects remain here with timestamps (e.g., *Trashed 5 minutes ago*). Click **Restore** to return a project to your active list, or click **Delete** to permanently purge it. Purging lets you choose between removing the project from Manang's registry or moving the actual project directory to your operating system's trash. Click **Empty trash** in the header to purge all trashed items.
-3. Right-click any project card in Home (or click its card menu) to open, rename, edit tags, pin, archive, or select **Move to trash**.
+3. Right-click any project card in Home (or click its card menu) to open, rename, edit tags, pin, archive, copy its path, or select **Move to trash**. The pin button on the card pins or unpins it. A project whose folder has moved shows *Folder not found* and cannot be opened.
 
 ## 3. Create a project
 
 1. Open the Home screen.
 2. Click **New project** (or run `New project` from the File menu or command palette `Ctrl+K` (`Cmd+K`)).
 3. Type a project name in the dialog.
-4. Select your document authoring engine:
-   - **Typst:** Fast, modern markup language with instant sub-millisecond preview. Recommended for new documents.
-   - **LaTeX:** Traditional TeX authoring. Best for journal submission templates and existing `.tex` files.
-   - **Markdown:** Lightweight plain-text markup for notes and simple reports.
-5. Select a starter template from the **Template** dropdown (or leave as default blank starter).
-6. Choose the folder where Manang will create the project directory.
-7. Click **Create**. Manang creates the folder, scaffolds the chosen template files and bibliography, and opens the project in the editor.
+4. Under **Language**, select your document authoring engine:
+   - **Typst:** Fast, modern markup with instant preview.
+   - **LaTeX:** For journal templates and existing `.tex` files.
+   - **Markdown:** Plain notes and simple documents.
+5. Select a starter from the **Template** dropdown. It lists the templates for the chosen language; leave it on **Blank (default starter)** for a minimal project, or choose **Clear template** to go back to it.
+6. In **Create in**, type or **Browse** to the folder that will hold the project. Manang creates a new folder there named after the project.
+7. Click **Create project**. Manang creates the folder, writes the template files and a `manang.toml` project file, and opens the project in the editor.
 
 ## 4. Open an existing project
 
 1. Open the Home screen.
 2. Click **Open folder** (or choose **File > Open folder…**).
 3. Use the system file picker to select a folder on your computer.
-4. If the folder already contains a `manang.toml` file or scientific documents (`.typ`, `.tex`, `.md`), Manang detects the engine and opens the project.
+4. The folder must contain a `manang.toml` project file; Manang reads the engine from it and opens the project. A folder without one is not opened, and Home asks you to choose the folder that contains `manang.toml` or to create a new project. To bring in existing files, see [Coming from Overleaf](coming-from-overleaf.md).
 5. To switch quickly between recent projects, press `Ctrl+O` (`Cmd+O`) or choose **File > Switch project…**.
 6. To close the project and return to Home, choose **File > Close project** or run `Close project` from the command palette (`Ctrl+K` (`Cmd+K`)).
 
 ## 5. Main window layout
 
-The Manang workbench is divided into six functional areas:
+The Manang workbench is divided into seven functional areas:
 
 1. **Top bar:**
    - Functions as the window drag handle and carries window controls.
    - Contains the **Manang mark** button on the far left (click to go Home, or press `Ctrl+Shift+H` / `Cmd+Shift+H`).
    - Houses the complete application menu bar (**File**, **Edit**, **View**, **Go**, **Build**, **Help**) on Linux, Windows, and in the browser. Use `Alt+letter` mnemonics or press `F10` to navigate menus with the keyboard. When the window width drops below 900 pixels, the menus fold into a single compact **Menu** button. (On macOS, the menus appear in the system menu bar.)
-   - When viewing Home or Settings, the top bar carries a search input (`/` to focus) and quick action buttons (**New project**, **Open folder**).
+   - On Home, in Settings and in the User guide, the top bar carries a search input (`/` to focus); on Home it also has quick action buttons (**New project**, **Open folder**). Inside a project, `/` opens Go to file.
    - *Window title:* The operating system taskbar, window title, and alt-tab list display `<file> — <project>` (or `Settings — <project>`, `Home`, or `Manang`), keeping the top bar clean and focused.
 2. **Activity bar:**
    - The vertical icon rail on the far left.
@@ -91,7 +91,10 @@ The Manang workbench is divided into six functional areas:
      - **Outline:** Document headings and sections.
      - **Figures:** Vector figures in the project.
      - **References:** Bibliography entries and citations.
+     - **Plugins** (`Ctrl+Shift+X` (`Cmd+Shift+X`)): Installed and registry plugins. See [Plugins](plugins.md).
+     - **Agent** (`Ctrl+Shift+A` (`Cmd+Shift+A`)): The AI assistant. See [AI Assistant](ai-assistant.md).
      - **Settings** (`Ctrl+,` (`Cmd+,`)): Application and project configuration.
+   - The Source control panel has two parts, **Changes** (Git) and **Versions** (see [Version History and Restore](version-history.md)).
 3. **Sidebar:**
    - Displays the panel selected in the Activity bar.
    - Press `Ctrl+B` (`Cmd+B`) to toggle the sidebar open or closed.
@@ -109,3 +112,12 @@ The Manang workbench is divided into six functional areas:
      - **Problems** (`Ctrl+Shift+M` (`Cmd+Shift+M`)): Lists compiler errors, syntax warnings, diagram failures, and spelling suggestions. Click any problem to jump to that line in your document.
      - **Output:** Shows raw build and compiler logs.
    - Press `Ctrl+J` (`Cmd+J`) to toggle the bottom panel open or closed.
+7. **Agent column and status bar:**
+   - The Agent column opens on the right when you open the AI assistant.
+   - The status bar at the bottom shows the Git branch, the caret position, the word count, a **Live** item during a shared session and the **AI** chip (ready, not set up or off).
+
+## 6. Find help inside Manang
+
+1. Choose **Help > User guide** to read this guide inside the application, with search.
+2. Press `Ctrl+/` (`Cmd+/`) for the searchable keyboard shortcuts list.
+3. Choose **Help > Report a problem** or **Help > Send feedback** to prepare a message; see [Troubleshooting](troubleshooting.md).
