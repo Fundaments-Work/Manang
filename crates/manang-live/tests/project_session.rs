@@ -790,3 +790,23 @@ proptest! {
         run_project::<YrsEngine>(&ops, seed)?;
     }
 }
+
+// -- who holds a file ----------------------------------------------------------
+
+#[test]
+fn a_host_learns_which_files_others_hold() {
+    let mut sim =
+        ProjectSim::<LoroEngine>::new(2, &small_project(), 7, NetConfig::CLEAN, keep).expect("sim");
+    assert!(sim.heal(60_000), "did not converge");
+    sim.advance(25_000); // a couple of anti-entropy rounds confirm the copies
+    let texts = live_ids(&mut sim, 0, NodeKind::Text);
+    assert_eq!(texts.len(), 3);
+    let guest = sim.clients[1].session.peer();
+    for id in &texts {
+        assert_eq!(
+            sim.clients[0].session.file_holders(*id),
+            vec![guest],
+            "the guest answered or confirmed {id}"
+        );
+    }
+}

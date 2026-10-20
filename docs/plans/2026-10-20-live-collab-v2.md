@@ -109,7 +109,7 @@ Merged on `feat/live-collab-v2` (not yet on `main`): wave 0 (S1-S6), P1
 (project tree, blobs, manifest, wire v2), P5 (frontend state), P6 (UI; verify-ui
 live section 96/96 re-run on the merge) P2 (multi-doc session router) and P3 (path policy, disk and tree bridge, sidecar,
 join classification; tests green on the merge, clippy clean). The
-plugin driver ignores the new project outputs until P4 wires them. Gates on the merge result: fmt, clippy
+single-file driver is untouched; P4 (below) adds a separate project driver. Gates on the merge result: fmt, clippy
 and tests for `manang-live`, `manang-live-plugin`, `manang-git`; `pnpm run check`,
 vitest (1051), eslint. Build note: worktrees with the same layout must not share
 one `CARGO_TARGET_DIR` at the same time (artifact names collide).
@@ -146,3 +146,69 @@ slot, path}]}`, `live.progress {done, total}`, `live.notice {kind: joined | left
 * Mock dev hooks for verify-ui: `dev.live-seed`, `dev.live-local`,
   `dev.live-make-invite`, `dev.live-peer-join|open|type|caret|create|rename|delete`,
   `dev.live-text`.
+
+## P4: the plugin and the project driver (2026-10-20, branch `agent/live-p4-plugin`)
+
+`crates/manang-live-plugin`: `projdrv/` is the project session thread (one OS
+thread per session, like the single-file driver, which is unchanged); `scan.rs`
+builds the host's tree from the folder through the path policy. Everything in
+the contract above is implemented; what a shell or the UI package needs to know
+beyond it:
+
+* **The project folder.** The plugin has no way to learn it by itself (the
+  project plugin exposes no "current root"). `live.start` and `live.join` take
+  an optional `root` (absolute path of the open project folder, the `root` of
+  `project.open`'s summary); `LivePlugin::with_project_root(|| Option<PathBuf>)`
+  is the alternative for the shell. Without either, a project command fails
+  with code `no-project`. The frontend's `liveApi.start/join` must pass `root`.
+* **`live.resolve {choices}`.** Per file: `take-host` (a differing file is
+  replaced; its local copy goes to `.manang/trash` when the host's content
+  arrives, nothing is touched before), `keep-mine` (a differing file stays out
+  of the session on this side: never offered, never overwritten, not listed),
+  `share` (a guest-only file joins the room), `keep-private` (default for
+  guest-only files, also with no choice). The wildcard `"*"` is the single
+  all-files confirmation: its action covers every differing file without an
+  explicit choice (explicit choices win). Refusals: `unresolved` (a differing
+  file with no choice and no wildcard) and `needs-confirmation` (more than one
+  replacement without `"*"` carrying `take-host`, even when every file was
+  chosen explicitly: this is stricter than the mock, which allows it). `share`
+  on a differing file is `invalid`. It returns `{applied, trashed}` where
+  `trashed` lists the paths that will be replaced. It works before the tree
+  has reached the guest (it goes by the manifest).
+* **Phases.** `live.status.phase` is `manifest` (guest waiting for the host),
+  `plan` (waiting for `live.resolve`) or `live`. Project commands other than
+  `live.resolve`/`live.leave` are refused before `live` (`waiting`, or
+  `invalid` while a plan waits). A resolve with no plan is `no-plan`.
+* **`live.attach {path, doc?}`** waits (up to 8 s, then `waiting`) for a file
+  still being fetched. `doc` is the kernel editor document that shows the file
+  (optional; found by path otherwise); when given or found, remote edits are
+  mirrored into it with `replace_silent`. The file's text on attach is the
+  room's: the view must show it. A file open in a tab is written by the web
+  view only; closing the tab (`live.detach`) writes the room's text to disk.
+  A replaced file that is already open in a tab must be re-attached by the UI.
+* **Host leaving (owner decision 5).** `live.status.unsynced_files` and the
+  `live.peers` event's `unsynced_files` count the files (not folders, not files
+  kept out) that no *present* peer has shown it holds: a peer holds a text
+  file when it answered for it, was sent its state, confirmed it, or edited
+  it; a blob when it was served to it. With nobody else present it equals the
+  file count. The UI shows "N files not yet synced to others" before the host
+  leaves; leaving is never blocked. Leaving never deletes anything on disk.
+* **New events beyond the contract.** `live.paused {files, changed_lines,
+  total_lines}` (a large rewrite on disk, such as a checkout, is held and not
+  shared) answered with `live.resync {paused: "share" | "discard"}`; discarding
+  rewrites the disk from the session (the rewritten copies go to the trash).
+  `live.status` also has `paused`, `skipped` (paths left out or refused, with
+  the reason), `phase`, `following`, `rejected`. `live.tree` ops carry `by`:
+  exact for a create (the node's creator), otherwise the only other person
+  present or `""`. `live.progress` is throttled to a few per second plus the
+  last. `live.inspect` returns `scope`.
+* **Limits.** A document parked in the sidecar misses live updates; it catches
+  up when the editing peer's size/hash update arrives (about 1.5 s after the
+  typing pauses) or when it is loaded again, so a peer that edits and crashes
+  within that window leaves others' copies of that file behind until the next
+  edit. Binary and figure files are last-writer-wins. An attached file edited
+  outside the editor is the editor's business (no event). A blob is read from
+  disk on the session thread when a peer asks for it.
+* **Additive changes elsewhere.** `manang-live`: `Session::file_holders(id)`.
+  `manang-live-plugin`: `DiskBridge::cancel_delete`, `InviteScope`,
+  `LivePlugin::with_loaded_docs`/`with_project_root`.

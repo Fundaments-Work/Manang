@@ -336,7 +336,7 @@ pub(crate) fn random_peer() -> Result<u64, LiveHostError> {
     })
 }
 
-fn state_label(state: SessionState) -> (&'static str, u32) {
+pub(crate) fn state_label(state: SessionState) -> (&'static str, u32) {
     match state {
         SessionState::Idle | SessionState::Connecting | SessionState::Syncing => ("connecting", 0),
         SessionState::Waiting => ("waiting", 0),
