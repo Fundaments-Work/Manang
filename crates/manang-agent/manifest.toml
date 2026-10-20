@@ -113,7 +113,7 @@ id = "agent.enabled"
 type = "bool"
 default = true
 title = "Enable the AI agent"
-description = "Nothing is sent anywhere until you pick a provider, give your consent and press Send. A project can switch the agent off for itself."
+description = "Nothing is sent until you pick a provider and press Send."
 
 [[contributes.settings]]
 id = "agent.provider"
@@ -121,21 +121,21 @@ type = "enum"
 values = ["anthropic", "openai", "deepseek", "openrouter", "groq", "ollama", "llama_cpp", "lm_studio", "custom"]
 default = "anthropic"
 title = "Provider"
-description = "Who answers your requests. Set the key under Key."
+description = "Who answers your requests."
 
 [[contributes.settings]]
 id = "agent.model"
 type = "string"
 default = ""
 title = "Model"
-description = "Model id. Empty uses the provider's first listed model."
+description = "Empty uses the provider's first model."
 
 [[contributes.settings]]
 id = "agent.base-url"
 type = "string"
 default = ""
 title = "Base URL"
-description = "Empty uses the provider's address. Set it for a custom or local server."
+description = "Empty uses the provider's default address."
 
 [[contributes.settings]]
 id = "agent.client"
@@ -143,21 +143,21 @@ type = "enum"
 values = ["rig", "builtin"]
 default = "rig"
 title = "Provider client"
-description = "rig is the default client layer; builtin is Manang's own, kept as a fallback."
+description = "rig is the default; builtin is the fallback."
 
 [[contributes.settings]]
 id = "agent.offline"
 type = "bool"
 default = false
 title = "Offline mode"
-description = "Only providers on this machine (localhost) may be contacted."
+description = "Only contact providers on this machine."
 
 [[contributes.settings]]
 id = "agent.include-thinking"
 type = "bool"
 default = false
 title = "Developer: stream the model's reasoning"
-description = "Off by default: the panel only says Thinking. On, the reasoning text is sent to the panel's event stream (for debugging prompts)."
+description = "Send the model's reasoning to the event stream (for debugging)."
 
 [[contributes.settings]]
 id = "agent.context-window"
@@ -166,7 +166,7 @@ min = 8000
 max = 1000000
 default = 100000
 title = "Working window (tokens)"
-description = "How much conversation the assistant keeps before it clears old tool results (at 60%) and summarises the older part (at 85%). Models with larger windows are not filled on purpose: cost and quality fall first."
+description = "Tokens kept before old results are cleared and older turns summarised."
 
 [[contributes.settings]]
 id = "agent.reasoning-effort"
@@ -174,28 +174,28 @@ type = "enum"
 values = ["auto", "low", "high"]
 default = "auto"
 title = "Reasoning effort"
-description = "For models that take it (DeepSeek). auto uses low for slash commands such as /rewrite and high for open chat. Fixed when a chat starts."
+description = "For models that support it. auto: low for slash commands, high for chat."
 
 [[contributes.settings]]
 id = "agent.use-agents-md"
 type = "bool"
 default = false
 title = "Use AGENTS.md as project instructions"
-description = "Read AGENTS.md or CLAUDE.md when the project has no MANANG.md. Off by default: in a research repository they are usually build notes for coding agents."
+description = "Read AGENTS.md or CLAUDE.md when there is no MANANG.md."
 
 [[contributes.settings]]
 id = "agent.redact-emails"
 type = "bool"
 default = false
 title = "Redact email addresses"
-description = "Replace email addresses in what is sent. Secret-like strings are always redacted."
+description = "Replace email addresses in what is sent."
 
 [[contributes.settings]]
 id = "agent.redact-paths"
 type = "bool"
 default = false
 title = "Redact user names in paths"
-description = "Replace the user name in home-directory paths in what is sent."
+description = "Replace the user name in home paths in what is sent."
 
 [[contributes.settings]]
 id = "agent.retention-days"
@@ -204,4 +204,4 @@ min = 0
 max = 3650
 default = 30
 title = "Keep sessions (days)"
-description = "Sessions older than this are deleted when a new one starts. 0 keeps them."
+description = "Delete older sessions at startup. 0 keeps all."
