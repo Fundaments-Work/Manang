@@ -1,6 +1,6 @@
 # Figures and Diagrams
 
-You can sketch vector figures in the built-in figure studio, write text-based diagrams in Mermaid, Pikchr, and ASCII format, and include them in Typst, LaTeX, and Markdown documents.
+Draw vector figures in the built-in figure studio, write Mermaid, Pikchr and ASCII diagrams as text, and include the results in Typst, LaTeX and Markdown.
 
 ## 1. Use the vector figure studio
 

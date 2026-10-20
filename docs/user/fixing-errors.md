@@ -1,6 +1,8 @@
-# Fixing errors
+# Fixing Errors
 
-Small, mechanical compile errors have one obvious repair: a forgotten `\usepackage`, a Typst package you never imported, a `}` left open. Manang offers that repair as a **Fix** button. It never guesses between candidates and never uses the network or an AI model. Anything it does not recognise stays with **Fix with AI**.
+Fix small compile errors such as a missing LaTeX package or an unclosed Typst bracket with one click, undo any fix, and turn automatic fixes on or off.
+
+Small, mechanical compile errors have one obvious repair: a forgotten `\usepackage`, a Typst package you never imported, a `}` left open. Manang offers that repair as a **Fix** button. It never guesses between candidates and never uses the network or an AI model. Anything it does not recognise stays with **Fix with AI**; see [AI Assistant](ai-assistant.md).
 
 ## 1. Where Fix appears
 
@@ -39,7 +41,7 @@ A package that is already loaded is never added twice, and a file with no `\docu
 
 ## 4. Settings
 
-Open Settings and look under **Self-healing**:
+Open Settings and look under **Plugins > Heal**:
 
 - **Offer one-click fixes** (`heal.enabled`, on): turn all fixes off.
 - **Apply certain fixes on save** (`heal.auto-apply`, off): when you save, certain fixes are applied and the notice says so. Likely fixes are never applied automatically.

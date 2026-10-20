@@ -1,8 +1,8 @@
 # Install Manang
 
-Download the installer for your system from the
-[latest release](https://github.com/Fundaments-Work/Manang/releases/latest). Every release lists its
-files and a `SHA256SUMS.txt` so you can check what you downloaded.
+Install Manang with one command on Linux or with a downloaded installer on Windows, macOS and Linux, and learn what to expect from unsigned installers.
+
+Download the installer for your system from the [latest release](https://github.com/Fundaments-Work/Manang/releases/latest). Every release lists its files and a `SHA256SUMS.txt` so you can check what you downloaded.
 
 ## Linux: one command
 
@@ -90,8 +90,9 @@ the checksums above matter.
 
 - **Typst and Markdown** work out of the box.
 - **LaTeX** needs a TeX installation on your `PATH` (TeX Live, MiKTeX or MacTeX), or the
-  optional built-in engine, which is a consented download offered on Linux x86-64 first.
-  See [Fixing errors](fixing-errors.md) and [Known issues](../beta/known-issues.md).
+  optional built-in engine, which is a consented download available on Linux (x86-64 and arm64) in
+  this beta; Windows and macOS builds of it are planned. See [Preview and PDF](preview-and-pdf.md) and
+  [Troubleshooting](troubleshooting.md).
 - **Linux** needs WebKitGTK 4.1 (`libwebkit2gtk-4.1`), which the `.deb` and `.rpm` pull in
   for you. The tarball does not install it: on Debian and Ubuntu
   `sudo apt install libwebkit2gtk-4.1-0`, on Fedora `sudo dnf install webkit2gtk4.1`, on Arch
@@ -101,7 +102,7 @@ the checksums above matter.
 
 There is no in-app updater yet. Download the new installer and run it over the old one;
 your projects and settings live in your own folders and are kept. Releases are listed in the
-[changelog](../../CHANGELOG.md).
+[changelog](https://github.com/Fundaments-Work/Manang/blob/main/CHANGELOG.md).
 
 ## Uninstalling
 
@@ -111,4 +112,4 @@ folders and are never touched.
 
 ## Build from source
 
-See [Building](../building.md).
+See [Building](https://github.com/Fundaments-Work/Manang/blob/main/docs/building.md), or the build steps in [Getting Started](getting-started.md).

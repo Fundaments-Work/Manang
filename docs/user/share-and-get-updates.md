@@ -1,6 +1,8 @@
 # Share and Get Updates
 
-Share your project with co-authors and bring their work into yours, without a terminal. Both actions live in the **Versions** view (Source control, then **Versions**), in the group above the timeline.
+Connect a shared address once, share your saved versions with co-authors, and bring their changes into your project without a terminal or lost work.
+
+Both actions live in the **Versions** view (Source control, then **Versions**), in the group above the timeline.
 
 You can also reach the same controls without opening the Versions view: the **Share** button at the right end of the tab strip (`Ctrl+Alt+L`, `Cmd+Option+L`) opens a popover with a **Share versions** section. It shows the same status line, **Share** and **Get updates** buttons, and when updates from your co-authors are waiting the Share button itself turns lime.
 
@@ -54,4 +56,4 @@ Open tabs reload when updates arrive.
 
 - Everything is stored as ordinary files and standard git, so any git tool works with the same project.
 - Large or binary files are shared like any others; very large files are better kept out of the project.
-- This is manual and turn-based. Live co-editing is a separate feature.
+- This is manual and turn-based. Live co-editing is a separate feature; see [Edit Together Live](edit-together-live.md).

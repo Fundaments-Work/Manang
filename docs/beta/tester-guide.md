@@ -1,6 +1,6 @@
 # Manang Beta Tester Guide
 
-Welcome to the private, invite-only beta of **Manang**—the high-performance scientific authoring and illustration suite combining Typst, LaTeX, Markdown, an in-house vector figure studio, and citation indexing.
+Welcome to the public beta of Manang, the desktop editor for Typst, LaTeX and Markdown with a built-in vector figure studio and citation indexing.
 
 This guide explains what to expect during the beta, how to get started in your first 15 minutes, how to report friction or bugs, and our uncompromising privacy promise.
 
@@ -22,8 +22,8 @@ Here is what you should expect:
 
 > **Note on Installers:** Native installers for Linux (`.deb`, `.rpm`, tarball), macOS (`.dmg`) and Windows (`.msi`, `.exe`) are on the GitHub release. They are not code-signed yet, so macOS Gatekeeper and Windows SmartScreen warn on the first launch; the install guide explains the two clicks that get past it.
 
-### Future In-App Updates
-Manang includes an automated beta update channel that checks for weekly bugfix releases using revocable per-tester private tokens. When an update is ready, Manang displays a release notification and summary ("What's New") before updating.
+### Updates
+There is no in-app updater yet. To update, download the newest installer from the [releases page](https://github.com/Fundaments-Work/Manang/releases/latest) and run it over the old one; your projects and settings are kept. See the [install guide](../user/install.md).
 
 ---
 

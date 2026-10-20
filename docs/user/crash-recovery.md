@@ -1,6 +1,6 @@
 # Crash Recovery and Safety Copies
 
-Manang protects your work with automatic local snapshotting and multi-layer safety copies. If your computer crashes, loses power, or the application quits unexpectedly, unsaved work can be restored immediately upon reopening the project. In addition, whenever destructive or batch operations occur, Manang preserves safety copies before modifying any files on disk.
+Manang saves recovery snapshots of unsaved edits and keeps safety copies before risky operations, so a crash or a mistake does not cost you your work.
 
 ## 1. How crash recovery ("hot exit") works
 
@@ -10,13 +10,13 @@ While any document has unsaved edits, Manang continuously maintains an atomic re
    - Edits are debounced and snapshotted automatically (within 2 seconds of your last edit, at most every 10 seconds).
    - Snapshots are written using atomic filesystem operations (temporary file, flush to storage, atomic rename). A sudden crash or power loss during writing never leaves a torn or partial snapshot.
 2. **Snapshot storage location:**
-   - Snapshots are stored in your platform's application data directory under `recovery/<project-id>/<file-id>.json`:
-     - **Linux:** `~/.local/share/manang/recovery/`
-     - **macOS:** `~/Library/Application Support/manang/recovery/`
-     - **Windows:** `%APPDATA%\manang\recovery\`
+   - Snapshots are stored in Manang's application data folder under `recovery/<project-id>/<file-id>.json`:
+     - **Linux:** `~/.local/share/work.fundaments.manang/recovery/`
+     - **macOS:** `~/Library/Application Support/work.fundaments.manang/recovery/`
+     - **Windows:** `%APPDATA%\work.fundaments.manang\recovery\`
 3. **Safety limits and isolation:**
    - Snapshots never overwrite or alter your source files on disk.
-   - Individual documents larger than 10 MB are excluded from background snapshotting to avoid disk I/O stalls.
+   - Individual documents larger than 5 MiB are excluded from background snapshotting to avoid disk I/O stalls.
    - If a snapshot cannot be parsed, Manang quarantines it as `<name>.json.corrupt` and continues loading other snapshots.
 
 ## 2. Recover your work after an unexpected quit
@@ -42,9 +42,16 @@ Manang creates safety copies before executing destructive actions, ensuring that
 
 ### Batch find and replace
 When you run a project-wide replace operation across multiple files:
-1. Manang writes backup copies of every file about to be modified into `.manang/trash/<timestamp-seq>/` within your project folder.
+1. Manang writes backup copies of every file about to be modified into a numbered folder under `.manang/trash/` within your project folder.
 2. If an error occurs during replacement, the operation halts immediately.
 3. You can inspect or recover original versions from `.manang/trash/` at any time.
+
+### Files changed by another program
+If a file that is open in Manang changes on disk, for example because another editor saved it or a Git checkout rewrote it:
+
+1. If you have no unsaved edits in that file, Manang reloads it silently.
+2. If you do have unsaved edits, a bar appears above the editor and nothing is overwritten. Choose **Keep my version** (your text stays, and the disk version is first copied into `.manang/trash/`), **Load disk version** (press `Ctrl+Z` to get your own text back), or **Compare** to see the differences.
+3. If the file was deleted outside Manang, the tab and its text stay open. Choose **Save again** to write the file back, **Save as** to save it under another name, or **Close**.
 
 ### Source control discard and checkout
 When you discard uncommitted modifications in the Source Control view:

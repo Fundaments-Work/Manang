@@ -1,4 +1,6 @@
-# The Visual editor
+# The Visual Editor
+
+See Markdown and Typst formatted as you write in the Visual editor, switch back to Source at any time, and use the toolbar; the file stays plain text.
 
 The Visual editor shows Markdown and Typst files as formatted text while you write: headings are large, bold is bold, lists have bullets, formulas and images are drawn. It is still your file. Nothing is converted and written back, so the text on disk, your version history and your co-authors all see ordinary Markdown or Typst, and switching back to **Source** shows exactly what is in the file.
 
@@ -11,7 +13,7 @@ For a `.md`, `.markdown` or `.typ` file, the strip above the editor has a **Sour
 - Click **Visual**, or press `Ctrl+Alt+V` (`Cmd+Option+V`), or choose **View > Visual editor**.
 - Click **Source** or press the same keys to go back. Your caret, undo history and unsaved edits stay as they are.
 - Each tab remembers its own mode while it is open.
-- Manang also remembers your choice for the file type: after you switch a Markdown file to Visual, the next Markdown file you open starts in Visual too. Switch it back to Source and it is forgotten. The setting behind this is **Settings > Editor > File types that open in the Visual editor**, a list of `markdown` and `typst` (empty by default).
+- Manang also remembers your choice for the file type: after you switch a Markdown file to Visual, the next Markdown file you open starts in Visual too. Switch it back to Source and it is forgotten. The setting behind this is **Settings > Editor > Visual default** (`editor.visual-default`), a list of `markdown` and `typst` (empty by default).
 
 Other formats (LaTeX, BibTeX) have no Visual mode yet and show no switch.
 

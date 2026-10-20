@@ -1,6 +1,6 @@
 # The Trash
 
-Manang provides a two-stage deletion model for projects and files. Deleting an item does not immediately destroy your work—projects and documents move to the Trash first, where they can be restored with a single click or permanently purged when you are ready.
+Move projects and files to the Trash instead of deleting them, restore them with one click, and know where Manang keeps its internal backup copies.
 
 ## 1. Project trash on the Home screen
 
@@ -36,20 +36,20 @@ You can delete individual files and folders within an open project safely from t
 ### Delete a file or folder
 1. In the workbench sidebar, click the **Files** icon to display the file tree.
 2. Right-click the file or folder you want to remove and select **Move to trash**.
-3. If the file has unsaved edits in an open tab, Manang flushes the latest edits before moving it, ensuring that the trashed file contains your latest work.
-4. Manang moves the item to your operating system's Recycle Bin or Trash (controlled by the `files.trash-on-delete: true` setting in Settings).
+3. If the file has unsaved edits in an open tab, Manang saves the latest edits first, so the trashed file contains your latest work.
+4. Manang moves the item into the project's own trash folder, `.manang/trash/<id>/`, under its original path. A notice confirms the move. The item does not go to your operating system's Recycle Bin.
 
 ### Restore a deleted file
-1. Open your operating system's Trash (macOS / Linux) or Recycle Bin (Windows).
-2. Locate the file or folder.
-3. Use your system file manager's **Put Back** or **Restore** action to return the file to its original directory inside your Manang project.
-4. The Files tree in Manang updates automatically to display the restored file.
+1. In your file manager, open the `.manang` folder inside your project (it is a hidden folder, so turn on hidden files if you do not see it).
+2. Open `trash`, then the numbered folder for that deletion, and find the file or folder under its original path.
+3. Move or copy it back to its original directory inside your project.
+4. Press **Refresh files** in the Files panel if the tree does not update on its own.
 
 ## 3. Project internal backup folders
 
 In addition to the operating system trash, Manang maintains internal safety backup folders within your project directory:
 
-- **`.manang/trash/`:** Before running project-wide batch operations (such as multi-file find and replace), Manang writes copies of all target files to timestamped subfolders here.
+- **`.manang/trash/`:** Deleted files, as described above, and the originals of files that Manang is about to overwrite or replace: a project-wide replace (see [Search and Replace](search-and-replace.md)), **Convert to Typst** over an existing file, **Keep my version** after a change on disk, and files replaced or deleted during a live session. Each operation gets its own numbered subfolder.
 - **`.git/manang-trash/`:** When you discard uncommitted changes in the Source Control panel or restore an earlier version snapshot, replaced files are backed up here first.
 
 These folders are local, never synced to remote repositories, and provide an offline safety net against unintended overwrites.

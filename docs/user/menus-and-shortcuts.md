@@ -1,6 +1,6 @@
 # Menus and Shortcuts
 
-Manang provides a comprehensive menu bar, global keyboard shortcuts, and surface-specific controls. Every menu item runs the same command as the command palette and the keyboard shortcut shown beside it.
+Look up every menu in Manang and its default keyboard shortcut, learn the Alt-key mnemonics, and find the keys used inside the figure studio and the PDF viewer.
 
 ## 1. Access the menu bar
 
@@ -42,6 +42,7 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 | *— Separator —* | | | |
 | **Save** | `file.save` | `Ctrl+S` (`Cmd+S`) | Saves modifications in the active editor tab. |
 | **Save all** | `file.save-all` | `Ctrl+Shift+S` (`Cmd+Shift+S`) | Saves all modified documents across the project. |
+| **Save a version** | `file.save-version` | `Ctrl+Alt+S` (`Cmd+Option+S`) | Saves a named version of the whole project. See [Version History and Restore](version-history.md). |
 | *— Separator —* | | | |
 | **Share…** | `share.open` | `Ctrl+Alt+L` (`Cmd+Option+L`) | Opens the Share popover at the end of the tab strip: edit together live, share versions, invite link. |
 | **Share this file live…**, **Join a live session…**, **Copy live invite**, **Leave live session** | `live.*` | — | The same live actions, straight from the menu. See [Edit together live](edit-together-live.md). |
@@ -71,7 +72,9 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 | *— Separator —* | | | |
 | **Find** | `edit.find` | `Ctrl+F` (`Cmd+F`) | Opens the in-document or in-PDF find bar. |
 | **Replace** | `edit.replace` | — | Opens search and replace in the active editor. |
-| **Search in project** | `view.search` | `Ctrl+Shift+F` (`Cmd+Shift+F`) | Opens the Search sidebar panel for project-wide text search. |
+| **Search in project** | `view.search` | `Ctrl+Shift+F` (`Cmd+Shift+F`) | Opens the Search sidebar panel for project-wide text search. See [Search and Replace](search-and-replace.md). |
+| *— Separator —* | | | |
+| **Rewrite selection**, **Shorten selection**, **Translate selection**, **Explain selection** | `agent.rewrite`, `agent.shorten`, `agent.translate`, `agent.explain` | — | Open the AI assistant and send that command for the selected text. See [AI Assistant](ai-assistant.md). |
 | *— Separator —* | | | |
 | **Format document** | `doc.format` | `Shift+Alt+F` (`Shift+Option+F`) | Tidies whitespace and indentation in the active file. |
 | **Copy include line** | `doc.copy-include` | — | Copies inclusion markup for active figure or diagram. |
@@ -86,11 +89,12 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 | **Files** | `view.files` | `Ctrl+Shift+E` (`Cmd+Shift+E`) | Shows the project file tree panel in the sidebar. |
 | **Search** | `view.search` | `Ctrl+Shift+F` (`Cmd+Shift+F`) | Shows the text search and replace panel in the sidebar. |
 | **Source control** | `view.source-control` | — | Shows Git status, staging, branches, and diffs. |
+| **Versions** | `view.versions` | — | Shows the version timeline in the Source control panel. |
 | **Outline** | `view.outline` | — | Shows document headings and hierarchical structure. |
 | **Figures** | `view.figures` | — | Shows vector figures in the project. |
 | **References** | `view.references` | — | Shows bibliography entries and citation tools. |
 | **Plugins** | `view.plugins` | `Ctrl+Shift+X` (`Cmd+Shift+X`) | Shows installed plugins and permissions. |
-| **Agent** | `agent.toggle` | `Ctrl+Shift+A` (`Cmd+Shift+A`) | Opens or closes the AI agent chat column on the right. See [using the agent](../ai/using-the-agent.md). |
+| **Agent** | `agent.toggle` | `Ctrl+Shift+A` (`Cmd+Shift+A`) | Opens or closes the AI agent chat column on the right. See [AI Assistant](ai-assistant.md). |
 | *— Separator —* | | | |
 | **Toggle side panel** | `view.toggle-side` | `Ctrl+B` (`Cmd+B`) | Expands or collapses the active sidebar panel. |
 | **Toggle panel** | `view.toggle-panel` | `Ctrl+J` (`Cmd+J`) | Expands or collapses the bottom panel (Problems/Output). |
@@ -103,7 +107,7 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 | *— Separator —* | | | |
 | **Zen mode** | `view.zen` | `Ctrl+\` (`Cmd+\`) | Toggles distraction-free reading column. |
 | **Switch to light/dark theme** | `view.theme` | — | Switches between Dark and Light color themes. |
-| **Slides** | `doc.slides` | — | Toggles between text and presentation view for Typst. |
+| **Slides** | `doc.slides` | — | Toggles between text and slides view for Typst. See [Slides and Presentations](slides.md). |
 | *— Separator (when figure is active) —* | | | |
 | **Zoom figure to fit** | `figure.zoom-fit` | `Shift+1` | Zooms the figure canvas to fit all elements. |
 | **Figure: Insert Mermaid** | `figure.insert-mermaid` | — | Opens dialog to insert a Mermaid diagram as shapes. |
@@ -141,15 +145,17 @@ Below is every menu in Manang with its items, groups, and default shortcuts.
 
 | Item | Command ID | Default shortcut | Notes |
 | :--- | :--- | :--- | :--- |
+| **User guide** | `help.user-guide` | — | Opens this user guide inside Manang, with search. |
 | **Keyboard shortcuts** | `help.shortcuts` | `Ctrl+/` (`Cmd+/`) | Opens the searchable shortcuts cheat sheet overlay. |
 | **Change keyboard shortcuts** | `help.keybindings` | — | Opens Settings directly on the Keyboard shortcuts tab. |
 | *— Separator —* | | | |
-| **Report a problem** | `help.report-problem` | — | Reveals log files and assists in creating a bug report. |
+| **Report a problem** | `help.report-problem` | — | Opens a dialog where you describe the problem and read a diagnostics report to copy. Manang sends nothing itself. |
+| **Send feedback** | `help.send-feedback` | — | The same dialog, for suggestions and ideas. |
 | **Open logs** | `help.open-logs` | — | Reveals the application logs folder in your system file manager. |
 | *— Separator —* | | | |
 | **Toggle developer tools** | `dev.inspect` | `F12` or `Ctrl+Shift+I` | Opens the web inspector (development builds only). |
 | *— Separator —* | | | |
-| **About Manang** | `help.about` | — | Displays version, commit hash, and licenses. |
+| **About Manang** | `help.about` | — | Displays version, commit, channel, system, what is new, and licenses. |
 
 ---
 

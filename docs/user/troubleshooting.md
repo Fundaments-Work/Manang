@@ -1,6 +1,6 @@
 # Troubleshooting
 
-You can locate application logs, open developer inspection tools, resolve TeX compiler and Linux display issues, debug plugin failures, and report bugs.
+Find the Manang log files, open developer tools, fix LaTeX and Linux display problems, understand plugin load failures, and report a bug to the team.
 
 ## 1. Locate application log files
 
@@ -17,6 +17,8 @@ Find the log file for your operating system (identifier `work.fundaments.manang`
   `%LOCALAPPDATA%\work.fundaments.manang\logs\Manang.log`  
   *(typically `C:\Users\<Username>\AppData\Local\work.fundaments.manang\logs\Manang.log`)*
 
+You can also choose **Help > Open logs** to open the log folder in your file manager.
+
 To follow logs live in a terminal while running on Linux or macOS:
 ```bash
 tail -f ~/.local/share/work.fundaments.manang/logs/Manang.log
@@ -27,7 +29,7 @@ tail -f ~/.local/share/work.fundaments.manang/logs/Manang.log
 When running a development build of Manang (such as with `pnpm app:dev` or `cargo tauri dev`), you can open the built-in web developer tools to inspect UI state, network requests, and console errors.
 
 1. In the Manang window, press `F12`.
-   - Or press `Ctrl+Shift+I` (`Cmd+Alt+I` / `Cmd+Shift+I`).
+   - Or press `Ctrl+Shift+I` (`Cmd+Shift+I`).
 2. The web inspector opens.
 3. Switch to the **Console** tab to view frontend log messages and exceptions.
 4. Switch to the **Elements** or **Network** tabs to inspect layout and asset loading.
@@ -50,7 +52,7 @@ Manang compiles LaTeX using your operating system's TeX distribution (`latexmk`,
    - **macOS:** `brew install --cask mactex-no-gui` (or download MacTeX from [tug.org/mactex](https://tug.org/mactex/))
    - **Windows:** Install TeX Live from [tug.org/texlive](https://tug.org/texlive/) or MiKTeX from [miktex.org](https://miktex.org/). Ensure the installer option to add binaries to `PATH` is enabled.
 2. Restart Manang after installation so the desktop app inherits the updated `PATH` environment variable.
-3. In Manang Settings (`Ctrl+,` (`Cmd+,`)), verify under **LaTeX** that **Backend** is set to `auto` or `system`.
+3. In Manang Settings (`Ctrl+,` (`Cmd+,`)), verify under **Plugins > LaTeX** that **LaTeX engine** is set to **Automatic** or **System TeX**.
 4. *Alternative, no TeX needed:* press **Download the built-in engine** in the preview pane, the Problems tab or Settings > **LaTeX**. See "No TeX installed? Use the built-in engine" in [Preview and PDF](preview-and-pdf.md).
 
 ### The built-in engine will not download or run
@@ -79,10 +81,10 @@ This is caused by a known hardware-acceleration incompatibility between WebKitGT
 ## 5. A plugin fails to compile or load
 
 ### Problem
-A third-party plugin shows a red indicator line or an error message in Settings -> Plugins.
+A third-party plugin shows **Failed** in the Plugins list or an error message. See "What the status words mean" in [Plugins](plugins.md).
 
 ### Solution
-1. **Check the directory name:** The directory in `<config>/manang/plugins/<name>/` must exactly match the `name` field in `manifest.toml`.
+1. **Check the directory name:** The directory in `manang/plugins/<name>/` inside Manang's configuration folder (see [Plugins](plugins.md)) must exactly match the `name` field in `manifest.toml`.
 2. **Validate manifest syntax:** Ensure `manifest.toml` is valid TOML and uses valid permissions:
    - Buffer: `read:active`, `write:active`
    - Filesystem: `read:<dir>`, `write:<dir>`
@@ -94,8 +96,8 @@ A third-party plugin shows a red indicator line or an error message in Settings 
 
 If you discover a bug or unexpected behavior:
 
-1. Check `Manang.log` and note any error or panic messages.
-2. Note your operating system version, desktop environment (Wayland or X11 on Linux), and graphics hardware.
-3. Note the steps to reproduce the issue and the type of document being edited (Typst, LaTeX, or Markdown).
-4. Open an issue on GitHub at:
-   `https://github.com/Fundaments-Work/Manang/issues`
+1. Choose **Help > Report a problem** (or **Help > Send feedback** for an idea). A dialog opens.
+2. Describe what happened in a few lines.
+3. Leave **Include diagnostics** on to attach a report with Manang's version, your plugins and the end of the log. Home folders and anything that looks like a key are removed, your documents are never included, and you can read the whole report in the dialog.
+4. Click **Copy**, then send the text to the Manang team, for example in an issue on GitHub at `https://github.com/Fundaments-Work/Manang/issues`. Manang sends nothing by itself.
+5. Also note your operating system version, desktop environment (Wayland or X11 on Linux), graphics hardware and the steps to reproduce the issue. **Open logs folder** in the dialog opens the full log if you want to attach it.
