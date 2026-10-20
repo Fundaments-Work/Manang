@@ -28,6 +28,7 @@ getrandom = "0.4"
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 proptest = "1"
+insta = "1"
 
 [[bench]]
 name = "bridge"
