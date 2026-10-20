@@ -159,3 +159,141 @@ and quota; the release signing scheme.
   fake load.
 * A 1 GB machine has no swap by default. A small swap file or zram is the
   owner's call on their VM; the plan assumes none and relies on `MemoryMax`.
+
+## Research results and the merged plan (2026-10-20, second round)
+
+Sources: two read-only reports (a memory- and CPU-minimal native design; a
+Cloudflare-compatible design with pricing), plus checks by the lead. [V] verified,
+[I] inferred, [U] unverified.
+
+### Decided direction
+
+* **Production target (owner):** the powerful native relay on the Oracle VM behind
+  the Cloudflare Tunnel, served as `relay.fundaments.work`; `relay-test` is
+  temporary and is deleted after the cut-over. **Cloudflare stays a ready second
+  backend** (the existing Worker, brought to parity), not a rewrite.
+* **Architecture: two backends, one contract ("D+").** A shared `relay-proto`
+  (done) plus a sans-IO core crate that holds only per-room and per-connection
+  decisions (path and frame checks, token bucket, room state machine, capability
+  verification, store effects) and compiles to wasm32 (CI check). The native
+  adapter owns the registry, budgets, timers and sockets; the Durable Object
+  adapter owns hibernation. Golden vectors plus one `relay-conformance` binary
+  (`--url`, advertised capabilities) prove equivalence on native, `wrangler dev`
+  and production. A workers-rs spike is optional and last (the SDK's hibernation
+  support exists but the Rust page documents none [V/I]).
+
+### Verified facts
+
+* tungstenite 0.30 defaults: read buffer 128 KiB, write buffer 128 KiB, max message
+  64 MiB, max frame 16 MiB [V, source]. At 500 connections that is the largest
+  controllable memory cost, so it must be tuned.
+* A cgroup v2 memory cap includes kernel socket buffers (`sock` in `memory.stat`)
+  [V, LWN]; per-socket `SO_SNDBUF`/`SO_RCVBUF` bound them (setting them disables
+  autotuning; the kernel doubles the value).
+* The VM (measured): Ubuntu 24.04, EPYC 7551 (AVX2 and BMI2 present), 954 MB RAM,
+  about 500 MB available. `snapd` hosts Oracle's cloud agent, so do not remove it.
+  `containerd` and `runc` (34 MB) are leftovers of a Docker attempt with nothing
+  depending on them. `fwupd` (42 MB) is useless on a VM. `multipathd` (26 MB): root
+  is plain ext4, no iSCSI sessions; decide after checking `multipath -ll`.
+  `check-new-release` (97 MB) is a login-time MOTD hook.
+* Cloudflare, 500 users doing live co-editing (0.7 billed messages/s/user, the 20:1
+  rule) [I from docs]: the Free plan cannot carry it (100k Durable Object
+  requests/day lasts hours); the Paid plan is about $7/month at 500 users and
+  about $22/month at 5,000 for requests; duration cost depends on rooms
+  hibernating (worst case, never hibernating, about $58/month at 500 users:
+  measure before promising). Durable storage must batch writes (per-frame rows
+  would cost about $170/month at 500 users). Cloudflare Containers is a poor
+  elastic fit (about $12/month always-on plus the plan fee, single region).
+* A Worker Custom Domain cannot coexist with a CNAME on the same hostname [V], so
+  moving `relay.fundaments.work` from the Worker to the tunnel is a short,
+  announced switch: delete the Custom Domain binding, create the tunnel hostname.
+  Keep the Worker on a second name as the fallback. Invites carry the relay
+  address, so the test hostname must never be put in invites.
+* Today's contract drift [V]: the Worker never pings and idles whole rooms at 15
+  minutes, answers 429/426, advertises 16 MiB; native pings every 25 s, idles per
+  connection at 90 s, effective cap 8 MiB, sends 1013 for slow readers. The
+  vectors and X3 below remove this drift.
+* Through the tunnel today: `https://relay-test.fundaments.work/health` returns
+  `ok`, a valid room upgrade returns `101 Switching Protocols`. On the VM the
+  relay answers a bad room path with a clean 404; any other unknown path gets an
+  empty reply instead of an HTTP error (fix in the new server).
+
+### Native design (targets, not measurements)
+
+* One tokio `current_thread` runtime (a 1/8-OCPU baseline gains nothing from
+  work stealing); benchmark one against two workers.
+* Memory budget at 500 connections about 160-175 MB: about 12-16 KiB idle per
+  connection (4 KiB read buffer, no write buffer, `SO_SNDBUF` about 64 KiB and
+  `SO_RCVBUF` about 32 KiB, `TCP_NODELAY`), a global in-flight frame budget of
+  96 MiB counted once per shared allocation, admission by declared frame length
+  before the body is read, bulk frames over 1 MiB behind at most 4 permits,
+  refuse new connections above 85% of `memory.current`, `MemoryMax` only a backstop
+  (no `MemoryHigh` without swap).
+* Fan-out: sharded registry (64 shards, `[u8;16]` keys, no lock across an await or
+  syscall), direct send from the sender's task, per-peer byte-budgeted queue with
+  an age limit, one `Bytes` allocation per frame, vectored writes (up to 256 KiB
+  per wake-up), one shared 1 s sweeper for pings and idle instead of timers per
+  connection. Slow reader policy by bytes and age; presence is lossy (latest
+  wins); data frames are never silently dropped (disconnect with 1013, the client
+  resyncs). Shed order: refuse connections, drop presence, refuse new rooms, refuse
+  frames over 1 MiB, disconnect the largest queues.
+* WebSocket layer behind a `WsLayer` trait: tuned tokio-tungstenite first
+  (`read_buffer_size` 4 KiB, `write_buffer_size` 0, explicit limits). A small custom
+  RFC 6455 codec (about 300 lines, `httparse` for the handshake, fuzzed with a
+  differential oracle against tungstenite, mask required, RSV bits rejected so
+  deflate stays off) is built only if tuned tungstenite exceeds 40 KiB per
+  connection or 5% of one core at the target mix. tokio-tungstenite 0.30.0
+  (2026-07-11) is maintained; `fastwebsockets` last released 2025-01-14 and is not
+  recommended.
+* Allocator: glibc with `MALLOC_ARENA_MAX=1`, `MALLOC_MMAP_THRESHOLD_=262144`,
+  `MALLOC_TRIM_THRESHOLD_=262144` in the env file first; measure jemalloc and
+  mimalloc after churn before changing. Release profile as in `Cargo.toml`;
+  `x86-64-v2` by default.
+* Behind `cloudflared`: relay keepalive 25-30 s (the edge idles proxied WebSockets
+  at roughly 100 s [U, community]), `CF-Connecting-IP` only from loopback, no TLS,
+  `GOMEMLIMIT` for cloudflared, and a measured choice of QUIC versus HTTP/2 and of
+  2 versus 4 tunnel connections.
+* Pass criteria for 500 users (from a separate host, after 30 minutes of sustained
+  load): `memory.current` of the relay at most 200 MB under the full mix and 150
+  MB idle, p99 forward latency at most 50 ms (250 ms during bulk sync), relay CPU
+  at most 5% of one vCPU on average, relay plus cloudflared at most 12%, RSS back
+  within 30 MB after everyone disconnects, no descriptor leak, under 5% growth in a
+  one-hour soak, and the hostile suite stays inside budgets.
+
+### Work packages (at most one heavy build agent at a time, always capped)
+
+| # | Package | Heavy |
+| :--- | :--- | :--- |
+| N1 | `relay-core`: sans-IO per-room/per-connection logic, sharded registry, byte-budgeted queues, global budget type, proptests, wasm32 check | no |
+| X2 | `relay-conformance` runner, `/.well-known/relay` capabilities, vectors for HTTP codes, limiter traces, 150 s idle survival | no |
+| N2 | `WsLayer` trait and tuned tokio-tungstenite implementation | no |
+| N3 | Server loop: single-task connections, vectored writes, sweeper, admission by declared length, memory watcher, shedding | yes |
+| N4 | Ops surface: `/health`, `/ready`, `/metrics`, drain with 1012, `CF-Connecting-IP`, per-IP limits, HTTP errors for unknown paths | no |
+| N5 | `relay-loadgen` with histograms and the scenarios above | no |
+| D1 | Replace the v0 binary on the VM with the new relay through the same deploy script; VM trims the owner approves; `GOMEMLIMIT` for cloudflared | no |
+| N6 | Measurement on a separate host: allocator, QUIC versus HTTP/2, runtime threads, codec rule; record results in the repo | yes, alone |
+| X3 | Worker to contract parity, moved into the new repo; hibernation test; 90 s idle | no |
+| N7 | Fuzz targets (handshake, frame header, envelope, token), hostile suite, cargo-deny, reproducible release builds | yes |
+| X6 | Write tokens (Ed25519, `kid`, expiry, room and role) with Rust and WebCrypto verifiers and vectors | no |
+| X7 | `DurableStore`: native log and DO SQLite with a hash-chain head, batched writes | yes |
+| C1 | Cut-over: `relay-test` to `relay.fundaments.work`, Worker kept on a fallback name, rollback runbook | no |
+
+### Owner decisions
+
+1. Confirm the production target: the Oracle relay as `relay.fundaments.work`, the
+   Worker as fallback (your words suggest yes).
+2. Read section 2.8 of the Cloudflare master agreement for non-HTML proxying
+   (Cloudflare's service terms restrict large media; small WebSocket frames look
+   fine [I]).
+3. Fragmented WebSocket messages: reject (1002) or reassemble.
+4. `panic = abort` (smaller) or unwind (one bad frame cannot take down 500 users).
+5. Write-token transport: query parameter (works from browsers; must never be
+   logged) or header.
+6. Durable rooms in the first version, with retention and quota.
+7. VM trims: remove `containerd`/`runc`, mask `fwupd`, set `Prompt=never` for the
+   release upgrader; leave `snapd` (hosts Oracle's agent); `multipathd` only after
+   a check. Zram, a small swap file, or neither.
+8. Which machine runs the load generator (your desktop over the real tunnel, or a
+   second VM over loopback).
+9. The Oracle idle-reclaim risk: accept, or move to pay-as-you-go.
+10. Frame cap: keep the 8 MiB contract with admission permits.
