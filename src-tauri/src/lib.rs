@@ -254,11 +254,14 @@ fn build_kernel_parts(
     )?;
     kernel.register(
         manang_live_plugin::manifest()?,
-        Arc::new(manang_live_plugin::LivePlugin::new(
-            Arc::clone(editor),
-            events.clone(),
-            dirs.config.to_path_buf(),
-        )),
+        Arc::new(
+            manang_live_plugin::LivePlugin::new(
+                Arc::clone(editor),
+                events.clone(),
+                dirs.config.to_path_buf(),
+            )
+            .with_data_dir(dirs.data.to_path_buf()),
+        ),
     )?;
     // The Visual editor: sessions over the format adapters of the text
     // formats (ADR 0015). Parsing runs on the plugin's own Rayon pool.

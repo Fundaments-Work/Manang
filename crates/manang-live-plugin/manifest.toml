@@ -46,6 +46,10 @@ id = "live.contributors"
 title = "List who edited in the live session"
 
 [[contributes.commands]]
+id = "live.resync"
+title = "Rebuild the live document from the others"
+
+[[contributes.commands]]
 id = "live.configure"
 title = "Apply live editing settings"
 
@@ -62,3 +66,10 @@ type = "string"
 default = ""
 title = "Name shown to collaborators"
 description = "Shown next to your caret. Empty uses your system user name."
+
+[[contributes.settings]]
+id = "live.email"
+type = "string"
+default = ""
+title = "Email shared with collaborators (optional)"
+description = "Shared only with the people in a live session, so a version you save together can credit them with Co-authored-by. Empty shares none; those people are then named in the version's message instead."

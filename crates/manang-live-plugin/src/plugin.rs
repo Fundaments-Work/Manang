@@ -5,19 +5,22 @@ use std::sync::Arc;
 
 use manang_editor::{DocId, Editor};
 use manang_kernel::{Context, EventBus, Payload, Plugin, PluginError};
+use manang_live::LoroEngine;
 use manang_live::bridge::LiveDoc;
 use manang_live::envelope::{Entropy, Invite, OsEntropy, RoomSecret, seed_fingerprint};
 use manang_live::seed::{JoinPlan, plan_join};
 use manang_live::session::SessionConfig;
+use manang_live::vcs::coauthor_trailers;
 use parking_lot::Mutex;
 use ropey::Rope;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::runtime::{Builder, Handle, Runtime};
 
-use crate::driver::{Change, DriverHandle, DriverParams, PushOutcome};
+use crate::driver::{Change, DriverHandle, DriverParams, PushOutcome, random_peer};
 use crate::error::LiveHostError;
 use crate::invite::{InviteLink, normalize_relay, room_url};
+use crate::store::{Snapshots, Trash};
 
 /// The relay run by Fundaments; the default of `live.relay-url`. It only ever
 /// sees ciphertext, and the setting can point anywhere or be emptied.
@@ -28,6 +31,8 @@ const DEFAULT_RELAY: &str = "wss://relay.fundaments.work";
 struct Settings {
     relay_url: String,
     display_name: String,
+    /// Shared with collaborators for `Co-authored-by:` credit; empty shares none.
+    email: String,
 }
 
 impl Default for Settings {
@@ -35,6 +40,7 @@ impl Default for Settings {
         Self {
             relay_url: DEFAULT_RELAY.to_owned(),
             display_name: String::new(),
+            email: String::new(),
         }
     }
 }
@@ -54,6 +60,8 @@ struct Inner {
     events: EventBus,
     /// Where a replaced copy of a file is saved before a join overwrites it.
     config_dir: PathBuf,
+    /// Where disposable document snapshots live (the app data directory).
+    data_dir: PathBuf,
     settings: Mutex<Settings>,
     runtime: Mutex<Option<Runtime>>,
     active: Mutex<Option<Active>>,
@@ -82,12 +90,25 @@ impl LivePlugin {
             inner: Arc::new(Inner {
                 editor,
                 events,
+                data_dir: config_dir.clone(),
                 config_dir,
                 settings: Mutex::new(Settings::default()),
                 runtime: Mutex::new(None),
                 active: Mutex::new(None),
             }),
         }
+    }
+}
+
+impl LivePlugin {
+    /// Keep document snapshots in `dir` (the app data directory) instead of
+    /// the config directory. Call before the plugin is registered.
+    #[must_use]
+    pub fn with_data_dir(mut self, dir: PathBuf) -> Self {
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.data_dir = dir;
+        }
+        self
     }
 }
 
@@ -129,19 +150,6 @@ fn random_hex(bytes: usize) -> Result<String, LiveHostError> {
     let mut buf = vec![0u8; bytes];
     OsEntropy.fill(&mut buf)?;
     Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
-}
-
-/// A fresh peer id: unique per replica, below 2^53 (yrs compatible) and not
-/// the seed author's.
-fn random_peer() -> Result<u64, LiveHostError> {
-    let mut buf = [0u8; 8];
-    OsEntropy.fill(&mut buf)?;
-    let id = u64::from_le_bytes(buf) & ((1 << 53) - 1);
-    Ok(if id <= manang_live::SEED_PEER {
-        id + 2
-    } else {
-        id
-    })
 }
 
 fn clean_name(name: &str) -> String {
@@ -186,8 +194,11 @@ impl Inner {
         "Guest".to_owned()
     }
 
-    fn session_config(&self, peer: u64) -> SessionConfig {
+    fn session_config(&self, peer: u64, await_host: bool) -> SessionConfig {
+        let email = self.settings.lock().email.trim().to_owned();
         SessionConfig {
+            await_host,
+            email: (!email.is_empty()).then_some(email),
             name: self.display_name(),
             slot: u8::try_from(peer % u64::from(manang_live::presence::PALETTE_SLOTS)).unwrap_or(0),
             ..SessionConfig::default()
@@ -238,7 +249,10 @@ impl Inner {
             live_doc: LiveDoc::seeded(peer, &text)?,
             rope: Rope::from_str(&text),
             keys,
-            config: self.session_config(peer),
+            config: self.session_config(peer, false),
+            replace: None,
+            trash: None,
+            snapshots: Some((self.snapshots(), room_hex)),
         })?;
         *self.active.lock() = Some(Active {
             handle: Arc::new(handle),
@@ -267,61 +281,56 @@ impl Inner {
             .text(Some(doc))
             .map_err(|e| LiveHostError::Editor(e.to_string()))?;
         let peer = random_peer()?;
-        let (live_doc, rope, reset) = match plan_join(invite.seed, &local, None) {
-            JoinPlan::SeedLocally => (LiveDoc::seeded(peer, &local)?, Rope::from_str(&local), None),
-            plan => {
-                // An empty copy has nothing to lose; anything else must be
-                // confirmed, and is saved before it is replaced.
-                if !local.is_empty() && plan == JoinPlan::ChooseResolution && !take_host {
-                    return Err(LiveHostError::Differs);
+        let room_hex = keys.room_id_hex();
+        let snapshots = self.snapshots();
+        let trash = Trash {
+            dir: self.config_dir.join("live-trash"),
+            name: name.to_owned(),
+        };
+        // A snapshot of this very room, equal to the file as it is now, lets a
+        // document outlive everyone leaving; it is never trusted over the disk.
+        let restored = snapshots.restore::<LoroEngine>(&room_hex, peer, &local);
+        let (live_doc, rope, replace, await_host) = if let Some(doc) = restored {
+            (doc, Rope::from_str(&local), None, false)
+        } else {
+            match plan_join(invite.seed, &local, None) {
+                JoinPlan::SeedLocally => (
+                    LiveDoc::seeded(peer, &local)?,
+                    Rope::from_str(&local),
+                    None,
+                    true,
+                ),
+                plan => {
+                    // An empty copy has nothing to lose; anything else must be
+                    // confirmed, and is saved before it can be replaced. It is
+                    // replaced only once a host has answered.
+                    if !local.is_empty() && plan == JoinPlan::ChooseResolution && !take_host {
+                        return Err(LiveHostError::Differs);
+                    }
+                    if !local.is_empty() {
+                        trash.save(&local, "join")?;
+                    }
+                    (LiveDoc::empty(peer)?, Rope::new(), Some(local), true)
                 }
-                if !local.is_empty() {
-                    self.save_replaced_copy(name, &local)?;
-                }
-                (LiveDoc::empty(peer)?, Rope::new(), Some(local.clone()))
             }
         };
-        let mut change = None;
-        if let Some(old) = &reset
-            && !old.is_empty()
-        {
-            let chars = old.chars().count();
-            self.editor
-                .replace_silent(Some(doc), 0, chars, "")
-                .map_err(|e| LiveHostError::Editor(e.to_string()))?;
-            change = Some(json!({
-                "start": 0,
-                "delete": old.encode_utf16().count(),
-                "insert": "",
-            }));
-        }
 
         let session = random_hex(6)?;
-        let room_hex = keys.room_id_hex();
-        let spawned = self.handle().and_then(|runtime| {
-            DriverHandle::spawn(DriverParams {
-                session_id: session.clone(),
-                doc,
-                editor: Arc::clone(&self.editor),
-                events: self.events.clone(),
-                handle: runtime,
-                room_url: room_url(&link.relay, &room_hex),
-                live_doc,
-                rope,
-                keys,
-                config: self.session_config(peer),
-            })
-        });
-        let handle = match spawned {
-            Ok(handle) => handle,
-            Err(e) => {
-                if change.is_some() {
-                    // Put back what was blanked: nothing changed after all.
-                    let _ = self.editor.replace_silent(Some(doc), 0, 0, &local);
-                }
-                return Err(e);
-            }
-        };
+        let handle = DriverHandle::spawn(DriverParams {
+            session_id: session.clone(),
+            doc,
+            editor: Arc::clone(&self.editor),
+            events: self.events.clone(),
+            handle: self.handle()?,
+            room_url: room_url(&link.relay, &room_hex),
+            live_doc,
+            rope,
+            keys,
+            config: self.session_config(peer, await_host),
+            replace,
+            trash: Some(trash),
+            snapshots: Some((snapshots, room_hex)),
+        })?;
         let invite_text = link.render()?;
         *self.active.lock() = Some(Active {
             handle: Arc::new(handle),
@@ -337,30 +346,35 @@ impl Inner {
             "version": 0,
             "role": "guest",
             "file": link.file,
-            "reset": change,
+            "waiting": await_host,
+            "reset": Value::Null,
         }))
     }
 
-    /// Save the copy a join is about to replace, outside the project.
-    fn save_replaced_copy(&self, name: &str, text: &str) -> Result<(), LiveHostError> {
-        let dir = self.config_dir.join("live-trash");
-        std::fs::create_dir_all(&dir).map_err(|e| LiveHostError::Io(e.to_string()))?;
-        let stamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs());
-        let safe: String = name
-            .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || c == '.' || c == '-' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .take(80)
-            .collect();
-        std::fs::write(dir.join(format!("{stamp}-{safe}")), text)
-            .map_err(|e| LiveHostError::Io(e.to_string()))
+    fn snapshots(&self) -> Snapshots {
+        Snapshots::new(self.data_dir.join("live-snapshots"))
+    }
+
+    /// Rebuild the document from the others in the room.
+    fn resync(&self) -> Result<Value, LiveHostError> {
+        let handle = self.active_handle(None)?;
+        handle.resync(random_peer()?)?;
+        Ok(json!({ "resyncing": true }))
+    }
+
+    /// Who edited since the last call, with ready-to-append commit trailers.
+    fn contributors(&self, args: &Value) -> Result<Value, LiveHostError> {
+        let handle = self.active_handle(None)?;
+        let list = handle.contributors()?;
+        let text = |key: &str| args.get(key).and_then(Value::as_str);
+        let plan = coauthor_trailers(&list, text("committer_email"), text("committer_name"));
+        Ok(json!({
+            "contributors": list.iter().map(|c| json!({
+                "name": c.name, "email": c.email,
+            })).collect::<Vec<_>>(),
+            "trailers": plan.trailers,
+            "without_email": plan.without_email,
+        }))
     }
 
     fn active_handle(&self, session: Option<&str>) -> Result<Arc<DriverHandle>, LiveHostError> {
@@ -457,6 +471,9 @@ impl Inner {
         if let Some(v) = values.get("live.display-name").and_then(Value::as_str) {
             v.clone_into(&mut next.display_name);
         }
+        if let Some(v) = values.get("live.email").and_then(Value::as_str) {
+            v.clone_into(&mut next.email);
+        }
         *self.settings.lock() = next;
         Ok(json!({ "applied": values.len() }))
     }
@@ -493,13 +510,8 @@ impl Plugin for LivePlugin {
                 let (version, text) = handle.snapshot()?;
                 json!({ "version": version, "text": text })
             }
-            "live.contributors" => {
-                let handle = inner.active_handle(None)?;
-                let list = handle.contributors()?;
-                json!({ "contributors": list.iter().map(|c| json!({
-                    "name": c.name, "email": c.email,
-                })).collect::<Vec<_>>() })
-            }
+            "live.contributors" => inner.contributors(&args)?,
+            "live.resync" => inner.resync()?,
             "live.configure" => inner.configure(&args)?,
             other => return Err(PluginError::UnknownCommand(other.to_owned())),
         };

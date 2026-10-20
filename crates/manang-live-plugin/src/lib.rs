@@ -8,13 +8,15 @@
 //! `live.*` events. See `driver` for the protocol with the web view and
 //! `docs/adr/0013-live-editing.md` for the design.
 //!
-//! The file on disk stays plain UTF-8: the CRDT lives only in memory and in
-//! the session.
+//! The file on disk stays plain UTF-8. The CRDT lives in memory and in the
+//! session; a disposable snapshot of it is kept in the app data directory so a
+//! document survives everyone leaving (see `store`).
 
 mod driver;
 mod error;
 mod invite;
 mod plugin;
+mod store;
 
 pub use driver::{Change, PeerInfo, PushOutcome, Status};
 pub use error::LiveHostError;
