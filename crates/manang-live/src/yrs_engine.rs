@@ -29,6 +29,19 @@ fn decode_err(e: impl std::fmt::Display) -> LiveError {
     LiveError::Decode(e.to_string())
 }
 
+/// Run a yrs *decoder* on bytes from the network. yrs 0.28 asserts on some
+/// hostile inputs (a client id of 2^53 or more panics in `ClientID::new`, found
+/// by fuzzing), and a peer must not be able to take the session thread down.
+/// This is the one place a panic is caught, at the boundary of a third-party
+/// parser that has no fallible interface for these values; the decoders hold no
+/// shared state, so unwinding out of them leaves nothing inconsistent.
+fn guarded<T, E: std::fmt::Display>(decode: impl FnOnce() -> Result<T, E>) -> Result<T, LiveError> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(decode)) {
+        Ok(result) => result.map_err(decode_err),
+        Err(_) => Err(LiveError::Decode("malformed yrs data".to_owned())),
+    }
+}
+
 fn options(peer: u64) -> Result<Options, LiveError> {
     if peer > MAX_PEER {
         return Err(LiveError::Engine("peer id must be below 2^53".to_owned()));
@@ -72,7 +85,7 @@ impl YrsEngine {
     }
 
     fn import(&self, bytes: &[u8]) -> Result<bool, LiveError> {
-        let update = Update::decode_v1(bytes).map_err(decode_err)?;
+        let update = guarded(|| Update::decode_v1(bytes))?;
         let mut txn = self.doc.transact_mut_with(REMOTE_ORIGIN);
         txn.apply_update(update).map_err(decode_err)?;
         let pending = txn.store().pending_update().is_some() || txn.store().pending_ds().is_some();
@@ -203,7 +216,7 @@ impl TextCrdt for YrsEngine {
         let sv_bytes = version
             .get(8..)
             .ok_or_else(|| LiveError::Decode("version too short".to_owned()))?;
-        let sv = StateVector::decode_v1(sv_bytes).map_err(decode_err)?;
+        let sv = guarded(|| StateVector::decode_v1(sv_bytes))?;
         // `encode_diff_v1` always includes the full delete set, so a peer
         // that only missed deletions is repaired too.
         Ok(self.doc.transact().encode_diff_v1(&sv))
@@ -241,7 +254,7 @@ impl TextCrdt for YrsEngine {
     }
 
     fn cursor_pos(&self, cursor: &[u8]) -> Option<usize> {
-        let sticky = StickyIndex::decode_v1(cursor).ok()?;
+        let sticky = guarded(|| StickyIndex::decode_v1(cursor)).ok()?;
         let txn = self.doc.transact();
         sticky.get_offset(&txn).map(|o| o.index as usize)
     }
@@ -282,4 +295,25 @@ fn seed_chunks(text: &str) -> impl Iterator<Item = &str> {
         rest = tail;
         Some(head)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Found by fuzzing (`fuzz/regressions/live_text_apply/yrs-client-id-assert`):
+    /// a client id of 2^53 or more made yrs panic while decoding an update.
+    #[test]
+    fn hostile_update_is_an_error_not_a_panic() {
+        let crash: [u8; 12] = [
+            0x6a, 0x2c, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x2c, 0x72, 0x6a,
+        ];
+        let mut e = YrsEngine::new(10).expect("engine");
+        assert!(e.apply_update(&crash).is_err());
+        assert!(e.export_since(&crash).is_err());
+        assert_eq!(e.cursor_pos(&crash), None);
+        // The replica is still usable afterwards.
+        e.insert(0, "ok").expect("insert");
+        assert_eq!(e.text(), "ok");
+    }
 }

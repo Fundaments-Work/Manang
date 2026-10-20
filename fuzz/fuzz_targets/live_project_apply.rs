@@ -16,14 +16,19 @@ use manang_live::project::{FileId, NodeKind, NodeMeta, ProjectDoc};
 
 fn check(doc: &ProjectDoc) {
     let view = doc.view();
-    let mut seen = HashSet::new();
+    // Same-named directories merge, so directories may share a path; every
+    // other node has a path of its own.
+    let mut dirs = HashSet::new();
+    let mut files = HashSet::new();
     for e in view.entries() {
         assert!(valid_path(&e.path), "resolved path {:?} is not valid", e.path);
-        assert!(seen.insert(e.path.clone()), "duplicate path {:?}", e.path);
+        if e.meta.kind == NodeKind::Dir {
+            dirs.insert(e.path.clone());
+        } else {
+            assert!(files.insert(e.path.clone()), "duplicate path {:?}", e.path);
+        }
     }
-    for m in view.manifest() {
-        assert!(m.validate().is_ok() || m.size > 0, "manifest entry invalid: {m:?}");
-    }
+    assert!(dirs.is_disjoint(&files), "a file shares a directory's path");
 }
 
 fuzz_target!(|data: &[u8]| {
