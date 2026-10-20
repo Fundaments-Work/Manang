@@ -53,6 +53,7 @@ pub const ROOM_ID_LEN: usize = 16;
 const HKDF_SALT: &[u8] = b"manang-live/v1";
 const INFO_KEY: &[u8] = b"aead-key";
 const INFO_ROOM: &[u8] = b"room-id";
+const INFO_ROOM_V2: &[u8] = b"room-id-v2";
 
 /// What an envelope carries. Sent in the clear (and authenticated) so a relay
 /// can apply different rate limits to chatty ephemeral traffic and to updates.
@@ -132,6 +133,26 @@ impl RoomSecret {
         hk.expand(INFO_KEY, &mut key)
             .map_err(|_| LiveError::Envelope("key derivation failed"))?;
         hk.expand(INFO_ROOM, &mut room_id)
+            .map_err(|_| LiveError::Envelope("room id derivation failed"))?;
+        let cipher = XChaCha20Poly1305::new_from_slice(&key)
+            .map_err(|_| LiveError::Envelope("bad key length"))?;
+        key.zeroize();
+        Ok(RoomKeys { cipher, room_id })
+    }
+}
+
+impl RoomSecret {
+    /// Keys for the **project room** of this secret: the same AEAD key, but a
+    /// different routing id (HKDF info `room-id-v2`), so a project session and
+    /// a single-file session sharing one invite secret never share a relay
+    /// room, and old peers never receive v2 traffic.
+    pub fn derive_project(&self) -> Result<RoomKeys, LiveError> {
+        let hk = Hkdf::<Sha256>::new(Some(HKDF_SALT), &self.0);
+        let mut key = [0u8; 32];
+        let mut room_id = [0u8; ROOM_ID_LEN];
+        hk.expand(INFO_KEY, &mut key)
+            .map_err(|_| LiveError::Envelope("key derivation failed"))?;
+        hk.expand(INFO_ROOM_V2, &mut room_id)
             .map_err(|_| LiveError::Envelope("room id derivation failed"))?;
         let cipher = XChaCha20Poly1305::new_from_slice(&key)
             .map_err(|_| LiveError::Envelope("bad key length"))?;
@@ -267,6 +288,16 @@ pub struct Invite {
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 impl Invite {
+    /// An invite to a project room: the `seed` field carries the
+    /// [`crate::manifest::manifest_root`] of the host's project at share time.
+    #[must_use]
+    pub fn for_project(secret: RoomSecret, manifest_root: [u8; 16]) -> Self {
+        Self {
+            secret,
+            seed: manifest_root,
+        }
+    }
+
     /// Encode for a URL fragment (no padding).
     #[must_use]
     pub fn to_fragment(&self) -> String {

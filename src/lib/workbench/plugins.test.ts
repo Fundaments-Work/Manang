@@ -64,10 +64,10 @@ describe("plugins panel model", () => {
       "typst.svg-to-pdf",
     ]);
     // agent 25, citations 7, diagram 5, editor 8, figure 21, git 27, heal 2, latex 8,
-    // live 11, markdown 4, plugins 17, project 30, recovery 4, search 6, settings 14,
+    // live 20, markdown 4, plugins 17, project 30, recovery 4, search 6, settings 14,
     // typst 7, visual 21, writing 14.
     expect(groups.reduce((n, g) => n + g.commands.length, 0)).toBe(
-      25 + 7 + 5 + 8 + 21 + 27 + 2 + 8 + 11 + 4 + 17 + 30 + 4 + 6 + 14 + 7 + 21 + 14,
+      25 + 7 + 5 + 8 + 21 + 27 + 2 + 8 + 20 + 4 + 17 + 30 + 4 + 6 + 14 + 7 + 21 + 14,
     );
   });
 

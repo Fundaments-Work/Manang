@@ -34,6 +34,7 @@ use std::time::{Duration, Instant};
 use manang_editor::{DocId, Editor};
 use manang_kernel::{EventBus, Payload};
 use manang_live::LoroEngine;
+use manang_live::TextCrdt;
 use manang_live::bridge::{LiveDoc, RemoteApplied, TextTarget};
 use manang_live::envelope::{OsEntropy, RoomKeys};
 use manang_live::session::{Input, Output, Session, SessionConfig, SessionState, pump};
@@ -45,11 +46,16 @@ use ropey::Rope;
 use serde_json::{Value, json};
 
 use crate::error::LiveHostError;
+use crate::store::{Snapshots, Trash};
 
 /// How often the thread wakes with nothing to do (polls the socket, ticks timers).
 const TICK: Duration = Duration::from_millis(10);
 /// Minimum gap between presence events.
 const PRESENCE_GAP_MS: u64 = 40;
+/// Minimum gap between writes of the document snapshot.
+const SNAPSHOT_GAP_MS: u64 = 2_000;
+/// Two automatic resyncs are never closer than this.
+const RESYNC_GAP_MS: u64 = 10_000;
 /// How long a command waits for the thread.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -85,7 +91,7 @@ impl PeerInfo {
 /// What the shell shows about the session.
 #[derive(Debug, Clone)]
 pub struct Status {
-    /// `connecting`, `connected`, `reconnecting`, `left` or `error`.
+    /// `connecting`, `waiting`, `connected`, `reconnecting`, `left` or `error`.
     pub state: &'static str,
     /// Failed reconnect attempts so far (while `reconnecting`).
     pub attempt: u32,
@@ -134,6 +140,10 @@ enum Cmd {
     Contributors {
         reply: Sender<Vec<Contributor>>,
     },
+    Resync {
+        peer: u64,
+        reply: Sender<Result<(), LiveHostError>>,
+    },
     Leave {
         reply: Sender<()>,
     },
@@ -152,6 +162,19 @@ pub struct DriverParams {
     pub rope: Rope,
     pub keys: RoomKeys,
     pub config: SessionConfig,
+    /// The file's text before this join, when the join will replace it with
+    /// the room's: it is replaced only once somebody answers.
+    pub replace: Option<String>,
+    /// Where a copy about to be replaced is saved first.
+    pub trash: Option<Trash>,
+    /// Where the document snapshot is kept, and the room's id for its name.
+    pub snapshots: Option<(Snapshots, String)>,
+}
+
+/// The snapshot sidecar of this session.
+struct SnapshotSink {
+    store: Snapshots,
+    room: String,
 }
 
 /// The plugin's handle on a running session thread.
@@ -190,6 +213,16 @@ impl DriverHandle {
             last_presence_ms: 0,
             last_presence: Value::Null,
             closed: false,
+            replace: params.replace,
+            trash: params.trash,
+            snap: params
+                .snapshots
+                .map(|(store, room)| SnapshotSink { store, room }),
+            snap_version: Vec::new(),
+            last_snap_ms: None,
+            hard_error: false,
+            clock: 0,
+            last_resync_ms: None,
         };
         for output in first {
             driver.absorb(output);
@@ -235,6 +268,12 @@ impl DriverHandle {
         self.ask(|reply| Cmd::Snapshot { reply })
     }
 
+    /// Throw the local document away and rebuild it from the room (the other
+    /// copies are the authority). The file keeps its text until someone answers.
+    pub fn resync(&self, peer: u64) -> Result<(), LiveHostError> {
+        self.ask(|reply| Cmd::Resync { peer, reply })?
+    }
+
     /// Everyone who edited since the last call (for commit trailers).
     pub fn contributors(&self) -> Result<Vec<Contributor>, LiveHostError> {
         self.ask(|reply| Cmd::Contributors { reply })
@@ -270,11 +309,37 @@ struct Driver {
     last_presence_ms: u64,
     last_presence: Value,
     closed: bool,
+    /// The text this join will replace once a host answers (see
+    /// [`DriverParams::replace`]); also set by a resync.
+    replace: Option<String>,
+    trash: Option<Trash>,
+    snap: Option<SnapshotSink>,
+    snap_version: Vec<u8>,
+    last_snap_ms: Option<u64>,
+    /// The error cannot go away by itself (the shared copy is gone).
+    hard_error: bool,
+    /// The session thread's clock, ms since it started.
+    clock: u64,
+    last_resync_ms: Option<u64>,
 }
 
-fn state_label(state: SessionState) -> (&'static str, u32) {
+/// A fresh peer id: unique per replica, below 2^53 (yrs compatible) and not
+/// the seed author's.
+pub(crate) fn random_peer() -> Result<u64, LiveHostError> {
+    let mut buf = [0u8; 8];
+    manang_live::envelope::Entropy::fill(&mut OsEntropy, &mut buf)?;
+    let id = u64::from_le_bytes(buf) & ((1 << 53) - 1);
+    Ok(if id <= manang_live::SEED_PEER {
+        id + 2
+    } else {
+        id
+    })
+}
+
+pub(crate) fn state_label(state: SessionState) -> (&'static str, u32) {
     match state {
         SessionState::Idle | SessionState::Connecting | SessionState::Syncing => ("connecting", 0),
+        SessionState::Waiting => ("waiting", 0),
         SessionState::Live => ("connected", 0),
         SessionState::Reconnecting { attempt, .. } => ("reconnecting", attempt),
         SessionState::Closed => ("left", 0),
@@ -305,6 +370,7 @@ impl Driver {
                 break;
             }
             let now = ms(t0);
+            self.clock = now;
             match pump(&mut self.session, &mut self.transport, &mut self.rope, now) {
                 Ok(outputs) => {
                     for output in outputs {
@@ -314,10 +380,12 @@ impl Driver {
                 Err(e) => self.fail(&e.to_string()),
             }
             self.emit_presence(now);
+            self.save_snapshot(now, false);
         }
     }
 
     fn command(&mut self, cmd: Cmd, now: u64) {
+        self.clock = now;
         match cmd {
             Cmd::Push {
                 version,
@@ -327,13 +395,23 @@ impl Driver {
                 let _ = reply.send(self.push(version, &changes));
             }
             Cmd::Selection { version, selection } => {
-                if version == self.version {
+                if version == self.version && !self.session.awaiting_host() {
                     let outputs = self.session.set_selection(&self.rope, selection);
                     self.perform(outputs);
                 }
             }
             Cmd::Snapshot { reply } => {
-                let _ = reply.send((self.version, self.rope.to_string()));
+                // While waiting, the view still shows the file's own text and
+                // the session's document is empty: the file is what to re-read.
+                let text = if self.replace.is_some() || self.session.awaiting_host() {
+                    self.editor.text(Some(self.doc)).unwrap_or_default()
+                } else {
+                    self.rope.to_string()
+                };
+                let _ = reply.send((self.version, text));
+            }
+            Cmd::Resync { peer, reply } => {
+                let _ = reply.send(self.resync(peer, now));
             }
             Cmd::Contributors { reply } => {
                 let _ = reply.send(self.session.take_contributors());
@@ -346,6 +424,7 @@ impl Driver {
     }
 
     fn leave(&mut self, now: u64) {
+        self.save_snapshot(now, true);
         let outputs = self.session.handle(now, Input::Leave, &mut self.rope);
         self.perform(outputs);
         self.closed = true;
@@ -355,6 +434,9 @@ impl Driver {
     fn push(&mut self, version: u64, changes: &[Change]) -> Result<PushOutcome, LiveHostError> {
         if self.closed {
             return Err(LiveHostError::NotLive);
+        }
+        if self.session.awaiting_host() {
+            return Err(LiveHostError::Waiting);
         }
         if version != self.version {
             return Ok(PushOutcome::Stale(self.version));
@@ -442,31 +524,57 @@ impl Driver {
             }
             Output::State(state) => {
                 let (label, attempt) = state_label(state);
+                if state == SessionState::Live {
+                    self.replace_with_room();
+                }
                 {
                     let mut status = self.status.lock();
-                    if status.state != "error" {
+                    if !self.hard_error {
+                        // A later state report means the session moved on: a
+                        // soft error is over.
                         status.state = label;
+                        status.error = None;
                     }
                     status.attempt = attempt;
                     status.peers = self.peers();
                 }
                 self.emit_state();
             }
-            Output::Diverged { .. } => {
-                self.fail(
-                    "The copies of this file no longer match. Leave and join again from the host's invite.",
-                );
-            }
+            Output::HostTimeout => self.fail(
+                "Nobody has answered yet. The host may have left or be offline. Your file has not been changed; Manang keeps trying.",
+            ),
+            Output::Diverged { peer } => self.on_diverged(peer),
             Output::Rejected(_) => {
                 self.status.lock().rejected += 1;
             }
             Output::Send(_) | Output::Connect | Output::Close => {}
+            // Project-session outputs (several files, manifests, blobs). A
+            // single-file session never produces them; the project driver
+            // handles them in work package P4.
+            Output::DocChanged(_)
+            | Output::Tree(_)
+            | Output::DocWanted(_)
+            | Output::DocDiverged { .. }
+            | Output::Progress { .. }
+            | Output::Manifest { .. }
+            | Output::BlobRequested { .. }
+            | Output::BlobReceived { .. }
+            | Output::BlobFailed { .. } => {}
         }
     }
 
     fn remote(&mut self, applied: &RemoteApplied) {
         if applied.changes.is_empty() {
             return;
+        }
+        let mut changes: Vec<Value> = Vec::new();
+        match self.blank_for_replace() {
+            Ok(Some(blank)) => changes.push(blank.to_json()),
+            Ok(None) => {}
+            Err(e) => {
+                self.fail_hard(&e.to_string());
+                return;
+            }
         }
         for c in &applied.changes {
             if let Err(e) = self.editor.replace_silent(
@@ -475,24 +583,26 @@ impl Driver {
                 c.char_start + c.char_delete,
                 &c.insert,
             ) {
-                self.fail(&format!("The shared copy of the file is gone: {e}"));
+                self.fail_hard(&format!("The shared copy of the file is gone: {e}"));
                 return;
             }
         }
+        changes.extend(applied.changes.iter().map(|c| {
+            Change {
+                start: c.utf16_start,
+                delete: c.utf16_delete,
+                insert: c.insert.clone(),
+            }
+            .to_json()
+        }));
+        self.step(changes);
+        self.recover();
+    }
+
+    /// One accepted remote step: bump the version and tell the view.
+    fn step(&mut self, changes: Vec<Value>) {
         self.version += 1;
         self.status.lock().version = self.version;
-        let changes: Vec<Value> = applied
-            .changes
-            .iter()
-            .map(|c| {
-                Change {
-                    start: c.utf16_start,
-                    delete: c.utf16_delete,
-                    insert: c.insert.clone(),
-                }
-                .to_json()
-            })
-            .collect();
         self.events.emit(
             "live.remote",
             Payload::Json(json!({
@@ -505,11 +615,161 @@ impl Driver {
         self.presence_dirty = true;
     }
 
+    /// The room has answered: the file's old text goes (a copy was saved at
+    /// join, and the editor's text is saved again if it was edited since).
+    /// Returns the view change that removes it, `None` if nothing to remove.
+    fn blank_for_replace(&mut self) -> Result<Option<Change>, LiveHostError> {
+        let Some(original) = self.replace.take() else {
+            return Ok(None);
+        };
+        let current = self
+            .editor
+            .text(Some(self.doc))
+            .map_err(|e| LiveHostError::Editor(e.to_string()))?;
+        if current.is_empty() {
+            return Ok(None);
+        }
+        if current != original
+            && let Some(trash) = &self.trash
+        {
+            trash.save(&current, "edited")?;
+        }
+        self.editor
+            .replace_silent(Some(self.doc), 0, current.chars().count(), "")
+            .map_err(|e| LiveHostError::Editor(e.to_string()))?;
+        Ok(Some(Change {
+            start: 0,
+            delete: current.encode_utf16().count(),
+            insert: String::new(),
+        }))
+    }
+
+    /// The session went live with nothing to apply (the room's text is empty):
+    /// the old text still has to go.
+    fn replace_with_room(&mut self) {
+        if self.replace.is_none() {
+            return;
+        }
+        match self.blank_for_replace() {
+            Ok(Some(blank)) => self.step(vec![blank.to_json()]),
+            Ok(None) => {}
+            Err(e) => self.fail_hard(&e.to_string()),
+        }
+    }
+
+    /// Rebuild the document from the room: save the file's text, start from an
+    /// empty document under a new peer id and ask again. The editor keeps its
+    /// text until somebody answers.
+    fn resync(&mut self, peer: u64, now: u64) -> Result<(), LiveHostError> {
+        if self.closed {
+            return Err(LiveHostError::NotLive);
+        }
+        let current = self
+            .editor
+            .text(Some(self.doc))
+            .map_err(|e| LiveHostError::Editor(e.to_string()))?;
+        if !current.is_empty()
+            && let Some(trash) = &self.trash
+        {
+            trash.save(&current, "resync")?;
+        }
+        let doc = LiveDoc::empty(peer)?;
+        self.rope = Rope::new();
+        self.replace = Some(current);
+        self.last_resync_ms = Some(now);
+        let outputs = self.session.resync(now, doc);
+        self.perform(outputs);
+        Ok(())
+    }
+
+    /// The copies disagree at the same version. The peer with the higher id
+    /// rebuilds from the other (so two peers never both wait for each other);
+    /// the other keeps going and answers.
+    fn on_diverged(&mut self, peer: u64) {
+        if self.session.peer() <= peer {
+            return;
+        }
+        if self
+            .last_resync_ms
+            .is_some_and(|t| self.clock.saturating_sub(t) < RESYNC_GAP_MS)
+        {
+            return;
+        }
+        let result = random_peer().and_then(|p| self.resync(p, self.clock));
+        if let Err(e) = result {
+            self.fail(&format!("The copies of this file no longer match: {e}"));
+        }
+    }
+
+    /// Write the document snapshot (debounced) when the document changed.
+    /// A failed write is ignored on purpose: the snapshot is a cache, and the
+    /// file on disk and the room still hold everything.
+    fn save_snapshot(&mut self, now: u64, force: bool) {
+        let Some(sink) = &self.snap else {
+            return;
+        };
+        if self.session.awaiting_host() {
+            return; // an empty joiner's document must never shadow the room's
+        }
+        if !force
+            && self
+                .last_snap_ms
+                .is_some_and(|t| now.saturating_sub(t) < SNAPSHOT_GAP_MS)
+        {
+            return;
+        }
+        let engine = self.session.doc().engine();
+        let version = engine.version();
+        if version == self.snap_version {
+            return;
+        }
+        self.last_snap_ms = Some(now);
+        if let Ok(bytes) = engine.export_snapshot()
+            && sink.store.save(&sink.room, &engine.text(), &bytes).is_ok()
+        {
+            self.snap_version = version;
+        }
+    }
+
+    /// A problem that may pass: the next state change or the next remote
+    /// step clears it.
     fn fail(&mut self, message: &str) {
+        if self.hard_error {
+            return;
+        }
         {
             let mut status = self.status.lock();
             status.state = "error";
             status.error = Some(message.to_owned());
+        }
+        self.emit_state();
+    }
+
+    /// A problem that cannot pass (the shared copy of the file is gone).
+    fn fail_hard(&mut self, message: &str) {
+        self.hard_error = true;
+        {
+            let mut status = self.status.lock();
+            status.state = "error";
+            status.error = Some(message.to_owned());
+        }
+        self.emit_state();
+    }
+
+    /// Data is flowing again: a soft error is over.
+    fn recover(&mut self) {
+        if self.hard_error {
+            return;
+        }
+        let (label, attempt) = state_label(self.session.state());
+        {
+            let mut status = self.status.lock();
+            if status.state != "error" {
+                return;
+            }
+            status.state = label;
+            status.attempt = attempt;
+            status.error = None;
         }
         self.emit_state();
     }

@@ -136,13 +136,23 @@ class Rig {
   /** Pushes the authority refused as stale. */
   stale = 0;
 
-  constructor(initial: string) {
-    this.authority = new LiveAuthority("s", initial, (topic, payload) => {
-      this.outbox.push({ topic, payload });
-    });
+  constructor(
+    initial: string,
+    readonly path = "a.typ",
+  ) {
+    this.authority = new LiveAuthority(
+      "s",
+      initial,
+      (topic, payload) => {
+        this.outbox.push({ topic, payload });
+      },
+      undefined,
+      path,
+    );
     this.state = EditorState.create({ doc: initial });
     this.binding = new LiveBinding({
       session: "s",
+      path: this.path,
       version: 0,
       host: {
         state: () => this.state,
@@ -279,6 +289,56 @@ describe("LiveBinding against the authority", () => {
     expect(staleTotal).toBeGreaterThan(50);
   });
 
+  it("converges per file when two files of one session are typed into at once", async () => {
+    let staleTotal = 0;
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const rand = random(seed * 104_729);
+      const a = new Rig(words(rand).repeat(3), "a.typ");
+      const b = new Rig(words(rand).repeat(3), "b.typ");
+      const rigs = [a, b];
+      for (let i = 0; i < 90; i += 1) {
+        const rig = rigs[Math.floor(rand() * 2)] ?? a;
+        const roll = rand();
+        if (roll < 0.35) {
+          rig.type(randomChange(rand, rig.state.doc.length));
+        } else if (roll < 0.55) {
+          rig.authority.remote([randomChange(rand, rig.authority.text.length)]);
+        } else {
+          await tick();
+          rig.step(rand);
+        }
+      }
+      // Drain both in turns: neither file's traffic may disturb the other's.
+      await Promise.all([a.drain(rand), b.drain(rand)]);
+      for (const rig of rigs) {
+        expect(rig.view, `seed ${seed} ${rig.path}`).toBe(rig.authority.text);
+        expect(rig.binding.pending, `seed ${seed} ${rig.path}`).toBe(false);
+        expect(rig.binding.version, `seed ${seed} ${rig.path}`).toBe(
+          rig.authority.version,
+        );
+        expect(rig.binding.resyncs, `seed ${seed} ${rig.path}`).toBe(0);
+        staleTotal += rig.stale;
+        rig.binding.close();
+      }
+      // Each file's events carry its own path, and nothing else's text leaked in.
+      expect(a.authority.path).toBe("a.typ");
+      expect(b.authority.path).toBe("b.typ");
+    }
+    expect(staleTotal).toBeGreaterThan(50);
+  });
+
+  it("keeps two files apart when events are fed to the wrong binding too", async () => {
+    const a = new Rig("alpha", "a.typ");
+    const b = new Rig("beta", "b.typ");
+    b.authority.remote([{ start: 0, delete: 0, insert: ">" }]);
+    const stray = b.outbox.shift();
+    a.binding.remote(stray?.payload as Parameters<LiveBinding["remote"]>[0]);
+    expect(a.view).toBe("alpha");
+    expect(a.binding.version).toBe(0);
+    a.binding.close();
+    b.binding.close();
+  });
+
   it("holds steps that arrive out of order until the gap is filled", async () => {
     const rig = new Rig("abc");
     rig.authority.remote([{ start: 3, delete: 0, insert: "1" }]);
@@ -330,6 +390,22 @@ describe("LiveBinding against the authority", () => {
     rig.binding.close();
   });
 
+  it("ignores events that name another file, and names its own file when pushing", async () => {
+    const rig = new Rig("abc", "a.typ");
+    rig.binding.remote({
+      session: "s",
+      path: "b.typ",
+      version: 1,
+      ack: false,
+      changes: [{ start: 0, delete: 0, insert: "x" }],
+    });
+    expect(rig.view).toBe("abc");
+    rig.type({ start: 3, delete: 0, insert: "!" });
+    await tick();
+    expect(rig.requests[0]?.args.path).toBe("a.typ");
+    rig.binding.close();
+  });
+
   it("ignores other sessions and stops after close", () => {
     const rig = new Rig("abc");
     rig.binding.remote({
@@ -360,6 +436,7 @@ describe("LiveBinding against the authority", () => {
     const rig = new Rig("hello world");
     const binding = new LiveBinding({
       session: "s",
+      path: "a.typ",
       version: 0,
       host: {
         state: () => state,

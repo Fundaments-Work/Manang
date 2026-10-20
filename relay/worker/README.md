@@ -56,7 +56,7 @@ pnpm install
 pnpm test          # unit tests inside workerd (Workers runtime)
 pnpm typecheck
 pnpm dev           # wrangler dev on http://127.0.0.1:8787, nothing is deployed
-pnpm conformance   # runs the Rust RelayClient test against wrangler dev
+pnpm conformance   # runs the Rust RelayClient test and the bulk-sync replay against wrangler dev
 ```
 
 Point the app's `live.relay-url` at `ws://127.0.0.1:8787` to try it.
@@ -92,6 +92,30 @@ Worker's own request quota is on the Workers pricing page:
 sockets per object and message size are on
 <https://developers.cloudflare.com/durable-objects/platform/limits/>. This relay
 writes no data to Durable Object storage except the idle-check alarm.
+
+### Project sessions and the 20:1 billing
+
+A project live session (ADR 0014) syncs a whole folder, which is many small
+messages. Cost follows incoming messages, not bytes or files. The bulk-sync
+replay (`crates/manang-relay/tests/bulk_sync.rs`) models a host answering a
+100-file join: 170 messages (one manifest page, 140 small document frames, 25
+one-chunk blobs, 4 chunks of two larger blobs). The guest's own requests add
+roughly one message per file and per chunk (an estimate; the test does not
+measure it), so about 280 messages in all: 280 / 20 = 14 billed requests per
+join. The Free plan's 100,000 requests a day is then about 7,000 such joins a
+day. The senders pace themselves at 100 messages and 2 MiB per second, which
+bounds the rate, not the count. Run the replay against a Worker (local or
+deployed) with:
+
+```sh
+MANANG_RELAY_URL=ws://127.0.0.1:8787 cargo test -p manang-relay --test bulk_sync -- --nocapture
+```
+
+(`ws://` only: this test has no TLS client, so it cannot reach a deployed
+`wss://` Worker; it takes about 3 seconds and joins a fresh random room).
+
+Both relays refill a connection's byte bucket at 4 MiB/s with a two-second
+capacity, so one frame can be at most 8 MiB, not the 16 MiB frame limit.
 
 ## Rotate or delete
 

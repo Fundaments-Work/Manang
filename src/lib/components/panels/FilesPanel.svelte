@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
 
+  import PresenceSwatches from "$lib/components/PresenceSwatches.svelte";
   import ContextMenu, { type MenuItem } from "$lib/components/ui/ContextMenu.svelte";
   import Icon from "$lib/components/ui/Icon.svelte";
   import {
@@ -12,6 +13,7 @@
     trashEntry,
   } from "$lib/state/actions";
   import { canBeMain, setMainFile } from "$lib/state/mainFile";
+  import { live } from "$lib/state/live.svelte";
   import { tabs } from "$lib/state/tabs.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
   import { basename, dirname, newFileName, uniqueName } from "$lib/workbench/paths";
@@ -215,6 +217,19 @@
       { label: "New file", onselect: () => void startCreate("file", dir) },
       { label: "New folder", onselect: () => void startCreate("folder", dir) },
     );
+    if (
+      row !== null &&
+      row.kind === "file" &&
+      live.active &&
+      live.scope === "project"
+    ) {
+      const shared = live.isLive(row.path);
+      items.push({
+        label: shared ? "Keep out of the live session" : "Share in the live session",
+        separated: true,
+        onselect: () => void (shared ? live.exclude(row.path) : live.include(row.path)),
+      });
+    }
     if (row !== null && row.kind === "file" && canBeMain(row.path)) {
       items.push({
         label: "Set as main file",
@@ -424,6 +439,9 @@
             {#if row.hint !== ""}<span class="ml-1.5 text-text-muted">{row.hint}</span
               >{/if}
           </span>
+          {#if row.kind === "file" && live.active}
+            <PresenceSwatches peers={live.peersAt(row.path)} where="row" />
+          {/if}
           {#if row.kind === "file" && isTabDirty(row.path)}
             <span
               class="h-1.5 w-1.5 shrink-0 bg-text"

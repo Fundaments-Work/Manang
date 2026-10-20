@@ -62,6 +62,45 @@ fn load_ignore(root: &Path) -> Gitignore {
     builder.build().unwrap_or_else(|_| Gitignore::empty())
 }
 
+/// The watcher's ignore rules as a reusable filter: `.git/`, `.manang/` and
+/// everything the root `.gitignore` matches. The live plugin applies the same
+/// filter to remote paths so both sides agree on what is "not the project".
+#[derive(Debug)]
+pub struct IgnoreFilter {
+    root: PathBuf,
+    ignore: Gitignore,
+}
+
+impl IgnoreFilter {
+    /// Load the filter for `root` (read the root `.gitignore`; a missing or
+    /// malformed file only loses filtering).
+    #[must_use]
+    pub fn load(root: &Path) -> Self {
+        Self {
+            root: root.to_path_buf(),
+            ignore: load_ignore(root),
+        }
+    }
+
+    /// Whether the project-relative path `rel` is filtered out. A path that is
+    /// not plainly relative counts as ignored.
+    #[must_use]
+    pub fn is_ignored(&self, rel: &Path, is_dir: bool) -> bool {
+        if rel.has_root()
+            || rel
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            return true;
+        }
+        is_internal(rel)
+            || self
+                .ignore
+                .matched_path_or_any_parents(self.root.join(rel), is_dir)
+                .is_ignore()
+    }
+}
+
 fn relative(root: &Path, path: &Path) -> Option<PathBuf> {
     path.strip_prefix(root).ok().map(Path::to_path_buf)
 }
@@ -220,6 +259,19 @@ mod tests {
             event = event.add_path(PathBuf::from(p));
         }
         DebouncedEvent::new(event, Instant::now())
+    }
+
+    #[test]
+    fn ignore_filter_matches_the_watcher_rules() {
+        let tmp = tempfile::tempdir().expect("tmp");
+        std::fs::write(tmp.path().join(".gitignore"), "build/\n*.aux\n").expect("gi");
+        let f = IgnoreFilter::load(tmp.path());
+        assert!(f.is_ignored(Path::new("build/out.pdf"), false));
+        assert!(f.is_ignored(Path::new("x.aux"), false));
+        assert!(f.is_ignored(Path::new(".git/config"), false));
+        assert!(f.is_ignored(Path::new(".manang/trash/1"), false));
+        assert!(f.is_ignored(Path::new("../x"), false));
+        assert!(!f.is_ignored(Path::new("a/main.typ"), false));
     }
 
     #[test]

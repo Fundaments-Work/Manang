@@ -1305,6 +1305,429 @@ async function liveSection(browser) {
   page.close();
 }
 
+/**
+ * Project-wide live sessions against the in-memory kernel (the mock follows the
+ * plugin's contract, see `mockLive.ts`): sharing the whole project from the
+ * Share popover, per-file presence swatches on tabs and Files rows, the
+ * participants list with Follow, tree changes and the deleted-file state with
+ * Restore, then joining a project whose files differ (the plan dialog: choices,
+ * the single all-files confirmation, Escape) and fetch progress in the status bar.
+ *
+ * Self-contained: `MANANG_ONLY=live` runs it after the single-file section.
+ */
+async function liveProjectSection(browser) {
+  section("Live editing: whole project");
+  const page = await newPage(browser);
+  current = page;
+  await clickText(page, "[data-project] button", "Entropy paper");
+  await waitFor(
+    page,
+    `document.querySelector(".cm-content")?.textContent.includes("Landauer")`,
+    { label: "editor shows main.typ" },
+  );
+  await press(page, "Escape", { wait: 100 });
+  await click(page, ".cm-content");
+  const run = (command, args = {}) =>
+    page.evaluate(
+      `import("/src/lib/kernel/index.ts").then((m) => m.kernel.run(${JSON.stringify(command)}, ${JSON.stringify(args)}))`,
+    );
+  const ev = (expression) => page.evaluate(expression);
+  const openFileTab = (path) =>
+    ev(
+      `import("/src/lib/state/actions.ts").then((m) => m.openFile(${JSON.stringify(path)}))`,
+    );
+  const palette = async (query) => {
+    await press(page, "k", { ctrl: true, wait: 300 });
+    await insertText(page, query);
+    await press(page, "Enter", { wait: 400 });
+  };
+  const openShare = () => click(page, '[data-testid="share-button"]');
+  const popover = `document.querySelector('[data-testid="share-popover"]')`;
+  const tabSel = (path) => `[role="tab"][data-tab="${path}"]`;
+  const rowSel = (path) => `[role="treeitem"][data-path="${path}"]`;
+  const footer = `document.querySelector('footer[aria-label="Status"]')`;
+  await run("settings.set", { id: "live.relay-url", value: "wss://relay.example.org" });
+  await run("dev.live-seed", {
+    files: {
+      "main.typ": "= Host main\n",
+      "talk.typ": "= Host talk\n",
+      "notes.md": "# Host notes\n",
+    },
+  });
+  await openFileTab("talk.typ");
+  await openFileTab("main.typ");
+  await waitFor(page, `document.querySelector('${tabSel("talk.typ")}') !== null`);
+
+  // -- Start: choose the whole project. ------------------------------------
+  await openShare();
+  await expectEventually(
+    page,
+    "the Share popover offers This file and Whole project, with a file open",
+    `(() => { const g = ${popover}?.querySelector('[data-testid="share-scope"]'); return !!g && g.getAttribute("role") === "radiogroup" && [...g.querySelectorAll('[role="radio"]')].map((b) => b.textContent.trim()).join("|") === "This file|Whole project" && g.querySelector('[data-scope="file"]').getAttribute("aria-checked") === "true"; })()`,
+  );
+  await click(page, '[data-scope="project"]');
+  check(
+    "choosing Whole project changes the sentence and the button",
+    await ev(
+      `(() => { const p = ${popover}; return p.querySelector('[data-testid="share-ready"]').innerText.includes("every file in this project") && p.querySelector('[data-testid="share-start"]').innerText === "Share the whole project"; })()`,
+    ),
+  );
+  await shoot(page, "live-p1-share-scope");
+  await click(page, '[data-testid="share-start"]');
+  await expectEventually(
+    page,
+    "a project session starts as host and lists its files",
+    `import("/src/lib/state/live.svelte.ts").then((m) => m.live.scope === "project" && m.live.role === "host" && m.live.files.length === 3)`,
+  );
+  check(
+    "the invite names a project",
+    (await run("live.invite")).invite.includes("scope=project"),
+  );
+
+  // -- A collaborator arrives and opens a file. ----------------------------
+  const ada = await run("dev.live-peer-join", { name: "Ada Lovelace", slot: 3 });
+  const bo = await run("dev.live-peer-join", { name: "Bo Ndiaye", slot: 5 });
+  await run("dev.live-peer-open", { peer: ada.peer, path: "talk.typ" });
+  await run("dev.live-peer-open", { peer: bo.peer, path: "talk.typ" });
+  await expectEventually(
+    page,
+    "the tab of the file Ada and Bo have open shows a square per person, named",
+    `(() => { const t = document.querySelector('${tabSel("talk.typ")}'); const s = t?.querySelector('[data-testid="presence-tab"]'); return !!s && s.querySelectorAll("[data-peer]").length === 2 && s.getAttribute("aria-label").includes("Ada Lovelace") && s.getAttribute("aria-label").includes("Bo Ndiaye") && t.getAttribute("aria-label").includes("here now: Ada Lovelace, Bo Ndiaye"); })()`,
+    {
+      show: `document.querySelector('${tabSel("talk.typ")}')?.outerHTML.slice(0, 400)`,
+    },
+  );
+  check(
+    "a file nobody has open shows no swatch",
+    !(await exists(page, `${tabSel("main.typ")} [data-testid="presence-tab"]`)),
+  );
+  check(
+    "the swatches are 6px squares with a hairline, in two different colours",
+    await ev(
+      `(() => { const q = [...document.querySelectorAll('${tabSel("talk.typ")} [data-testid="presence-tab"] [data-peer]')]; const s = q.map((e) => getComputedStyle(e)); return q.every((e) => e.getBoundingClientRect().width === 6 && e.getBoundingClientRect().height === 6) && s.every((c) => c.borderTopLeftRadius === "0px" && c.boxShadow === "none") && s[0].backgroundColor !== s[1].backgroundColor; })()`,
+    ),
+  );
+  if (await exists(page, rowSel("talk.typ"))) {
+    check(
+      "the Files row of that file shows the same people, named",
+      await ev(
+        `(() => { const s = document.querySelector('${rowSel("talk.typ")} [data-testid="presence-row"]'); return !!s && s.getAttribute("aria-label").includes("Ada Lovelace"); })()`,
+      ),
+    );
+  } else {
+    check("the Files tree is showing talk.typ", false, "no row for talk.typ");
+  }
+  await shoot(page, "live-p2-presence");
+
+  // -- The popover lists participants; Follow opens their file. -----------
+  await openShare();
+  await expectEventually(
+    page,
+    "the popover lists each person with 'in <file>' and a Follow action",
+    `(() => { const li = [...${popover}.querySelectorAll('[data-testid="share-participants"] li[data-peer]')]; const a = li.find((x) => x.innerText.includes("Ada Lovelace")); return li.length === 2 && !!a && a.innerText.includes("in talk.typ") && a.querySelector('[data-testid="share-follow"]').innerText === "Follow"; })()`,
+    {
+      show: `${popover}?.querySelector('[data-testid="share-participants"]')?.innerText`,
+    },
+  );
+  check(
+    "the one lime action in the popover is Copy invite link",
+    await ev(
+      `(() => { const lime = [...${popover}.querySelectorAll("button")].filter((b) => getComputedStyle(b).backgroundColor === getComputedStyle(document.documentElement).getPropertyValue("--mng-accent") || b.classList.contains("bg-accent")); return lime.length === 1 && lime[0].dataset.testid === "share-copy"; })()`,
+    ),
+  );
+  await shoot(page, "live-p3-participants");
+  await click(page, `[data-peer="${ada.peer}"] [data-testid="share-follow"]`);
+  await expectEventually(
+    page,
+    "Follow brings Ada's file to the front and the button says Stop following",
+    `import("/src/lib/state/tabs.svelte.ts").then((m) => m.tabs.active?.path === "talk.typ") && document.querySelector('[data-peer="${ada.peer}"] [data-testid="share-follow"]')?.innerText === "Stop following"`,
+  );
+  await run("dev.live-peer-open", { peer: ada.peer, path: "notes.md" });
+  await expectEventually(
+    page,
+    "while following, the view moves with Ada to notes.md",
+    `import("/src/lib/state/tabs.svelte.ts").then((m) => m.tabs.active?.path === "notes.md")`,
+  );
+  await click(page, `[data-peer="${ada.peer}"] [data-testid="share-follow"]`);
+  check(
+    "Stop following ends it",
+    await ev(
+      `import("/src/lib/state/live.svelte.ts").then((m) => m.live.following === null)`,
+    ),
+  );
+  await press(page, "Escape");
+
+  // -- Tree changes: notice, deleted-by state, Restore. -------------------
+  await openFileTab("talk.typ");
+  await run("dev.live-peer-create", { peer: bo.peer, path: "extra.typ", text: "x" });
+  await expectEventually(
+    page,
+    "a new file by someone else is announced in the status bar",
+    `${footer}.innerText.includes("Bo Ndiaye") && ${footer}.innerText.includes("extra.typ")`,
+    { show: `${footer}.innerText` },
+  );
+  await run("dev.live-peer-delete", { peer: ada.peer, path: "talk.typ" });
+  await expectEventually(
+    page,
+    "a file deleted by someone else shows 'deleted by' on its tab with Restore",
+    `(() => { const t = document.querySelector('${tabSel("talk.typ")}'); return !!t && t.innerText.includes("deleted by Ada Lovelace") && t.getAttribute("aria-label").includes("deleted by Ada Lovelace") && !!document.querySelector('[data-testid="tab-restore"]'); })()`,
+    {
+      show: `document.querySelector('${tabSel("talk.typ")}')?.outerHTML.slice(0, 300)`,
+    },
+  );
+  await expectEventually(
+    page,
+    "its editor says who deleted it and offers Restore for everyone",
+    `(() => { const b = document.querySelector('[data-testid="live-deleted"]'); return !!b && b.innerText.includes("Ada Lovelace deleted this file") && !!b.querySelector('[data-testid="live-restore"]'); })()`,
+  );
+  await shoot(page, "live-p4-deleted");
+  await click(page, '[data-testid="tab-restore"]');
+  await expectEventually(
+    page,
+    "Restore brings the file back into the session",
+    `!document.querySelector('[data-testid="tab-deleted"]') && !document.querySelector('[data-testid="live-deleted"]') && !!document.querySelector('[data-testid="live-bar"]')`,
+  );
+  check(
+    "the chip counts the people",
+    await ev(
+      `document.querySelector('[data-testid="live-chip"]')?.innerText.trim() === "Live: 3 people"`,
+    ),
+  );
+  await ev(
+    `import("/src/lib/state/live.svelte.ts").then((m) => { m.live.progress = { done: 12, total: 80 }; })`,
+  );
+  check(
+    "fetching shows its progress in the status bar",
+    await ev(
+      `document.querySelector('[data-testid="live-progress"]')?.innerText === "Fetching files 12/80"`,
+    ),
+  );
+  await ev(
+    `import("/src/lib/state/live.svelte.ts").then((m) => { m.live.progress = null; })`,
+  );
+  // -- A deleter the session cannot name: no "by". ------------------------
+  await run("dev.live-peer-delete", {
+    peer: ada.peer,
+    path: "talk.typ",
+    anonymous: true,
+  });
+  await expectEventually(
+    page,
+    "an unnamed deleter is shown without 'by' on the tab",
+    `import("/src/lib/state/live.svelte.ts").then((m) => m.live.deletedBy("talk.typ") === "") && (() => { const t = document.querySelector('${tabSel("talk.typ")}'); return !!t && t.innerText.includes("deleted") && !t.innerText.includes("deleted by") && !t.getAttribute("aria-label").includes("deleted by"); })()`,
+    {
+      show: `document.querySelector('${tabSel("talk.typ")}')?.outerHTML.slice(0, 300)`,
+    },
+  );
+
+  // -- A large change on disk is held until answered. ---------------------
+  const held = `document.querySelector('[data-testid="live-paused"]')`;
+  await run("dev.live-paused", { files: 40, changed_lines: 900, total_lines: 2000 });
+  await expectEventually(
+    page,
+    "a held change asks: share, or put the folder back, and says the copies go to the trash",
+    `(() => { const d = ${held}; if (!d) return false; const t = d.innerText; return t.includes("Many files changed at once (for example by a Git checkout)") && t.includes("Share these changes or put your folder back as the session has it?") && t.includes("go to the trash") && t.includes("40 files") && d.querySelectorAll(".bg-accent").length === 1; })()`,
+    { show: `${held}?.innerText` },
+  );
+  await shoot(page, "live-p8-paused");
+  await click(page, '[data-testid="live-paused-later"]');
+  check(
+    "Decide later hides the dialog and the status bar offers it again",
+    await ev(
+      `${held} === null && !!document.querySelector('[data-testid="live-paused-chip"]')`,
+    ),
+  );
+  await click(page, '[data-testid="live-paused-chip"]');
+  await expectEventually(page, "the chip brings the dialog back", `${held} !== null`);
+  await click(page, '[data-testid="live-paused-discard"]');
+  await expectEventually(
+    page,
+    "putting the folder back answers the session and closes the dialog",
+    `${held} === null && !document.querySelector('[data-testid="live-paused-chip"]')`,
+  );
+  check(
+    "the session no longer holds a change",
+    (await run("live.status")).paused === null,
+  );
+
+  // -- Leaving as host with files nobody else has: warn, never block. -----
+  const leaveDlg = `document.querySelector('[role="alertdialog"],[role="dialog"]')`;
+  await run("dev.live-unsynced", { files: 2 });
+  await openShare();
+  await click(page, '[data-testid="share-leave"]');
+  await expectEventually(
+    page,
+    "leaving warns that 2 files have not reached anyone else, with Stay and Leave anyway",
+    `(() => { const d = ${leaveDlg}; if (!d) return false; const b = [...d.querySelectorAll("button")].map((x) => x.textContent.trim()); return d.innerText.includes("2 files have not reached anyone else yet") && b.includes("Stay") && b.includes("Leave anyway"); })()`,
+    { show: `${leaveDlg}?.innerText` },
+  );
+  await shoot(page, "live-p8-leave-warning");
+  await clickText(page, '[role="alertdialog"] button, [role="dialog"] button', "Stay");
+  check(
+    "Stay keeps the session",
+    await ev(`import("/src/lib/state/live.svelte.ts").then((m) => m.live.active)`),
+  );
+  await openShare();
+  await click(page, '[data-testid="share-leave"]');
+  await expectEventually(page, "the warning comes back", `${leaveDlg} !== null`);
+  await clickText(
+    page,
+    '[role="alertdialog"] button, [role="dialog"] button',
+    "Leave anyway",
+  );
+  await expectEventually(
+    page,
+    "Leave anyway ends the project session",
+    `import("/src/lib/state/live.svelte.ts").then((m) => !m.live.active)`,
+  );
+  await expectEventually(
+    page,
+    "Leave ends the project session",
+    `import("/src/lib/state/live.svelte.ts").then((m) => !m.live.active)`,
+  );
+
+  // -- Join a project whose files differ: the plan dialog. ----------------
+  await run("dev.live-local", {
+    files: {
+      "main.typ": "= My main\n",
+      "notes.md": "# My notes\n",
+      "talk.typ": "= Host talk\n",
+      "scratch.typ": "= Mine only\n",
+    },
+  });
+  const invite = (
+    await run("dev.live-make-invite", {
+      files: {
+        "main.typ": "= Host main\n",
+        "notes.md": "# Host notes\n",
+        "talk.typ": "= Host talk\n",
+        "refs.bib": "@book{a}\n",
+      },
+    })
+  ).invite;
+  const joinWith = async () => {
+    await palette("Join a live session");
+    await waitFor(
+      page,
+      `document.querySelector('[role="alertdialog"] input') !== null`,
+    );
+    await ev(
+      `(() => { const i = document.querySelector('[role="alertdialog"] input'); i.value = ${JSON.stringify(invite)}; i.dispatchEvent(new Event("input", { bubbles: true })); })()`,
+    );
+    await press(page, "Enter", { wait: 500 });
+  };
+  const dlg = `document.querySelector('[data-testid="join-plan"]')`;
+  await joinWith();
+  await expectEventually(
+    page,
+    "joining a project asks before changing anything: the plan lists each group",
+    `(() => { const d = ${dlg}; return !!d && d.getAttribute("role") === "dialog" && d.getAttribute("aria-modal") === "true" && d.querySelector('[data-testid="join-plan-summary"]').innerText === "1 the same, 1 new for you, 2 different, 1 only yours" && d.querySelectorAll('[data-testid="plan-differing"] li').length === 2 && d.querySelectorAll('[data-testid="plan-guest-only"] li').length === 1; })()`,
+    { show: `${dlg}?.innerText.slice(0, 400)` },
+  );
+  check(
+    "differing files default to the host's version, with the trash folder said plainly",
+    await ev(
+      `(() => { const d = ${dlg}; return [...d.querySelectorAll('[data-testid="plan-differing"] [aria-checked="true"]')].every((b) => b.dataset.choice === "take-host") && d.querySelector('[data-testid="plan-replace-note"]').innerText.includes("saved to a trash folder"); })()`,
+    ),
+  );
+  check(
+    "replacing two files needs the all-files confirmation: Join is off until it is ticked",
+    await ev(
+      `(() => { const d = ${dlg}; return d.querySelector('[data-testid="plan-join"]').disabled && !d.querySelector('[data-testid="plan-join"]').classList.contains("bg-accent") && d.querySelector('[data-testid="plan-confirm-all"]').checked === false && d.innerText.includes("Replace 2 of my files"); })()`,
+    ),
+  );
+  check(
+    "focus is inside the dialog and the files still hold the guest's own text",
+    (await ev(`${dlg}.contains(document.activeElement)`)) &&
+      (await ev(
+        `import("/src/lib/state/live.svelte.ts").then((m) => m.live.plan !== null && m.live.files.length === 0)`,
+      )),
+  );
+  await shoot(page, "live-p5-plan");
+  for (let i = 0; i < 14; i += 1) await press(page, "Tab", { wait: 30 });
+  check(
+    "Tab does not escape the dialog",
+    await ev(`${dlg}.contains(document.activeElement)`),
+  );
+  await press(page, "Tab", { shift: true, wait: 30 });
+  check(
+    "Shift+Tab stays inside too",
+    await ev(`${dlg}.contains(document.activeElement)`),
+  );
+  // Focus on plain text must not strand the keyboard.
+  await ev(`document.activeElement.blur()`);
+  // Escape leaves without changing a file.
+  await press(page, "Escape", { wait: 300 });
+  await expectEventually(
+    page,
+    "Escape cancels: the session ends and the dialog closes",
+    `${dlg} === null && document.querySelector('[data-testid="join-plan"]') === null`,
+  );
+  check("no session is left behind", (await run("live.status")).active === false);
+
+  await joinWith();
+  await waitFor(page, `${dlg} !== null`, { label: "plan dialog again" });
+  await click(
+    page,
+    '[data-testid="plan-differing"] li[data-path="notes.md"] [data-choice="keep-mine"]',
+  );
+  check(
+    "keeping one of the two means only one replacement: no confirmation is asked",
+    await ev(
+      `(() => { const d = ${dlg}; return !d.querySelector('[data-testid="plan-confirm-all"]') && !d.querySelector('[data-testid="plan-join"]').disabled; })()`,
+    ),
+  );
+  await click(
+    page,
+    '[data-testid="plan-differing"] li[data-path="notes.md"] [data-choice="take-host"]',
+  );
+  await click(page, '[data-testid="plan-guest-only"] [data-choice="share"]');
+  await click(page, '[data-testid="plan-confirm-all"]');
+  check(
+    "ticking the confirmation enables Join, the one lime action of the dialog",
+    await ev(
+      `(() => { const j = document.querySelector('[data-testid="plan-join"]'); return !j.disabled && j.classList.contains("bg-accent") && ${dlg}.querySelectorAll(".bg-accent").length === 1; })()`,
+    ),
+  );
+  check(
+    "the dialog uses square corners, no shadows and only weights 300 and 400",
+    await ev(
+      `(() => { for (const el of [${dlg}, ...${dlg}.querySelectorAll("*")]) { const s = getComputedStyle(el); if (s.borderTopLeftRadius !== "0px" || s.boxShadow !== "none" || !["300", "400"].includes(s.fontWeight)) return el.outerHTML.slice(0, 80); } return true; })()`,
+    ),
+  );
+  await resize(page, 420, 800);
+  check(
+    "at 420 px the dialog fits the window",
+    await ev(
+      `(() => { const r = ${dlg}.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && document.documentElement.scrollWidth <= window.innerWidth; })()`,
+    ),
+  );
+  await shoot(page, "live-p6-plan-narrow");
+  await resize(page, 1280, 820);
+  await ev(`document.documentElement.classList.add("theme-light")`);
+  await shoot(page, "live-p7-plan-light");
+  await ev(`document.documentElement.classList.remove("theme-light")`);
+  await click(page, '[data-testid="plan-join"]');
+  await expectEventually(
+    page,
+    "Join applies the choices: the dialog closes and the project's files are in the session",
+    `${dlg} === null && import("/src/lib/state/live.svelte.ts").then((m) => m.live.scope === "project" && m.live.plan === null && m.live.progress === null && ["main.typ","notes.md","talk.typ","refs.bib","scratch.typ"].every((p) => m.live.files.some((f) => f.path === p)))`,
+    { timeout: 15000 },
+  );
+  check(
+    "the replaced copy of main.typ now holds the host's text",
+    (await run("dev.live-text", { path: "main.typ" })) === "= Host main\n",
+  );
+  await openShare();
+  await click(page, '[data-testid="share-leave"]');
+  check(
+    "no page errors were thrown during the project session",
+    page.errors.length === 0,
+    page.errors.slice(0, 2).join(" | "),
+  );
+  page.close();
+}
+
 async function healSection(browser) {
   section("Self-healing fixes");
   const hp = await newPage(browser);
@@ -3067,7 +3490,10 @@ async function main() {
       else if (process.env.MANANG_ONLY === "visual") await visualSection(browser);
       else if (process.env.MANANG_ONLY === "engine") await engineSection(browser);
       else if (process.env.MANANG_ONLY === "autosave") await autosaveSection(browser);
-      else await liveSection(browser);
+      else {
+        await liveSection(browser);
+        await liveProjectSection(browser);
+      }
       browser.close();
       child.kill("SIGTERM");
       const bad = results.filter((entry) => !entry.passed);
@@ -9674,6 +10100,7 @@ async function main() {
     await autosaveSection(browser);
     await engineSection(browser);
     await liveSection(browser);
+    await liveProjectSection(browser);
     await visualSection(browser);
 
     /* ------------------------------------------------------------------ */

@@ -9,6 +9,7 @@
   import { notice } from "$lib/state/notice.svelte";
   import { sharePopover } from "$lib/state/sharePopover.svelte";
   import { liveChipText } from "$lib/workbench/live";
+  import { progressText } from "$lib/workbench/livePlan";
   import { tabs } from "$lib/state/tabs.svelte";
   import { writing } from "$lib/state/writing.svelte";
   import { workspace } from "$lib/state/workspace.svelte";
@@ -123,6 +124,24 @@
   </div>
 
   <AgentChip />
+  {#if live.active && live.progress !== null}
+    <span
+      class="mng-status-text font-mono"
+      role="status"
+      data-testid="live-progress"
+      aria-label={progressText(live.progress.done, live.progress.total)}
+      >{progressText(live.progress.done, live.progress.total)}</span
+    >
+  {/if}
+  {#if live.active && live.paused !== null && !live.pausedOpen}
+    <button
+      type="button"
+      class="mng-status text-text"
+      data-testid="live-paused-chip"
+      title="Changes on disk are on hold. Decide what to do with them"
+      onclick={() => live.showPaused()}>Changes on hold</button
+    >
+  {/if}
   {#if live.active}
     <button
       type="button"

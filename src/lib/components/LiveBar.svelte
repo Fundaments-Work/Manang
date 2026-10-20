@@ -4,6 +4,7 @@
   import {
     connectionDetail,
     connectionLabel,
+    deletedSentence,
     NO_RELAY_MESSAGE,
     participantSummary,
   } from "$lib/workbench/live";
@@ -24,6 +25,7 @@
   const conn = $derived(live.connection === "off" ? "connecting" : live.connection);
   const label = $derived(connectionLabel(conn, live.attempt));
   const detail = $derived(connectionDetail(conn, live.error));
+  const deletedBy = $derived(live.active ? live.deletedBy(path) : null);
   const slot = (n: number): number => ((n % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
 
   let inviteField: HTMLInputElement | undefined = $state();
@@ -46,7 +48,7 @@
         <span
           class="inline-block size-2 border border-text"
           class:bg-text={conn === "connected"}
-          class:border-dashed={conn === "reconnecting"}
+          class:border-dashed={conn === "reconnecting" || conn === "waiting"}
           aria-hidden="true"
         ></span>
         <span data-testid="live-state">{label}</span>
@@ -93,6 +95,14 @@
       >
         {live.copied ? "Copied" : "Copy invite"}
       </button>
+      {#if conn === "error" || conn === "waiting"}
+        <button
+          type="button"
+          class="mng-btn"
+          data-testid="live-resync"
+          onclick={() => void live.resync()}>Re-sync</button
+        >
+      {/if}
       <button
         type="button"
         class="mng-btn"
@@ -109,6 +119,25 @@
         {detail}
       </p>
     {/if}
+  </div>
+{:else if deletedBy !== null}
+  <div
+    class="border-b border-line bg-surface text-xs"
+    role="region"
+    aria-label="Deleted in the live session"
+    data-testid="live-deleted"
+  >
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+      <p class="m-0 min-w-0 flex-1 text-text" role="status">
+        {deletedSentence(deletedBy)}
+      </p>
+      <button
+        type="button"
+        class="mng-btn"
+        data-testid="live-restore"
+        onclick={() => void live.restore(path)}>Restore for everyone</button
+      >
+    </div>
   </div>
 {:else if live.needsRelay && !live.active}
   <div

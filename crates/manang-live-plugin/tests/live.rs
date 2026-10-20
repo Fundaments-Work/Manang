@@ -582,6 +582,13 @@ fn leave_and_rejoin_never_replaces_a_copy_silently() {
     converge(&mut [&mut host, &mut guest], Duration::from_secs(15));
     guest.leave();
     assert_eq!(guest.status()["active"], json!(false));
+    // The guest edits the file on its own while away, so its copy is no longer
+    // the room's last state (a rejoin would otherwise restore the snapshot).
+    guest
+        .editor
+        .insert(Some(guest.doc), 0, "offline note\n")
+        .expect("local edit");
+    guest.view = guest.kernel_text().encode_utf16().collect();
 
     // The host carries on; the guest's file is now behind.
     host.insert_at_end("host only\n");
@@ -595,6 +602,7 @@ fn leave_and_rejoin_never_replaces_a_copy_silently() {
         guest.kernel_text().contains("guest line"),
         "nothing replaced"
     );
+    assert!(guest.kernel_text().starts_with("offline note"));
 
     // Confirmed: the host's version wins, and the old copy is saved first.
     guest.join(&invite, Some("take-host")).expect("take host");
@@ -696,6 +704,206 @@ fn a_wrong_key_cannot_read_or_join_the_conversation() {
         "nothing was applied from unreadable frames"
     );
     assert_eq!(session.doc().engine().text(), "");
+    host.leave();
+    guest.leave();
+}
+
+fn wait_state(client: &Client, state: &str, limit: Duration) {
+    wait_for(limit, state, || client.status()["state"] == json!(state));
+}
+
+#[test]
+fn joining_an_empty_room_keeps_the_file_and_never_says_live() {
+    let relay = Relay::start();
+    let mut host = Client::new("host", Some(&relay.url()), SEED);
+    let mut guest = Client::new("guest", None, "My own draft.\n");
+    let invite = host.start();
+    host.leave(); // nobody is home
+
+    guest.join(&invite, Some("take-host")).expect("join");
+    for _ in 0..80 {
+        guest.process(Duration::from_millis(50));
+        assert_eq!(
+            guest.status()["state"],
+            json!("waiting"),
+            "states so far: {:?}",
+            guest.states
+        );
+    }
+    assert!(!guest.states.iter().any(|s| s == "connected"));
+    assert_eq!(
+        guest.kernel_text(),
+        "My own draft.\n",
+        "the file is untouched"
+    );
+    assert_eq!(guest.view_text(), "My own draft.\n");
+
+    // Typing is refused while waiting, with a code the shell understands.
+    let pushed = guest.call(
+        "live.push",
+        json!({
+            "session": guest.sid, "version": 0,
+            "changes": [{ "start": 0, "delete": 0, "insert": "x" }],
+        }),
+    );
+    assert_eq!(err_code(&pushed.expect_err("refused")), "waiting");
+    assert_eq!(guest.kernel_text(), "My own draft.\n");
+
+    // The old copy was saved up front.
+    let saved: Vec<_> = std::fs::read_dir(guest.config_dir.path().join("live-trash"))
+        .expect("trash dir")
+        .collect();
+    assert_eq!(saved.len(), 1);
+    guest.leave();
+}
+
+#[test]
+fn a_late_host_answers_a_waiting_joiner_and_only_then_the_file_is_replaced() {
+    let relay = Relay::start();
+    let mut host = Client::new("host", Some(&relay.url()), SEED);
+    let mut guest = Client::new("guest", None, "My own draft.\n");
+    let invite = host.start();
+    host.insert_at_end("A host line.\n");
+    host.leave();
+
+    guest.join(&invite, Some("take-host")).expect("join");
+    wait_state(&guest, "waiting", Duration::from_secs(5));
+    assert_eq!(guest.kernel_text(), "My own draft.\n");
+
+    // The host comes back through its own invite: its file equals the snapshot
+    // it left behind, so the room is reseeded from it.
+    host.join(&invite, None).expect("the host rejoins");
+    converge(&mut [&mut host, &mut guest], Duration::from_secs(30));
+    assert_eq!(guest.kernel_text(), host.kernel_text());
+    assert!(guest.kernel_text().contains("A host line."));
+    wait_state(&guest, "connected", Duration::from_secs(10));
+    assert!(guest.status()["error"].is_null());
+    host.leave();
+    guest.leave();
+}
+
+#[test]
+fn a_document_survives_everyone_leaving_and_the_disk_always_wins() {
+    let relay = Relay::start();
+    let mut host = Client::new("host", Some(&relay.url()), SEED);
+    let invite = host.start();
+    host.insert_at_end("typed in the session\n");
+    let last = host.kernel_text();
+    host.leave();
+
+    let snaps = host.config_dir.path().join("live-snapshots");
+    assert_eq!(
+        std::fs::read_dir(&snaps).expect("snapshot dir").count(),
+        1,
+        "one snapshot for the room"
+    );
+
+    // An empty room reseeds from the sidecar when the file still matches it.
+    host.join(&invite, None).expect("rejoin");
+    wait_state(&host, "connected", Duration::from_secs(10));
+    assert_eq!(host.kernel_text(), last);
+    let mut late = Client::new("late", None, "");
+    late.join(&invite, None).expect("an empty copy joins");
+    converge(&mut [&mut host, &mut late], Duration::from_secs(30));
+    assert_eq!(late.kernel_text(), last);
+    host.leave();
+    late.leave();
+
+    // A file edited since is never overwritten by the sidecar: the join asks.
+    host.editor
+        .insert(Some(host.doc), 0, "edited on disk\n")
+        .expect("edit");
+    let err = host.join(&invite, None).expect_err("the disk differs");
+    assert_eq!(err_code(&err), "differs");
+}
+
+#[test]
+fn contributors_come_back_as_commit_trailers() {
+    let relay = Relay::start();
+    let mut host = Client::new("host", Some(&relay.url()), SEED);
+    let mut guest = Client::new("guest", None, SEED);
+    guest
+        .call(
+            "live.configure",
+            json!({ "values": { "live.email": "guest@example.org" } }),
+        )
+        .expect("configure");
+    let invite = host.start();
+    guest.join(&invite, None).expect("join");
+    wait_state(&guest, "connected", Duration::from_secs(10));
+    wait_state(&host, "connected", Duration::from_secs(10));
+    guest.insert_at_end("guest wrote this\n");
+    converge(&mut [&mut host, &mut guest], Duration::from_secs(15));
+
+    let out = host
+        .call(
+            "live.contributors",
+            json!({ "committer_name": "host", "committer_email": "host@example.org" }),
+        )
+        .expect("contributors");
+    assert_eq!(
+        out["trailers"],
+        json!(["Co-authored-by: guest <guest@example.org>"])
+    );
+    // Taken: the next commit starts from nothing.
+    let again = host
+        .call("live.contributors", json!({}))
+        .expect("contributors");
+    assert_eq!(again["trailers"], json!([]));
+    host.leave();
+    guest.leave();
+}
+
+#[test]
+fn a_resync_rebuilds_the_document_from_the_room_and_the_session_recovers() {
+    let relay = Relay::start();
+    let mut host = Client::new("host", Some(&relay.url()), SEED);
+    let mut guest = Client::new("guest", None, SEED);
+    let invite = host.start();
+    guest.join(&invite, None).expect("join");
+    wait_state(&guest, "connected", Duration::from_secs(10));
+    host.insert_at_end("one\n");
+    converge(&mut [&mut host, &mut guest], Duration::from_secs(15));
+
+    guest.call("live.resync", json!({})).expect("resync");
+    assert_eq!(guest.status()["state"], json!("waiting"));
+    host.insert_at_end("two\n");
+    converge(&mut [&mut host, &mut guest], Duration::from_secs(30));
+    wait_state(&guest, "connected", Duration::from_secs(10));
+    assert!(guest.kernel_text().ends_with("one\ntwo\n"));
+    assert!(guest.status()["error"].is_null());
+    // Editing works again, in both directions.
+    guest.insert_at_end("three\n");
+    converge(&mut [&mut host, &mut guest], Duration::from_secs(15));
+    assert!(host.kernel_text().ends_with("two\nthree\n"));
+    host.leave();
+    guest.leave();
+}
+
+#[test]
+fn nobody_answering_is_a_clear_error_that_clears_when_someone_does() {
+    let relay = Relay::start();
+    let mut host = Client::new("host", Some(&relay.url()), SEED);
+    let mut guest = Client::new("guest", None, "Draft.\n");
+    let invite = host.start();
+    host.leave();
+    guest.join(&invite, Some("take-host")).expect("join");
+
+    // The host-answer timeout is 20 s.
+    wait_state(&guest, "error", Duration::from_secs(40));
+    let message = guest.status()["error"].as_str().unwrap_or("").to_owned();
+    assert!(message.contains("Nobody has answered"), "{message}");
+    assert_eq!(
+        guest.kernel_text(),
+        "Draft.\n",
+        "still the guest's own file"
+    );
+
+    host.join(&invite, None).expect("the host comes back");
+    converge(&mut [&mut host, &mut guest], Duration::from_secs(30));
+    wait_state(&guest, "connected", Duration::from_secs(10));
+    assert!(guest.status()["error"].is_null());
+    assert_eq!(guest.kernel_text(), host.kernel_text());
     host.leave();
     guest.leave();
 }

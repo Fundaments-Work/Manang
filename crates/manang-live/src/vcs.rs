@@ -13,9 +13,10 @@
 //!    autosave first) and lists the people who edited since the previous
 //!    commit as `Co-authored-by:` trailers: see [`ContributionLog`] and
 //!    [`coauthor_trailers`].
-//! 4. **"Get updates" is disabled for files in a live session**: a merge
-//!    rewriting a file underneath a CRDT would diverge every peer. See
-//!    [`live_paths_touched_by`].
+//! 4. **"Get updates" is refused for files in a live session**: a merge
+//!    rewriting a file underneath a CRDT would diverge every peer. The shell
+//!    applies the rule (`versionActions.ts`); [`live_paths_touched_by`] is the
+//!    pure form of it.
 //!
 //! Nothing here touches git or the filesystem; `manang-git` and the live
 //! plugin apply the results.
@@ -162,7 +163,9 @@ impl ContributionLog {
 }
 
 /// File name of the disposable CRDT sidecar for a room, to be placed under
-/// the app data directory (`<data>/live/<name>`), never in the working tree.
+/// the app data directory (`<data>/live-snapshots/<name>`), never in the
+/// working tree. (The plugin writes its own `.snap` container, which adds a
+/// text digest to the engine snapshot; this name is the portable form.)
 #[must_use]
 pub fn sidecar_name(room_id_hex: &str) -> String {
     format!("{room_id_hex}.crdt")

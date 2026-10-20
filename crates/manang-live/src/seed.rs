@@ -14,16 +14,13 @@
 //! produces operations identical to the host's, so nothing is transferred and
 //! nothing is duplicated. `AdoptHost` joins with an empty document and lets
 //! the host's state replace the buffer: nothing of the joiner's is lost
-//! because it was the base. `ChooseResolution` joins into a *shadow* buffer
-//! (the editor's file is untouched), shows the diff between the joiner's file
-//! and the host's text, and offers exactly two ways forward:
-//!
-//! * **Take the host's version** (the default): the host's content wins; the
-//!   joiner's file is copied to `<git-dir>/manang-trash/` first.
-//! * **Merge**: a three-way merge of base, joiner's file and host's text with
-//!   `manang-merge`'s `merge3` (collaboration plan WP2). The merged text enters
-//!   the room as an ordinary local edit, so every peer receives it; conflicts
-//!   are resolved by the joiner before it is sent.
+//! because it was the base. `ChooseResolution` is not decided here: the live
+//! plugin asks the person (the join is refused with `differs` until they
+//! confirm), and on "use the host's version" it copies the joiner's file to
+//! `live-trash` in the app config directory, joins with an empty document and
+//! replaces the file only when a host has actually answered (until then the
+//! file is untouched). The planned three-way merge (`manang-merge`'s `merge3`)
+//! is not built yet.
 //!
 //! Nothing is ever merged silently, and the host never has to wait.
 

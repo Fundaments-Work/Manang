@@ -10,12 +10,16 @@
 //! * [`protocol`], [`presence`], [`session`], [`transport`]: the sans-IO
 //!   session state machine and the [`SyncTransport`] trait.
 
+pub mod blob;
 pub mod bridge;
 pub mod engine;
 pub mod envelope;
 pub mod error;
 pub mod loro_engine;
+pub mod manifest;
+pub mod pacer;
 pub mod presence;
+pub mod project;
 pub mod protocol;
 pub mod seed;
 pub mod session;

@@ -3,13 +3,20 @@
  * listed. Kept apart from the store so they are tested without a kernel.
  */
 
-import type { LiveConnection, LivePeer } from "$lib/kernel/liveApi";
+import type {
+  LiveConnection,
+  LiveError,
+  LivePausedInfo,
+  LivePeer,
+} from "$lib/kernel/liveApi";
 
 /** What the session bar says for each connection state. */
 export function connectionLabel(state: LiveConnection, attempt: number): string {
   switch (state) {
     case "connecting":
       return "Connecting";
+    case "waiting":
+      return "Waiting for host";
     case "connected":
       return "Live";
     case "reconnecting":
@@ -30,6 +37,8 @@ export function connectionDetail(
   error: string | null,
 ): string | null {
   switch (state) {
+    case "waiting":
+      return "Your copy of the file is kept as it is until someone in the session answers. You cannot type here until then.";
     case "reconnecting":
       return "Your edits are kept and will merge when the connection is back.";
     case "error":
@@ -41,7 +50,7 @@ export function connectionDetail(
 
 /** Whether the document can be typed into while the session is in this state. */
 export function editingAllowed(state: LiveConnection): boolean {
-  return state !== "error";
+  return state !== "error" && state !== "waiting";
 }
 
 /** The relay is not set: sharing (not joining) needs one. */
@@ -76,6 +85,8 @@ export function liveChipText(
   switch (state) {
     case "connecting":
       return "Live: connecting";
+    case "waiting":
+      return "Live: waiting for host";
     case "reconnecting":
       return "Live: reconnecting";
     case "error":
@@ -112,4 +123,121 @@ export function canShareLive(
 export function inviteFileLabel(file: string | null | undefined): string {
   if (file === null || file === undefined || file === "") return "the shared file";
   return file.split("/").pop() ?? file;
+}
+
+/** What a live file blocks: things that would rewrite it underneath the session. */
+export type LiveGuardedAction = "get-updates" | "restore" | "reload";
+
+/**
+ * A plain-language reason why `action` must not run now, or `null`. `touched`
+ * is the paths the action rewrites (empty for "the whole project").
+ * A merge or restore rewriting a file underneath a live session would make
+ * every copy differ, so the person is asked to leave first.
+ */
+export function liveBlock(
+  action: LiveGuardedAction,
+  livePath: string | null,
+  touched: readonly string[] = [],
+): string | null {
+  if (livePath === null) return null;
+  const name = livePath.split("/").pop() ?? livePath;
+  if (action === "restore" && touched.length > 0 && !touched.includes(livePath)) {
+    return null;
+  }
+  switch (action) {
+    case "get-updates":
+      return `${name} is being edited together live. Getting updates could rewrite it for everyone, so leave the live session first.`;
+    case "restore":
+      return `${name} is being edited together live. Restoring it would replace it for everyone, so leave the live session first.`;
+    case "reload":
+      return `${name} changed on disk while it is in a live session. The session's version is kept; save to overwrite the disk copy.`;
+  }
+}
+
+/** Where `Co-authored-by` credit goes when a version is saved during a session. */
+export function versionMessage(
+  existing: string | undefined,
+  withoutEmail: readonly string[],
+): string | undefined {
+  if (withoutEmail.length === 0) return existing;
+  const line = `Also edited by: ${withoutEmail.join(", ")}`;
+  return existing === undefined || existing === "" ? line : `${existing}\n\n${line}`;
+}
+
+/**
+ * A refused `live.*` command, in plain words. The plugin's own sentences
+ * are kept for the codes that name a file or a relay; the ones that would
+ * read as jargon are rewritten.
+ */
+export function plainLiveError(error: LiveError): string {
+  switch (error.code) {
+    case "needs-confirmation":
+      return "Replacing more than one of your files needs one confirmation for all of them. Tick the box in the join window and try again.";
+    case "unresolved":
+      return "Some of your files are different from the host's. Choose what to do with each one first.";
+    case "no-project":
+      return "Open a project folder first. A live project session shares the folder you have open.";
+    case "bad-path":
+      return "A file in the session has a name that cannot be used safely on this computer, so it was left out.";
+    case "not-text":
+      return "That file is not text, so it cannot be edited together live. It is shared as a whole file instead.";
+    case "paused":
+      return "Many files changed at once and are waiting for your answer. Choose what to do with them first.";
+    case "waiting":
+      return "That file is still being fetched. Try again in a moment.";
+    case "not-project":
+      return "This only works when a whole project is shared.";
+    case "no-plan":
+      return "There is nothing left to decide.";
+    case "not-in-session":
+      return "That file is not part of the session.";
+    case "excluded":
+      return "That file is kept out of the session on your side.";
+    case "not-deleted":
+      return "That file was not deleted during this session, so there is nothing to bring back.";
+    case "not-live":
+      return "There is no live session.";
+    case "stopped":
+      return "The live session stopped unexpectedly. Start or join it again.";
+    case "invalid":
+      return error.message === ""
+        ? "The session cannot do that right now."
+        : error.message;
+    default:
+      return error.message;
+  }
+}
+
+/** Leaving as the host while files have not reached anyone else: the warning. */
+export function unsyncedWarning(files: number): string {
+  return files === 1
+    ? "1 file has not reached anyone else yet."
+    : `${files} files have not reached anyone else yet.`;
+}
+
+export const UNSYNCED_DETAIL =
+  "If you leave now, the others will not have them. Nothing on your disk is deleted.";
+
+/** The held large change: what it is, in a sentence. */
+export function pausedSentence(info: LivePausedInfo): string {
+  const files = info.files === 1 ? "1 file" : `${info.files} files`;
+  return `${files} changed at once (${info.changed_lines} of ${info.total_lines} lines).`;
+}
+
+export const PAUSED_QUESTION =
+  "Many files changed at once (for example by a Git checkout). Share these changes or put your folder back as the session has it?";
+
+export const PAUSED_DISCARD_NOTE =
+  "Putting your folder back replaces these files with the session's versions. The copies you have now go to the trash.";
+
+/** Who deleted a file, for a sentence; empty when the session cannot tell. */
+export function deletedSentence(by: string): string {
+  return by === ""
+    ? "This file was deleted in the session. It is still open here and no longer shared."
+    : `${by} deleted this file. It is still open here and no longer shared.`;
+}
+
+/** The tab's short tag for a file deleted in the session ("deleted by Ada", or "deleted"). */
+export function deletedTag(by: string): string {
+  return by === "" ? "deleted" : `deleted by ${by}`;
 }

@@ -15,6 +15,7 @@ import {
   type GitVersionInfo,
 } from "$lib/kernel/api";
 import { gitActionableError, parseGitError } from "$lib/workbench/git";
+import { liveBlock, versionMessage } from "$lib/workbench/live";
 import { sharedNotice, updatedWords } from "$lib/workbench/share";
 import {
   changeSummary,
@@ -28,6 +29,7 @@ import {
 
 import * as actions from "./actions";
 import { dialog } from "./dialog.svelte";
+import { live } from "./live.svelte";
 import { documents } from "./documents.svelte";
 import { notice } from "./notice.svelte";
 import { tabs } from "./tabs.svelte";
@@ -107,6 +109,17 @@ export async function ensureIdentity(root: string): Promise<boolean> {
   }
 }
 
+async function identityForTrailers(
+  root: string,
+): Promise<{ name: string | null; email: string | null }> {
+  try {
+    const id = await api.identityGet({ root });
+    return { name: id.name, email: id.email };
+  } catch {
+    return { name: null, email: null };
+  }
+}
+
 /** True once the project is a repository (starting one after a yes). */
 async function ensureTracked(root: string): Promise<boolean> {
   const opened = await api.open(root);
@@ -145,7 +158,16 @@ export async function saveVersion(): Promise<void> {
     if (answer.id !== "save") return;
     const name =
       answer.value.trim() === "" ? defaultVersionName(new Date()) : answer.value.trim();
-    const saved = await api.saveVersion({ root, name });
+    // People who edited together live are credited in the version.
+    const who = await identityForTrailers(root);
+    const credit = await live.coauthors(who);
+    const message = versionMessage(undefined, credit.withoutEmail);
+    const saved = await api.saveVersion({
+      root,
+      name,
+      ...(credit.trailers.length > 0 ? { trailers: credit.trailers } : {}),
+      ...(message !== undefined ? { message } : {}),
+    });
     notice.show(`Saved version "${saved.subject}"`);
   } catch (error) {
     const parsed = parseGitError(error);
@@ -176,6 +198,15 @@ export async function restoreFromVersion(
 ): Promise<GitRestored | null> {
   const root = workspace.project?.root;
   if (root === undefined) return null;
+  const blocked = liveBlock(
+    "restore",
+    live.active ? live.path : null,
+    scope.kind === "whole" ? [] : scope.paths,
+  );
+  if (blocked !== null) {
+    notice.error(blocked);
+    return null;
+  }
   try {
     await saveOpenEdits();
     const status = await api.status({ root });
@@ -238,6 +269,11 @@ export async function shareVersions(): Promise<boolean> {
 export async function getUpdates(): Promise<boolean> {
   const root = workspace.project?.root;
   if (root === undefined) return false;
+  const blocked = liveBlock("get-updates", live.active ? live.path : null);
+  if (blocked !== null) {
+    notice.error(blocked);
+    return false;
+  }
   try {
     await saveOpenEdits();
     const before = await api.syncStatus({ root });

@@ -11,6 +11,19 @@
  * `live.remote` / `live.presence` / `live.state` events. Keep it in step with
  * that crate's `manifest.toml` and `driver.rs`.
  *
+ * Project sessions (`scope: "project"`) are mocked too: a tree of text files,
+ * each with its own `LiveAuthority` (own version counter, events carry `path`),
+ * the two-phase join (`live.plan`, `live.resolve`), per-file attach/detach, tree
+ * operations and notices from scripted peers. The host's files are seeded with
+ * `dev.live-seed`, the guest's disk with `dev.live-local`. It also follows the
+ * real project driver where that is stricter than the first mock was: a project
+ * command needs the open folder's `root` (else `no-project`), replacing more
+ * than one file needs the `*` confirmation (`needs-confirmation`), commands
+ * other than resolve/leave are refused before the session is `live` (`waiting`
+ * while the manifest is awaited, `invalid` while a plan waits), and a large
+ * change held on disk (`dev.live-paused`) is answered with
+ * `live.resync {paused}` (a plain resync meanwhile is refused as `paused`).
+ *
  * `LiveAuthority` is the part of the Rust session thread that the web view
  * depends on; the binding's tests run against it with random interleavings.
  */
@@ -19,10 +32,19 @@ import type { Args, KernelError } from "./client";
 import type { MockPlugin, MockPluginFactory } from "./mock";
 import type {
   LiveChange,
+  LiveChoice,
   LiveConnection,
+  LiveFileNode,
+  LivePausedInfo,
   LivePeer,
+  LivePhase,
+  LivePlanClass,
+  LivePlanFile,
+  LiveProgress,
   LivePushResult,
   LiveRemoteSelection,
+  LiveScope,
+  LiveTreeOp,
 } from "./liveApi";
 import { scalarLength, utf16ToScalar } from "./offsets";
 
@@ -37,7 +59,16 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["live.selection", "Share the caret with the live session"],
   ["live.snapshot", "Re-read the live document"],
   ["live.contributors", "List who edited in the live session"],
+  ["live.resync", "Rebuild the live document from the others"],
   ["live.configure", "Apply live editing settings"],
+  ["live.resolve", "Apply the choices for joining a live project"],
+  ["live.attach", "Start editing a file of the live session"],
+  ["live.detach", "Stop editing a file of the live session"],
+  ["live.follow", "Follow a person in the live session"],
+  ["live.files", "List the files of the live session"],
+  ["live.exclude", "Keep a file out of the live session"],
+  ["live.include", "Put a file back into the live session"],
+  ["live.restore", "Restore a file deleted in the live session"],
 ];
 
 function liveFail(code: string, message: string): KernelError {
@@ -69,13 +100,14 @@ export type Emitter = (topic: string, payload: unknown) => void;
 
 interface MockPeer extends LivePeer {
   selection: { anchor: number; head: number } | null;
+  /** The file in front of the peer (project sessions). */
+  path: string | null;
 }
 
 /** The session thread's document and version, as the web view sees it. */
 export class LiveAuthority {
   text: string;
   version = 0;
-  readonly peers: MockPeer[] = [];
   /** Set to make `push` also run `onApply` (the editor mirror). */
   onApply: ((before: string, change: LiveChange) => void) | undefined;
 
@@ -83,8 +115,20 @@ export class LiveAuthority {
     readonly session: string,
     text: string,
     private readonly emit: Emitter,
+    /** Shared by all files of a project session. */
+    readonly peers: MockPeer[] = [],
+    /** The file, in a project session: events name it. */
+    readonly path?: string,
   ) {
     this.text = text;
+  }
+
+  #at(peer: MockPeer): boolean {
+    return this.path === undefined || peer.path === this.path;
+  }
+
+  #where(): { path?: string } {
+    return this.path === undefined ? {} : { path: this.path };
   }
 
   /** The view pushes edits made against `version`. */
@@ -97,7 +141,7 @@ export class LiveAuthority {
         this.text = applyChange(before, change);
         this.onApply?.(before, change);
         for (const peer of this.peers) {
-          if (peer.selection === null) continue;
+          if (peer.selection === null || !this.#at(peer)) continue;
           peer.selection = {
             anchor: mapThrough(peer.selection.anchor, [change]),
             head: mapThrough(peer.selection.head, [change]),
@@ -112,6 +156,7 @@ export class LiveAuthority {
     if (failure !== undefined) throw failure;
     this.emit("live.remote", {
       session: this.session,
+      ...this.#where(),
       version: this.version,
       ack: true,
       changes: [],
@@ -128,7 +173,7 @@ export class LiveAuthority {
       this.text = applyChange(before, change);
       this.onApply?.(before, change);
       for (const peer of this.peers) {
-        if (peer.selection === null) continue;
+        if (peer.selection === null || !this.#at(peer)) continue;
         peer.selection = {
           anchor: mapThrough(peer.selection.anchor, [change]),
           head: mapThrough(peer.selection.head, [change]),
@@ -138,6 +183,7 @@ export class LiveAuthority {
     this.version += 1;
     this.emit("live.remote", {
       session: this.session,
+      ...this.#where(),
       version: this.version,
       ack: false,
       changes,
@@ -156,7 +202,7 @@ export class LiveAuthority {
   #presence(): void {
     const selections: LiveRemoteSelection[] = [];
     for (const peer of this.peers) {
-      if (peer.selection === null) continue;
+      if (peer.selection === null || !this.#at(peer)) continue;
       selections.push({
         peer: peer.peer,
         name: peer.name,
@@ -167,6 +213,7 @@ export class LiveAuthority {
     }
     this.emit("live.presence", {
       session: this.session,
+      ...this.#where(),
       version: this.version,
       selections,
     });
@@ -177,8 +224,35 @@ export class LiveAuthority {
 /* The plugin                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/** The tree of a project session, as the plugin holds it. */
+interface MockProject {
+  /** Files in the session, each with its own document and version. */
+  files: Map<string, LiveAuthority>;
+  /** The host's files a guest has been offered (before `live.resolve`). */
+  offered: Map<string, string>;
+  /** The guest's own files, to classify against the offer. */
+  local: Map<string, string>;
+  plan: LivePlanFile[] | null;
+  attached: Set<string>;
+  excluded: Set<string>;
+  /** Deleted by a peer: path -> the last text, until restored or the session ends. */
+  deleted: Map<string, string>;
+  progress: LiveProgress | null;
+  following: string | null;
+  /** A guest waits for the host's file list, for its own choices, or is in. */
+  phase: LivePhase;
+  /** Files no one present has shown they hold (what a host strands by leaving). */
+  unsynced: number | null;
+  /** A held large change on disk, until `live.resync {paused}` answers it. */
+  paused: LivePausedInfo | null;
+}
+
 interface Run {
+  scope: LiveScope;
+  /** The document of a file session; for a project, an unused empty one. */
   authority: LiveAuthority;
+  peers: MockPeer[];
+  project: MockProject | null;
   doc: number;
   role: "host" | "guest";
   invite: string;
@@ -202,6 +276,7 @@ function parseInvite(text: string): {
   relay: string;
   file: string | null;
   fragment: string;
+  scope: LiveScope;
 } {
   let url: URL;
   try {
@@ -224,7 +299,9 @@ function parseInvite(text: string): {
     throw liveFail("bad-invite", "This invite is not valid: the key is missing");
   }
   const file = url.searchParams.get("file");
-  return { relay, file: file === "" ? null : file, fragment };
+  const scope: LiveScope =
+    url.searchParams.get("scope") === "project" ? "project" : "file";
+  return { relay, file: file === "" ? null : file, fragment, scope };
 }
 
 function normalizeRelay(input: string): string {
@@ -263,6 +340,34 @@ function numberArg(args: Args, key: string): number {
  * every mock kernel in the page, like a relay both people can reach.
  */
 const pretend = new Map<string, string>();
+/** Invites made for a pretend project host: fragment -> the host's files. */
+const pretendProjects = new Map<string, Map<string, string>>();
+
+function classify(
+  offered: ReadonlyMap<string, string>,
+  local: ReadonlyMap<string, string>,
+): LivePlanFile[] {
+  const out: LivePlanFile[] = [];
+  for (const [path, text] of offered) {
+    const mine = local.get(path);
+    const cls: LivePlanClass =
+      mine === undefined ? "missing" : mine === text ? "identical" : "differing";
+    out.push({ path, class: cls });
+  }
+  for (const path of local.keys()) {
+    if (!offered.has(path)) out.push({ path, class: "guest-only" });
+  }
+  return out;
+}
+
+function unsafePath(path: string): boolean {
+  return (
+    path === "" ||
+    path.startsWith("/") ||
+    path.split("/").some((part) => part === ".." || part === "." || part === "") ||
+    path.split("/").some((part) => part.startsWith("."))
+  );
+}
 
 /** Tests and verify-ui construct this to drive the scripted collaborator. */
 export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
@@ -272,11 +377,20 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
     let nextSession = 1;
     let nextPeer = 7001;
     let lagMs = 0;
+    /** The host's files for the next `live.start` of a project. */
+    let seeded = new Map<string, string>();
+    /** The guest's disk for the next project join. */
+    let localDisk = new Map<string, string>();
 
     const send: Emitter = (topic, payload) => {
       if (lagMs <= 0) emit(topic, payload);
       else setTimeout(() => emit(topic, payload), lagMs);
     };
+
+    const peerList = (r: Run) =>
+      r.peers.map(({ peer, name, slot, path }) =>
+        r.scope === "project" ? { peer, name, slot, path } : { peer, name, slot },
+      );
 
     const stateEvent = (r: Run): void =>
       send("live.state", {
@@ -284,8 +398,24 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
         state: r.state,
         attempt: r.attempt,
         error: r.error,
-        peers: r.authority.peers.map(({ peer, name, slot }) => ({ peer, name, slot })),
+        peers: peerList(r),
       });
+
+    /** Files no one present has shown they hold: all of them while alone. */
+    const unsyncedOf = (r: Run): number => {
+      const project = r.project;
+      if (project === null) return 0;
+      return project.unsynced ?? (r.peers.length === 0 ? project.files.size : 0);
+    };
+
+    const peersEvent = (r: Run): void => {
+      if (r.scope !== "project") return;
+      send("live.peers", {
+        session: r.authority.session,
+        peers: peerList(r),
+        unsynced_files: unsyncedOf(r),
+      });
+    };
 
     const setState = (r: Run, state: LiveConnection, attempt = 0): void => {
       r.state = state;
@@ -307,6 +437,52 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
       return run;
     };
 
+    const projectOf = (r: Run): MockProject => {
+      if (r.project === null) {
+        throw liveFail("not-project", "This is not a project session.");
+      }
+      return r.project;
+    };
+
+    /** Project commands wait for the session to be `live`, like the real driver. */
+    const needLive = (r: Run): MockProject => {
+      const project = projectOf(r);
+      if (project.phase === "manifest") {
+        throw liveFail(
+          "waiting",
+          "Waiting for the host's file list. Try again in a moment.",
+        );
+      }
+      if (project.phase === "plan") {
+        throw liveFail("invalid", "Choose what to do with each file first.");
+      }
+      return project;
+    };
+
+    /** The project folder a project command needs (it cannot find it itself). */
+    const rootArg = (args: Args): string => {
+      const root = args["root"];
+      if (typeof root !== "string" || root.trim() === "") {
+        throw liveFail(
+          "no-project",
+          "Open a project folder to use live project sessions.",
+        );
+      }
+      return root;
+    };
+
+    /** The document a command names: the file's own, or the project file at `path`. */
+    const authorityFor = (r: Run, args: Args): LiveAuthority => {
+      if (r.project === null) return r.authority;
+      needLive(r);
+      const path = typeof args["path"] === "string" ? args["path"] : "";
+      const found = r.project.files.get(path);
+      if (found === undefined) {
+        throw liveFail("not-in-session", `${path || "A file"} is not in the session.`);
+      }
+      return found;
+    };
+
     const begin = (
       doc: number,
       role: "host" | "guest",
@@ -314,13 +490,18 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
       invite: string,
       file: string | null,
       relay: string,
+      project: MockProject | null = null,
     ): Run => {
       const session = `mock${String(nextSession).padStart(4, "0")}`;
       nextSession += 1;
-      const authority = new LiveAuthority(session, text, send);
-      authority.onApply = mirror(doc);
+      const peers: MockPeer[] = [];
+      const authority = new LiveAuthority(session, text, send, peers);
+      if (project === null) authority.onApply = mirror(doc);
       const r: Run = {
+        scope: project === null ? "file" : "project",
         authority,
+        peers,
+        project,
         doc,
         role,
         invite,
@@ -338,8 +519,238 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
       return r;
     };
 
+    const emptyProject = (): MockProject => ({
+      files: new Map(),
+      offered: new Map(),
+      local: new Map(),
+      plan: null,
+      attached: new Set(),
+      excluded: new Set(),
+      deleted: new Map(),
+      progress: null,
+      following: null,
+      phase: "live",
+      unsynced: null,
+      paused: null,
+    });
+
+    const addFile = (r: Run, path: string, text: string): LiveAuthority => {
+      const project = projectOf(r);
+      const authority = new LiveAuthority(
+        r.authority.session,
+        text,
+        send,
+        r.peers,
+        path,
+      );
+      project.files.set(path, authority);
+      return authority;
+    };
+
     const text = (doc: number): string =>
       String(host.call("editor.text", { id: doc }) ?? "");
+
+    const filesArg = (value: unknown): Map<string, string> => {
+      const out = new Map<string, string>();
+      if (typeof value === "object" && value !== null) {
+        for (const [path, body] of Object.entries(value)) {
+          if (typeof body === "string") out.set(path, body);
+        }
+      }
+      return out;
+    };
+
+    const peerAt = (r: Run, id: unknown): MockPeer => {
+      const found = r.peers.find((p) => p.peer === String(id));
+      if (found === undefined) throw liveFail("no-peer", "There is no such person.");
+      return found;
+    };
+
+    const inviteFor = (
+      relay: string,
+      file: string | null,
+      scope: LiveScope,
+      fragment: string,
+    ): string => {
+      const url = new URL("manang-live://join");
+      url.searchParams.set("relay", relay);
+      if (file !== null) url.searchParams.set("file", file);
+      if (scope === "project") url.searchParams.set("scope", "project");
+      url.hash = fragment;
+      return url.toString();
+    };
+
+    const startFile = (args: Args): unknown => {
+      const relay = normalizeRelay(relayUrl);
+      const doc = numberArg(args, "doc");
+      const file = typeof args["file"] === "string" ? args["file"] : null;
+      const start = text(doc);
+      const fragment = `mock${fingerprint(start)}${nextSession.toString(16).padStart(8, "0")}`;
+      pretend.set(fragment, start);
+      const r = begin(
+        doc,
+        "host",
+        start,
+        inviteFor(relay, file, "file", fragment),
+        file,
+        relay,
+      );
+      return {
+        session: r.authority.session,
+        version: 0,
+        role: "host",
+        invite: r.invite,
+      };
+    };
+
+    const startProject = (args: Args): unknown => {
+      const relay = normalizeRelay(relayUrl);
+      rootArg(args);
+      const fragment = `mockp${nextSession.toString(16).padStart(8, "0")}${pretendProjects.size}`;
+      pretendProjects.set(fragment, new Map(seeded));
+      const project = emptyProject();
+      const r = begin(
+        0,
+        "host",
+        "",
+        inviteFor(relay, null, "project", fragment),
+        null,
+        relay,
+        project,
+      );
+      for (const [path, body] of seeded) addFile(r, path, body);
+      return {
+        session: r.authority.session,
+        version: 0,
+        role: "host",
+        scope: "project",
+        invite: r.invite,
+        files: project.files.size,
+      };
+    };
+
+    const joinProject = (args: Args, link: ReturnType<typeof parseInvite>): unknown => {
+      rootArg(args);
+      const offered = pretendProjects.get(link.fragment);
+      if (offered === undefined) {
+        throw liveFail("bad-invite", "This invite is not valid: nobody is hosting it.");
+      }
+      const project = emptyProject();
+      project.phase = "manifest";
+      project.offered = new Map(offered);
+      project.local = new Map(localDisk);
+      const r = begin(
+        0,
+        "guest",
+        "",
+        args["invite"] as string,
+        link.file,
+        link.relay,
+        project,
+      );
+      r.peers.push({
+        peer: String(nextPeer),
+        name: "Ada Lovelace",
+        slot: 3,
+        selection: null,
+        path: null,
+      });
+      nextPeer += 1;
+      // Phase 1 ends with the manifest: the shell decides what to do with each file.
+      setTimeout(() => {
+        if (run !== r || project.plan !== null) return;
+        project.plan = classify(project.offered, project.local);
+        project.phase = "plan";
+        send("live.plan", { session: r.authority.session, files: project.plan });
+      }, 20);
+      return {
+        session: r.authority.session,
+        version: 0,
+        role: "guest",
+        scope: "project",
+        file: null,
+      };
+    };
+
+    const resolve = (args: Args): unknown => {
+      const r = current();
+      const project = projectOf(r);
+      const plan = project.plan;
+      if (plan === null) throw liveFail("no-plan", "There is nothing to resolve.");
+      const choices = new Map<string, string>();
+      for (const choice of Array.isArray(args["choices"])
+        ? (args["choices"] as LiveChoice[])
+        : []) {
+        choices.set(choice.path, choice.action);
+      }
+      // Never silent: a file that differs needs an answer, and replacing more
+      // than one needs an explicit all-files choice (`*`).
+      const differing = plan.filter((f) => f.class === "differing");
+      const unanswered = differing.filter((f) => !choices.has(f.path));
+      if (unanswered.length > 0 && !choices.has("*")) {
+        throw liveFail(
+          "unresolved",
+          `${unanswered.length} file(s) differ and need a choice.`,
+        );
+      }
+      const wholesale = choices.get("*");
+      const replacing = differing.filter(
+        (f) => (choices.get(f.path) ?? wholesale) !== "keep-mine",
+      ).length;
+      if (replacing > 1 && wholesale !== "take-host") {
+        throw liveFail(
+          "needs-confirmation",
+          `Replacing ${replacing} of your files needs the all-files confirmation.`,
+        );
+      }
+      const trashed: string[] = [];
+      const taken: string[] = [];
+      for (const file of plan) {
+        const choice = choices.get(file.path) ?? wholesale;
+        if (file.class === "identical" || file.class === "missing") {
+          taken.push(file.path);
+        } else if (file.class === "differing") {
+          if (choice === "keep-mine") project.excluded.add(file.path);
+          else {
+            taken.push(file.path);
+            trashed.push(file.path);
+          }
+        } else if (choice === "share") {
+          project.offered.set(file.path, project.local.get(file.path) ?? "");
+          taken.push(file.path);
+        }
+      }
+      project.plan = null;
+      project.phase = "live";
+      project.progress = { done: 0, total: taken.length };
+      send("live.progress", { session: r.authority.session, ...project.progress });
+      for (const path of taken) {
+        addFile(r, path, project.offered.get(path) ?? "");
+        project.progress = { done: project.progress.done + 1, total: taken.length };
+        send("live.progress", { session: r.authority.session, ...project.progress });
+      }
+      project.progress = null;
+      return { applied: taken.length, trashed };
+    };
+
+    const tree = (r: Run, ops: LiveTreeOp[]): void => {
+      send("live.tree", { session: r.authority.session, ops });
+    };
+
+    const notice = (
+      r: Run,
+      kind: "joined" | "left" | "deleted" | "renamed",
+      peer: string,
+      path?: string,
+    ): void => {
+      if (r.scope !== "project") return;
+      send("live.notice", {
+        session: r.authority.session,
+        kind,
+        peer,
+        ...(path === undefined ? {} : { path }),
+      });
+    };
 
     const handlers: Record<string, (args: Args) => unknown> = {
       "live.configure": (args) => {
@@ -357,18 +768,25 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
           relay_set: relaySet,
           session: r.authority.session,
           role: r.role,
-          doc: r.doc,
+          scope: r.scope,
           file: r.file,
           relay: r.relay,
           state: r.state,
           attempt: r.attempt,
           error: r.error,
           version: r.authority.version,
-          peers: r.authority.peers.map(({ peer, name, slot }) => ({
-            peer,
-            name,
-            slot,
-          })),
+          peers: peerList(r),
+          ...(r.project === null
+            ? { doc: r.doc }
+            : {
+                files: r.project.files.size,
+                progress: r.project.progress,
+                phase: r.project.phase,
+                unsynced_files: unsyncedOf(r),
+                paused: r.project.paused,
+                skipped: [],
+                following: r.project.following,
+              }),
         };
       },
       "live.start": (args) => {
@@ -378,23 +796,7 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
             "A live session is already running. Leave it first.",
           );
         }
-        const relay = normalizeRelay(relayUrl);
-        const doc = numberArg(args, "doc");
-        const file = typeof args["file"] === "string" ? args["file"] : null;
-        const start = text(doc);
-        const fragment = `mock${fingerprint(start)}${nextSession.toString(16).padStart(8, "0")}`;
-        pretend.set(fragment, start);
-        const url = new URL("manang-live://join");
-        url.searchParams.set("relay", relay);
-        if (file !== null) url.searchParams.set("file", file);
-        url.hash = fragment;
-        const r = begin(doc, "host", start, url.toString(), file, relay);
-        return {
-          session: r.authority.session,
-          version: 0,
-          role: "host",
-          invite: r.invite,
-        };
+        return args["scope"] === "project" ? startProject(args) : startFile(args);
       },
       "live.join": (args) => {
         if (run !== null) {
@@ -403,10 +805,11 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
             "A live session is already running. Leave it first.",
           );
         }
-        const doc = numberArg(args, "doc");
         const link = parseInvite(
           typeof args["invite"] === "string" ? args["invite"] : "",
         );
+        if (link.scope === "project") return joinProject(args, link);
+        const doc = numberArg(args, "doc");
         const hostText = pretend.get(link.fragment);
         if (hostText === undefined) {
           throw liveFail(
@@ -443,11 +846,12 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
           link.relay,
         );
         // The other person is in the room; the host's text arrives as an edit.
-        r.authority.peers.push({
+        r.peers.push({
           peer: String(nextPeer),
           name: "Ada Lovelace",
           slot: 3,
           selection: null,
+          path: null,
         });
         nextPeer += 1;
         if (stream) {
@@ -480,7 +884,7 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
         const link = parseInvite(
           typeof args["invite"] === "string" ? args["invite"] : "",
         );
-        return { relay: link.relay, file: link.file };
+        return { relay: link.relay, file: link.file, scope: link.scope };
       },
       "live.push": (args) => {
         const r = current();
@@ -493,21 +897,138 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
         const changes = Array.isArray(args["changes"])
           ? (args["changes"] as LiveChange[])
           : [];
-        return r.authority.push(numberArg(args, "version"), changes);
+        return authorityFor(r, args).push(numberArg(args, "version"), changes);
       },
       "live.selection": () => ({}),
-      "live.snapshot": () => {
-        const r = current();
-        return { version: r.authority.version, text: r.authority.text };
+      "live.snapshot": (args) => {
+        const authority = authorityFor(current(), args);
+        return { version: authority.version, text: authority.text };
       },
       "live.contributors": () => {
         const r = current();
         return {
-          contributors: r.authority.peers.map((p) => ({ name: p.name, email: null })),
+          contributors: r.peers.map((p) => ({ name: p.name, email: null })),
+          trailers: [],
+          without_email: r.peers.map((p) => p.name),
         };
+      },
+      "live.resync": (args) => {
+        const r = current();
+        const project = r.project;
+        const answer = args["paused"];
+        if (project === null) return { resyncing: true };
+        if (answer === undefined) {
+          if (project.paused !== null) {
+            throw liveFail(
+              "paused",
+              "A large change on disk is waiting for an answer.",
+            );
+          }
+          return { resyncing: true };
+        }
+        if (answer !== "share" && answer !== "discard") {
+          throw liveFail(
+            "invalid",
+            `\`paused\` must be "share" or "discard", not ${JSON.stringify(answer)}`,
+          );
+        }
+        project.paused = null;
+        return { resyncing: true };
+      },
+
+      /* -- Project sessions -------------------------------------------------- */
+      "live.resolve": resolve,
+      "live.attach": (args) => {
+        const r = current();
+        const project = needLive(r);
+        const path = typeof args["path"] === "string" ? args["path"] : "";
+        if (project.excluded.has(path)) {
+          throw liveFail("excluded", `${path} is kept out of the session.`);
+        }
+        const authority = authorityFor(r, args);
+        project.attached.add(path);
+        return { version: authority.version, text: authority.text };
+      },
+      "live.detach": (args) => {
+        const project = needLive(current());
+        const path = typeof args["path"] === "string" ? args["path"] : "";
+        return { detached: project.attached.delete(path) };
+      },
+      "live.follow": (args) => {
+        const project = projectOf(current());
+        project.following = typeof args["peer"] === "string" ? args["peer"] : null;
+        return { following: project.following };
+      },
+      "live.files": () => {
+        const r = current();
+        const project = needLive(r);
+        const files: LiveFileNode[] = [...project.files.keys()]
+          .filter((path) => !project.excluded.has(path))
+          .sort()
+          .map((path) => ({
+            path,
+            kind: "text" as const,
+            peers: r.peers.filter((p) => p.path === path).map((p) => p.peer),
+          }));
+        return { files };
+      },
+      "live.exclude": (args) => {
+        const project = needLive(current());
+        const path = typeof args["path"] === "string" ? args["path"] : "";
+        project.excluded.add(path);
+        project.attached.delete(path);
+        return { excluded: true };
+      },
+      "live.include": (args) => {
+        const project = needLive(current());
+        const path = typeof args["path"] === "string" ? args["path"] : "";
+        return { included: project.excluded.delete(path) };
+      },
+      "live.restore": (args) => {
+        const r = current();
+        const project = needLive(r);
+        const path = typeof args["path"] === "string" ? args["path"] : "";
+        const body = project.deleted.get(path);
+        if (body === undefined) {
+          throw liveFail("not-deleted", `${path} was not deleted in this session.`);
+        }
+        project.deleted.delete(path);
+        addFile(r, path, body);
+        tree(r, [{ op: "create", path, by: "self" }]);
+        return { restored: true };
       },
 
       /* -- Dev hooks: the scripted collaborator and the network ------------ */
+      "dev.live-seed": (args) => {
+        seeded = filesArg(args["files"]);
+        return { files: seeded.size };
+      },
+      "dev.live-local": (args) => {
+        localDisk = filesArg(args["files"]);
+        return { files: localDisk.size };
+      },
+      /** What a host would strand by leaving: the files no one present holds. */
+      "dev.live-unsynced": (args) => {
+        const project = projectOf(current());
+        project.unsynced = typeof args["files"] === "number" ? args["files"] : null;
+        peersEvent(current());
+        return null;
+      },
+      /** A large rewrite on disk (a Git checkout) is held until it is answered. */
+      "dev.live-paused": (args) => {
+        const r = current();
+        const project = projectOf(r);
+        const info: LivePausedInfo = {
+          files: typeof args["files"] === "number" ? args["files"] : 40,
+          changed_lines:
+            typeof args["changed_lines"] === "number" ? args["changed_lines"] : 900,
+          total_lines:
+            typeof args["total_lines"] === "number" ? args["total_lines"] : 2000,
+        };
+        project.paused = info;
+        send("live.paused", { session: r.authority.session, ...info });
+        return null;
+      },
       "dev.live-peer-join": (args) => {
         const r = current();
         const peer: MockPeer = {
@@ -515,18 +1036,32 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
           name: typeof args["name"] === "string" ? args["name"] : "Ada Lovelace",
           slot: typeof args["slot"] === "number" ? args["slot"] : 3,
           selection: null,
+          path: typeof args["path"] === "string" ? args["path"] : null,
         };
         nextPeer += 1;
-        r.authority.peers.push(peer);
+        r.peers.push(peer);
         stateEvent(r);
+        peersEvent(r);
+        notice(r, "joined", peer.peer);
         return { peer: peer.peer };
       },
       "dev.live-peer-leave": (args) => {
         const r = current();
-        const at = r.authority.peers.findIndex((p) => p.peer === String(args["peer"]));
-        if (at >= 0) r.authority.peers.splice(at, 1);
+        const at = r.peers.findIndex((p) => p.peer === String(args["peer"]));
+        const gone = at >= 0 ? r.peers.splice(at, 1)[0] : undefined;
         stateEvent(r);
+        peersEvent(r);
+        if (gone !== undefined) notice(r, "left", gone.peer);
         r.authority.caret("", null);
+        return null;
+      },
+      /** A peer brings another file to the front (project sessions). */
+      "dev.live-peer-open": (args) => {
+        const r = current();
+        const peer = peerAt(r, args["peer"]);
+        peer.path = typeof args["path"] === "string" ? args["path"] : null;
+        peer.selection = null;
+        peersEvent(r);
         return null;
       },
       "dev.live-peer-type": (args) => {
@@ -540,15 +1075,64 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
                 insert: typeof args["text"] === "string" ? args["text"] : "",
               },
             ];
-        r.authority.remote(changes);
-        return { version: r.authority.version };
+        const authority = authorityFor(r, args);
+        authority.remote(changes);
+        return { version: authority.version };
       },
       "dev.live-peer-caret": (args) => {
         const r = current();
-        r.authority.caret(String(args["peer"]), {
+        const authority = authorityFor(r, args);
+        const peer = peerAt(r, args["peer"]);
+        if (r.project !== null) peer.path = authority.path ?? null;
+        authority.caret(String(args["peer"]), {
           anchor: numberArg(args, "anchor"),
           head: numberArg(args, "head"),
         });
+        return null;
+      },
+      "dev.live-peer-create": (args) => {
+        const r = current();
+        const project = projectOf(r);
+        const peer = peerAt(r, args["peer"]);
+        const path = typeof args["path"] === "string" ? args["path"] : "";
+        if (unsafePath(path)) throw liveFail("bad-path", `${path} is not a safe path.`);
+        addFile(r, path, typeof args["text"] === "string" ? args["text"] : "");
+        project.excluded.delete(path);
+        tree(r, [{ op: "create", path, by: peer.peer }]);
+        return null;
+      },
+      "dev.live-peer-delete": (args) => {
+        const r = current();
+        const project = projectOf(r);
+        const peer = peerAt(r, args["peer"]);
+        const path = typeof args["path"] === "string" ? args["path"] : "";
+        const authority = project.files.get(path);
+        if (authority === undefined) return null;
+        project.files.delete(path);
+        project.attached.delete(path);
+        project.deleted.set(path, authority.text);
+        // `anonymous`: the session cannot tell who deleted it (`by` is empty).
+        tree(r, [
+          { op: "delete", path, by: args["anonymous"] === true ? "" : peer.peer },
+        ]);
+        notice(r, "deleted", peer.peer, path);
+        return null;
+      },
+      "dev.live-peer-rename": (args) => {
+        const r = current();
+        const project = projectOf(r);
+        const peer = peerAt(r, args["peer"]);
+        const from = typeof args["from"] === "string" ? args["from"] : "";
+        const to = typeof args["to"] === "string" ? args["to"] : "";
+        const authority = project.files.get(from);
+        if (authority === undefined) return null;
+        if (unsafePath(to)) throw liveFail("bad-path", `${to} is not a safe path.`);
+        project.files.delete(from);
+        const moved = addFile(r, to, authority.text);
+        moved.version = authority.version;
+        project.attached.delete(from);
+        tree(r, [{ op: "rename", path: to, from, by: peer.peer }]);
+        notice(r, "renamed", peer.peer, to);
         return null;
       },
       "dev.live-link": (args) => {
@@ -569,19 +1153,32 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
         lagMs = typeof args["ms"] === "number" ? args["ms"] : 0;
         return null;
       },
-      /** An invite for a pretend host whose file holds `text`. */
+      /** An invite for a pretend host whose file holds `text` (or whose project holds `files`). */
       "dev.live-make-invite": (args) => {
+        const relay = "wss://relay.example.org";
+        if (typeof args["files"] === "object" && args["files"] !== null) {
+          const fragment = `mockp${(2000 + pretendProjects.size).toString(16).padStart(8, "0")}${pretendProjects.size}`;
+          pretendProjects.set(fragment, filesArg(args["files"]));
+          return { invite: inviteFor(relay, null, "project", fragment) };
+        }
         const start = typeof args["text"] === "string" ? args["text"] : "";
         const fragment = `mock${fingerprint(start)}${(1000 + pretend.size).toString(16).padStart(8, "0")}`;
         pretend.set(fragment, start);
-        const url = new URL("manang-live://join");
-        url.searchParams.set("relay", "wss://relay.example.org");
-        if (typeof args["file"] === "string")
-          url.searchParams.set("file", args["file"]);
-        url.hash = fragment;
-        return { invite: url.toString() };
+        return {
+          invite: inviteFor(
+            relay,
+            typeof args["file"] === "string" ? args["file"] : null,
+            "file",
+            fragment,
+          ),
+        };
       },
-      "dev.live-text": () => (run === null ? null : run.authority.text),
+      "dev.live-text": (args) => {
+        if (run === null) return null;
+        return run.project === null
+          ? run.authority.text
+          : (run.project.files.get(String(args["path"] ?? ""))?.text ?? null);
+      },
     };
 
     return {

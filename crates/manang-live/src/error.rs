@@ -37,4 +37,10 @@ pub enum LiveError {
     /// The transport reported a failure.
     #[error("transport error: {0}")]
     Transport(String),
+    /// A blob chunk, size or hash was rejected (see [`crate::blob`]).
+    #[error("blob rejected: {0}")]
+    Blob(&'static str),
+    /// A project-tree operation or manifest was rejected.
+    #[error("project error: {0}")]
+    Project(String),
 }

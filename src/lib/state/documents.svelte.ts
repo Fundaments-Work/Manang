@@ -15,7 +15,7 @@ import {
   Transaction,
   type ChangeSpec,
   type Extension,
-  type EditorState,
+  EditorState,
   type Text,
   type TransactionSpec,
 } from "@codemirror/state";
@@ -49,6 +49,7 @@ import { KernelSync, type SyncStatus } from "$lib/kernel/sync";
 import type { LiveBinding, LiveHost } from "$lib/editor/live/binding";
 
 import { notice } from "./notice.svelte";
+import { liveBlock } from "$lib/workbench/live";
 import { dialog } from "./dialog.svelte";
 import { workspace } from "./workspace.svelte";
 
@@ -179,6 +180,20 @@ export class DocSession {
     this.sync.pause();
     this.live = true;
     this.#dispatch({ effects: liveCompartment.reconfigure(binding.extension) });
+  }
+
+  /**
+   * While a joiner waits for someone to answer, the file keeps its own text
+   * and cannot be typed into (what is typed would be replaced).
+   */
+  setLiveReadOnly(binding: LiveBinding, readOnly: boolean): void {
+    this.#dispatch({
+      effects: liveCompartment.reconfigure(
+        readOnly
+          ? [binding.extension, EditorState.readOnly.of(true)]
+          : binding.extension,
+      ),
+    });
   }
 
   /** Leave the session: the kernel copy is brought up to what the editor shows. */
@@ -370,6 +385,7 @@ export class DocumentsStore {
   readonly #saveListeners: ((path: string) => void)[] = [];
   readonly #changeListeners: ((path: string) => void)[] = [];
   readonly #dropListeners: ((path: string) => void)[] = [];
+  readonly #openListeners: ((path: string) => void)[] = [];
   #statsTimer: ReturnType<typeof setTimeout> | undefined;
 
   /* ----------------------------------------------------------------------- */
@@ -409,6 +425,11 @@ export class DocumentsStore {
     this.#dropListeners.push(listener);
   }
 
+  /** Called with the path of a document that was just opened (a text tab appeared). */
+  onOpen(listener: (path: string) => void): void {
+    this.#openListeners.push(listener);
+  }
+
   /** Called with the path after a document reached the disk. */
   onSave(listener: (path: string) => void): void {
     this.#saveListeners.push(listener);
@@ -426,6 +447,7 @@ export class DocumentsStore {
       const session = new DocSession(this, path, read.content, read.hash);
       this.#sessions.set(path, session);
       this.version += 1;
+      for (const listener of this.#openListeners) listener(path);
       return session;
     } catch (error) {
       notice.error(`Could not open ${path}: ${errorMessage(error)}`);
@@ -444,6 +466,7 @@ export class DocumentsStore {
     const session = new DocSession(this, path, "", null);
     this.#sessions.set(path, session);
     this.version += 1;
+    for (const listener of this.#openListeners) listener(path);
     return session;
   }
 
@@ -747,6 +770,17 @@ export class DocumentsStore {
     }
     // The document may have been closed or typed into while the read ran.
     if (this.#sessions.get(path) !== session) return;
+    if (session.live) {
+      // The session is the truth for this file: a reload would be sent to
+      // everyone as if it were typed. Keep the session's text; the next save
+      // writes it over the disk copy.
+      if (disk !== null && disk.hash !== session.diskHash) {
+        const same = disk.content === session.text();
+        session.diskHash = disk.hash;
+        if (!same) notice.show(liveBlock("reload", path) ?? "");
+      }
+      return;
+    }
     const action = decideExternal(
       {
         dirty: session.dirty,

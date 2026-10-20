@@ -16,8 +16,12 @@ libfuzzer-sys = "0.4"
 manang-agent-core = { path = "../crates/manang-agent-core" }
 manang-diagram = { path = "../crates/manang-diagram" }
 manang-kernel = { path = "../crates/manang-kernel" }
+manang-live = { path = "../crates/manang-live" }
+manang-live-plugin = { path = "../crates/manang-live-plugin" }
 manang-wasm-host = { path = "../crates/manang-wasm-host" }
 serde_json = "1"
+# Loro checksum repair in the live targets (the version Loro itself uses).
+xxhash-rust = { version = "0.8", default-features = false, features = ["xxh32"] }
 
 [[bin]]
 name = "manifest_from_toml"
@@ -43,6 +47,69 @@ bench = false
 [[bin]]
 name = "sse_parser"
 path = "fuzz_targets/sse_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_message_decode"
+path = "fuzz_targets/live_message_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_presence_decode"
+path = "fuzz_targets/live_presence_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_manifest"
+path = "fuzz_targets/live_manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_blob"
+path = "fuzz_targets/live_blob.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_envelope_open"
+path = "fuzz_targets/live_envelope_open.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_text_apply"
+path = "fuzz_targets/live_text_apply.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_project_apply"
+path = "fuzz_targets/live_project_apply.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_pathsec"
+path = "fuzz_targets/live_pathsec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "live_fsbridge"
+path = "fuzz_targets/live_fsbridge.rs"
 test = false
 doc = false
 bench = false
