@@ -128,3 +128,18 @@ Events: `live.remote` (+`path`), `live.presence` (+`path`), `live.state`, and ne
 slot, path}]}`, `live.progress {done, total}`, `live.notice {kind: joined | left
 | deleted | renamed, peer, path?}`. Single-file invites keep today's behaviour
 (`scope: "file"`).
+
+### Payload shapes (fixed by P5, binding for P3/P4)
+
+* `live.plan` event: `{files: [{path, class: "identical" | "missing" | "differing" | "guest-only"}]}`.
+* `live.resolve {choices: [{path, action: "take-host" | "keep-mine" | "share" | "keep-private"}]}`;
+  the wildcard path `"*"` is the single all-files confirmation. A differing file
+  with no choice is refused with code `unresolved`.
+* `live.files` returns `{files: [{path, kind: "text" | "binary", peers: string[]}]}`.
+* `live.peers` event: `{peers: [{peer, name, slot, path}]}`.
+* `live.push`/`live.selection` require `path`; `live.snapshot {path}`;
+  `live.start {doc?, file?, scope?}`; `live.inspect` returns `scope`.
+* The plugin manifest must list the 8 new commands that `mockLive.test.ts` lists.
+* Mock dev hooks for verify-ui: `dev.live-seed`, `dev.live-local`,
+  `dev.live-make-invite`, `dev.live-peer-join|open|type|caret|create|rename|delete`,
+  `dev.live-text`.
