@@ -119,3 +119,43 @@ existing security list; whether client IPs may be logged and for how long; the
 repository name, licence and visibility; proxy choice and whether the Worker stays
 as a fallback; the real maximum frame size; durable rooms yes or no with retention
 and quota; the release signing scheme.
+
+## Owner constraints (2026-10-20) and what they change
+
+* **Cloudflare Tunnel, no Caddy.** `cloudflared` on the VM makes outbound-only
+  connections to Cloudflare; the relay listens on `127.0.0.1` and speaks plain
+  WebSocket. No TLS code in the relay at all, no inbound ports open (the Oracle
+  security list can drop 80 and 443; SSH only from the owner's IP or through the
+  tunnel). The client IP comes from `CF-Connecting-IP`, trusted only because the
+  sole local peer is `cloudflared`. Cloudflare's edge gives DDoS absorption and
+  can add rate-limit rules for free. The 100 s idle limit on proxied WebSockets
+  stays: application keepalive uses real binary frames. The cut-over moves
+  `relay.fundaments.work` from the Worker route to the tunnel hostname; keep the
+  Worker on a second name as the fallback.
+* **Target machine: Oracle Always Free AMD, 1 GB RAM, x86_64** (the E2 micro shape
+  has a 1/8 OCPU baseline [I, confirm on the instance]). Goal: about 500 concurrent
+  users, which is roughly 60-100 rooms of up to 16 peers. Capacity numbers are
+  targets to measure with the load generator, not promises.
+* **Memory is the hard budget.** Rough split [I]: OS and journald 250-300 MB,
+  `cloudflared` 40-80 MB, relay at most 400 MB with a systemd `MemoryMax` of
+  about 600 MB for the unit. For 500 connections that means at most about 300 KB
+  per connection including queued frames, so: small read and write buffers (tune
+  down from tungstenite's roughly 128 KiB each), byte budgets per connection, per
+  room and **global** (a hard cap on in-flight bytes, for example 128 MiB), and
+  slow readers dropped by bytes, not by frame count.
+* **CPU is the second budget.** A 1/8 OCPU baseline favours few threads: start with
+  `current_thread` or two tokio workers, batch writes (one flush per wake-up),
+  no per-frame allocation, `Bytes` shared across receivers, no TLS, no compression.
+  Release profile: fat LTO, `codegen-units = 1`, `panic = "abort"`, a conservative
+  x86-64-v2 target (not `native`, the build host differs from the VM). The biggest
+  CPU cost on the box may be `cloudflared`, not the relay: measure both, and
+  compare `--protocol quic` against `http2`.
+* **Frame cap decision:** keep the effective 8 MiB (what the code really allows
+  today), make it an explicit documented constant, fix the bucket so the cap and
+  the limiter agree, and let the global in-flight budget protect the box.
+* **Oracle idle reclamation** applies to Always Free instances (CPU and network
+  95th percentile under 20% for 7 days) [V, Oracle docs; remedy via pay-as-you-go
+  is a third-party report, U]. Decide before depending on the VM; do not rely on
+  fake load.
+* A 1 GB machine has no swap by default. A small swap file or zram is the
+  owner's call on their VM; the plan assumes none and relies on `MemoryMax`.
