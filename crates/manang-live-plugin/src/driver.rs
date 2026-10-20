@@ -548,6 +548,18 @@ impl Driver {
                 self.status.lock().rejected += 1;
             }
             Output::Send(_) | Output::Connect | Output::Close => {}
+            // Project-session outputs (several files, manifests, blobs). A
+            // single-file session never produces them; the project driver
+            // handles them in work package P4.
+            Output::DocChanged(_)
+            | Output::Tree(_)
+            | Output::DocWanted(_)
+            | Output::DocDiverged { .. }
+            | Output::Progress { .. }
+            | Output::Manifest { .. }
+            | Output::BlobRequested { .. }
+            | Output::BlobReceived { .. }
+            | Output::BlobFailed { .. } => {}
         }
     }
 

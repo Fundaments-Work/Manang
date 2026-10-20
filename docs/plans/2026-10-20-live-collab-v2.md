@@ -105,8 +105,10 @@ session.
 
 ## Status (2026-10-20)
 
-Merged on `feat/live-collab-v2` (not yet on `main`): wave 0 (S1-S6) and P1
-(project tree, blobs, manifest, wire v2). Gates on the merge result: fmt, clippy
+Merged on `feat/live-collab-v2` (not yet on `main`): wave 0 (S1-S6), P1
+(project tree, blobs, manifest, wire v2), P5 (frontend state), P6 (UI; verify-ui
+live section 96/96 re-run on the merge) and P2 (multi-doc session router). The
+plugin driver ignores the new project outputs until P4 wires them. Gates on the merge result: fmt, clippy
 and tests for `manang-live`, `manang-live-plugin`, `manang-git`; `pnpm run check`,
 vitest (1051), eslint. Build note: worktrees with the same layout must not share
 one `CARGO_TARGET_DIR` at the same time (artifact names collide).
