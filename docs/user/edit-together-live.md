@@ -6,7 +6,7 @@ Your file on disk stays an ordinary text file. The shared state lives only in me
 
 ## What you need
 
-- **A relay**, to start a session. Manang uses the relay run by Fundaments (`wss://relay.fundaments.work`) unless you change it. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). Whoever runs the relay for your group gives you its address, for example `wss://relay.example.org`. During the beta you can use the Manang team's relay at `wss://manang-relay.fundamentswork.workers.dev`: paste it into Settings, Collaboration, Relay address. It only sees encrypted data.
+- **A relay**, to start a session. Manang uses the relay run by Fundaments (`wss://relay.fundaments.work`) unless you change it. A relay is a small server where the people in a session meet. It passes on encrypted data and cannot read your text (see [What the relay can see](#what-the-relay-can-see)). To use a relay run by your group instead, whoever runs it gives you its address, for example `wss://relay.example.org`: paste it into Settings, Collaboration, Relay address.
 - **An invite**, to join a session. The person who shares the file sends it to you. It already contains the relay address, so you do not need to set one to join.
 
 ## The Share button
@@ -39,7 +39,7 @@ To use your own relay, enter its address under **Relay address**: `wss://` for o
 
 1. Open the text file you want to work on together.
 2. Press **Share**, then **Share this file**. (Or use **File > Share this file live…**, or the command palette, `Ctrl+K`.)
-3. A bar appears above the editor. It says **Connecting**, then **Live**. The invite has been copied to your clipboard. If the clipboard is not available, the invite appears in a field in the bar, already selected.
+3. A bar appears above the editor. It says **Connecting**, then **Live** once it is connected. The invite has been copied to your clipboard. If the clipboard is not available, the invite appears in a field in the bar, already selected.
 4. Send the invite to the people you want to work with. Use **Copy invite** in the bar to copy it again.
 
 An invite is a long link that starts with `manang-live://`. **Anyone who has it can edit the file with you**, so send it only to the people you mean, through a channel you trust.
@@ -75,7 +75,11 @@ On two computers, run the relay on one, use `ws://ITS-IP:8787` as the relay addr
 
 If your copy of the file is **identical** to the host's at the moment they started sharing, you join straight away.
 
-If it is **different**, Manang does not replace anything silently. It asks first, and explains that joining replaces your copy with the host's version. If you agree, your copy is saved first to a folder outside your project (`live-trash` in Manang's settings folder), then the host's text arrives. If your copy is empty, there is nothing to lose and you join directly.
+If it is **different**, Manang does not replace anything silently. It asks first, and explains that joining replaces your copy with the host's version. If you agree, your copy is saved first to a folder outside your project (`live-trash` in Manang's settings folder). Your file is replaced only when someone in the session actually answers; until then the bar says **Waiting for host** and your file stays as it is (you cannot type in it meanwhile). If your copy is empty, there is nothing to lose and you join directly.
+
+If nobody answers within about 20 seconds, the bar says so and keeps trying. Check that the host still has the session open, or press **Re-sync** to ask again.
+
+If everyone left a session and you open the same invite again with the file unchanged since, Manang restores the document from a private copy it keeps in its data folder, so nothing typed in the session is lost. If the file changed in the meantime, the file on disk wins and Manang asks as above.
 
 ## In the session
 
@@ -89,9 +93,10 @@ If it is **different**, Manang does not replace anything silently. It asks first
 | The bar says | What it means |
 | :--- | :--- |
 | **Connecting** | Opening the connection and exchanging the document with the others. |
+| **Waiting for host** | You joined, but nobody has answered yet. Your file is untouched and read-only until someone does. |
 | **Live** | Connected. Edits flow both ways. |
 | **Reconnecting** | The connection dropped. Keep typing: your edits are kept and merge automatically when the connection is back. Manang retries on its own, waiting a little longer each time. |
-| **Session stopped** | Something went wrong that Manang cannot repair on its own; the bar says what. Leave and, if needed, join again with the invite. |
+| **Session stopped** | Something went wrong; the bar says what. Many problems pass by themselves (the bar goes back to Live). **Re-sync** rebuilds your copy from the others; if that does not help, leave and join again with the invite. |
 
 ## Leave
 
@@ -100,7 +105,8 @@ Choose **Leave** in the bar (or **Leave live session** in the File menu). Edits 
 ## Saving, versions and Git
 
 - Each person saves their own copy. After a session everyone's file contains the same merged text, but each person decides when to save it.
-- Version history and Git work as before. Do not use **Get updates** on the live file while you are in a session: Manang does not block it yet, and changing the file from outside while a session runs is not supported. Leave first.
+- Version history and Git work as before, with two rules. **Get updates** and restoring the live file are refused while you are in a session (they would rewrite the file for everyone); leave first. If another program changes the live file on disk, Manang keeps the session's text and your next save overwrites the disk copy.
+- When you **save a version** during a session, the people who edited with you are credited with `Co-authored-by` lines. Manang shares your email with them only if you type one in Settings > Collaboration (*Email shared with collaborators*); people without a shared email are named in the version's message instead.
 
 ## What the relay can see
 
@@ -122,4 +128,4 @@ What this does not give you:
 - **"This invite is not valid."** The link was cut or changed. Ask for it again and paste it whole, including everything after the `#`.
 - **Stuck on Connecting or Reconnecting.** The relay is not reachable from your network (firewall, wrong address, relay down). Check the address in Settings; the person who shared can see the same state in their bar. Your edits are kept in the meantime.
 - **"The live document was re-read from the session."** A step could not be applied, so Manang replaced your view with the session's text to stay consistent. Edits you had typed in the last moments before may need to be typed again. This is rare; please report it.
-- **Both people see different text after reconnecting.** Leave and join again. If it keeps happening, please report it with the relay address kind (`ws://` or `wss://`) and what you were doing.
+- **Both people see different text after reconnecting.** Press **Re-sync** in the bar. If it keeps happening, please report it with the relay address kind (`ws://` or `wss://`) and what you were doing.

@@ -27,6 +27,9 @@ pub enum LiveHostError {
         "Your copy of this file differs from the host's. Joining replaces it with the host's version; your copy is saved first."
     )]
     Differs,
+    /// The session is waiting for someone to answer; edits cannot be sent yet.
+    #[error("Waiting for someone in the session to answer. Your file has not been changed.")]
+    Waiting,
     /// A command argument was missing or malformed.
     #[error("{0}")]
     Invalid(String),
@@ -55,6 +58,7 @@ impl LiveHostError {
             Self::AlreadyLive => "already-live",
             Self::NotLive => "not-live",
             Self::Differs => "differs",
+            Self::Waiting => "waiting",
             Self::Invalid(_) => "invalid",
             Self::Editor(_) => "editor",
             Self::Core(_) => "core",

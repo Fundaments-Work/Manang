@@ -40,12 +40,14 @@ pub struct Presence {
     pub peer: u64,
     /// Monotonic per-peer counter; stale or replayed states are ignored.
     pub seq: u64,
-    /// Display name (from git identity, or chosen at join).
+    /// Display name: the `live.display-name` setting, else the system user
+    /// name. A claim, not a login.
     pub name: String,
     /// Colour slot in `0..PALETTE_SLOTS`.
     pub slot: u8,
-    /// Commit identity email, shared only if the person opted in. Used for
-    /// `Co-authored-by:` trailers; never shown in the UI.
+    /// Email shared only if the person typed one into the `live.email`
+    /// setting (empty means none). Used for `Co-authored-by:` trailers;
+    /// never shown in the UI.
     pub email: Option<String>,
     /// Current selection, if the peer has a caret in this document.
     pub selection: Option<Selection>,

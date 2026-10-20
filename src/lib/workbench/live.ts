@@ -10,6 +10,8 @@ export function connectionLabel(state: LiveConnection, attempt: number): string 
   switch (state) {
     case "connecting":
       return "Connecting";
+    case "waiting":
+      return "Waiting for host";
     case "connected":
       return "Live";
     case "reconnecting":
@@ -30,6 +32,8 @@ export function connectionDetail(
   error: string | null,
 ): string | null {
   switch (state) {
+    case "waiting":
+      return "Your copy of the file is kept as it is until someone in the session answers. You cannot type here until then.";
     case "reconnecting":
       return "Your edits are kept and will merge when the connection is back.";
     case "error":
@@ -41,7 +45,7 @@ export function connectionDetail(
 
 /** Whether the document can be typed into while the session is in this state. */
 export function editingAllowed(state: LiveConnection): boolean {
-  return state !== "error";
+  return state !== "error" && state !== "waiting";
 }
 
 /** The relay is not set: sharing (not joining) needs one. */
@@ -76,6 +80,8 @@ export function liveChipText(
   switch (state) {
     case "connecting":
       return "Live: connecting";
+    case "waiting":
+      return "Live: waiting for host";
     case "reconnecting":
       return "Live: reconnecting";
     case "error":
@@ -112,4 +118,43 @@ export function canShareLive(
 export function inviteFileLabel(file: string | null | undefined): string {
   if (file === null || file === undefined || file === "") return "the shared file";
   return file.split("/").pop() ?? file;
+}
+
+/** What a live file blocks: things that would rewrite it underneath the session. */
+export type LiveGuardedAction = "get-updates" | "restore" | "reload";
+
+/**
+ * A plain-language reason why `action` must not run now, or `null`. `touched`
+ * is the paths the action rewrites (empty for "the whole project").
+ * A merge or restore rewriting a file underneath a live session would make
+ * every copy differ, so the person is asked to leave first.
+ */
+export function liveBlock(
+  action: LiveGuardedAction,
+  livePath: string | null,
+  touched: readonly string[] = [],
+): string | null {
+  if (livePath === null) return null;
+  const name = livePath.split("/").pop() ?? livePath;
+  if (action === "restore" && touched.length > 0 && !touched.includes(livePath)) {
+    return null;
+  }
+  switch (action) {
+    case "get-updates":
+      return `${name} is being edited together live. Getting updates could rewrite it for everyone, so leave the live session first.`;
+    case "restore":
+      return `${name} is being edited together live. Restoring it would replace it for everyone, so leave the live session first.`;
+    case "reload":
+      return `${name} changed on disk while it is in a live session. The session's version is kept; save to overwrite the disk copy.`;
+  }
+}
+
+/** Where `Co-authored-by` credit goes when a version is saved during a session. */
+export function versionMessage(
+  existing: string | undefined,
+  withoutEmail: readonly string[],
+): string | undefined {
+  if (withoutEmail.length === 0) return existing;
+  const line = `Also edited by: ${withoutEmail.join(", ")}`;
+  return existing === undefined || existing === "" ? line : `${existing}\n\n${line}`;
 }

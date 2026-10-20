@@ -98,7 +98,7 @@ By design. The registry is new and starts empty; first-party plugins arrive in t
 ## 6. Real-time Co-Editing
 
 ### What
-Live co-editing (see [Edit together live](../user/edit-together-live.md)) works on **one text file per session**. It uses the hosted relay at `wss://relay.fundaments.work` by default (end-to-end encrypted; the relay sees only ciphertext and connection metadata), or your own relay. Do not use **Get updates** on the live file during a session. Joining with a copy that differs from the host's replaces your copy with the host's, after asking and saving the old copy.
+Live co-editing (see [Edit together live](../user/edit-together-live.md)) works on **one text file per session**. It uses the hosted relay at `wss://relay.fundaments.work` by default (end-to-end encrypted; the relay sees only ciphertext and connection metadata), or your own relay. **Get updates** and restoring the live file are refused during a session; leave first. Joining with a copy that differs from the host's replaces your copy with the host's, after asking and saving the old copy, and only once someone in the session has answered (until then the bar says *Waiting for host* and the file is untouched). A document survives everyone leaving only if you rejoin with the same invite and the file is unchanged on disk.
 
 ### How to Avoid
 For anything beyond one text file, use Git through the **Source Control** panel (`Ctrl+Shift+G`) or a shared folder.

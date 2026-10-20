@@ -160,6 +160,9 @@ mod args {
         pub root: Option<String>,
         pub name: Option<String>,
         pub message: Option<String>,
+        /// Extra `Key: value` trailer lines, e.g. `Co-authored-by: ...`.
+        #[serde(default)]
+        pub trailers: Vec<String>,
     }
 
     #[derive(Deserialize)]
@@ -407,7 +410,7 @@ impl GitPlugin {
             "git.save-version" => {
                 let a: args::SaveVersion = parse(input)?;
                 self.write(a.root.as_deref(), |c| {
-                    versions::save_version(c, a.name.as_deref(), a.message.as_deref())
+                    versions::save_version(c, a.name.as_deref(), a.message.as_deref(), &a.trailers)
                 })
             }
             "git.versions" => {

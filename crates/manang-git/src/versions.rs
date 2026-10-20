@@ -78,18 +78,32 @@ fn staged_count(ctx: &Ctx) -> Result<usize, GitError> {
 
 /// Stage every non-ignored change and commit it as a labelled version.
 /// An empty change set is [`GitError::NothingToSave`], never an empty commit.
+///
+/// `trailers` are extra `Key: value` lines (such as `Co-authored-by:` for
+/// the people who edited together live) added after the version marker.
 pub fn save_version(
     ctx: &Ctx,
     name: Option<&str>,
     message: Option<&str>,
+    trailers: &[String],
 ) -> Result<Saved, GitError> {
-    save_version_at(ctx, name, message, now_secs())
+    save_version_with(ctx, name, message, trailers, now_secs())
 }
 
 pub(crate) fn save_version_at(
     ctx: &Ctx,
     name: Option<&str>,
     message: Option<&str>,
+    now: i64,
+) -> Result<Saved, GitError> {
+    save_version_with(ctx, name, message, &[], now)
+}
+
+fn save_version_with(
+    ctx: &Ctx,
+    name: Option<&str>,
+    message: Option<&str>,
+    extra_trailers: &[String],
     now: i64,
 ) -> Result<Saved, GitError> {
     let name = name.map(str::trim).filter(|n| !n.is_empty());
@@ -112,7 +126,8 @@ pub(crate) fn save_version_at(
     if files_changed == 0 {
         return Err(GitError::NothingToSave);
     }
-    let trailers = [VERSION_TRAILER.to_owned()];
+    let mut trailers = vec![VERSION_TRAILER.to_owned()];
+    trailers.extend(extra_trailers.iter().cloned());
     let committed = writes::commit_request(
         ctx,
         &CommitRequest {

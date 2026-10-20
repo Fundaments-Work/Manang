@@ -46,7 +46,7 @@
         <span
           class="inline-block size-2 border border-text"
           class:bg-text={conn === "connected"}
-          class:border-dashed={conn === "reconnecting"}
+          class:border-dashed={conn === "reconnecting" || conn === "waiting"}
           aria-hidden="true"
         ></span>
         <span data-testid="live-state">{label}</span>
@@ -93,6 +93,14 @@
       >
         {live.copied ? "Copied" : "Copy invite"}
       </button>
+      {#if conn === "error" || conn === "waiting"}
+        <button
+          type="button"
+          class="mng-btn"
+          data-testid="live-resync"
+          onclick={() => void live.resync()}>Re-sync</button
+        >
+      {/if}
       <button
         type="button"
         class="mng-btn"

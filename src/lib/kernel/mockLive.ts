@@ -37,6 +37,7 @@ const COMMANDS: readonly (readonly [string, string])[] = [
   ["live.selection", "Share the caret with the live session"],
   ["live.snapshot", "Re-read the live document"],
   ["live.contributors", "List who edited in the live session"],
+  ["live.resync", "Rebuild the live document from the others"],
   ["live.configure", "Apply live editing settings"],
 ];
 
@@ -504,7 +505,13 @@ export const livePlugin: MockPluginFactory = (emit, host): MockPlugin => {
         const r = current();
         return {
           contributors: r.authority.peers.map((p) => ({ name: p.name, email: null })),
+          trailers: [],
+          without_email: r.authority.peers.map((p) => p.name),
         };
+      },
+      "live.resync": () => {
+        current();
+        return { resyncing: true };
       },
 
       /* -- Dev hooks: the scripted collaborator and the network ------------ */

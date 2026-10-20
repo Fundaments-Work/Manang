@@ -327,6 +327,16 @@ export const MOCK_MANIFESTS: Readonly<Record<string, MockManifest>> = {
         scope: "user",
         "requires-restart": false,
       },
+      {
+        id: "live.email",
+        type: "string",
+        default: "",
+        title: "Email shared with collaborators (optional)",
+        description:
+          "Shared only with the people in a live session, so a version you save together can credit them with Co-authored-by. Empty shares none; those people are then named in the version's message instead.",
+        scope: "user",
+        "requires-restart": false,
+      },
     ],
   },
   markdown: {

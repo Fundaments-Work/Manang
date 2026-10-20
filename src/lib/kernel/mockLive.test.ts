@@ -32,6 +32,7 @@ describe("the mock live plugin", () => {
         "live.join",
         "live.leave",
         "live.push",
+        "live.resync",
         "live.selection",
         "live.snapshot",
         "live.start",

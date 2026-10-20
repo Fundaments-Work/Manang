@@ -216,3 +216,35 @@ fn version_files_and_diffs_show_what_changed() {
         "bad-arguments"
     );
 }
+
+#[test]
+fn a_version_can_carry_co_author_trailers() {
+    let h = harness();
+    let r = Repo::with_commit();
+    r.write("a.txt", "edited together\n");
+    h.ok(
+        &r,
+        "git.save-version",
+        json!({
+            "name": "Together",
+            "trailers": ["Co-authored-by: Ada <ada@example.org>"],
+        }),
+    );
+    let body = git(&r.dir, &["log", "-1", "--format=%B"]);
+    assert!(body.contains("Manang-Version: 1"), "{body}");
+    assert!(
+        body.trim_end()
+            .ends_with("Co-authored-by: Ada <ada@example.org>"),
+        "{body}"
+    );
+    // Still recognised as a version, and a bad trailer is refused.
+    r.write("a.txt", "again\n");
+    assert_eq!(
+        h.code(
+            &r,
+            "git.save-version",
+            json!({"trailers": ["not a trailer\nInjected: yes"]})
+        ),
+        "bad-arguments"
+    );
+}
