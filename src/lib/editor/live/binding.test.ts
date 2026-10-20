@@ -289,6 +289,56 @@ describe("LiveBinding against the authority", () => {
     expect(staleTotal).toBeGreaterThan(50);
   });
 
+  it("converges per file when two files of one session are typed into at once", async () => {
+    let staleTotal = 0;
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const rand = random(seed * 104_729);
+      const a = new Rig(words(rand).repeat(3), "a.typ");
+      const b = new Rig(words(rand).repeat(3), "b.typ");
+      const rigs = [a, b];
+      for (let i = 0; i < 90; i += 1) {
+        const rig = rigs[Math.floor(rand() * 2)] ?? a;
+        const roll = rand();
+        if (roll < 0.35) {
+          rig.type(randomChange(rand, rig.state.doc.length));
+        } else if (roll < 0.55) {
+          rig.authority.remote([randomChange(rand, rig.authority.text.length)]);
+        } else {
+          await tick();
+          rig.step(rand);
+        }
+      }
+      // Drain both in turns: neither file's traffic may disturb the other's.
+      await Promise.all([a.drain(rand), b.drain(rand)]);
+      for (const rig of rigs) {
+        expect(rig.view, `seed ${seed} ${rig.path}`).toBe(rig.authority.text);
+        expect(rig.binding.pending, `seed ${seed} ${rig.path}`).toBe(false);
+        expect(rig.binding.version, `seed ${seed} ${rig.path}`).toBe(
+          rig.authority.version,
+        );
+        expect(rig.binding.resyncs, `seed ${seed} ${rig.path}`).toBe(0);
+        staleTotal += rig.stale;
+        rig.binding.close();
+      }
+      // Each file's events carry its own path, and nothing else's text leaked in.
+      expect(a.authority.path).toBe("a.typ");
+      expect(b.authority.path).toBe("b.typ");
+    }
+    expect(staleTotal).toBeGreaterThan(50);
+  });
+
+  it("keeps two files apart when events are fed to the wrong binding too", async () => {
+    const a = new Rig("alpha", "a.typ");
+    const b = new Rig("beta", "b.typ");
+    b.authority.remote([{ start: 0, delete: 0, insert: ">" }]);
+    const stray = b.outbox.shift();
+    a.binding.remote(stray?.payload as Parameters<LiveBinding["remote"]>[0]);
+    expect(a.view).toBe("alpha");
+    expect(a.binding.version).toBe(0);
+    a.binding.close();
+    b.binding.close();
+  });
+
   it("holds steps that arrive out of order until the gap is filled", async () => {
     const rig = new Rig("abc");
     rig.authority.remote([{ start: 3, delete: 0, insert: "1" }]);

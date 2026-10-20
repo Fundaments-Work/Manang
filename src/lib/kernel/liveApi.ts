@@ -3,7 +3,9 @@
  *
  * The Rust side owns the CRDT, the encryption and the relay connection. The
  * shell only pushes local edits and the caret, and receives `live.remote`,
- * `live.presence` and `live.state` events on the kernel bus. See
+ * `live.presence` and `live.state` events on the kernel bus. A project session
+ * adds `live.plan`, `live.tree`, `live.peers`, `live.progress` and
+ * `live.notice`, and names the file in every push, caret and remote step. See
  * `src/lib/editor/live/binding.ts` for the edit protocol.
  */
 
