@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 use manang_live::bridge::LiveDoc;
 use manang_live::envelope::seed_fingerprint;
 use manang_live::manifest::ManifestEntry;
-use manang_live::project::{Entry, NodeKind};
+use manang_live::project::{Entry, NodeKind, NodeMeta};
 use manang_live::session::Output;
 
 use super::{Driver, Phase};
@@ -79,6 +79,26 @@ pub(crate) struct ResolveOutcome {
 pub(crate) struct PendingPlan {
     pub entries: Vec<ManifestEntry>,
     pub plan: JoinPlan,
+}
+
+/// A tree entry made from a manifest line (before the tree itself arrived).
+fn entry_of(listed: &ManifestEntry) -> Entry {
+    let name = listed
+        .path
+        .rsplit_once('/')
+        .map_or(listed.path.as_str(), |(_, n)| n);
+    Entry {
+        id: listed.id,
+        parent: None,
+        meta: NodeMeta::file(
+            name,
+            listed.kind,
+            listed.size,
+            listed.sha256,
+            listed.seed_fp,
+        ),
+        path: listed.path.clone(),
+    }
 }
 
 /// What happens to one file of the plan.
@@ -189,14 +209,19 @@ impl Driver {
         self.status.lock().phase = "live";
 
         let view = self.view();
+        // The tree may not have reached us yet (it syncs beside the
+        // manifest): then the manifest is what we go by.
+        let tree_here = !view.entries().is_empty();
         let mut out: Vec<Output> = Vec::new();
         let mut applied = 0usize;
         let mut trashed: Vec<String> = Vec::new();
         let mut known = std::collections::BTreeSet::new();
         for listed in &entries {
             known.insert(listed.id);
-            let Some(entry) = view.get(listed.id) else {
-                continue; // deleted while the guest was deciding
+            let entry = match view.get(listed.id) {
+                Some(entry) => entry.clone(),
+                None if tree_here => continue, // deleted while the guest was deciding
+                None => entry_of(listed),
             };
             if listed.kind == NodeKind::Dir {
                 if self.disk.policy().is_shareable(&entry.path) {
@@ -210,12 +235,12 @@ impl Driver {
             match decision {
                 Decision::Take => {
                     applied += 1;
-                    out.extend(self.take_entry(entry, false));
+                    out.extend(self.take_entry(&entry, false));
                 }
                 Decision::Replace => {
                     applied += 1;
                     trashed.push(entry.path.clone());
-                    out.extend(self.take_entry(entry, true));
+                    out.extend(self.take_entry(&entry, true));
                 }
                 Decision::KeepOut => self.exclude_local(entry.id, &entry.path),
                 Decision::Share | Decision::Private => {}
@@ -269,6 +294,11 @@ impl Driver {
     /// trash when the host's content lands.
     pub(super) fn take_entry(&mut self, entry: &Entry, replace: bool) -> Vec<Output> {
         let path = entry.path.as_str();
+        {
+            let state = self.file(entry.id);
+            state.joined = true;
+            state.known_path = Some(entry.path.clone());
+        }
         if let Err(reason) = self.disk.policy().check_rel(path) {
             self.skip(path, &reason.to_string());
             return Vec::new();
@@ -371,7 +401,8 @@ impl Driver {
     /// deciding): fetch it. A different local file at the same path is
     /// replaced by the host's, saved to the trash first.
     pub(super) fn on_created(&mut self, entry: Entry) -> Vec<Output> {
-        if self.file(entry.id).excluded || self.excluded_paths.contains(&entry.path) {
+        let state = self.file(entry.id);
+        if state.excluded || state.joined || self.excluded_paths.contains(&entry.path) {
             return Vec::new();
         }
         if entry.meta.kind == NodeKind::Dir {

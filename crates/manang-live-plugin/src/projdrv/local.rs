@@ -29,7 +29,7 @@ use crate::disk::{Observed, read_capped, sha256};
 use crate::driver::{Change, PushOutcome};
 use crate::error::LiveHostError;
 use crate::fsbridge::{Intent, SharedNode, SharedView, parse_changed_event};
-use crate::scan::{ensure_dir, split};
+use crate::scan::{ensure_dir, scan_dir, split};
 
 /// The shared project as the tree bridge sees it.
 struct Shared<'a> {
@@ -360,7 +360,9 @@ impl Driver {
             .disk
             .close(path)
             .map_err(|e| LiveHostError::Io(e.to_string()))?;
-        if closed.flush_needed {
+        // The tab was the writer while it was open; the room's text is the
+        // file's now (nothing is written when the disk already has it).
+        if closed.trashed.is_none() {
             self.queue_disk(id);
         }
         if let Some(trash) = closed.trashed {
@@ -658,7 +660,30 @@ impl Driver {
                     .project_mut()
                     .ok_or(LiveHostError::NotProject)?;
                 ensure_dir(project, &path)?;
-                Ok(Vec::new())
+                // The watcher may attach to a new directory after its first
+                // files were written (and a moved-in folder reports only
+                // itself): look inside so nothing is missed.
+                let mut out = Vec::new();
+                let scan = scan_dir(self.disk.policy(), &path)
+                    .map_err(|e| LiveHostError::Io(e.to_string()))?;
+                for item in scan.items {
+                    if self.view().id_at_path(&item.rel).is_some() {
+                        continue;
+                    }
+                    if item.kind == NodeKind::Dir {
+                        let project = self
+                            .session
+                            .project_mut()
+                            .ok_or(LiveHostError::NotProject)?;
+                        ensure_dir(project, &item.rel)?;
+                    } else {
+                        match self.create_from_disk(&item.rel) {
+                            Ok(more) => out.extend(more),
+                            Err(e) => self.skip(&item.rel, &e.to_string()),
+                        }
+                    }
+                }
+                Ok(out)
             }
             Intent::CreateFile {
                 path,

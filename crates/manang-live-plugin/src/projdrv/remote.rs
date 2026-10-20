@@ -130,7 +130,12 @@ impl Driver {
         for change in changes {
             match change {
                 TreeChange::Created { id, path } => {
-                    ops.push(json!({ "op": "create", "path": path, "by": id.peer().to_string() }));
+                    // Files the join already took are not news to the view.
+                    if !self.files.get(&id).is_some_and(|f| f.joined) {
+                        ops.push(json!({
+                            "op": "create", "path": path, "by": id.peer().to_string(),
+                        }));
+                    }
                     if let Some(entry) = view.get(id) {
                         out.extend(self.on_created(entry.clone()));
                     }
@@ -217,10 +222,11 @@ impl Driver {
     }
 
     fn on_moved(&mut self, id: FileId, from: &str, to: &str, by: &str) {
-        if let Some(state) = self.files.get_mut(&id)
-            && state.attached
-        {
-            state.open_path = Some(to.to_owned());
+        if let Some(state) = self.files.get_mut(&id) {
+            state.known_path = Some(to.to_owned());
+            if state.attached {
+                state.open_path = Some(to.to_owned());
+            }
         }
         let excluded =
             self.files.get(&id).is_some_and(|f| f.excluded) || self.excluded_paths.contains(from);
@@ -321,9 +327,8 @@ impl Driver {
         let Some(ids) = self.arriving_blobs.remove(&hash) else {
             return;
         };
-        let view = self.view();
         for id in ids {
-            let Some(path) = view.path_of(id).map(str::to_owned) else {
+            let Some(path) = self.arrival_path(id) else {
                 continue;
             };
             if self.excluded_paths.contains(&path) {

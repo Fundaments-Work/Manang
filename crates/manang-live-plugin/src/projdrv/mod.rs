@@ -479,6 +479,11 @@ struct FileState {
     /// The path the tab shows (kept while the file is open, even after a
     /// remote delete removed it from the tree).
     open_path: Option<String>,
+    /// The path the manifest or the last move gave the file: the fallback
+    /// while the project tree has not reached a guest yet.
+    known_path: Option<String>,
+    /// The join (or a creation) has already taken this file.
+    joined: bool,
 }
 
 struct PendingAttach {

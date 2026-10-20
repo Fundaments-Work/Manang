@@ -17,7 +17,7 @@ use manang_live::project::{FileId, NodeKind};
 use manang_live::session::Output;
 
 use super::{Driver, META_QUIET_MS};
-use crate::disk::{read_capped, sha256};
+use crate::disk::{Observed, read_capped, sha256};
 use crate::fsbridge::text_edits;
 use crate::sidecar::Rehydrated;
 
@@ -94,7 +94,13 @@ impl Driver {
         if self.disk.is_behind(path) {
             return false;
         }
+        // Only a document the disk already agrees with is parked: a file the
+        // disk has not caught up with, or one changed outside the session
+        // that the tree bridge has not read yet, stays loaded.
         let sha = sha256(text.as_bytes());
+        if !matches!(self.disk.observe(path), Ok(Observed::Content(h)) if h == sha) {
+            return false;
+        }
         if self
             .sidecar
             .save(&self.room_hex, id, &sha, &snapshot)
@@ -277,26 +283,35 @@ impl Driver {
             let state = self.file(id);
             std::mem::take(&mut state.replace_on_arrival)
         };
+        let attached = self.files.get(&id).is_some_and(|f| f.attached);
+        if !attached
+            && !self.pending_text.contains_key(&id)
+            && let (Some(path), Some(text)) = (self.arrival_path(id), self.doc_text(id))
+            && !self.excluded_paths.contains(&path)
+        {
+            // The tab, or the guest's own pending edit, comes first; any
+            // other file's first content goes to the disk now.
+            let result = if replace {
+                self.disk.take_host(&path, text.as_bytes()).map(|_| ())
+            } else {
+                self.disk.queue_text(&path, &text).map(|_| ())
+            };
+            if let Err(e) = result {
+                self.skip(&path, &e.to_string());
+            }
+        }
+        // Only now may the document be parked: its text is on its way.
         let evicted = self.residency.unpin(&id);
         self.evict_all(evicted);
         self.touch(id);
-        let attached = self.files.get(&id).is_some_and(|f| f.attached);
-        if attached || self.pending_text.contains_key(&id) {
-            return; // the tab, or the guest's own pending edit, comes first
-        }
-        let (Some(path), Some(text)) = (self.path_of(id), self.doc_text(id)) else {
-            return;
-        };
-        if self.excluded_paths.contains(&path) {
-            return;
-        }
-        let result = if replace {
-            self.disk.take_host(&path, text.as_bytes()).map(|_| ())
-        } else {
-            self.disk.queue_text(&path, &text).map(|_| ())
-        };
-        if let Err(e) = result {
-            self.skip(&path, &e.to_string());
+    }
+
+    /// The path of a file whose content just arrived: the tree's, or the
+    /// manifest's while the tree has not reached a guest yet.
+    pub(super) fn arrival_path(&mut self, id: FileId) -> Option<String> {
+        match self.path_of(id) {
+            Some(path) => Some(path),
+            None => self.files.get(&id).and_then(|f| f.known_path.clone()),
         }
     }
 

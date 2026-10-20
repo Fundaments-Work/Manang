@@ -55,6 +55,16 @@ pub(crate) fn scan_project(policy: &PathPolicy) -> Result<Scan, DiskError> {
     Ok(scan)
 }
 
+/// Describe everything shareable below the directory `rel_dir` (a directory
+/// that appeared while the watcher was still attaching to it).
+pub(crate) fn scan_dir(policy: &PathPolicy, rel_dir: &str) -> Result<Scan, DiskError> {
+    let mut scan = Scan::default();
+    let mut seen = 0usize;
+    walk(policy, rel_dir, &mut scan, &mut seen)?;
+    scan.items.sort_by(|a, b| a.rel.cmp(&b.rel));
+    Ok(scan)
+}
+
 fn walk(
     policy: &PathPolicy,
     rel_dir: &str,

@@ -963,7 +963,9 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
 
     /// Project sessions: remote peers that have shown they hold the document
     /// of `file`: they answered for it, confirmed it with a request that does
-    /// not carry the unsynced mark, or sent an update for it. Monotonic (a
+    /// not carry the unsynced mark, sent an update for it, or were sent its
+    /// state in a reply (a parked document no longer confirms anything, so
+    /// what was handed over counts). Monotonic (a
     /// peer that left stays listed; intersect with [`Session::peers`]).
     /// Backs the host's "N files not yet synced to others" warning.
     #[must_use]
@@ -2118,6 +2120,12 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     ) {
         match self.slot_export_since(key, their_version) {
             Ok(update) => {
+                if stage == SyncStage::Reply
+                    && let Key::File(id) = key
+                {
+                    // Sent its state: it holds the file once it applied it.
+                    self.note_holder(id, to);
+                }
                 let digest = self.slot_digest(key);
                 let version = self.slot_version(key);
                 let msg = self.sync_message(key, Some(to), stage, digest, version, update);
