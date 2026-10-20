@@ -79,7 +79,9 @@
     if (!ok) busy = false;
   }
 
+  // On the window, so Escape and Tab still work when focus fell on plain text.
   function onkeydown(event: KeyboardEvent): void {
+    if (!open) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -94,7 +96,10 @@
     ];
     const first = items[0];
     const last = items[items.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
+    if (!box.contains(document.activeElement)) {
+      event.preventDefault();
+      first?.focus();
+    } else if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last?.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -165,10 +170,11 @@
   </ul>
 {/snippet}
 
+<svelte:window {onkeydown} />
+
 {#if open}
   <div
     class="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]"
-    {onkeydown}
     role="presentation"
   >
     <div class="absolute inset-0 bg-bg/60" aria-hidden="true"></div>
@@ -314,7 +320,7 @@
         >
         <button
           type="button"
-          class="mng-btn border-accent bg-accent text-accent-ink"
+          class="mng-btn {ready ? 'border-accent bg-accent text-accent-ink' : ''}"
           data-testid="plan-join"
           disabled={!ready}
           onclick={() => void join()}>Join</button

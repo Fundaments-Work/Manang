@@ -226,8 +226,8 @@
       {@const label = labels.get(tab.id)}
       {@const active = tab.id === tabs.active?.id}
       {@const dirty = isTabDirty(tab.path)}
-      {@const here = live.active ? live.peersAt(tab.path) : []}
       {@const gone = live.active ? live.deletedBy(tab.path) : null}
+      {@const here = live.active && gone === null ? live.peersAt(tab.path) : []}
       <div
         role="presentation"
         class="group relative flex shrink-0 items-stretch border-r border-line {active
