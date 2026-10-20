@@ -4,6 +4,11 @@ import {
   canShareLive,
   connectionDetail,
   connectionLabel,
+  deletedSentence,
+  PAUSED_DISCARD_NOTE,
+  pausedSentence,
+  plainLiveError,
+  unsyncedWarning,
   editingAllowed,
   initials,
   inviteFileLabel,
@@ -112,5 +117,43 @@ describe("live guards", () => {
       "Also edited by: Ada, Grace",
     );
     expect(versionMessage("Draft.", ["Ada"])).toBe("Draft.\n\nAlso edited by: Ada");
+  });
+});
+
+describe("plain live errors and the host-leaving warning", () => {
+  it("rewrites every code the project driver adds, without jargon", () => {
+    for (const code of [
+      "needs-confirmation",
+      "no-project",
+      "bad-path",
+      "not-text",
+      "paused",
+      "waiting",
+      "not-project",
+    ]) {
+      const text = plainLiveError({ code, message: "raw" });
+      expect(text).not.toBe("raw");
+      expect(text).not.toMatch(/manifest|CRDT|wildcard|`/i);
+    }
+    expect(plainLiveError({ code: "differs", message: "kept as is" })).toBe(
+      "kept as is",
+    );
+  });
+
+  it("counts files that have not reached anyone", () => {
+    expect(unsyncedWarning(1)).toBe("1 file has not reached anyone else yet.");
+    expect(unsyncedWarning(7)).toBe("7 files have not reached anyone else yet.");
+  });
+
+  it("never says 'by' when the session cannot tell who deleted a file", () => {
+    expect(deletedSentence("")).toMatch(/^This file was deleted/);
+    expect(deletedSentence("Ada")).toMatch(/^Ada deleted this file/);
+  });
+
+  it("sizes a held change and says where the discarded copies go", () => {
+    expect(pausedSentence({ files: 1, changed_lines: 3, total_lines: 9 })).toBe(
+      "1 file changed at once (3 of 9 lines).",
+    );
+    expect(PAUSED_DISCARD_NOTE).toMatch(/trash/);
   });
 });

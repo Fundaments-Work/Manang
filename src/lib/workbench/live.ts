@@ -3,7 +3,12 @@
  * listed. Kept apart from the store so they are tested without a kernel.
  */
 
-import type { LiveConnection, LivePeer } from "$lib/kernel/liveApi";
+import type {
+  LiveConnection,
+  LiveError,
+  LivePausedInfo,
+  LivePeer,
+} from "$lib/kernel/liveApi";
 
 /** What the session bar says for each connection state. */
 export function connectionLabel(state: LiveConnection, attempt: number): string {
@@ -157,4 +162,77 @@ export function versionMessage(
   if (withoutEmail.length === 0) return existing;
   const line = `Also edited by: ${withoutEmail.join(", ")}`;
   return existing === undefined || existing === "" ? line : `${existing}\n\n${line}`;
+}
+
+/**
+ * A refused `live.*` command, in plain words. The plugin's own sentences
+ * are kept for the codes that name a file or a relay; the ones that would
+ * read as jargon are rewritten.
+ */
+export function plainLiveError(error: LiveError): string {
+  switch (error.code) {
+    case "needs-confirmation":
+      return "Replacing more than one of your files needs one confirmation for all of them. Tick the box in the join window and try again.";
+    case "unresolved":
+      return "Some of your files are different from the host's. Choose what to do with each one first.";
+    case "no-project":
+      return "Open a project folder first. A live project session shares the folder you have open.";
+    case "bad-path":
+      return "A file in the session has a name that cannot be used safely on this computer, so it was left out.";
+    case "not-text":
+      return "That file is not text, so it cannot be edited together live. It is shared as a whole file instead.";
+    case "paused":
+      return "Many files changed at once and are waiting for your answer. Choose what to do with them first.";
+    case "waiting":
+      return "That file is still being fetched. Try again in a moment.";
+    case "not-project":
+      return "This only works when a whole project is shared.";
+    case "no-plan":
+      return "There is nothing left to decide.";
+    case "not-in-session":
+      return "That file is not part of the session.";
+    case "excluded":
+      return "That file is kept out of the session on your side.";
+    case "not-deleted":
+      return "That file was not deleted during this session, so there is nothing to bring back.";
+    case "not-live":
+      return "There is no live session.";
+    case "stopped":
+      return "The live session stopped unexpectedly. Start or join it again.";
+    case "invalid":
+      return error.message === ""
+        ? "The session cannot do that right now."
+        : error.message;
+    default:
+      return error.message;
+  }
+}
+
+/** Leaving as the host while files have not reached anyone else: the warning. */
+export function unsyncedWarning(files: number): string {
+  return files === 1
+    ? "1 file has not reached anyone else yet."
+    : `${files} files have not reached anyone else yet.`;
+}
+
+export const UNSYNCED_DETAIL =
+  "If you leave now, the others will not have them. Nothing on your disk is deleted.";
+
+/** The held large change: what it is, in a sentence. */
+export function pausedSentence(info: LivePausedInfo): string {
+  const files = info.files === 1 ? "1 file" : `${info.files} files`;
+  return `${files} changed at once (${info.changed_lines} of ${info.total_lines} lines).`;
+}
+
+export const PAUSED_QUESTION =
+  "Many files changed at once (for example by a Git checkout). Share these changes or put your folder back as the session has it?";
+
+export const PAUSED_DISCARD_NOTE =
+  "Putting your folder back replaces these files with the session's versions. The copies you have now go to the trash.";
+
+/** Who deleted a file, for a sentence; empty when the session cannot tell. */
+export function deletedSentence(by: string): string {
+  return by === ""
+    ? "This file was deleted in the session. It is still open here and no longer shared."
+    : `${by} deleted this file. It is still open here and no longer shared.`;
 }

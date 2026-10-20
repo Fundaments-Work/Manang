@@ -42,6 +42,22 @@ export interface LiveRemoteSelection extends LivePeer {
   readonly head: number;
 }
 
+/** Where a project session is: waiting for the host's file list, for the guest's choices, or running. */
+export type LivePhase = "manifest" | "plan" | "live";
+
+/** A path left out of a project session, and why. */
+export interface LiveSkipped {
+  readonly path: string;
+  readonly reason: string;
+}
+
+/** A large rewrite on disk (a Git checkout, say) that is held, not shared. */
+export interface LivePausedInfo {
+  readonly files: number;
+  readonly changed_lines: number;
+  readonly total_lines: number;
+}
+
 export interface LiveStatus {
   readonly active: boolean;
   /** Whether Settings has a relay address (sharing needs one; joining does not). */
@@ -60,6 +76,14 @@ export interface LiveStatus {
   /** Files in a project session. */
   readonly files?: number;
   readonly progress?: LiveProgress | null;
+  /** Project sessions only (a project session has no `doc`). */
+  readonly phase?: LivePhase;
+  /** Files no other person present has shown they hold: what leaving now would strand. */
+  readonly unsynced_files?: number;
+  /** A held large change waiting for `live.resync {paused}`, or `null`. */
+  readonly paused?: LivePausedInfo | null;
+  readonly skipped?: readonly LiveSkipped[];
+  readonly following?: string | null;
 }
 
 export interface LiveProgress {
@@ -144,7 +168,7 @@ export interface LiveTreeOp {
   readonly op: "create" | "delete" | "rename" | "move";
   readonly path: string;
   readonly from?: string;
-  /** Peer id of the author. */
+  /** Peer id of the author; `""` when the session cannot tell who. */
   readonly by: string;
 }
 
@@ -156,6 +180,13 @@ export interface LiveTreeEvent {
 export interface LivePeersEvent {
   readonly session: string;
   readonly peers: readonly LivePeerAt[];
+  /** Project sessions: files no one present has shown they hold. */
+  readonly unsynced_files?: number;
+}
+
+/** `live.paused`: a large change on disk is held until the person answers. */
+export interface LivePausedEvent extends LivePausedInfo {
+  readonly session: string;
 }
 
 export interface LiveProgressEvent extends LiveProgress {
@@ -202,7 +233,8 @@ export function liveError(error: unknown): LiveError {
 export function liveApi(kernel: Kernel) {
   return {
     status: () => kernel.run<LiveStatus>("live.status"),
-    start: (args: { doc?: number; file?: string; scope?: LiveScope }) =>
+    /** `root`: the open folder (a project session cannot find it itself). */
+    start: (args: { doc?: number; file?: string; scope?: LiveScope; root?: string }) =>
       kernel.run<LiveStarted>("live.start", args),
     /** Phase 1 of a project join: connect and fetch the manifest (a `live.plan` follows). */
     join: (args: {
@@ -210,6 +242,8 @@ export function liveApi(kernel: Kernel) {
       invite: string;
       name?: string;
       resolution?: "take-host";
+      /** A project join needs the open folder. */
+      root?: string;
     }) => kernel.run<LiveStarted>("live.join", args),
     leave: () => kernel.run<{ left: boolean }>("live.leave"),
     invite: () => kernel.run<{ invite: string; file: string | null }>("live.invite"),
@@ -256,7 +290,9 @@ export function liveApi(kernel: Kernel) {
       kernel.run<{ included: boolean }>("live.include", { path }),
     restore: (path: string) =>
       kernel.run<{ restored: boolean }>("live.restore", { path }),
-    resync: () => kernel.run<{ resyncing: boolean }>("live.resync"),
+    /** Rebuild from the room; in a project, `paused` answers a held large change. */
+    resync: (args: { paused?: "share" | "discard" } = {}) =>
+      kernel.run<{ resyncing: boolean }>("live.resync", args),
     /** Who edited since the last call, with ready-made commit trailers. */
     contributors: (committer: { name?: string | null; email?: string | null } = {}) =>
       kernel.run<{
