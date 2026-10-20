@@ -37,7 +37,7 @@ import { workspace } from "./workspace.svelte";
 const api = liveApi(kernel);
 
 /** The settings the plugin needs, pushed in the browser where no shell does. */
-const SYNCED = ["live.relay-url", "live.display-name"] as const;
+const SYNCED = ["live.relay-url", "live.display-name", "live.email"] as const;
 
 type Early =
   | { topic: "live.remote"; payload: LiveRemoteEvent }
@@ -125,7 +125,41 @@ export class LiveState {
     this.attempt = event.attempt;
     this.error = event.error;
     this.peers = event.peers;
+    if (this.#binding !== null && this.#doc !== null) {
+      this.#doc.setLiveReadOnly(this.#binding, event.state === "waiting");
+    }
     if (event.state === "error" && event.error !== null) notice.error(event.error);
+  }
+
+  /** Rebuild this copy from the others in the session (the Re-sync button). */
+  async resync(): Promise<void> {
+    if (!this.active) return;
+    try {
+      await api.resync();
+      notice.show(
+        "Re-syncing with the session. Your file is kept until someone answers.",
+      );
+    } catch (error) {
+      notice.error(liveError(error).message);
+    }
+  }
+
+  /**
+   * Trailers and a message line for a version saved during a session: the
+   * people who edited since the last version. Nothing when there is no session.
+   */
+  async coauthors(committer: {
+    name: string | null;
+    email: string | null;
+  }): Promise<{ trailers: readonly string[]; withoutEmail: readonly string[] }> {
+    if (!this.active) return { trailers: [], withoutEmail: [] };
+    try {
+      const out = await api.contributors(committer);
+      return { trailers: out.trailers, withoutEmail: out.without_email };
+    } catch (error) {
+      reportError("live.contributors", error);
+      return { trailers: [], withoutEmail: [] };
+    }
   }
 
   /* ----------------------------------------------------------------------- */
@@ -254,6 +288,10 @@ export class LiveState {
         });
       }
       this.#begin(doc, result.session, result.version, "guest");
+      if (result.waiting === true && this.#binding !== null) {
+        this.connection = "waiting";
+        doc.setLiveReadOnly(this.#binding, true);
+      }
       if (result.reset !== undefined && result.reset !== null) {
         const reset = result.reset;
         doc.liveHost().dispatch({
@@ -270,7 +308,11 @@ export class LiveState {
           ],
         });
       }
-      notice.show(`Joined ${inviteFileLabel(result.file)}.`);
+      notice.show(
+        result.waiting === true
+          ? `Joined ${inviteFileLabel(result.file)}. Waiting for someone in the session to answer; your file is not changed yet.`
+          : `Joined ${inviteFileLabel(result.file)}.`,
+      );
     } catch (error) {
       notice.error(liveError(error).message);
     } finally {

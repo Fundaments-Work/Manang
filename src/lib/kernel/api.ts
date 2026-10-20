@@ -1033,6 +1033,8 @@ export function gitApi(kernel: Kernel) {
       req: {
         name?: string | undefined;
         message?: string | undefined;
+        /** Extra `Key: value` lines, e.g. `Co-authored-by: ...`. */
+        trailers?: readonly string[] | undefined;
         root?: string | undefined;
       } = {},
     ) => kernel.run<GitSavedVersion>("git.save-version", { ...req }),

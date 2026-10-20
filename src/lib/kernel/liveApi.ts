@@ -17,7 +17,7 @@ export interface LiveChange {
 }
 
 export type LiveConnection =
-  "connecting" | "connected" | "reconnecting" | "left" | "error";
+  "connecting" | "waiting" | "connected" | "reconnecting" | "left" | "error";
 
 export interface LivePeer {
   /** Decimal string: ids are 64-bit. */
@@ -54,7 +54,12 @@ export interface LiveStarted {
   readonly role: "host" | "guest";
   readonly invite?: string;
   readonly file?: string | null;
-  /** The joiner's copy was replaced by the host's: apply this to the view first. */
+  /**
+   * A joiner waits for someone in the room to answer: the file keeps its own
+   * text (read-only) until then, and is replaced by the room's only after.
+   */
+  readonly waiting?: boolean;
+  /** Unused since a join no longer blanks the file up front. */
   readonly reset?: LiveChange | null;
 }
 
@@ -139,10 +144,17 @@ export function liveApi(kernel: Kernel) {
     }) => kernel.run("live.selection", args),
     snapshot: (session: string) =>
       kernel.run<{ version: number; text: string }>("live.snapshot", { session }),
-    contributors: () =>
-      kernel.run<{ contributors: readonly { name: string; email: string | null }[] }>(
-        "live.contributors",
-      ),
+    resync: () => kernel.run<{ resyncing: boolean }>("live.resync"),
+    /** Who edited since the last call, with ready-made commit trailers. */
+    contributors: (committer: { name?: string | null; email?: string | null } = {}) =>
+      kernel.run<{
+        contributors: readonly { name: string; email: string | null }[];
+        trailers: readonly string[];
+        without_email: readonly string[];
+      }>("live.contributors", {
+        committer_name: committer.name ?? undefined,
+        committer_email: committer.email ?? undefined,
+      }),
     configure: (values: Record<string, unknown>) =>
       kernel.run<{ applied: number }>("live.configure", { values }),
   };
