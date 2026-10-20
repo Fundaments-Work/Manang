@@ -212,3 +212,18 @@ beyond it:
 * **Additive changes elsewhere.** `manang-live`: `Session::file_holders(id)`.
   `manang-live-plugin`: `DiskBridge::cancel_delete`, `InviteScope`,
   `LivePlugin::with_loaded_docs`/`with_project_root`.
+
+## Gate result (2026-10-20, merge of all packages, branch `feat/live-collab-v2`)
+
+Run once, alone, capped (4 build jobs, nice, ionice, 10 GB memory cap): `cargo fmt
+--all --check`, `cargo clippy --all-targets --all-features --locked -D warnings`
+(whole workspace), `cargo test --all --locked` (1,553 passed, 0 failed, 6
+ignored), `pnpm run typecheck`, `pnpm run lint`: all exit 0. `cargo tree -p manang`
+shows none of tectonic, harfbuzz, freetype-sys, openssl-sys, aws-lc.
+`cargo check -p manang-live --target wasm32-unknown-unknown` passes. Not run: the
+criterion benchmarks, the full UI suite beyond the live section (96/96 and
+106/106 by the agents; 96/96 re-run by the lead before P8), the Cloudflare Worker
+conformance, and two real windows against the hosted relay.
+Fuzzing (P7, 60 s per target, real libFuzzer): seven targets clean; two found
+bugs, fixed (a Loro cursor crash reachable by any invite holder) or documented
+(a yrs panic; yrs is test-only).
