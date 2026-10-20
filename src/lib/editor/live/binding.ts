@@ -63,12 +63,16 @@ export interface LiveHost {
 
 export interface BindingOptions {
   readonly session: string;
+  /** The file this binding keeps in step: every push, caret and snapshot names it. */
+  readonly path: string;
   /** The version the session was at when the binding attached. */
   readonly version: number;
   readonly host: LiveHost;
   readonly api: Pick<LiveApi, "push" | "selection" | "snapshot">;
   /** A step failed and the view was re-read from Rust (pending edits were lost). */
   readonly onResync?: (reason: string) => void;
+  /** The person typed (not a remote step): follow mode ends on it. */
+  readonly onLocalEdit?: () => void;
   /** Wait this long for progress before re-reading the document. */
   readonly watchdogMs?: number;
   /** Caret announcements are batched over this long. */
@@ -122,6 +126,8 @@ type SetTimer = (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
 
 export class LiveBinding {
   readonly #session: string;
+  readonly #path: string;
+  readonly #onLocalEdit: () => void;
   readonly #host: LiveHost;
   readonly #api: BindingOptions["api"];
   readonly #onResync: (reason: string) => void;
@@ -149,6 +155,8 @@ export class LiveBinding {
 
   constructor(options: BindingOptions) {
     this.#session = options.session;
+    this.#path = options.path;
+    this.#onLocalEdit = options.onLocalEdit ?? (() => undefined);
     this.#version = options.version;
     this.#host = options.host;
     this.#api = options.api;
@@ -159,6 +167,10 @@ export class LiveBinding {
 
   get session(): string {
     return this.#session;
+  }
+
+  get path(): string {
+    return this.#path;
   }
 
   /** The step the view has integrated. */
@@ -177,7 +189,10 @@ export class LiveBinding {
       EditorView.updateListener.of((update) => {
         if (this.#closed) return;
         for (const tr of update.transactions) {
-          if (tr.docChanged && !isLiveTransaction(tr)) this.local(tr.changes);
+          if (tr.docChanged && !isLiveTransaction(tr)) {
+            this.#onLocalEdit();
+            this.local(tr.changes);
+          }
         }
         if (update.docChanged || update.selectionSet) this.#queueSelection();
       }),
@@ -208,7 +223,12 @@ export class LiveBinding {
     this.#armWatchdog();
     const changes = toLiveChanges(this.#inflight);
     this.#api
-      .push({ session: this.#session, version: this.#version, changes })
+      .push({
+        session: this.#session,
+        path: this.#path,
+        version: this.#version,
+        changes,
+      })
       .then((result) => {
         this.#sending = false;
         if (this.#closed) return;
@@ -235,7 +255,7 @@ export class LiveBinding {
 
   /** A `live.remote` event for this session (others are ignored by the caller). */
   remote(event: LiveRemoteEvent): void {
-    if (this.#closed || event.session !== this.#session) return;
+    if (this.#closed || !this.#mine(event)) return;
     if (event.version <= this.#version) return; // already integrated
     this.#held.set(event.version, event);
     this.#drain();
@@ -243,10 +263,18 @@ export class LiveBinding {
 
   /** A `live.presence` event: where the others' carets are. */
   presence(event: LivePresenceEvent): void {
-    if (this.#closed || event.session !== this.#session) return;
+    if (this.#closed || !this.#mine(event)) return;
     if (this.#presence !== null && event.version < this.#presence.version) return;
     this.#presence = event;
     this.#showPresence();
+  }
+
+  /** An event of this session, and (when it names a file) of this file. */
+  #mine(event: { session: string; path?: string }): boolean {
+    return (
+      event.session === this.#session &&
+      (event.path === undefined || event.path === this.#path)
+    );
   }
 
   #drain(): void {
@@ -384,6 +412,7 @@ export class LiveBinding {
     void this.#api
       .selection({
         session: this.#session,
+        path: this.#path,
         version: this.#version,
         anchor: main.anchor,
         head: main.head,
@@ -405,7 +434,7 @@ export class LiveBinding {
     clearTimeout(this.#watchdog);
     const run = async (): Promise<void> => {
       try {
-        const snapshot = await this.#api.snapshot(this.#session);
+        const snapshot = await this.#api.snapshot(this.#session, this.#path);
         if (this.#closed) return;
         const current = this.#host.state().doc.toString();
         if (current !== snapshot.text) {
