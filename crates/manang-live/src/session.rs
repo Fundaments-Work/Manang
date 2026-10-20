@@ -566,6 +566,9 @@ pub struct Session<E: TextCrdt, N: Entropy> {
     pacer: Pacer,
     deferred: BTreeMap<FileId, BTreeMap<u64, Deferred>>,
     wanted_reported: BTreeSet<FileId>,
+    /// Peers that have shown they hold a file's document (see
+    /// [`Session::file_holders`]).
+    holders: BTreeMap<FileId, BTreeSet<u64>>,
     rr_cursor: Option<FileId>,
     unsynced_cursor: Option<FileId>,
     next_unsynced_retry: u64,
@@ -648,6 +651,7 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             pacer,
             deferred: BTreeMap::new(),
             wanted_reported: BTreeSet::new(),
+            holders: BTreeMap::new(),
             rr_cursor: None,
             unsynced_cursor: None,
             next_unsynced_retry: 0,
@@ -955,6 +959,28 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
     #[must_use]
     pub fn presence(&self) -> &PresenceBook {
         &self.presence
+    }
+
+    /// Project sessions: remote peers that have shown they hold the document
+    /// of `file`: they answered for it, confirmed it with a request that does
+    /// not carry the unsynced mark, or sent an update for it. Monotonic (a
+    /// peer that left stays listed; intersect with [`Session::peers`]).
+    /// Backs the host's "N files not yet synced to others" warning.
+    #[must_use]
+    pub fn file_holders(&self, file: FileId) -> Vec<u64> {
+        self.holders
+            .get(&file)
+            .map(|set| set.iter().copied().collect())
+            .unwrap_or_default()
+    }
+
+    fn note_holder(&mut self, file: FileId, peer: u64) {
+        /// Most holders remembered per file.
+        const MAX_HOLDERS: usize = 16;
+        let set = self.holders.entry(file).or_default();
+        if set.len() < MAX_HOLDERS || set.contains(&peer) {
+            set.insert(peer);
+        }
     }
 
     /// Project sessions: the remote peers that have `file` open or are
@@ -1724,6 +1750,15 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
             digest: m.digest,
             flags: 0,
         };
+        if let Key::File(id) = key {
+            let holds = match m.stage {
+                SyncStage::Reply | SyncStage::Final => true,
+                SyncStage::Request => request_flags(m.update) & FLAG_UNSYNCED == 0,
+            };
+            if holds {
+                self.note_holder(id, m.from);
+            }
+        }
         match m.stage {
             SyncStage::Request => {
                 req.flags = request_flags(m.update);
@@ -1823,6 +1858,9 @@ impl<E: TextCrdt, N: Entropy> Session<E, N> {
         targets: &mut dyn TextTargets,
         out: &mut Vec<Output>,
     ) {
+        if let Key::File(id) = key {
+            self.note_holder(id, from);
+        }
         if !self.is_loaded_key(key) {
             // Not interested yet; the state exchange on load brings it.
             if matches!(key, Key::File(_)) {
