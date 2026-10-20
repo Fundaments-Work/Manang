@@ -297,3 +297,43 @@ Cloudflare-compatible design with pricing), plus checks by the lead. [V] verifie
    second VM over loopback).
 9. The Oracle idle-reclaim risk: accept, or move to pay-as-you-go.
 10. Frame cap: keep the 8 MiB contract with admission permits.
+
+## Decisions taken by the lead on the owner's "do what is best" (2026-10-20)
+
+1. **Production target:** the native relay on the Oracle VM as `relay.fundaments.work`,
+   the Worker brought to parity as the fallback. The production switch itself (DNS,
+   Worker binding) waits for the owner's explicit go.
+2. Cloudflare master agreement section 2.8: still the owner's to read (not retrievable).
+3. **Fragmented WebSocket messages:** rejected with 1002 once the custom codec exists;
+   until then the tuned library with explicit limits. Browsers and the Rust client do
+   not fragment.
+4. **Panic policy: unwind**, not abort. On a single-threaded runtime one panic in one
+   connection task must not take down all connections; no `unwrap`, no unsafe, fuzzing,
+   and `Restart=always` stay as the backstop. (The skeleton's release profile says
+   `abort`; change it in the server-loop package.)
+5. **Write-token transport:** a `cap` query parameter (works from browsers); the relay
+   never logs the query string.
+6. **Durable rooms:** not in the first version. The store trait and the upgrade
+   parameters (`dur`, `since`) are specified now; implementation comes after the
+   measurements.
+7. **VM:** removed `containerd` and `runc` (Docker leftovers), masked `fwupd`, disabled
+   `multipathd` (root is plain ext4, no multipath maps), set the release upgrader to
+   `Prompt=never`, added `/etc/sysctl.d/60-relay.conf` (`tcp_keepalive_time=60`,
+   `somaxconn=1024`). Kept `snapd` (hosts Oracle's cloud agent, about 90 MB). No swap
+   or zram for now; revisit after the load test. Undo for multipath:
+   `sudo systemctl enable --now multipathd multipathd.socket`; for fwupd:
+   `sudo systemctl unmask fwupd.service fwupd-refresh.service fwupd-refresh.timer`.
+8. **Load generator host:** the owner's desktop over the real tunnel for the end-to-end
+   path (capped, never beside another heavy job); relay-only numbers from a low-rate
+   run on the VM itself.
+9. **Oracle idle reclamation:** accepted for now and flagged to the owner (a
+   pay-as-you-go upgrade is the reported remedy).
+10. **Frame cap:** 8 MiB contract with admission permits for frames over 1 MiB.
+
+### Measured correction (VM, after the trims)
+
+`free` "used" misled. Anonymous memory is about 102 MB; file cache is 452 MB (reclaimable),
+slab 122 MB; `MemAvailable` is 537 MB (it was 520 MB before the trims, a gain of only
+about 16 MB). The VM is not memory-starved: the relay budget of about 200 MB plus
+`cloudflared` fits. The biggest resident service left is Oracle's cloud agent (about
+90 MB with its updater), which stays.
