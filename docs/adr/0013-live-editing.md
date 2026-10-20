@@ -1,6 +1,6 @@
 # ADR 0013: Live co-editing
 
-Status: accepted and implemented for Beta 1 (text files, one per session), 2026-10-18. Evidence: `docs/research/2026-10-18-live-spike.md`. Where the implementation differs from the decisions below, see "Implementation notes".
+Status: accepted and implemented for Beta 1 (text files, one per session), 2026-10-18; stabilised 2026-10-20 (waiting for a host, snapshot sidecar, guards, trailers; see the last implementation note). Project-wide sessions are planned in `docs/plans/2026-10-20-live-collab-v2.md`. Evidence: `docs/research/2026-10-18-live-spike.md`. Where the implementation differs from the decisions below, see "Implementation notes".
 
 ## Context
 
@@ -93,7 +93,13 @@ What was built, and where it is not what the decisions above describe.
 * **Differing copies (refines decision 2).** `plan_join` runs with no git base. An identical copy seeds locally; an empty copy joins directly; anything else asks and, if confirmed, **replaces the copy with the host's version after saving it to `live-trash` in the app config directory** (not `<git-dir>/manang-trash/`: the plugin has no path or repository for a kernel document). The three-way merge option waits for `manang-merge`.
 * **Transport.** `wss://` is a cargo feature of `manang-relay` (`tls`: rustls on ring, bundled Mozilla roots; no aws-lc), enabled by the plugin; the relay binary stays TLS-free.
 * **Collaborator colours.** Eight slots (the core's `PALETTE_SLOTS`), each a mix of existing tokens plus a stroke style and always a name label; see `docs/design-system-additions.md`.
-* **Not done.** Deploying the Cloudflare relay (it is built in `relay/worker`, nothing is deployed); policy keys `collab.live` and `collab.relays`; disabling Get updates for a live file; `Co-authored-by:` trailers on commits (the `live.contributors` command exists, nothing calls it yet); figures; peer-to-peer transport; compaction of long sessions; fuzzing the import path.
+* **Stabilisation (2026-10-20, wave 0 of the v2 plan).**
+  * *Joining without a host.* A join no longer blanks the file or reports Live. The session enters `waiting` (the bar says "Waiting for host", the file is read-only and untouched) and leaves it only when a peer answers, never on a timer. It keeps asking (a Request carrying a one-byte waiting marker, which peers always answer), does not answer others meanwhile, and after 20 s reports "Nobody has answered yet" as an error that clears when someone does. The file is replaced by the room's text only then, in the same ordered `live.remote` step that carries the room's text; the copy is saved to `live-trash` first (and again if it was edited while waiting).
+  * *Snapshot sidecar.* Each participant writes a debounced snapshot (`<app data>/live-snapshots/<room id>.snap`: magic, text digest, Loro snapshot; unused ones are pruned after 30 days). A join of the same room uses it only if the file on disk equals the snapshot's text exactly and the digest checks out, so a document survives everyone leaving and the room is reseeded by whoever rejoins first; otherwise the disk wins and the normal join (and its question) applies. A host cannot reopen a room except through its own invite, because `live.start` always makes a new room.
+  * *Guards.* Get updates and restoring the live file are refused with a plain message while a session runs; a watcher-driven reload of a live file is not applied (it would be sent to the room as typing): the session's text is kept and the next save overwrites the disk copy.
+  * *Trailers.* `live.contributors` returns ready-made `Co-authored-by:` lines (given the committer's identity); "Save a version" passes them to `git.save-version` (new `trailers` argument) and names contributors without an email in the message. People share an email only through the setting `live.email`.
+  * *Errors.* A soft error (state `error`) clears on the next state change or remote step. On a digest mismatch at equal versions the peer with the higher id rebuilds its document from the room (`live.resync`, also the bar's Re-sync button), so two peers never wait for each other.
+* **Not done.** Deploying the Cloudflare relay (it is built in `relay/worker`, nothing is deployed); policy keys `collab.live` and `collab.relays`; figures; peer-to-peer transport; compaction of long sessions; fuzzing the import path; the three-way merge for differing copies; project-wide sessions.
 
 ## Consequences
 
