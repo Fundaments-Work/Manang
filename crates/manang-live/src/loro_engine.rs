@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use loro::{
-    EventTriggerKind, ExportMode, LoroDoc, LoroText, Subscription, TextDelta, VersionVector,
+    ContainerTrait, EventTriggerKind, ExportMode, LoroDoc, LoroText, Subscription, TextDelta,
+    VersionVector,
     cursor::{Cursor, PosType, Side},
     event::Diff,
 };
@@ -224,8 +225,33 @@ impl TextCrdt for LoroEngine {
 
     fn cursor_pos(&self, cursor: &[u8]) -> Option<usize> {
         let cursor = Cursor::decode(cursor).ok()?;
+        // A cursor comes from a peer (presence). One that names another
+        // container, a map or a tree, reaches an `unreachable!()` inside Loro
+        // (found by fuzzing), so only this document's own text is resolved.
+        if cursor.container != self.text.id() {
+            return None;
+        }
         let unicode = self.doc.get_cursor_pos(&cursor).ok()?.current.pos;
         self.text
             .convert_pos(unicode, PosType::Unicode, PosType::Bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Found by fuzzing (`fuzz/regressions/live_text_apply/loro-cursor-container`):
+    /// a peer's cursor that names a non-text container hit `unreachable!()`
+    /// inside Loro when resolved.
+    #[test]
+    fn hostile_cursor_is_none_not_a_panic() {
+        let crash: [u8; 6] = [0, 0, 0, 0x98, 0, 0];
+        let mut e = LoroEngine::new(10).expect("engine");
+        e.insert(0, "hello").expect("insert");
+        assert_eq!(e.cursor_pos(&crash), None);
+        // Our own cursors still resolve.
+        let mine = e.cursor_at(2).expect("cursor");
+        assert_eq!(e.cursor_pos(&mine), Some(2));
     }
 }

@@ -1,5 +1,5 @@
 // Runs the Rust relay client's conformance test (crates/manang-relay/tests/
-// conformance.rs) against this Worker under a local `wrangler dev`.
+// conformance.rs, and the paced bulk-sync replay in bulk_sync.rs) against this Worker under a local `wrangler dev`.
 //
 //   pnpm conformance            (needs a Rust toolchain; builds only manang-relay)
 //
@@ -55,7 +55,17 @@ try {
   code = await new Promise((done) => {
     const cargo = spawn(
       "cargo",
-      ["test", "-p", "manang-relay", "--test", "conformance", "--", "--nocapture"],
+      [
+        "test",
+        "-p",
+        "manang-relay",
+        "--test",
+        "conformance",
+        "--test",
+        "bulk_sync",
+        "--",
+        "--nocapture",
+      ],
       {
         cwd: repo,
         stdio: "inherit",

@@ -98,13 +98,21 @@ By design. The registry is new and starts empty; first-party plugins arrive in t
 ## 6. Real-time Co-Editing
 
 ### What
-Live co-editing (see [Edit together live](../user/edit-together-live.md)) works on **one text file per session**. It uses the hosted relay at `wss://relay.fundaments.work` by default (end-to-end encrypted; the relay sees only ciphertext and connection metadata), or your own relay. **Get updates** and restoring the live file are refused during a session; leave first. Joining with a copy that differs from the host's replaces your copy with the host's, after asking and saving the old copy, and only once someone in the session has answered (until then the bar says *Waiting for host* and the file is untouched). A document survives everyone leaving only if you rejoin with the same invite and the file is unchanged on disk.
+Live co-editing (see [Edit together live](../user/edit-together-live.md)) shares **one text file** or the **whole project** per session. It uses the hosted relay at `wss://relay.fundaments.work` by default (end-to-end encrypted; the relay sees only ciphertext and connection metadata), or your own relay. **Get updates** and restoring the live file are refused during a session; leave first. Joining a single file or project with copies that differ from the host's replaces your copies with the host's, only after asking, saving the old copies (single file: `live-trash` in Manang's settings folder; project: `.manang/trash` in the project) and, for a project, after one confirmation when more than one file is replaced.
+
+Whole-project sessions have limits:
+
+- **Anyone with the invite can create, change and delete shared files in your project folder** (never outside it, never dotfiles, `.git`, `manang.toml`, `.manang`, `target`, `node_modules`, `__pycache__` or ignored files). There are no accounts and no read-only role, and nobody can be removed from a session: leave and start a new one.
+- **Images, figures and other non-text files are last-writer-wins**; concurrent edits of one figure lose one side.
+- **A session ends when the last person leaves.** There is no room to rejoin; a joiner to an empty room keeps waiting for a host that is not there.
+- A large rewrite on disk (a Git checkout) is held and you are asked whether to share it or put your folder back.
+- Windows and macOS case-folding of file names is implemented and tested on Linux only.
 
 ### How to Avoid
-For anything beyond one text file, use Git through the **Source Control** panel (`Ctrl+Shift+G`) or a shared folder.
+Send a whole-project invite only to people you would let edit the project, and keep Git commits of your own before a session. For anything else, use Git through the **Source Control** panel (`Ctrl+Shift+G`) or a shared folder.
 
 ### Status
-Beta 1: text files only. Merging a differing copy instead of replacing it, figures, comments and project-wide sessions are planned.
+Beta: one file or the whole project. Merging a differing copy instead of replacing it, member roles and removal, comments, a room that outlives its members, and merging figure edits are planned. Design and threat model: ADR 0014.
 
 ---
 
