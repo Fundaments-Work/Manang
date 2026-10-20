@@ -385,6 +385,7 @@ export class DocumentsStore {
   readonly #saveListeners: ((path: string) => void)[] = [];
   readonly #changeListeners: ((path: string) => void)[] = [];
   readonly #dropListeners: ((path: string) => void)[] = [];
+  readonly #openListeners: ((path: string) => void)[] = [];
   #statsTimer: ReturnType<typeof setTimeout> | undefined;
 
   /* ----------------------------------------------------------------------- */
@@ -424,6 +425,11 @@ export class DocumentsStore {
     this.#dropListeners.push(listener);
   }
 
+  /** Called with the path of a document that was just opened (a text tab appeared). */
+  onOpen(listener: (path: string) => void): void {
+    this.#openListeners.push(listener);
+  }
+
   /** Called with the path after a document reached the disk. */
   onSave(listener: (path: string) => void): void {
     this.#saveListeners.push(listener);
@@ -441,6 +447,7 @@ export class DocumentsStore {
       const session = new DocSession(this, path, read.content, read.hash);
       this.#sessions.set(path, session);
       this.version += 1;
+      for (const listener of this.#openListeners) listener(path);
       return session;
     } catch (error) {
       notice.error(`Could not open ${path}: ${errorMessage(error)}`);
@@ -459,6 +466,7 @@ export class DocumentsStore {
     const session = new DocSession(this, path, "", null);
     this.#sessions.set(path, session);
     this.version += 1;
+    for (const listener of this.#openListeners) listener(path);
     return session;
   }
 

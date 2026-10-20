@@ -136,13 +136,23 @@ class Rig {
   /** Pushes the authority refused as stale. */
   stale = 0;
 
-  constructor(initial: string) {
-    this.authority = new LiveAuthority("s", initial, (topic, payload) => {
-      this.outbox.push({ topic, payload });
-    });
+  constructor(
+    initial: string,
+    readonly path = "a.typ",
+  ) {
+    this.authority = new LiveAuthority(
+      "s",
+      initial,
+      (topic, payload) => {
+        this.outbox.push({ topic, payload });
+      },
+      undefined,
+      path,
+    );
     this.state = EditorState.create({ doc: initial });
     this.binding = new LiveBinding({
       session: "s",
+      path: this.path,
       version: 0,
       host: {
         state: () => this.state,
@@ -330,6 +340,22 @@ describe("LiveBinding against the authority", () => {
     rig.binding.close();
   });
 
+  it("ignores events that name another file, and names its own file when pushing", async () => {
+    const rig = new Rig("abc", "a.typ");
+    rig.binding.remote({
+      session: "s",
+      path: "b.typ",
+      version: 1,
+      ack: false,
+      changes: [{ start: 0, delete: 0, insert: "x" }],
+    });
+    expect(rig.view).toBe("abc");
+    rig.type({ start: 3, delete: 0, insert: "!" });
+    await tick();
+    expect(rig.requests[0]?.args.path).toBe("a.typ");
+    rig.binding.close();
+  });
+
   it("ignores other sessions and stops after close", () => {
     const rig = new Rig("abc");
     rig.binding.remote({
@@ -360,6 +386,7 @@ describe("LiveBinding against the authority", () => {
     const rig = new Rig("hello world");
     const binding = new LiveBinding({
       session: "s",
+      path: "a.typ",
       version: 0,
       host: {
         state: () => state,

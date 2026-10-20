@@ -25,13 +25,21 @@ describe("the mock live plugin", () => {
       .map((c) => c.id);
     expect(ids).toEqual(
       [
+        "live.attach",
         "live.configure",
         "live.contributors",
+        "live.detach",
+        "live.exclude",
+        "live.files",
+        "live.follow",
+        "live.include",
         "live.inspect",
         "live.invite",
         "live.join",
         "live.leave",
         "live.push",
+        "live.resolve",
+        "live.restore",
         "live.resync",
         "live.selection",
         "live.snapshot",
@@ -66,6 +74,7 @@ describe("the mock live plugin", () => {
     const { session } = await live.start({ doc: id });
     const ok = await live.push({
       session,
+      path: "main.typ",
       version: 0,
       changes: [{ start: 3, delete: 0, insert: "d" }],
     });
@@ -73,6 +82,7 @@ describe("the mock live plugin", () => {
     expect(await kernel.run("editor.text", { id })).toBe("abcd");
     const stale = await live.push({
       session,
+      path: "main.typ",
       version: 0,
       changes: [{ start: 0, delete: 0, insert: "X" }],
     });
@@ -82,7 +92,12 @@ describe("the mock live plugin", () => {
     const acks = topics("live.remote").map((e) => e.payload);
     expect(acks).toEqual([{ session, version: 1, ack: true, changes: [] }]);
     const bad = await live
-      .push({ session, version: 1, changes: [{ start: 99, delete: 0, insert: "x" }] })
+      .push({
+        session,
+        path: "main.typ",
+        version: 1,
+        changes: [{ start: 99, delete: 0, insert: "x" }],
+      })
       .catch((e: unknown) => liveError(e));
     expect(bad).toMatchObject({ code: "invalid" });
     await live.leave();
@@ -94,6 +109,7 @@ describe("the mock live plugin", () => {
     const { session } = await live.start({ doc: id });
     await live.push({
       session,
+      path: "main.typ",
       version: 0,
       changes: [{ start: 3, delete: 0, insert: "X" }],
     });
@@ -212,6 +228,7 @@ describe("the mock live plugin", () => {
     expect(topics("live.remote")).toHaveLength(0);
     const stale = await live.push({
       session,
+      path: "main.typ",
       version: 0,
       changes: [{ start: 3, delete: 0, insert: "!" }],
     });
