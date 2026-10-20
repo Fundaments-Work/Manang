@@ -2,8 +2,8 @@
 
 **Project:** Manang (The High-Performance Scientific Authoring & Illustration Suite)  
 **Target:** AI Coding Agents (Antigravity, Cursor, Claude Code, Copilot, etc.) and Human Engineers  
-**Version:** 1.3.0  
-**Last Updated:** 2026-10-18
+**Version:** 1.4.0  
+**Last Updated:** 2026-10-20
 
 ---
 
@@ -160,7 +160,10 @@ If any step fails, diagnose and fix the root cause. **Never disable lints or use
 
 ## 7. Operational Hygiene (Leave No Mess Behind)
 
-Agents (and humans) work in parallel on one machine with limited CPU and disk. A Rust build of this repo is 5-17 GB; abandoned worktrees and stray dev servers have cost hours. Follow these rules every time.
+Agents (and humans) share one machine with limited CPU, memory and disk.
+
+* A Rust build of this repo is 5-25 GB; abandoned worktrees and stray dev servers have cost hours.
+* The machine has **frozen twice** (2026-10-18 and 2026-10-20) under parallel builds, fuzzing and headless Chromium. Section 7.6 is the response: follow it every time.
 
 ### 7.1. Processes and ports
 * **Never leave a dev server, watcher, browser or fuzzer running** when you finish. Stop what you started.
@@ -197,7 +200,7 @@ Agents (and humans) work in parallel on one machine with limited CPU and disk. A
 * **CI minutes are a budget** (private repository, free quota; it ran out once). CI is two tiers: `quick` (every push, about 4 minutes) and `full` (weekly, on demand, or a PR labelled `full-ci`). Agents never push and never trigger workflows; the lead pushes to `main` in batches after the local gates pass. Never add `CARGO_*` or `RUSTFLAGS` variables to a workflow without expecting a cold, 40-minute cache rebuild.
 * **UI suite slots:** run the full suite through `scripts/ui-slot.sh` (two slots by default, `MANANG_UI_SLOTS` to change) instead of locking one global file; the suite picks its own free DevTools port. A section-only run (`MANANG_ONLY=live|autosave|heal`) is short and needs no slot. Always start Vite with a fresh cache (`rm -rf node_modules/.vite`, `--force`).
 * **Concurrency budget on one machine:** at most one heavy Rust build at a time (a workspace test run, `tauri dev`, or an agent's crate build), and at most one build-heavy agent alongside another tool such as Antigravity. Never run a full-workspace gate while agents are building. Watch `uptime`: a load average far above the core count means stop and serialise.
-* Agents share the main build cache: `CARGO_TARGET_DIR=<repo>/target` with `-p <crate>`, instead of a fresh multi-GB `target/` per worktree.
+* Agents share the main build cache (`CARGO_TARGET_DIR=<repo>/target`, `-p <crate>`) **only one at a time**. Worktrees with the same layout produce the same artifact filenames and clobber each other (stale links, "variant not found"): give a second concurrent builder its own target directory and delete it afterwards.
 * To wait for a process, wait on its PID (`while kill -0 <pid>; do ...`), never `pgrep -f "<its command text>"`: the waiting shell's own command line matches and the loop never ends.
 * The root `Cargo.toml` optimises **dependencies** in dev builds (`[profile.dev.package."*"] opt-level = 3`) while our own crates stay at `opt-level = 1`. An unoptimised Typst is 10-50x slower and makes `tauri dev` unusable for judging speed. Keep it; judge performance only on this profile or release, never on a plain debug build.
 * Delete build output you created in disposable worktrees (`cargo clean` or remove the worktree). Do not commit `target/`, `dist/`, `artifacts/` or fuzz corpora beyond minimal regression seeds.
@@ -216,3 +219,34 @@ Agents (and humans) work in parallel on one machine with limited CPU and disk. A
 * UI vocabulary is fixed: **Files, Search, Figures, References, Plugins, Problems, Output, Settings**. Do not reintroduce Desk / Library Shelf / Instrument Shelf / Whispers.
 * Clippy runs with let-chains enabled (edition 2024, MSRV 1.95): write `if let .. && ..` instead of nested `if let`.
 
+### 7.6. Resource limits for agents (hard rules)
+
+| Rule | Value |
+| :--- | :--- |
+| Heavy builds at once (workspace test, `tauri dev`, release build, fuzz, load test, Chromium run) | **1** |
+| Start another agent only if 1-minute load is at most | 4 |
+| ...and available memory (`free -h`) is at least | 10 GB |
+| Fuzzing, nightly or sanitizer builds | **alone**, never beside Chromium or another build |
+| Headless UI runs (Chromium) | one at a time, never beside a heavy Rust build |
+| Read-only research and planning agents | allowed beside one build; no processes, no builds |
+
+* Wrap every heavy command so it cannot take the machine down:
+  `CARGO_BUILD_JOBS=4 nice -n 10 ionice -c3 systemd-run --user --scope -q -p MemoryMax=8G -p CPUQuota=500% -- <command>`
+  (use `MemoryMax=4G -p CPUQuota=300%` for Vite and UI runs).
+* A high load average is a signal to stop and serialise, not noise to explain away.
+* Check `uptime` and `free -h` before each heavy step; wait and re-check, do not push on.
+* An interrupted agent must leave a branch someone can resume: commit after each step.
+
+### 7.7. Servers and deployments
+
+| Rule | Detail |
+| :--- | :--- |
+| Nothing hardcoded | Hosts, addresses, users, key paths, versions and limits come from environment variables or an env file on the target, never from code or scripts |
+| Deploy through scripts | Deploys, rollbacks and status go through the scripts in the owning repo (`deploy/`), never ad-hoc edits on a server |
+| Config is never overwritten | A deploy creates the env file once; later deploys leave it alone |
+| Secrets stay out of sessions | Tokens and keys are entered by the owner on the target; agents never read private keys or tunnel tokens |
+| Verify before and after | Dry-run package removals, check checksums of downloads, run a health check after every change |
+| Reversible changes | Disable or mask before purging; record the undo command in the plan |
+| Build for the target | Build for the target's libc (check `objdump -T` against the target's glibc), not the dev machine's |
+| Outward-facing changes wait for the owner | DNS or routing switches, new public repositories, pushes and anything that changes what users reach |
+| Production relay | `fundaments-relay` repository (separate repo, own `AGENTS.md`); VM facts are in the relay plan |
