@@ -5,6 +5,7 @@ import {
   connectionDetail,
   connectionLabel,
   deletedSentence,
+  deletedTag,
   PAUSED_DISCARD_NOTE,
   pausedSentence,
   plainLiveError,
@@ -148,6 +149,8 @@ describe("plain live errors and the host-leaving warning", () => {
   it("never says 'by' when the session cannot tell who deleted a file", () => {
     expect(deletedSentence("")).toMatch(/^This file was deleted/);
     expect(deletedSentence("Ada")).toMatch(/^Ada deleted this file/);
+    expect(deletedTag("")).toBe("deleted");
+    expect(deletedTag("Ada")).toBe("deleted by Ada");
   });
 
   it("sizes a held change and says where the discarded copies go", () => {

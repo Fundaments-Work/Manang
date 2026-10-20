@@ -236,3 +236,8 @@ export function deletedSentence(by: string): string {
     ? "This file was deleted in the session. It is still open here and no longer shared."
     : `${by} deleted this file. It is still open here and no longer shared.`;
 }
+
+/** The tab's short tag for a file deleted in the session ("deleted by Ada", or "deleted"). */
+export function deletedTag(by: string): string {
+  return by === "" ? "deleted" : `deleted by ${by}`;
+}
