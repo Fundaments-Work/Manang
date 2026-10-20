@@ -45,6 +45,43 @@ pub enum LiveHostError {
     /// The session thread is gone.
     #[error("The live session stopped unexpectedly.")]
     Stopped,
+    /// A project command on a single-file session.
+    #[error("This is not a project session.")]
+    NotProject,
+    /// A project session needs the folder to share or to join into.
+    #[error("Open a project folder to use live project sessions.")]
+    NoProject,
+    /// The path names no file of the session.
+    #[error("{0} is not in the session.")]
+    NotInSession(String),
+    /// The path is kept out of the session on this side.
+    #[error("{0} is kept out of the session.")]
+    Excluded(String),
+    /// A path the security policy refuses.
+    #[error("{0}")]
+    BadPath(String),
+    /// A file that is not text cannot be edited live.
+    #[error("{0} is not a text file.")]
+    NotText(String),
+    /// Nothing to resolve: no join plan is waiting.
+    #[error("There is nothing to resolve.")]
+    NoPlan,
+    /// Differing files with no answer.
+    #[error("{0} file(s) differ and need a choice.")]
+    Unresolved(usize),
+    /// More than one of the guest's files would be replaced without the
+    /// all-files confirmation.
+    #[error("Replacing {0} of your files needs the all-files confirmation.")]
+    NeedsConfirmation(usize),
+    /// The file was not deleted in this session (or its copy is gone).
+    #[error("{0} was not deleted in this session.")]
+    NotDeleted(String),
+    /// The file is still being fetched.
+    #[error("{0} is still being fetched. Try again in a moment.")]
+    Fetching(String),
+    /// A large rewrite on disk is held until it is answered.
+    #[error("A large change on disk is waiting for an answer.")]
+    Paused,
 }
 
 impl LiveHostError {
@@ -64,6 +101,18 @@ impl LiveHostError {
             Self::Core(_) => "core",
             Self::Io(_) => "io",
             Self::Stopped => "stopped",
+            Self::NotProject => "not-project",
+            Self::NoProject => "no-project",
+            Self::NotInSession(_) => "not-in-session",
+            Self::Excluded(_) => "excluded",
+            Self::BadPath(_) => "bad-path",
+            Self::NotText(_) => "not-text",
+            Self::NoPlan => "no-plan",
+            Self::Unresolved(_) => "unresolved",
+            Self::NeedsConfirmation(_) => "needs-confirmation",
+            Self::NotDeleted(_) => "not-deleted",
+            Self::Fetching(_) => "waiting",
+            Self::Paused => "paused",
         }
     }
 }

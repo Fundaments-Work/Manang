@@ -315,6 +315,12 @@ impl<C: Clock> DiskBridge<C> {
         })
     }
 
+    /// Forget a delete that was deferred because the tab was open (the user
+    /// restored the file). Returns whether one was waiting.
+    pub fn cancel_delete(&mut self, path: &str) -> bool {
+        self.deferred_delete.remove(path)
+    }
+
     /// Whether a remote change to `path` is waiting (queued, or owed to an
     /// open tab). The disk is behind the shared state for such a path.
     #[must_use]

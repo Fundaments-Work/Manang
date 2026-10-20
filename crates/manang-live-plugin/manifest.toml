@@ -1,7 +1,7 @@
 [plugin]
 name = "live"
 version = "0.1.0"
-description = "Edit one file together in real time. End-to-end encrypted through a relay you choose; the file on disk stays plain text."
+description = "Edit a file or a whole project together in real time. End-to-end encrypted through a relay you choose; the file on disk stays plain text."
 tier = "native"
 
 [contributes]
@@ -52,6 +52,38 @@ title = "Rebuild the live document from the others"
 [[contributes.commands]]
 id = "live.configure"
 title = "Apply live editing settings"
+
+[[contributes.commands]]
+id = "live.resolve"
+title = "Apply the choices for joining a live project"
+
+[[contributes.commands]]
+id = "live.attach"
+title = "Start editing a file of the live session"
+
+[[contributes.commands]]
+id = "live.detach"
+title = "Stop editing a file of the live session"
+
+[[contributes.commands]]
+id = "live.follow"
+title = "Follow a person in the live session"
+
+[[contributes.commands]]
+id = "live.files"
+title = "List the files of the live session"
+
+[[contributes.commands]]
+id = "live.exclude"
+title = "Keep a file out of the live session"
+
+[[contributes.commands]]
+id = "live.include"
+title = "Put a file back into the live session"
+
+[[contributes.commands]]
+id = "live.restore"
+title = "Restore a file deleted in the live session"
 
 [[contributes.settings]]
 id = "live.relay-url"

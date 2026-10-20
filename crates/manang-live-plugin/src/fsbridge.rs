@@ -821,7 +821,7 @@ impl Stats {
 }
 
 /// Text (valid UTF-8 without NUL) or blob.
-fn classify(bytes: &[u8]) -> (NodeKind, Option<String>) {
+pub(crate) fn classify(bytes: &[u8]) -> (NodeKind, Option<String>) {
     if bytes.contains(&0) {
         return (NodeKind::Blob, None);
     }

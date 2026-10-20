@@ -19,12 +19,14 @@ pub mod fsbridge;
 mod invite;
 pub mod pathsec;
 mod plugin;
+mod projdrv;
+mod scan;
 pub mod sidecar;
 mod store;
 
 pub use driver::{Change, PeerInfo, PushOutcome, Status};
 pub use error::LiveHostError;
-pub use invite::{InviteLink, normalize_relay};
+pub use invite::{InviteLink, InviteScope, normalize_relay};
 pub use plugin::LivePlugin;
 
 use manang_kernel::Manifest;
