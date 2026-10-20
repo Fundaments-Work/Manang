@@ -16,6 +16,7 @@ use ropey::Rope;
 
 use crate::engine::{Applied, IndexUnit, RawChange, TextCrdt};
 use crate::error::LiveError;
+use crate::project::FileId;
 
 /// What the bridge needs from the buffer it keeps in step.
 ///
@@ -97,6 +98,9 @@ pub struct AppliedChange {
 /// The result of applying one remote update.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RemoteApplied {
+    /// Which file of a project session the changes belong to (`None` for a
+    /// single-document session).
+    pub doc: Option<FileId>,
     /// Changes in application order.
     pub changes: Vec<AppliedChange>,
     /// The update needs operations this replica lacks: trigger a resync.
@@ -108,7 +112,11 @@ pub struct LiveDoc<E: TextCrdt> {
     engine: E,
 }
 
-fn check_char_range<T: TextTarget>(t: &T, from: usize, to: usize) -> Result<(), LiveError> {
+fn check_char_range<T: TextTarget + ?Sized>(
+    t: &T,
+    from: usize,
+    to: usize,
+) -> Result<(), LiveError> {
     let len = t.len_chars();
     if from > to || to > len {
         return Err(LiveError::OutOfRange { from, to, len });
@@ -117,7 +125,7 @@ fn check_char_range<T: TextTarget>(t: &T, from: usize, to: usize) -> Result<(), 
 }
 
 /// UTF-16 offset to character index, refusing offsets inside a surrogate pair.
-fn utf16_to_char_checked<T: TextTarget>(t: &T, idx: usize) -> Result<usize, LiveError> {
+fn utf16_to_char_checked<T: TextTarget + ?Sized>(t: &T, idx: usize) -> Result<usize, LiveError> {
     let len = t.len_utf16();
     if idx > len {
         return Err(LiveError::OutOfRange {
@@ -136,7 +144,7 @@ fn utf16_to_char_checked<T: TextTarget>(t: &T, idx: usize) -> Result<usize, Live
 }
 
 /// Byte offset to character index, refusing offsets inside a character.
-fn byte_to_char_checked<T: TextTarget>(t: &T, idx: usize) -> Result<usize, LiveError> {
+fn byte_to_char_checked<T: TextTarget + ?Sized>(t: &T, idx: usize) -> Result<usize, LiveError> {
     let len = t.len_bytes();
     if idx > len {
         return Err(LiveError::OutOfRange {
@@ -199,7 +207,7 @@ impl<E: TextCrdt> LiveDoc<E> {
 
     /// Apply a local edit given as a character range (the editor plugin's
     /// unit) to the rope and the CRDT in one step. This is the keystroke path.
-    pub fn local_replace_chars<T: TextTarget>(
+    pub fn local_replace_chars<T: TextTarget + ?Sized>(
         &mut self,
         target: &mut T,
         from: usize,
@@ -214,7 +222,7 @@ impl<E: TextCrdt> LiveDoc<E> {
     }
 
     /// Apply a local edit given as a UTF-16 range (CodeMirror's unit).
-    pub fn local_replace_utf16<T: TextTarget>(
+    pub fn local_replace_utf16<T: TextTarget + ?Sized>(
         &mut self,
         target: &mut T,
         start: usize,
@@ -243,7 +251,7 @@ impl<E: TextCrdt> LiveDoc<E> {
 
     /// Import a remote update, apply its changes to the rope and return them
     /// in both units for the web view.
-    pub fn apply_remote<T: TextTarget>(
+    pub fn apply_remote<T: TextTarget + ?Sized>(
         &mut self,
         target: &mut T,
         update: &[u8],
@@ -258,19 +266,34 @@ impl<E: TextCrdt> LiveDoc<E> {
             out.push(apply_raw(target, unit, &change)?);
         }
         Ok(RemoteApplied {
+            doc: None,
             changes: out,
             pending,
         })
     }
 
+    /// Import a remote update into the engine only, for a document no editor
+    /// view shows. Returns whether the update depends on missing operations.
+    pub fn apply_remote_detached(&mut self, update: &[u8]) -> Result<bool, LiveError> {
+        Ok(self.engine.apply_update(update)?.pending)
+    }
+
     /// A stable position for a UTF-16 offset in the current text.
-    pub fn cursor_at_utf16<T: TextTarget>(&self, target: &T, utf16: usize) -> Option<Vec<u8>> {
+    pub fn cursor_at_utf16<T: TextTarget + ?Sized>(
+        &self,
+        target: &T,
+        utf16: usize,
+    ) -> Option<Vec<u8>> {
         let c = utf16_to_char_checked(target, utf16).ok()?;
         self.engine.cursor_at(target.char_to_byte(c))
     }
 
     /// Resolve a stable position to a UTF-16 offset in the current text.
-    pub fn cursor_pos_utf16<T: TextTarget>(&self, target: &T, cursor: &[u8]) -> Option<usize> {
+    pub fn cursor_pos_utf16<T: TextTarget + ?Sized>(
+        &self,
+        target: &T,
+        cursor: &[u8],
+    ) -> Option<usize> {
         let byte = self.engine.cursor_pos(cursor)?;
         let c = byte_to_char_checked(target, byte).ok()?;
         Some(target.char_to_utf16(c))
@@ -278,7 +301,7 @@ impl<E: TextCrdt> LiveDoc<E> {
 
     /// Make the rope equal the CRDT text with one minimal replacement. Used
     /// after a snapshot load and as the repair path if the two ever diverge.
-    pub fn resync_target<T: TextTarget>(&self, target: &mut T) -> Option<AppliedChange> {
+    pub fn resync_target<T: TextTarget + ?Sized>(&self, target: &mut T) -> Option<AppliedChange> {
         let have = target.to_text();
         let want = self.engine.text();
         if have == want {
@@ -298,7 +321,7 @@ impl<E: TextCrdt> LiveDoc<E> {
     }
 }
 
-fn apply_raw<T: TextTarget>(
+fn apply_raw<T: TextTarget + ?Sized>(
     target: &mut T,
     unit: IndexUnit,
     change: &RawChange,
