@@ -24,6 +24,7 @@
   const conn = $derived(live.connection === "off" ? "connecting" : live.connection);
   const label = $derived(connectionLabel(conn, live.attempt));
   const detail = $derived(connectionDetail(conn, live.error));
+  const deletedBy = $derived(live.active ? live.deletedBy(path) : null);
   const slot = (n: number): number => ((n % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
 
   let inviteField: HTMLInputElement | undefined = $state();
@@ -117,6 +118,25 @@
         {detail}
       </p>
     {/if}
+  </div>
+{:else if deletedBy !== null}
+  <div
+    class="border-b border-line bg-surface text-xs"
+    role="region"
+    aria-label="Deleted in the live session"
+    data-testid="live-deleted"
+  >
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+      <p class="m-0 min-w-0 flex-1 text-text" role="status">
+        {deletedBy} deleted this file. It is still open here and no longer shared.
+      </p>
+      <button
+        type="button"
+        class="mng-btn"
+        data-testid="live-restore"
+        onclick={() => void live.restore(path)}>Restore for everyone</button
+      >
+    </div>
   </div>
 {:else if live.needsRelay && !live.active}
   <div

@@ -2,6 +2,8 @@
   import { tick } from "svelte";
 
   import SharePanel from "$lib/components/SharePanel.svelte";
+  import { SLOT_COLOURS, SLOT_COUNT } from "$lib/editor/live/remote";
+  import type { LiveScope } from "$lib/kernel/liveApi";
   import { layout } from "$lib/state/layout.svelte";
   import { live } from "$lib/state/live.svelte";
   import { settings } from "$lib/state/settings.svelte";
@@ -38,6 +40,22 @@
       ? basename(tabs.active.path)
       : null,
   );
+  /** What to share when starting: the open file, or everything. */
+  let chosen = $state<LiveScope | null>(null);
+  const scope = $derived<LiveScope>(chosen ?? (file === null ? "project" : "file"));
+  const SCOPES: readonly { id: LiveScope; label: string }[] = [
+    { id: "file", label: "This file" },
+    { id: "project", label: "Whole project" },
+  ];
+  const canStart = $derived(
+    scope === "file" ? file !== null : workspace.project !== null,
+  );
+  const slotOf = (n: number): number => ((n % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
+  /** The file a person has in front of them, for "in <file>". */
+  const whereIs = (path: string | null | undefined): string | null => {
+    const at = path ?? (live.scope === "file" ? live.path : null);
+    return at === null || at === undefined ? null : basename(at);
+  };
   const conn = $derived(live.connection === "off" ? "connecting" : live.connection);
 
   // Take focus when opened; read the settings so the setup note is current.
@@ -93,6 +111,16 @@
     action();
   }
 
+  function onscopekey(event: KeyboardEvent): void {
+    const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
+    if (!forward && event.key !== "ArrowLeft" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    chosen = scope === "file" ? "project" : "file";
+    void tick().then(() =>
+      root?.querySelector<HTMLElement>(`[data-scope="${chosen}"]`)?.focus(),
+    );
+  }
+
   function openSettings(): void {
     then(() => live.openRelaySettings());
   }
@@ -123,9 +151,9 @@
           {connectionLabel(conn, live.attempt)}: {participantSummary(live.peers)}
         </p>
         <p class="m-0 text-text-60">
-          Everyone in the session is typing in {live.path === null
-            ? "the same file"
-            : basename(live.path)}.
+          {live.scope === "project"
+            ? "Everyone in the session is editing this project."
+            : `Everyone in the session is typing in ${live.path === null ? "the same file" : basename(live.path)}.`}
         </p>
       {:else}
         <p class="m-0 text-text-60">
@@ -167,18 +195,50 @@
             >
           </div>
         {:else}
+          <div
+            class="flex border border-line"
+            role="radiogroup"
+            aria-label="What to share"
+            data-testid="share-scope"
+          >
+            {#each SCOPES as option, index (option.id)}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={scope === option.id}
+                tabindex={scope === option.id ? 0 : -1}
+                data-scope={option.id}
+                class="inset-focus h-7 min-w-0 flex-1 truncate px-2 text-xs {index > 0
+                  ? 'border-l border-line'
+                  : ''} {scope === option.id
+                  ? 'bg-surface-hi text-text'
+                  : 'text-text-60 hover:text-text'}"
+                onclick={() => (chosen = option.id)}
+                onkeydown={onscopekey}>{option.label}</button
+              >
+            {/each}
+          </div>
           <p class="m-0 text-text-60" data-testid="share-ready">
-            {file === null
-              ? "Open a text file to share it."
-              : `You will share ${file}. Sharing as ${name === "" ? "your computer's user name" : name}.`}
+            {#if scope === "file"}
+              {file === null
+                ? "Open a text file to share it."
+                : `You will share ${file}. Sharing as ${name === "" ? "your computer's user name" : name}.`}
+            {:else}
+              {workspace.project === null
+                ? "Open a project to share it."
+                : `You will share every file in this project. Anyone you invite sees what differs from their own copy before anything changes. Sharing as ${name === "" ? "your computer's user name" : name}.`}
+            {/if}
           </p>
           <div class="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
               class="mng-btn"
               data-testid="share-start"
-              disabled={file === null || live.busy}
-              onclick={() => then(() => void live.share())}>Share this file</button
+              disabled={!canStart || live.busy}
+              onclick={() => then(() => void live.share(scope))}
+              >{scope === "file"
+                ? "Share this file"
+                : "Share the whole project"}</button
             >
             <button
               type="button"
@@ -195,18 +255,66 @@
     {#if live.active}
       <section
         class="space-y-2 border-t border-line px-3 py-3"
+        aria-labelledby="share-people-title"
+        data-testid="share-participants"
+      >
+        <h2 id="share-people-title" class="m-0 text-[13px] font-normal text-text">
+          People here
+        </h2>
+        <ul class="m-0 list-none space-y-1 p-0">
+          <li class="flex items-center gap-2 text-text">
+            <span
+              class="inline-block h-1.5 w-1.5 shrink-0 bg-text outline outline-1 outline-line"
+              aria-hidden="true"
+            ></span>
+            <span class="min-w-0 flex-1 truncate">You</span>
+          </li>
+          {#each live.peers as peer (peer.peer)}
+            {@const at = whereIs(peer.path)}
+            {@const followed = live.following === peer.peer}
+            <li class="flex items-center gap-2" data-peer={peer.peer}>
+              <span
+                class="inline-block h-1.5 w-1.5 shrink-0 outline outline-1 outline-line"
+                style="background: {SLOT_COLOURS[slotOf(peer.slot)]}"
+                aria-hidden="true"
+              ></span>
+              <span class="min-w-0 flex-1 truncate">
+                <span class="text-text">{peer.name}</span>
+                {#if at !== null}
+                  <span class="font-mono text-[11px] text-text-60"> in {at}</span>
+                {/if}
+              </span>
+              <button
+                type="button"
+                class="inset-focus shrink-0 px-1 text-[11px] text-math hover:underline"
+                data-testid="share-follow"
+                aria-pressed={followed}
+                aria-label="{followed ? 'Stop following' : 'Follow'} {peer.name}"
+                onclick={() => live.follow(followed ? null : peer.peer)}
+                >{followed ? "Stop following" : "Follow"}</button
+              >
+            </li>
+          {/each}
+          {#if live.peers.length === 0}
+            <li class="text-text-60">Only you so far. Send the invite link below.</li>
+          {/if}
+        </ul>
+      </section>
+      <section
+        class="space-y-2 border-t border-line px-3 py-3"
         aria-labelledby="share-invite-title"
       >
         <h2 id="share-invite-title" class="m-0 text-[13px] font-normal text-text">
           Invite link
         </h2>
         <p class="m-0 text-text-60">
-          Anyone who has the link can edit this file with you. Send it only to the
-          people you mean.
+          Anyone who has the link can edit {live.scope === "project"
+            ? "this project"
+            : "this file"} with you. Send it only to the people you mean.
         </p>
         <button
           type="button"
-          class="mng-btn"
+          class="mng-btn border-accent bg-accent text-accent-ink"
           data-testid="share-copy"
           onclick={() => void live.copyInvite()}
         >
@@ -234,7 +342,10 @@
         Send the versions you saved to your co-authors, and get theirs. One turn at a
         time, not live.
       </p>
-      <SharePanel embedded quiet={layout.sideView === "source-control"} />
+      <SharePanel
+        embedded
+        quiet={live.active || layout.sideView === "source-control"}
+      />
     </section>
   </div>
 {/if}

@@ -14,6 +14,7 @@
   import Home from "./Home.svelte";
   import ProjectSwitcher from "./ProjectSwitcher.svelte";
   import EngineDialog from "./EngineDialog.svelte";
+  import JoinPlanDialog from "./JoinPlanDialog.svelte";
   import ConfirmDialog from "./ui/ConfirmDialog.svelte";
   import ConsentDialog from "./plugins/ConsentDialog.svelte";
   import FeedbackDialog from "./FeedbackDialog.svelte";
@@ -264,6 +265,7 @@
   <CommandPalette />
   <ProjectSwitcher />
   <ConfirmDialog />
+  <JoinPlanDialog />
   <ConsentDialog />
   <EngineDialog />
   <FeedbackDialog />
