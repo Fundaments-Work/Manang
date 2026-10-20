@@ -1505,8 +1505,78 @@ async function liveProjectSection(browser) {
   await ev(
     `import("/src/lib/state/live.svelte.ts").then((m) => { m.live.progress = null; })`,
   );
+  // -- A deleter the session cannot name: no "by". ------------------------
+  await run("dev.live-peer-delete", { peer: ada.peer, path: "extra.typ", anonymous: true });
+  await ev(
+    `import("/src/lib/state/live.svelte.ts").then((m) => m.live.deleted.get("extra.typ") === "")`,
+  );
+  check(
+    "an unnamed deleter is stored as empty",
+    await ev(
+      `import("/src/lib/state/live.svelte.ts").then((m) => m.live.deletedBy("extra.typ") === "")`,
+    ),
+  );
+
+  // -- A large change on disk is held until answered. ---------------------
+  const held = `document.querySelector('[data-testid="live-paused"]')`;
+  await run("dev.live-paused", { files: 40, changed_lines: 900, total_lines: 2000 });
+  await expectEventually(
+    page,
+    "a held change asks: share, or put the folder back, and says the copies go to the trash",
+    `(() => { const d = ${held}; if (!d) return false; const t = d.innerText; return t.includes("Many files changed at once (for example by a Git checkout)") && t.includes("Share these changes or put your folder back as the session has it?") && t.includes("go to the trash") && t.includes("40 files") && d.querySelectorAll(".bg-accent").length === 1; })()`,
+    { show: `${held}?.innerText` },
+  );
+  await shoot(page, "live-p8-paused");
+  await click(page, '[data-testid="live-paused-later"]');
+  check(
+    "Decide later hides the dialog and the status bar offers it again",
+    await ev(
+      `${held} === null && !!document.querySelector('[data-testid="live-paused-chip"]')`,
+    ),
+  );
+  await click(page, '[data-testid="live-paused-chip"]');
+  await expectEventually(page, "the chip brings the dialog back", `${held} !== null`);
+  await click(page, '[data-testid="live-paused-discard"]');
+  await expectEventually(
+    page,
+    "putting the folder back answers the session and closes the dialog",
+    `${held} === null && !document.querySelector('[data-testid="live-paused-chip"]')`,
+  );
+  check(
+    "the session no longer holds a change",
+    (await run("live.status")).paused === null,
+  );
+
+  // -- Leaving as host with files nobody else has: warn, never block. -----
+  const leaveDlg = `document.querySelector('[role="alertdialog"],[role="dialog"]')`;
+  await run("dev.live-unsynced", { files: 2 });
   await openShare();
   await click(page, '[data-testid="share-leave"]');
+  await expectEventually(
+    page,
+    "leaving warns that 2 files have not reached anyone else, with Stay and Leave anyway",
+    `(() => { const d = ${leaveDlg}; if (!d) return false; const b = [...d.querySelectorAll("button")].map((x) => x.textContent.trim()); return d.innerText.includes("2 files have not reached anyone else yet") && b.includes("Stay") && b.includes("Leave anyway"); })()`,
+    { show: `${leaveDlg}?.innerText` },
+  );
+  await shoot(page, "live-p8-leave-warning");
+  await clickText(page, '[role="alertdialog"] button, [role="dialog"] button', "Stay");
+  check(
+    "Stay keeps the session",
+    await ev(`import("/src/lib/state/live.svelte.ts").then((m) => m.live.active)`),
+  );
+  await openShare();
+  await click(page, '[data-testid="share-leave"]');
+  await expectEventually(page, "the warning comes back", `${leaveDlg} !== null`);
+  await clickText(
+    page,
+    '[role="alertdialog"] button, [role="dialog"] button',
+    "Leave anyway",
+  );
+  await expectEventually(
+    page,
+    "Leave anyway ends the project session",
+    `import("/src/lib/state/live.svelte.ts").then((m) => !m.live.active)`,
+  );
   await expectEventually(
     page,
     "Leave ends the project session",
