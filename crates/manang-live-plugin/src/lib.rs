@@ -12,10 +12,14 @@
 //! session; a disposable snapshot of it is kept in the app data directory so a
 //! document survives everyone leaving (see `store`).
 
+pub mod disk;
 mod driver;
 mod error;
+pub mod fsbridge;
 mod invite;
+pub mod pathsec;
 mod plugin;
+pub mod sidecar;
 mod store;
 
 pub use driver::{Change, PeerInfo, PushOutcome, Status};
