@@ -49,8 +49,8 @@ files as plain text on your own disk.
   including DeepSeek, Anthropic, local models). The agent proposes changes as
   a diff you accept or reject; you see exactly what will be sent before it goes;
   keys live in your operating system's keychain; one switch turns it all off.
-- **Write together.** Version-based sharing through Git, and live co-editing with
-  end-to-end encrypted updates (in development for the beta).
+- **Write together.** Version-based sharing through Git, and live co-editing of one
+  file or a whole project with end-to-end encrypted updates.
 - **A platform, not a pile of features.** Everything in Manang is a plugin.
   Third-party plugins run as sandboxed WebAssembly components that declare the
   permissions they need and cannot touch your system beyond them.

@@ -23,7 +23,8 @@ Manang distinguishes between core first-party plugins and third-party extensions
 1. **Built-in (Native) plugins:**
    - First-party plugins compiled directly into the application in Rust (such as Typst, LaTeX, Markdown, Citations, Diagram, Figure, Writing, Git, Search, and Settings).
    - They provide maximum performance, sub-millisecond execution, and zero-copy binary IPC.
-   - Built-in plugins cannot be uninstalled; most can be switched off, a few core ones cannot.
+   - **Built-in plugins cannot be uninstalled.** They can be switched off (the switch on their row), and their page says "Built in: can be switched off but not removed".
+   - **Six core plugins cannot even be switched off:** editor, project, settings, keybindings, theme and plugins. Manang needs them to run. Their row shows **Core** instead of a switch.
 2. **Sandboxed (WebAssembly component) plugins:**
    - Third-party extensions compiled to WebAssembly components (`wasm32-unknown-unknown`).
    - Run inside isolated Wasmtime component-model sandboxes.
@@ -71,8 +72,8 @@ Clicking a plugin opens its page as a tab, like an extension's page in other edi
 
 ## 6. Disable and uninstall
 
-1. **Disable** (the switch on a row, or the button on the page) unloads a plugin but keeps its files and your approvals. **Enable** brings it back.
-2. **Uninstall** (on the plugin page) asks for confirmation. The plugin stops running and its folder moves to the plugins trash folder (`plugins-trash` next to the plugins folder); nothing is deleted. Its approved access is forgotten.
+1. **Disable** (the switch on a row, or the button on the page) unloads a plugin but keeps its files and your approvals. **Enable** brings it back. Built-in plugins can be disabled this way; the six core plugins cannot.
+2. **Uninstall** (on the plugin page, for installed third-party plugins only) asks for confirmation. The plugin stops running and its folder moves to the plugins trash folder (`plugins-trash` next to the plugins folder); nothing is deleted. Its approved access is forgotten.
 
 ## 7. Install from a file or folder
 

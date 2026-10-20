@@ -10,7 +10,7 @@ This is a living document of known issues, platform quirks, and workarounds veri
 | :--- | :--- | :--- | :--- | :--- |
 | [1. Local TeX distribution required for LaTeX](#1-local-tex-distribution-required-for-latex) | LaTeX Compiler | All | Medium | Yes |
 | [2. Math formulas in Mermaid text diagrams](#2-math-formulas-in-mermaid-text-diagrams) | Diagrams | All | Low | Yes |
-| [3. Linux Wayland + NVIDIA display stutter](#3-linux-wayland-nvidia-display-stutter) | Desktop Shell | Linux | Low | Yes (Automatic) |
+| [3. Linux Wayland + NVIDIA display stutter](#3-linux-wayland--nvidia-display-stutter) | Desktop Shell | Linux | Low | Yes (Automatic) |
 | [4. macOS native top menu bar integration](#4-macos-native-top-menu-bar-integration) | Menus | macOS | Low | Yes |
 | [5. Plugin signatures for local installs](#5-plugin-signatures-for-local-installs) | Plugins | All | Low | Yes |
 | [6. Real-time co-editing](#6-real-time-co-editing) | Collaboration | All | Low | Yes |
@@ -109,7 +109,7 @@ Whole-project sessions have limits:
 - Windows and macOS case-folding of file names is implemented and tested on Linux only.
 
 ### How to Avoid
-Send a whole-project invite only to people you would let edit the project, and keep Git commits of your own before a session. For anything else, use Git through the **Source Control** panel (`Ctrl+Shift+G`) or a shared folder.
+Send a whole-project invite only to people you would let edit the project, and keep Git commits of your own before a session. For anything else, use Git through the **Versions** view (View menu) or a shared folder.
 
 ### Status
 Beta: one file or the whole project. Merging a differing copy instead of replacing it, member roles and removal, comments, a room that outlives its members, and merging figure edits are planned. Design and threat model: ADR 0014.
