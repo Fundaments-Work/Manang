@@ -32,6 +32,10 @@ use crate::store::{Snapshots, Trash};
 /// sees ciphertext, and the setting can point anywhere or be emptied.
 const DEFAULT_RELAY: &str = "wss://relay.fundaments.work";
 
+/// Events of the project watcher a session may have queued before the thread
+/// reads them (a checkout can report thousands of paths in a few batches).
+const FS_EVENT_QUEUE: usize = 4096;
+
 /// Values of the plugin's settings.
 #[derive(Debug, Clone)]
 struct Settings {
@@ -475,7 +479,9 @@ impl Inner {
             policy,
             editor: Arc::clone(&self.editor),
             events: self.events.clone(),
-            fs_events: self.events.subscribe("project.changed"),
+            fs_events: self
+                .events
+                .subscribe_with_capacity("project.changed", FS_EVENT_QUEUE),
             handle: self.handle()?,
             room_url: room_url(&relay, &room_hex),
             room_hex,
@@ -523,7 +529,9 @@ impl Inner {
             policy,
             editor: Arc::clone(&self.editor),
             events: self.events.clone(),
-            fs_events: self.events.subscribe("project.changed"),
+            fs_events: self
+                .events
+                .subscribe_with_capacity("project.changed", FS_EVENT_QUEUE),
             handle: self.handle()?,
             room_url: room_url(&link.relay, &room_hex),
             room_hex,

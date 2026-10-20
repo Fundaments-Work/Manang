@@ -732,11 +732,23 @@ impl Driver {
             }
             Intent::Delete { path } => {
                 let id = self.id_of(&path)?;
-                self.drop_doc(id);
-                self.files.remove(&id);
-                self.arriving.remove(&id);
-                self.pending_text.remove(&id);
-                self.meta_due.remove(&id);
+                // A directory takes everything below it along.
+                let prefix = format!("{path}/");
+                let below: Vec<FileId> = self
+                    .view()
+                    .entries()
+                    .iter()
+                    .filter(|e| e.path.starts_with(&prefix))
+                    .map(|e| e.id)
+                    .collect();
+                for gone in below.into_iter().chain([id]) {
+                    self.drop_doc(gone);
+                    self.files.remove(&gone);
+                    self.arriving.remove(&gone);
+                    self.pending_text.remove(&gone);
+                    self.meta_due.remove(&gone);
+                    self.dirty_docs.remove(&gone);
+                }
                 let project = self
                     .session
                     .project_mut()
