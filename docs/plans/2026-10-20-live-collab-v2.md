@@ -102,3 +102,29 @@ idle budget (cap loaded docs, evict); relay limits and Cloudflare's 20:1
 WebSocket billing under bulk sync (pace the sender); case-insensitive file
 systems and Windows names; git checkouts that rewrite hundreds of files during a
 session.
+
+## Status (2026-10-20)
+
+Merged on `feat/live-collab-v2` (not yet on `main`): wave 0 (S1-S6) and P1
+(project tree, blobs, manifest, wire v2). Gates on the merge result: fmt, clippy
+and tests for `manang-live`, `manang-live-plugin`, `manang-git`; `pnpm run check`,
+vitest (1051), eslint. Build note: worktrees with the same layout must not share
+one `CARGO_TARGET_DIR` at the same time (artifact names collide).
+
+## Contract for P2-P6 (commands and events)
+
+Existing, extended with `path`: `live.start {scope: "file"|"project", doc?}`,
+`live.join {invite}` (phase 1: connect and fetch the manifest only),
+`live.inspect` (returns scope), `live.push {path, ...}`,
+`live.selection {path, ...}`, `live.snapshot {path}`, `live.status` (adds scope,
+file count, progress), `live.leave`, `live.resync`, `live.contributors`.
+New: `live.resolve {choices}` (apply the join plan), `live.attach {path}` ->
+`{version, text}`, `live.detach {path}`, `live.follow {peer|null}` (local),
+`live.files` (tree with per-file peers), `live.exclude {path}`,
+`live.include {path}`, `live.restore {path}`.
+Events: `live.remote` (+`path`), `live.presence` (+`path`), `live.state`, and new
+`live.plan` (classified files: identical, missing, differing, guest-only),
+`live.tree {ops: [{op, path, from?, by}]}`, `live.peers {peers: [{peer, name,
+slot, path}]}`, `live.progress {done, total}`, `live.notice {kind: joined | left
+| deleted | renamed, peer, path?}`. Single-file invites keep today's behaviour
+(`scope: "file"`).
