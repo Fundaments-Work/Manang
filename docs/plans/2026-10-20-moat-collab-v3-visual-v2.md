@@ -15,7 +15,7 @@ packages I1, A1-A3 and C1 below are done and verified. Today it is not.
 ## Facts that shape the plan
 
 * Collaboration v2 is on `feat/live-collab-v2`, **not on `main`**; P7 (fuzzing,
-  relay conformance, ADR 0014) is still open. [V]
+  relay conformance, ADR 0018) is still open. [V]
 * `manang-live` has no identity layer: no signing, roles or members. A "viewer"
   is a UI courtesy until identity exists. [V]
 * There is no annotations crate and no comments code. The git-file design

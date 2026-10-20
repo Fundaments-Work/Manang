@@ -1,6 +1,6 @@
 # ADR 0013: Live co-editing
 
-Status: accepted and implemented for Beta 1 (text files, one per session), 2026-10-18; stabilised 2026-10-20 (waiting for a host, snapshot sidecar, guards, trailers; see the last implementation note). Project-wide sessions are decided in `docs/adr/0014-project-live.md` (plan: `docs/plans/2026-10-20-live-collab-v2.md`). Evidence: `docs/research/2026-10-18-live-spike.md`. Where the implementation differs from the decisions below, see "Implementation notes".
+Status: accepted and implemented for Beta 1 (text files, one per session), 2026-10-18; stabilised 2026-10-20 (waiting for a host, snapshot sidecar, guards, trailers; see the last implementation note). Project-wide sessions are decided in `docs/adr/0018-project-live.md` (plan: `docs/plans/2026-10-20-live-collab-v2.md`). Evidence: `docs/research/2026-10-18-live-spike.md`. Where the implementation differs from the decisions below, see "Implementation notes".
 
 Status note (2026-10-20): the relay server (the Rust `manang-relay` crate and the Cloudflare Worker in `relay/worker`) now lives in a separate private repository and is no longer part of this repository. The app keeps only the client transport, `crates/manang-relay-client` (`RelayClient`, with the `tls` feature). The wire contract described in this ADR (`/room/<32 hex>`, binary frames, sealed envelopes) remains the public contract that any relay must follow. Paths to `crates/manang-relay` and `relay/worker` below are historical, and so are the passages about an organisation self-hosting the relay or the Worker being "not deployed": the relay run by Fundaments is the default (`wss://relay.fundaments.work`), and this repository no longer contains a relay an organisation could run.
 
@@ -101,7 +101,7 @@ What was built, and where it is not what the decisions above describe.
   * *Guards.* Get updates and restoring the live file are refused with a plain message while a session runs; a watcher-driven reload of a live file is not applied (it would be sent to the room as typing): the session's text is kept and the next save overwrites the disk copy.
   * *Trailers.* `live.contributors` returns ready-made `Co-authored-by:` lines (given the committer's identity); "Save a version" passes them to `git.save-version` (new `trailers` argument) and names contributors without an email in the message. People share an email only through the setting `live.email`.
   * *Errors.* A soft error (state `error`) clears on the next state change or remote step. On a digest mismatch at equal versions the peer with the higher id rebuilds its document from the room (`live.resync`, also the bar's Re-sync button), so two peers never wait for each other.
-* **Not done.** The policy keys `collab.live` and `collab.relays` (no code reads them); figures (blobs in project sessions, last writer wins); peer-to-peer transport; compaction of long sessions; the three-way merge for differing copies (the host's version wins, after a question). Done since the first implementation: the hosted relay is the default, the `Co-authored-by` trailers, the Get-updates and restore guards, project-wide sessions (ADR 0014), and fuzzing of the import path, the protocol decoders and the path rules (ADR 0014, "Hardening"). Member identity, roles and a durable room are not built either (ADR 0014, "What is NOT done").
+* **Not done.** The policy keys `collab.live` and `collab.relays` (no code reads them); figures (blobs in project sessions, last writer wins); peer-to-peer transport; compaction of long sessions; the three-way merge for differing copies (the host's version wins, after a question). Done since the first implementation: the hosted relay is the default, the `Co-authored-by` trailers, the Get-updates and restore guards, project-wide sessions (ADR 0018), and fuzzing of the import path, the protocol decoders and the path rules (ADR 0018, "Hardening"). Member identity, roles and a durable room are not built either (ADR 0018, "What is NOT done").
 
 ## Consequences
 
@@ -114,6 +114,6 @@ What was built, and where it is not what the decisions above describe.
   compaction); invitees are trusted equally; new `loro` and RustCrypto
   dependencies; a documented gap between "who edited" (a claim) and
   authentication.
-* Follow-ups: chunk the first sync (done for project sessions, ADR 0014), browser entropy and
+* Follow-ups: chunk the first sync (done for project sessions, ADR 0018), browser entropy and
   TLS client, policy keys, design sign-off for caret colours, work packages L1
   to L9 in the research report.

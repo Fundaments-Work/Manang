@@ -1,4 +1,6 @@
-# ADR 0014: Project-wide live sessions
+# ADR 0018: Project-wide live sessions
+
+Numbering: drafted as 0014 and renumbered 0018 on 2026-10-20, because 0014 already belongs to the web-version ADR.
 
 Status: accepted, implemented and merged to `main` (merge of `feat/live-collab-v2`), 2026-10-20. Extends
 ADR 0013 (one text file per session), which stays valid for single-file
