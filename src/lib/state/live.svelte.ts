@@ -28,6 +28,8 @@ import {
   type LiveConnection,
   type LiveFileNode,
   type LiveNoticeEvent,
+  type LivePausedEvent,
+  type LivePausedInfo,
   type LivePeerAt,
   type LivePeersEvent,
   type LivePlanEvent,
@@ -42,7 +44,13 @@ import {
   type LiveTreeOp,
 } from "$lib/kernel/liveApi";
 import { basename } from "$lib/workbench/paths";
-import { inviteFileLabel, NO_RELAY_MESSAGE } from "$lib/workbench/live";
+import {
+  inviteFileLabel,
+  NO_RELAY_MESSAGE,
+  plainLiveError,
+  UNSYNCED_DETAIL,
+  unsyncedWarning,
+} from "$lib/workbench/live";
 import {
   followStep,
   NOT_FOLLOWING,
@@ -67,6 +75,13 @@ import { workspace } from "./workspace.svelte";
 
 const api = liveApi(kernel);
 
+/** A refused command in plain words. */
+const say = (error: unknown): string => plainLiveError(liveError(error));
+
+/** How often a file that is still being fetched is asked for again. */
+const ATTACH_RETRIES = 3;
+const ATTACH_RETRY_MS = 2000;
+
 /** The settings the plugin needs, pushed in the browser where no shell does. */
 const SYNCED = ["live.relay-url", "live.display-name", "live.email"] as const;
 
@@ -76,6 +91,7 @@ type Early =
   | { topic: "live.plan"; payload: LivePlanEvent }
   | { topic: "live.tree"; payload: LiveTreeEvent }
   | { topic: "live.peers"; payload: LivePeersEvent }
+  | { topic: "live.paused"; payload: LivePausedEvent }
   | { topic: "live.progress"; payload: LiveProgressEvent }
   | { topic: "live.notice"; payload: LiveNoticeEvent };
 
@@ -98,6 +114,12 @@ export class LiveState {
   plan = $state.raw<readonly LivePlanFile[] | null>(null);
   /** Files being fetched after the plan was resolved. */
   progress = $state.raw<LiveProgress | null>(null);
+  /** Files no one else present has shown they hold (host, project sessions). */
+  unsynced = $state(0);
+  /** A large change on disk is held until the person answers (a Git checkout, say). */
+  paused = $state.raw<LivePausedInfo | null>(null);
+  /** The held change's dialog is showing (it can be put off and brought back). */
+  pausedOpen = $state(false);
   /** The person this window follows (peer id), if any. */
   following = $state<string | null>(null);
   /** Files deleted by someone else, and who: path -> name. */
@@ -123,7 +145,9 @@ export class LiveState {
     onResync: (path, reason) =>
       notice.error(`${basename(path)} was re-read from the session: ${reason}.`),
     onLocalEdit: () => this.#followEvent({ kind: "edited" }),
+    onAttachFailed: (path, error) => this.#attachFailed(path, error),
   });
+  readonly #retries = new SvelteMap<string, number>();
   #listening = false;
   #early: Early[] = [];
   #copiedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -234,7 +258,16 @@ export class LiveState {
         break;
       case "live.peers":
         this.#setPeers(event.payload.peers);
+        if (typeof event.payload.unsynced_files === "number") {
+          this.unsynced = event.payload.unsynced_files;
+        }
         break;
+      case "live.paused": {
+        const { files, changed_lines, total_lines } = event.payload;
+        this.paused = { files, changed_lines, total_lines };
+        this.pausedOpen = true;
+        break;
+      }
       case "live.progress": {
         const { done, total } = event.payload;
         this.progress = done >= total ? null : { done, total };
@@ -345,19 +378,21 @@ export class LiveState {
   async #attach(path: string): Promise<void> {
     const doc = documents.get(path);
     if (doc === undefined || this.#session === null) return;
-    await this.#bindings.attach(doc);
+    if ((await this.#bindings.attach(doc)) !== null) this.#retries.delete(path);
   }
 
   #tree(ops: readonly LiveTreeOp[]): void {
     let files = [...this.files];
     for (const op of ops) {
-      const by = this.#nameOf(op.by);
+      // The session may not know who did it (`by` is empty): no name then.
+      const by = op.by === "" ? "" : this.#nameOf(op.by);
       if (op.op === "create") {
         if (!files.some((f) => f.path === op.path)) {
           files.push({ path: op.path, kind: "text", peers: [] });
         }
         this.deleted.delete(op.path);
-        if (documents.get(op.path) !== undefined) void this.#attach(op.path);
+        // A file replaced while its tab is open: bring the view to the room's text.
+        if (documents.get(op.path) !== undefined) void this.#reattach(op.path);
       } else if (op.op === "delete") {
         files = files.filter((f) => f.path !== op.path);
         if (documents.get(op.path) !== undefined) this.deleted.set(op.path, by);
@@ -373,6 +408,31 @@ export class LiveState {
     this.#setFiles(files);
   }
 
+  /** Close the file's binding and attach again: the room's text replaces the view's. */
+  async #reattach(path: string): Promise<void> {
+    await this.#bindings.detach(path, { quiet: true });
+    await this.#attach(path);
+  }
+
+  #attachFailed(path: string, error: unknown): void {
+    const failure = liveError(error);
+    const tried = this.#retries.get(path) ?? 0;
+    if (failure.code === "waiting" && tried < ATTACH_RETRIES) {
+      this.#retries.set(path, tried + 1);
+      setTimeout(() => {
+        if (this.isLive(path)) void this.#attach(path);
+      }, ATTACH_RETRY_MS);
+      return;
+    }
+    this.#retries.delete(path);
+    if (failure.code === "excluded" || failure.code === "not-in-session") return;
+    notice.error(
+      failure.code === "waiting"
+        ? `${basename(path)} is taking a while to arrive. Close and open it again in a moment.`
+        : `${basename(path)} could not be opened live. ${say(error)}`,
+    );
+  }
+
   /** Decide the files of a joined project (phase 2 of the join). */
   async resolvePlan(choices: readonly LiveChoice[]): Promise<boolean> {
     if (this.plan === null) return false;
@@ -381,13 +441,13 @@ export class LiveState {
       this.plan = null;
       if (out.trashed.length > 0) {
         notice.show(
-          `${out.trashed.length} of your files were replaced by the host's. Your copies are in live-trash.`,
+          `${out.trashed.length} of your files were replaced by the host's. Your copies are in the trash folder.`,
         );
       }
       await this.#afterFiles();
       return true;
     } catch (error) {
-      notice.error(liveError(error).message);
+      notice.error(say(error));
       return false;
     }
   }
@@ -399,7 +459,7 @@ export class LiveState {
       await api.exclude(path);
       await this.refreshFiles();
     } catch (error) {
-      notice.error(liveError(error).message);
+      notice.error(say(error));
     }
   }
 
@@ -408,7 +468,7 @@ export class LiveState {
       await api.include(path);
       await this.#afterFiles();
     } catch (error) {
-      notice.error(liveError(error).message);
+      notice.error(say(error));
     }
   }
 
@@ -419,7 +479,7 @@ export class LiveState {
       this.deleted.delete(path);
       await this.#afterFiles();
     } catch (error) {
-      notice.error(liveError(error).message);
+      notice.error(say(error));
     }
   }
 
@@ -523,8 +583,35 @@ export class LiveState {
         "Re-syncing with the session. Your file is kept until someone answers.",
       );
     } catch (error) {
-      notice.error(liveError(error).message);
+      notice.error(say(error));
     }
+  }
+
+  /** Answer the held large change: keep it for everyone, or put the folder back. */
+  async answerPaused(answer: "share" | "discard"): Promise<void> {
+    if (!this.active || this.paused === null) return;
+    try {
+      await api.resync({ paused: answer });
+      this.paused = null;
+      this.pausedOpen = false;
+      notice.show(
+        answer === "share"
+          ? "Sharing the changes with everyone."
+          : "Putting your folder back as the session has it. The copies you had go to the trash.",
+      );
+    } catch (error) {
+      notice.error(say(error));
+    }
+  }
+
+  /** Put the held-change dialog off for now (the change stays held). */
+  deferPaused(): void {
+    this.pausedOpen = false;
+  }
+
+  /** Bring the held-change dialog back. */
+  showPaused(): void {
+    if (this.paused !== null) this.pausedOpen = true;
   }
 
   /**
@@ -600,7 +687,12 @@ export class LiveState {
       } else {
         // The plugin reads what is not open from disk: open files are settled first.
         for (const open of documents.all()) await open.sync.idle();
-        const started = await api.start({ scope: "project" });
+        const root = workspace.project?.root;
+        if (root === undefined) {
+          notice.error(plainLiveError({ code: "no-project", message: "" }));
+          return;
+        }
+        const started = await api.start({ scope: "project", root });
         this.#beginProject(started.session, "host");
         this.inviteText = started.invite ?? null;
         await this.#afterFiles();
@@ -612,7 +704,7 @@ export class LiveState {
         this.needsRelay = true;
         notice.error(NO_RELAY_MESSAGE);
       } else {
-        notice.error(failure.message);
+        notice.error(plainLiveError(failure));
       }
     } finally {
       this.busy = false;
@@ -645,7 +737,7 @@ export class LiveState {
       try {
         inspected = await api.inspect(text);
       } catch (error) {
-        notice.error(liveError(error).message);
+        notice.error(say(error));
         return;
       }
       if (inspected.scope === "project") {
@@ -654,7 +746,7 @@ export class LiveState {
       }
       await this.#joinFile(text, inspected.file);
     } catch (error) {
-      notice.error(liveError(error).message);
+      notice.error(say(error));
     } finally {
       this.busy = false;
     }
@@ -662,7 +754,14 @@ export class LiveState {
 
   /** Phase 1 of a project join: connect; the plan arrives as an event. */
   async #joinProject(invite: string): Promise<void> {
-    const result = await api.join({ invite });
+    const root = workspace.project?.root;
+    if (root === undefined) {
+      notice.error(
+        "Open the folder you want to join into first, then paste the invite. The shared files are added to it.",
+      );
+      return;
+    }
+    const result = await api.join({ invite, root });
     this.#beginProject(result.session, "guest");
     notice.show("Joined the project. Choose what to do with each file.");
   }
@@ -756,6 +855,10 @@ export class LiveState {
     this.#inSession.clear();
     this.plan = null;
     this.progress = null;
+    this.unsynced = 0;
+    this.paused = null;
+    this.pausedOpen = false;
+    this.#retries.clear();
     this.deleted.clear();
     this.treeOps = [];
     this.notices = [];
@@ -813,11 +916,41 @@ export class LiveState {
     }
   }
 
-  /** Leave: edits on their way get a moment to arrive, then the session ends. */
-  async leave(): Promise<void> {
+  /**
+   * How many files the host would strand by leaving now (0 for anyone else).
+   * Asks the session, which knows best; falls back to the last event.
+   */
+  async #strandedByLeaving(): Promise<number> {
+    if (this.role !== "host" || this.scope !== "project") return 0;
+    try {
+      const status = await api.status();
+      return status.unsynced_files ?? this.unsynced;
+    } catch {
+      return this.unsynced;
+    }
+  }
+
+  /**
+   * Leave: edits on their way get a moment to arrive, then the session ends.
+   * A host whose files have not reached anyone else is warned first (never
+   * blocked): `Stay` keeps the session and returns false.
+   */
+  async leave(options: { skipWarning?: boolean } = {}): Promise<boolean> {
     if (this.#session === null) {
       this.#clear();
-      return;
+      return true;
+    }
+    if (options.skipWarning !== true) {
+      const stranded = await this.#strandedByLeaving();
+      if (stranded > 0) {
+        const choice = await dialog.ask({
+          title: "Leave the session?",
+          message: `${unsyncedWarning(stranded)} ${UNSYNCED_DETAIL}`,
+          cancelLabel: "Stay",
+          actions: [{ id: "leave", label: "Leave anyway" }],
+        });
+        if (choice !== "leave") return false;
+      }
     }
     try {
       await this.#bindings.settle();
@@ -833,6 +966,7 @@ export class LiveState {
         ? "You left the live session. Your files stay as they are."
         : "You left the live session. The file is still yours to save.",
     );
+    return true;
   }
 
   /** The document went away (its tab closed): end the session without touching it. */
@@ -862,6 +996,10 @@ export class LiveState {
     this.#inSession.clear();
     this.plan = null;
     this.progress = null;
+    this.unsynced = 0;
+    this.paused = null;
+    this.pausedOpen = false;
+    this.#retries.clear();
     this.following = null;
     this.deleted.clear();
     this.treeOps = [];

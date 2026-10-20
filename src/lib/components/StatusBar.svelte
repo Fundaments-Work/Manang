@@ -133,6 +133,15 @@
       >{progressText(live.progress.done, live.progress.total)}</span
     >
   {/if}
+  {#if live.active && live.paused !== null && !live.pausedOpen}
+    <button
+      type="button"
+      class="mng-status text-text"
+      data-testid="live-paused-chip"
+      title="Changes on disk are on hold. Decide what to do with them"
+      onclick={() => live.showPaused()}>Changes on hold</button
+    >
+  {/if}
   {#if live.active}
     <button
       type="button"
