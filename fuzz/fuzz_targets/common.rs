@@ -47,3 +47,20 @@ pub fn small_text(u: &mut Unstructured<'_>) -> String {
         })
         .collect()
 }
+
+/// libFuzzer's panic hook aborts on any panic, even one the code under test
+/// catches on purpose. `YrsEngine` guards its decoders against yrs's own
+/// assertions on hostile input; let panics that originate inside the yrs crate
+/// pass (they unwind into that guard, and an unguarded one still aborts at the
+/// harness's `extern "C"` boundary), and abort on everything else as usual.
+pub fn tolerate_yrs_decoder_panics() {
+    std::panic::set_hook(Box::new(|info| {
+        let in_yrs = info
+            .location()
+            .is_some_and(|l| l.file().contains("/yrs-"));
+        eprintln!("{info}");
+        if !in_yrs {
+            std::process::abort();
+        }
+    }));
+}

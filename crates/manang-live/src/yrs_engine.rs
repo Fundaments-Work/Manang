@@ -30,16 +30,21 @@ fn decode_err(e: impl std::fmt::Display) -> LiveError {
 }
 
 /// Run a yrs *decoder* on bytes from the network. yrs 0.28 asserts on some
-/// hostile inputs (a client id of 2^53 or more panics in `ClientID::new`, found
-/// by fuzzing), and a peer must not be able to take the session thread down.
-/// This is the one place a panic is caught, at the boundary of a third-party
-/// parser that has no fallible interface for these values; the decoders hold no
-/// shared state, so unwinding out of them leaves nothing inconsistent.
-fn guarded<T, E: std::fmt::Display>(decode: impl FnOnce() -> Result<T, E>) -> Result<T, LiveError> {
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(decode)) {
-        Ok(result) => result.map_err(decode_err),
-        Err(_) => Err(LiveError::Decode("malformed yrs data".to_owned())),
-    }
+/// hostile inputs while decoding (a client id of 2^53 or more panics in
+/// `ClientID::new`; found by fuzzing), and a peer must not be able to take the
+/// session thread down. The decoders hold no shared state, so catching the
+/// panic here is safe.
+///
+/// This does **not** make integrating a hostile update safe: yrs can also panic
+/// inside a transaction (a crafted block underflows in `block.rs`), and the
+/// transaction's own drop then panics again, which aborts the process whatever
+/// we catch. This engine is the benchmark alternative to Loro and the session
+/// does not use it; Loro (which the fuzz targets cover on hostile bytes) is the
+/// engine for peers one does not trust. Do not put `YrsEngine` behind a network
+/// without fixing or replacing that path.
+fn guarded<T>(run: impl FnOnce() -> Result<T, LiveError>) -> Result<T, LiveError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(run))
+        .unwrap_or_else(|_| Err(LiveError::Decode("malformed yrs data".to_owned())))
 }
 
 fn options(peer: u64) -> Result<Options, LiveError> {
@@ -85,7 +90,7 @@ impl YrsEngine {
     }
 
     fn import(&self, bytes: &[u8]) -> Result<bool, LiveError> {
-        let update = guarded(|| Update::decode_v1(bytes))?;
+        let update = guarded(|| Update::decode_v1(bytes).map_err(decode_err))?;
         let mut txn = self.doc.transact_mut_with(REMOTE_ORIGIN);
         txn.apply_update(update).map_err(decode_err)?;
         let pending = txn.store().pending_update().is_some() || txn.store().pending_ds().is_some();
@@ -216,7 +221,7 @@ impl TextCrdt for YrsEngine {
         let sv_bytes = version
             .get(8..)
             .ok_or_else(|| LiveError::Decode("version too short".to_owned()))?;
-        let sv = guarded(|| StateVector::decode_v1(sv_bytes))?;
+        let sv = guarded(|| StateVector::decode_v1(sv_bytes).map_err(decode_err))?;
         // `encode_diff_v1` always includes the full delete set, so a peer
         // that only missed deletions is repaired too.
         Ok(self.doc.transact().encode_diff_v1(&sv))
@@ -254,7 +259,7 @@ impl TextCrdt for YrsEngine {
     }
 
     fn cursor_pos(&self, cursor: &[u8]) -> Option<usize> {
-        let sticky = guarded(|| StickyIndex::decode_v1(cursor)).ok()?;
+        let sticky = guarded(|| StickyIndex::decode_v1(cursor).map_err(decode_err)).ok()?;
         let txn = self.doc.transact();
         sticky.get_offset(&txn).map(|o| o.index as usize)
     }

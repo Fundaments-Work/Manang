@@ -11,13 +11,22 @@ use libfuzzer_sys::arbitrary::Unstructured;
 use libfuzzer_sys::fuzz_target;
 use manang_live::{LoroEngine, TextCrdt, YrsEngine};
 
-fn run<E: TextCrdt>(mode: u8, data: &[u8]) {
+/// `hostile_apply`: whether hostile bytes may reach `apply_update` /
+/// `from_snapshot`. Not for yrs, whose integrator can abort the process (see
+/// the note on `guarded` in `yrs_engine.rs`); yrs still gets hostile version
+/// vectors and cursors, which it decodes behind a guard.
+fn run<E: TextCrdt>(mode: u8, data: &[u8], hostile_apply: bool) {
     let mut u = Unstructured::new(data);
     match mode % 3 {
         0 => {
             let mut bytes = data.to_vec();
             common::fix_loro_checksum(&mut bytes);
             if let Ok(mut e) = E::new(10) {
+                let _ = e.export_since(&bytes);
+                let _ = e.cursor_pos(&bytes);
+                if !hostile_apply {
+                    return;
+                }
                 let _ = e.apply_update(&bytes);
                 // The replica must stay usable after a refused update.
                 let _ = e.text();
@@ -28,6 +37,9 @@ fn run<E: TextCrdt>(mode: u8, data: &[u8]) {
         1 => {
             let mut bytes = data.to_vec();
             common::fix_loro_checksum(&mut bytes);
+            if !hostile_apply {
+                return;
+            }
             if let Ok(e) = E::from_snapshot(11, &bytes) {
                 let _ = e.text();
                 let _ = e.export_snapshot();
@@ -74,6 +86,11 @@ fn run<E: TextCrdt>(mode: u8, data: &[u8]) {
             }
             for blob in blobs {
                 let bad = common::mutate(&mut u, blob);
+                let _ = a.export_since(&bad);
+                let _ = a.cursor_pos(&bad);
+                if !hostile_apply {
+                    continue;
+                }
                 if let Ok(mut c) = E::new(22) {
                     let _ = c.apply_update(&bad);
                     let _ = c.text();
@@ -88,10 +105,10 @@ fn run<E: TextCrdt>(mode: u8, data: &[u8]) {
     }
 }
 
-fuzz_target!(|data: &[u8]| {
+fuzz_target!(init: common::tolerate_yrs_decoder_panics(), |data: &[u8]| {
     let Some((&mode, rest)) = data.split_first() else {
         return;
     };
-    run::<LoroEngine>(mode, rest);
-    run::<YrsEngine>(mode, rest);
+    run::<LoroEngine>(mode, rest, true);
+    run::<YrsEngine>(mode, rest, false);
 });
