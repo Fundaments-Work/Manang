@@ -6,6 +6,8 @@ invites. Plan and work packages: `docs/plans/2026-10-20-live-collab-v2.md`.
 Fuzzing and relay conformance (work package P7) are described under
 "Hardening".
 
+Status note (2026-10-20): the relay server (the Rust `manang-relay` crate and the Cloudflare Worker in `relay/worker`) now lives in a separate private repository and is no longer part of this repository. The app keeps only the client transport, `crates/manang-relay-client` (`RelayClient`, with the `tls` feature). The wire contract described in this ADR (`/room/<32 hex>`, binary frames, sealed envelopes) remains the public contract that any relay must follow. Paths to `crates/manang-relay` and `relay/worker` below are historical.
+
 ## Context
 
 ADR 0013 shares one text file. People work on projects: a thesis is a main file,

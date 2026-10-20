@@ -2,6 +2,8 @@
 
 Status: accepted and implemented for Beta 1 (text files, one per session), 2026-10-18; stabilised 2026-10-20 (waiting for a host, snapshot sidecar, guards, trailers; see the last implementation note). Project-wide sessions are decided in `docs/adr/0014-project-live.md` (plan: `docs/plans/2026-10-20-live-collab-v2.md`). Evidence: `docs/research/2026-10-18-live-spike.md`. Where the implementation differs from the decisions below, see "Implementation notes".
 
+Status note (2026-10-20): the relay server (the Rust `manang-relay` crate and the Cloudflare Worker in `relay/worker`) now lives in a separate private repository and is no longer part of this repository. The app keeps only the client transport, `crates/manang-relay-client` (`RelayClient`, with the `tls` feature). The wire contract described in this ADR (`/room/<32 hex>`, binary frames, sealed envelopes) remains the public contract that any relay must follow. Paths to `crates/manang-relay` and `relay/worker` below are historical.
+
 ## Context
 
 The owner decided that real-time co-editing is required for Beta 1 (invite

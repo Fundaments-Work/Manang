@@ -1,5 +1,7 @@
 # Manang on the web: plan
 
+> Note (2026-10-20): The relay server moved to a separate private repository on 2026-10-20 (`crates/manang-relay` and `relay/worker` no longer exist here; the app keeps `crates/manang-relay-client`). Paths below describe the state when this was written.
+
 Date: 2026-10-18. Status: proposed; nothing here is decided until the owner
 answers section 11. Companion: `docs/adr/0014-web-version-and-accounts.md`.
 Builds on `2026-10-18-roadmap.md` (web version "after the desktop core"),
