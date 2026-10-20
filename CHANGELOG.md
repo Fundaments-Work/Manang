@@ -77,5 +77,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - **A hostile presence cursor could crash a live session thread (fixed).** A peer's cursor that named a map or tree container instead of the text reached an `unreachable!()` inside Loro; any invite holder could end someone's session. Cursors are now resolved only against the session's own text container.
-- **yrs and hostile updates (documented).** yrs, which is test-only and never faces peers, now decodes behind a guard, so a client id of 2^53 or more no longer panics, but a crafted block can still abort the process inside its transaction. Never put the yrs engine behind a network.
+- **yrs and hostile updates (documented).** yrs (kept in `manang-live` as the benchmark alternative; no live session uses it, only Loro faces peers) now decodes behind a guard, so a client id of 2^53 or more no longer panics, but a crafted block can still abort the process inside its transaction. Never put the yrs engine behind a network without fixing that path.
 - **Remote file paths** in whole-project sessions go through a path policy (see Added) and again at write time.
