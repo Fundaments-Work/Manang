@@ -44,6 +44,24 @@ You can draw vector figures, render diagrams from plain text, keep versions of y
   Bring a LaTeX or Typst project over from Overleaf, see how LaTeX compiles offline, and learn plainly where Manang's collaboration differs and when to stay on Overleaf.
 
 - **[Using Manang as a Local Typst Editor](typst-editor.md)**  
+  Write, preview and export Typst on your own computer, and see exactly what needs the network and what never does.
+
+- **[Using Manang as an Offline LaTeX Editor](offline-latex-editor.md)**  
+  Compile LaTeX with a TeX distribution or the optional Linux built-in engine, and know what works with no internet.
+
+- **[Write a Thesis in Typst](write-a-thesis-in-typst.md)**  
+  Set up a multi-file thesis with one file per chapter, a shared bibliography, figures, PDF export and named versions.
+
+- **[Move from LaTeX to Typst](move-from-latex-to-typst.md)**  
+  A practical mapping of common LaTeX constructs to Typst, and how to try the move in Manang.
+
+- **[Draw Figures for Papers and Theses](draw-figures-for-papers.md)**  
+  Use the figure studio or text diagrams, then include the saved SVG or PDF in a Typst, LaTeX or Markdown paper.
+
+- **[Use Manang with Git](use-manang-with-git.md)**  
+  What the Source control panel does, how versions differ from commits, and where Git support stops.
+
+- **[Using Manang as a Local Typst Editor](typst-editor.md)**  
   Create a Typst project, write with a live preview, jump between source and preview, fix errors, use packages, math, figures and a bibliography, export a PDF, and see what needs the network.
 
 - **[Using Manang as an Offline LaTeX Editor](offline-latex-editor.md)**  
@@ -62,7 +80,7 @@ You can draw vector figures, render diagrams from plain text, keep versions of y
   See which file types are edited, compiled, previewed or shown in a viewer, how large and binary files open, and what `manang.toml` holds.
 
 - **[Edit Together Live](edit-together-live.md)**  
-  Share one file or a whole project for real-time co-editing with an encrypted invite, see collaborators' carets, keep working through a dropped connection, and understand what the relay can and cannot see.
+  Share a text file for real-time co-editing with an encrypted invite, see collaborators' carets, keep working through a dropped connection, and understand what the relay can and cannot see.
 
 - **[Share and Get Updates](share-and-get-updates.md)**  
   Connect a shared address once, share your saved versions with co-authors, and bring their work into yours without losing anything.
@@ -90,3 +108,19 @@ You can draw vector figures, render diagrams from plain text, keep versions of y
 
 - **[Troubleshooting](troubleshooting.md)**  
   Find application logs on Linux, macOS, and Windows, open developer inspection tools, fix TeX installation errors, resolve Linux Wayland graphics issues, and report bugs.
+
+## Compare Manang
+
+Factual comparisons with sources, including when the other tool is the better fit.
+
+- **[Manang vs Overleaf](vs-overleaf.md)**  
+  Offline desktop editing versus an online editor built around real-time team writing.
+
+- **[Manang vs TeXstudio](vs-texstudio.md)**  
+  A desktop editor for Typst, LaTeX and Markdown versus an open source desktop editor built for LaTeX.
+
+- **[Manang vs VS Code with LaTeX Workshop](vs-vscode-latex-workshop.md)**  
+  A standalone editor versus LaTeX building and preview added to VS Code.
+
+- **[Manang vs the Typst Web App](vs-typst-web-app.md)**  
+  Local Typst compilation on your disk versus the Typst team's browser-based editor.

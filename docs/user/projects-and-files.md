@@ -1,6 +1,6 @@
 # Projects and Files
 
-Manage files in the project tree, open images and PDFs, move files to the trash safely, and use the Source control panel to stage, commit and sync with Git.
+Manage files in the project tree, open images and PDFs, move files to the trash safely, and use the Source control panel to stage, commit and pull with Git.
 
 ## 1. Use the Files view
 
@@ -102,6 +102,6 @@ Manang includes a built-in Git client powered by the pure-Rust `gix` engine.
    - Select another branch to check it out.
    - Or click **+ Create new branch…**, type a name and click **Create** to branch your work.
 9. Synchronize with remote repositories:
-   - Click **Sync** in the panel header to pull upstream commits and push local commits to your remote Git forge (e.g. GitHub, GitLab).
+   - Click **Sync** in the panel header to pull upstream commits from your remote (e.g. GitHub, GitLab). The pull only fast-forwards, so it stops if your branch has diverged, and **Sync** does not push your commits. To send your work out, use [Share and get updates](share-and-get-updates.md) or push from a terminal. See [Use Manang with Git](use-manang-with-git.md) for what the panel does and does not do.
 10. View commit history:
    - Scroll through previous commits in the history list. Click **Load more** to inspect earlier revisions.

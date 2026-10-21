@@ -40,7 +40,7 @@ One thing to know first: Manang identifies a project by a small file called `man
 - **`.tex`, `.sty`, `.cls`, `.dtx`, `.ltx`:** open in the text editor with LaTeX highlighting. `.tex` files are compiled; the others are included from them. Multi-file projects with `\input` or `\include` stay as they are, because Manang does not rewrite your files. See [Supported File Types](file-types.md).
 - **`.bib`:** opens in the editor and is read by the References panel. You may need to click **Reload bibliography files** there if you changed it outside the app. See [References and bibliographies](#references-and-bibliographies).
 - **Images:** `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.avif` and `.ico` open in a viewer tab. Your `\includegraphics` lines are not changed. PDF figures open in the built-in PDF viewer.
-- **`manang.toml`:** the only file Manang adds. Live whole-project sessions do not send it to other people.
+- **`manang.toml`:** the only file Manang adds. Live whole-project sessions (next release) will not send it to other people.
 - **Anything else:** text files open as text, and binary files open in an information tab with an **Open with system app** button.
 
 Because the files are not converted, what you get is what Overleaf exported. The result can still differ from what Overleaf produced if your local TeX distribution has different package versions than the one Overleaf used. Compile once and compare the PDF with the version you already have before you rely on it.
@@ -104,10 +104,10 @@ Remember that `biblatex` with the `biber` backend needs a TeX installation that 
 
 This is the biggest difference, so here it is plainly: **Manang is not a drop-in replacement for Overleaf's real-time collaboration.** It has three ways of working with other people, and none of them is the same thing as a shared online project.
 
-- **Live editing ([Edit Together Live](edit-together-live.md)).** You can share one file or a whole project. Co-authors see each other's carets and edits as they type. The text is end-to-end encrypted, and the relay in the middle (by default `wss://relay.fundaments.work`, or one you run yourself) cannot read it. Limits that matter for a team:
+- **Live editing ([Edit Together Live](edit-together-live.md)).** In v0.1.0-beta.1 you share one text file; sharing a whole project arrives in the next release. Co-authors see each other's carets and edits as they type. The text is end-to-end encrypted, and the relay in the middle (by default `wss://relay.fundaments.work`, or one you run yourself) cannot read it. Limits that matter for a team:
   - There are no accounts and no roles. Everyone with the invite has the same rights and can change files in your project folder. Nobody can be set to read-only or removed; to stop sharing with someone you leave and start a new session.
   - A session needs at least one person in it. When everyone leaves, it is gone. It is not a project that stays online for the others to visit later.
-  - In a whole-project session, text files merge edit by edit, but images, figures and other non-text files are last writer wins.
+  - In the whole-project sessions coming in the next release, text files merge edit by edit, but images, figures and other non-text files are last writer wins.
   - Co-authors need Manang installed and open at the same time.
 - **Share and get updates ([Share and Get Updates](share-and-get-updates.md)).** This is Git-based and turn-based. You connect a repository address from GitHub, GitLab or your own server, share your saved versions, and press **Get updates** to bring in theirs. If you both changed the same lines, Manang stops before touching your files and tells you which ones. Sign-in uses the git credentials or ssh keys already on your computer.
 - **Anything else.** Because a project is a folder of plain files, you can also use Git yourself, or a shared folder.

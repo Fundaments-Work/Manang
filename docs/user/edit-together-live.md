@@ -1,8 +1,8 @@
 # Edit Together Live
 
-Edit one file or a whole project with other people at the same time, see their carets, and keep an end-to-end encrypted session that the relay cannot read.
+Edit a text file together with other people at the same time, see their carets, and keep an end-to-end encrypted session that the relay cannot read.
 
-Live editing lets two or more people type in the same text file at the same time and see each other's edits and carets as they happen. You can share **one file** or the **whole project**. In a whole-project session everyone also sees files appear, move and disappear, and images, figures and PDFs are shared too (with limits, see [Limits of whole-project sessions](#limits-of-whole-project-sessions)).
+Live editing lets two or more people type in the same text file at the same time and see each other's edits and carets as they happen. In v0.1.0-beta.1 you share **one file**. Sharing the **whole project** is built and arrives in the next release; the whole-project sections below describe that release and are marked. In a whole-project session everyone also sees files appear, move and disappear, and images, figures and PDFs are shared too (with limits, see [Limits of whole-project sessions](#limits-of-whole-project-sessions)).
 
 Your files on disk stay ordinary files. The shared state lives in memory while the session runs, plus a disposable copy in Manang's data folder. When you press `Ctrl+S` (`Cmd+S`), Manang saves exactly what you see; nothing about the session is written into your project except the files themselves (and, if something is replaced or deleted, a copy in the project's trash, see [Whole-project sessions](#whole-project-sessions)).
 
@@ -48,6 +48,8 @@ If you were given a different relay address, enter it under **Relay address**. T
 An invite is a long link that starts with `manang-live://`. **Anyone who has it can edit the file with you**, so send it only to the people you mean, through a channel you trust.
 
 ## Whole-project sessions
+
+> **Not in v0.1.0-beta.1.** Everything in this section and the two below it describes whole-project sessions, which are in the development version and arrive in the next release. In the beta, **Share** offers one text file.
 
 To work on a whole thesis or paper, press **Share**, choose **Whole project**, and share. Everyone who joins gets the host's files and sees every file that is created, renamed, moved or deleted in the session. Open files show who else is in them, with a small coloured mark on the tab and in the file list.
 
