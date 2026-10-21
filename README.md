@@ -7,7 +7,9 @@
 
 <p align="center">
   <a href="docs/user/install.md">Install</a> ·
+  <a href="https://fundaments.work/docs/manang/">Docs</a> ·
   <a href="docs/user/index.md">User guide</a> ·
+  <a href="https://fundaments.work/docs/manang/compare/vs-overleaf/">Manang vs Overleaf</a> ·
   <a href="docs/plugins.md">Plugins</a> ·
   <a href="docs/beta/tester-guide.md">Beta tester guide</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
