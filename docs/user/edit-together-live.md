@@ -162,6 +162,7 @@ The invite contains a secret key. The key is part of the link after the `#`, so 
 - The relay can see: that a connection to a room exists, how large and how frequent the messages are, and when people connect and leave. A room is named by a number derived from the key; the relay cannot turn it back into the key.
 - The relay cannot see: your text, your edits, your name, your caret, the file name, or the key.
 - The relay stores nothing and forgets a room when the last person leaves.
+- The relay writes no logs of addresses, room names or message contents, and keeps no files. The services that carry the traffic to it (Cloudflare, which terminates the secure connection, and the cloud provider hosting the relay) can see the same metadata plus your network address, as any website's host can. None of them can read your text.
 
 What this does not give you:
 
