@@ -1,10 +1,12 @@
 //! Session state machine: host, join, leave, reconnect, resync, presence,
 //! and hostile input. Run against both engines.
 
+#[cfg(feature = "yrs-engine")]
+use manang_live::YrsEngine;
 use manang_live::envelope::{Kind, RoomSecret};
 use manang_live::session::{Input, Output, SessionState};
 use manang_live::sim::{NetConfig, Rng, Sim};
-use manang_live::{LoroEngine, TextCrdt, YrsEngine};
+use manang_live::{LoroEngine, TextCrdt};
 
 const SEED: &str = "Dear reviewers,\nthe méthode 😀 works.\n";
 
@@ -26,6 +28,7 @@ fn join_and_seed<E: TextCrdt>() {
 #[test]
 fn joiners_receive_the_hosts_seed() {
     join_and_seed::<LoroEngine>();
+    #[cfg(feature = "yrs-engine")]
     join_and_seed::<YrsEngine>();
 }
 
@@ -60,6 +63,7 @@ fn reconnect_flow<E: TextCrdt>() {
 #[test]
 fn offline_edits_merge_on_reconnect() {
     reconnect_flow::<LoroEngine>();
+    #[cfg(feature = "yrs-engine")]
     reconnect_flow::<YrsEngine>();
 }
 
@@ -170,6 +174,7 @@ fn presence_flow<E: TextCrdt>() {
 #[test]
 fn presence_is_resolved_stable_and_ephemeral() {
     presence_flow::<LoroEngine>();
+    #[cfg(feature = "yrs-engine")]
     presence_flow::<YrsEngine>();
 }
 
@@ -243,7 +248,7 @@ fn relay_sees_only_ciphertext() {
 #[test]
 fn pending_updates_trigger_a_resync_request() {
     // Drop everything for a while: later updates depend on lost ones.
-    let mut sim = Sim::<YrsEngine>::new(2, SEED, 8, NetConfig::CLEAN).expect("sim");
+    let mut sim = Sim::<LoroEngine>::new(2, SEED, 8, NetConfig::CLEAN).expect("sim");
     sim.advance(5_000);
     sim.net = NetConfig {
         drop_pct: 100,
@@ -344,6 +349,7 @@ fn divergence_is_detected<E: TextCrdt>() {
 #[test]
 fn divergence_is_reported_not_silent() {
     divergence_is_detected::<LoroEngine>();
+    #[cfg(feature = "yrs-engine")]
     divergence_is_detected::<YrsEngine>();
 }
 

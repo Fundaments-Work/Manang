@@ -2,14 +2,16 @@
 //! path is 8 ms, so the bridge must stay far below 1 ms.
 //!
 //! `cargo bench -p manang-live`. The p99 table comes from
-//! `cargo run --release -p manang-live --example measure`.
+//! `cargo run --release -p manang-live --features yrs-engine --example measure`.
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use manang_live::LoroEngine;
 use manang_live::TextCrdt;
+#[cfg(feature = "yrs-engine")]
+use manang_live::YrsEngine;
 use manang_live::bridge::LiveDoc;
 use manang_live::envelope::{Kind, RoomSecret};
 use manang_live::sim::Rng;
-use manang_live::{LoroEngine, YrsEngine};
 use ropey::Rope;
 
 fn document() -> String {
@@ -75,6 +77,7 @@ fn bench_engine<E: TextCrdt>(c: &mut Criterion) {
 
 fn benches(c: &mut Criterion) {
     bench_engine::<LoroEngine>(c);
+    #[cfg(feature = "yrs-engine")]
     bench_engine::<YrsEngine>(c);
 }
 

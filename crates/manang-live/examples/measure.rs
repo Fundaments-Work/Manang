@@ -1,5 +1,5 @@
 //! Measurements behind the engine choice. Run with
-//! `cargo run --release -p manang-live --example measure`.
+//! `cargo run --release -p manang-live --features yrs-engine --example measure`.
 //!
 //! Prints Markdown tables. Memory is live heap bytes from a counting global
 //! allocator, so it includes everything the engine retains and nothing else.
@@ -8,10 +8,12 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
+#[cfg(feature = "yrs-engine")]
+use manang_live::YrsEngine;
 use manang_live::bridge::{LiveDoc, TextTarget};
 use manang_live::envelope::{Kind, RoomSecret};
 use manang_live::sim::Rng;
-use manang_live::{LoroEngine, TextCrdt, YrsEngine};
+use manang_live::{LoroEngine, TextCrdt};
 use ropey::Rope;
 
 struct Counting;
@@ -448,11 +450,14 @@ fn main() {
     println!("| engine | measurement | result | notes |");
     println!("| --- | --- | --- | --- |");
     section_a_b_c::<LoroEngine>();
+    #[cfg(feature = "yrs-engine")]
     section_a_b_c::<YrsEngine>();
     section_d::<LoroEngine>();
+    #[cfg(feature = "yrs-engine")]
     section_d::<YrsEngine>();
     for burst in [1, 40] {
         section_g::<LoroEngine>(burst);
+        #[cfg(feature = "yrs-engine")]
         section_g::<YrsEngine>(burst);
     }
 }

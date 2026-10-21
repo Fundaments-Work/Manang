@@ -5,8 +5,10 @@
 //! Property 2: when edits are strictly sequential (one writer at a time,
 //! full settle in between) the result equals a plain `String` oracle.
 
+#[cfg(feature = "yrs-engine")]
+use manang_live::YrsEngine;
 use manang_live::sim::{NetConfig, Sim};
-use manang_live::{LoroEngine, TextCrdt, YrsEngine};
+use manang_live::{LoroEngine, TextCrdt};
 use proptest::prelude::*;
 
 const SNIPPETS: &[&str] = &[
@@ -127,6 +129,7 @@ proptest! {
         run_hostile::<LoroEngine>(&ops, seed)?;
     }
 
+    #[cfg(feature = "yrs-engine")]
     #[test]
     fn hostile_network_converges_yrs(ops in proptest::collection::vec(op_strategy(3), 1..60), seed in any::<u64>()) {
         run_hostile::<YrsEngine>(&ops, seed)?;
@@ -140,6 +143,7 @@ proptest! {
         run_sequential::<LoroEngine>(&ops, seed)?;
     }
 
+    #[cfg(feature = "yrs-engine")]
     #[test]
     fn sequential_edits_match_oracle_yrs(
         ops in proptest::collection::vec((0usize..3, 0u16..=1000, 0u8..6, any::<u8>()), 1..40),

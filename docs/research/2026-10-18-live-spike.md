@@ -24,7 +24,7 @@ product work (IPC commands, UI, Cloudflare Worker, policy), not research.
 ## Measurements
 
 Release build, this machine, 1 MB / 200 KB documents of mixed ASCII, accented,
-CJK and emoji text. `cargo run --release -p manang-live --example measure`
+CJK and emoji text. `cargo run --release -p manang-live --features yrs-engine --example measure`
 (counting allocator, so heap figures are live bytes) and `cargo bench -p
 manang-live` (criterion). Both engines sit behind the same trait and the same
 bridge, session and tests.

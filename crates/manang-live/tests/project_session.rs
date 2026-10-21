@@ -2,6 +2,8 @@
 //! lazy documents, paced bulk sync, blob transfer, hostile input, and
 //! convergence of N peers over M documents on a lossy network.
 
+#[cfg(feature = "yrs-engine")]
+use manang_live::YrsEngine;
 use manang_live::blob::{CHUNK_SIZE, MAX_BLOB_BYTES, blob_hash};
 use manang_live::bridge::LiveDoc;
 use manang_live::envelope::{Kind, RoomKeys, RoomSecret, seed_fingerprint};
@@ -11,7 +13,7 @@ use manang_live::project::{FileId, NodeKind, NodeMeta, ProjectDoc};
 use manang_live::protocol::Message;
 use manang_live::session::{Input, NoTargets, Output, Session, SessionConfig, SessionState};
 use manang_live::sim::{NetConfig, ProjectSim, Rng, SimContent};
-use manang_live::{LoroEngine, TextCrdt, YrsEngine};
+use manang_live::{LoroEngine, TextCrdt};
 use proptest::prelude::*;
 
 fn no_pacing(cfg: &mut SessionConfig) {
@@ -85,6 +87,7 @@ fn join_by_manifest<E: TextCrdt>() {
 #[test]
 fn guests_join_through_the_manifest() {
     join_by_manifest::<LoroEngine>();
+    #[cfg(feature = "yrs-engine")]
     join_by_manifest::<YrsEngine>();
 }
 
@@ -782,6 +785,7 @@ proptest! {
         run_project::<LoroEngine>(&ops, seed)?;
     }
 
+    #[cfg(feature = "yrs-engine")]
     #[test]
     fn peers_and_documents_converge_yrs(
         ops in proptest::collection::vec(op_strategy(3), 1..45),

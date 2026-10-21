@@ -3,7 +3,7 @@
 //! Pure, synchronous Rust with no OS dependency, so it also builds for
 //! `wasm32-unknown-unknown`. The pieces:
 //!
-//! * [`engine`]: the [`TextCrdt`] trait, with [`LoroEngine`] and [`YrsEngine`]
+//! * [`engine`]: the [`TextCrdt`] trait, with [`LoroEngine`] and (feature `yrs-engine`) `YrsEngine`
 //!   behind it so the engines can be measured against identical code.
 //! * [`bridge`]: keeps the editor's rope and the CRDT in step.
 //! * [`envelope`]: versioned XChaCha20-Poly1305 envelope, keys from HKDF.
@@ -26,11 +26,13 @@ pub mod session;
 pub mod sim;
 pub mod transport;
 pub mod vcs;
+#[cfg(feature = "yrs-engine")]
 pub mod yrs_engine;
 
 pub use engine::{Applied, IndexUnit, RawChange, SEED_PEER, TextCrdt};
 pub use error::LiveError;
 pub use loro_engine::LoroEngine;
+#[cfg(feature = "yrs-engine")]
 pub use yrs_engine::YrsEngine;
 
 #[cfg(test)]
@@ -68,6 +70,7 @@ mod tests {
         roundtrip::<LoroEngine>();
     }
 
+    #[cfg(feature = "yrs-engine")]
     #[test]
     fn units_yrs() {
         roundtrip::<YrsEngine>();

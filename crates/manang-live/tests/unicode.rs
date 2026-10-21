@@ -7,8 +7,10 @@
 //! rope, the CRDT, and a `Vec<u16>` that applies the UTF-16 change lists
 //! exactly as CodeMirror would.
 
+#[cfg(feature = "yrs-engine")]
+use manang_live::YrsEngine;
 use manang_live::bridge::{LiveDoc, TextTarget};
-use manang_live::{LoroEngine, TextCrdt, YrsEngine};
+use manang_live::{LoroEngine, TextCrdt};
 use proptest::prelude::*;
 use ropey::Rope;
 
@@ -90,6 +92,7 @@ proptest! {
         run::<LoroEngine>(&edits, seed)?;
     }
 
+    #[cfg(feature = "yrs-engine")]
     #[test]
     fn index_mapping_is_consistent_yrs(
         edits in proptest::collection::vec((0u16..=1000, 0u8..8, any::<u8>()), 1..60),
@@ -114,7 +117,7 @@ fn rope_primitives_agree_on_known_text() {
 #[test]
 fn edits_inside_a_surrogate_pair_are_refused_not_corrupting() {
     let mut r = Rope::from_str("a😀b");
-    let mut d = LiveDoc::<YrsEngine>::seeded(3, "a😀b").expect("doc");
+    let mut d = LiveDoc::<LoroEngine>::seeded(3, "a😀b").expect("doc");
     assert!(d.local_replace_utf16(&mut r, 2, 3, "").is_err());
     assert_eq!(r.to_string(), "a😀b");
     assert_eq!(d.engine().text(), "a😀b");
