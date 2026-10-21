@@ -33,8 +33,8 @@ tuning, test plans) are kept there; this page states only what the product needs
 ## 3. Relay track (private repository)
 
 **Decided.** Rust only, separate private repository (backed up privately), no TLS in the process
-(a Cloudflare Tunnel terminates it), single-threaded and memory-bounded. The hostname `relay-test` is the
-relay for now. Cloudflare deployment is a **future expansion goal**; the Cloudflare Worker was **removed
+(a Cloudflare Tunnel terminates it), single-threaded and memory-bounded. The hostname `relay.fundaments.work` is the
+relay. Cloudflare deployment is a **future expansion goal**; the Cloudflare Worker was **removed
 from the relay repo on 2026-10-21** (no users, no deployment to protect; recoverable from git history).
 
 | Package | Status |
@@ -46,7 +46,7 @@ from the relay repo on 2026-10-21** (no users, no deployment to protect; recover
 | Automatic update on the host (pull-based, verified, health-checked, rollback) | planned |
 | Metrics listener enabled on the host (loopback only) | done 2026-10-21 |
 | Allocator and memory tuning from measurements | not needed so far: 8.4 MB at 500 connections |
-| Rename `relay-test` to `relay` (the hostname `relay.fundaments.work` already is the app's default) | waiting for two dashboard steps by the owner, see O1 |
+| Rename `relay-test` to `relay` | done 2026-10-21: `relay.fundaments.work` is served by the tunnel; `relay-test` is gone |
 | A second relay for failover (a single host is a single point of failure, and a free-tier host can be reclaimed for low use) | planned, owner decision |
 | Write tokens and durable rooms | planned after identity; durable rooms need a redesign first |
 
@@ -127,7 +127,7 @@ identity, roles, rotation and token code. Plan: `2026-10-20-collab-program.md`.
 
 | # | Item |
 | :--- | :--- |
-| O1 | **Decided and half done 2026-10-21.** The Worker `manang-relay` is deleted (with its custom domain and DNS record), so `relay.fundaments.work` currently has no DNS. Left, one dashboard step by the owner (wrangler's login has no DNS or tunnel scope, and the automation was blocked): Zero Trust > Networks > Tunnels > `Manang-Relay` > Public hostname > add `relay.fundaments.work`, service `http://localhost:8787` (this also creates the DNS record). Then the app default `wss://relay.fundaments.work` works and `relay-test` can be removed |
+| O1 | **Done 2026-10-21.** The Worker `manang-relay` is deleted; `relay.fundaments.work` is a tunnel hostname to the VM relay; `relay-test` is retired. Verified end to end (delivery, no echo, 1002 on a bad envelope, public `/metrics` 404) and with a 48-client run |
 | O2 | ~~Push Manang `main`~~ Done 2026-10-21 |
 | O3 | Plugin policy: closed source (recommended: open source required), licence allow-list, review time target, launch strictness, a security and takedown contact, the registry hostname |
 | O4 | Accounts: a package-registry account and token for publishing the SDK crates; signing-key custody for the registry |
