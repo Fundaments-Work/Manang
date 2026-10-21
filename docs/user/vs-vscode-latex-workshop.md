@@ -18,7 +18,7 @@ LaTeX Workshop and VS Code facts link to their own pages. Manang facts come from
 | Compile engine | Typst compiler built in. LaTeX through your TeX distribution, or an optional Tectonic (XeTeX) engine on Linux only | Your TeX distribution: "the only requirement is a compatible LaTeX distribution in the system PATH"; the default recipe needs `latexmk` ([Install](https://github.com/James-Yu/LaTeX-Workshop/wiki/Install)). Recipes and tools include `latexmk`, `xelatexmk`, `lualatexmk`, `pdflatex`, `bibtex` and `tectonic` ([Compile](https://github.com/James-Yu/LaTeX-Workshop/wiki/Compile)) |
 | Live preview | PDF preview rebuilds after a short pause | Auto build can run never, on save, or when a dependency changes (the default, `onFileChange`), with PDF preview in VS Code or a browser ([Compile](https://github.com/James-Yu/LaTeX-Workshop/wiki/Compile), [README](https://github.com/James-Yu/LaTeX-Workshop)) |
 | Source and PDF jumps | Both ways (SyncTeX) | Both ways (SyncTeX) ([README](https://github.com/James-Yu/LaTeX-Workshop)) |
-| Collaboration | Live co-editing of one text file, end-to-end encrypted (whole-project sharing arrives in the next release); no track changes or comments ([Edit Together Live](edit-together-live.md)) | Visual Studio Live Share is supported but "uses workarounds that may cause issues" ([FAQ](https://github.com/James-Yu/LaTeX-Workshop/wiki/FAQ)); the PDF viewer and compiler must run on the host ([Extra features](https://github.com/James-Yu/LaTeX-Workshop/wiki/ExtraFeatures)) |
+| Collaboration | Live co-editing of one text file, end-to-end encrypted (whole-project sharing arrives in the next release); no track changes or comments ([Edit Together Live](edit-together-live.md)) | Visual Studio Live Share has experimental support and "uses workarounds that may cause issues" ([FAQ](https://github.com/James-Yu/LaTeX-Workshop/wiki/FAQ)); the PDF viewer and compiler must run on the host ([Extra features](https://github.com/James-Yu/LaTeX-Workshop/wiki/ExtraFeatures)) |
 | Version history | Named versions stored with Git, restore file or project ([Version History](version-history.md)) | Not stated by LaTeX Workshop |
 | Reference management | References panel for `.bib` and CSL-JSON; optional online Verify ([References](references.md)) | Completion of bibliography keys and labels ([README](https://github.com/James-Yu/LaTeX-Workshop)). A reference manager: not stated |
 | AI | Your own key; proposals you accept or reject; one switch turns it off ([AI Assistant](ai-assistant.md)) | None in LaTeX Workshop as far as its pages say. VS Code has GitHub Copilot, which can use a Copilot plan, your own API key or a local model ([VS Code docs](https://code.visualstudio.com/docs/copilot/overview)) |
@@ -53,7 +53,7 @@ Yes, with a separate extension. Tinymist is described as an integrated language 
 
 ## Using both
 
-Both work on plain files in a folder, so you can open the same project in each. Manang adds a `manang.toml` file to a project, which VS Code and LaTeX Workshop ignore; see [Supported File Types](file-types.md#7-the-manangtoml-project-file).
+Both work on plain files in a folder, so you can open the same project in each. Manang adds a `manang.toml` file to a project, a plain file beside your sources; see [Supported File Types](file-types.md#7-the-manangtoml-project-file).
 
 ## Sources
 
