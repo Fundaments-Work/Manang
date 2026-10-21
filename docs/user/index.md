@@ -52,6 +52,18 @@ You can draw vector figures, render diagrams from plain text, keep versions of y
 - **[Write a Thesis in Typst](write-a-thesis-in-typst.md)**  
   Set up a multi-file thesis with one file per chapter, a shared bibliography, figures, PDF export and named versions.
 
+- **[Write a Journal Paper in Typst or LaTeX](write-a-journal-paper.md)**  
+  Start from the Article template, add citations, figures and equations, export a PDF and save versions before you submit.
+
+- **[Make a Conference Poster in Typst](make-a-conference-poster.md)**  
+  Set the page, arrange columns under a title banner, add figures and references, and export a print-ready PDF.
+
+- **[Write a Lab Report in LaTeX](write-a-lab-report.md)**  
+  Use the Lab Report template for objective, theory, procedure, tables, figures, error analysis and references.
+
+- **[Take Lecture Notes in Markdown with Math](take-lecture-notes-in-markdown.md)**  
+  Headings, math, code, task lists and diagrams with a live preview, and the route to PDF through Typst.
+
 - **[Move from LaTeX to Typst](move-from-latex-to-typst.md)**  
   A practical mapping of common LaTeX constructs to Typst, and how to try the move in Manang.
 
