@@ -56,8 +56,10 @@ pub fn plan_join(host_seed: [u8; 16], local_text: &str, git_base: Option<&str>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::LoroEngine;
+    #[cfg(feature = "yrs-engine")]
+    use crate::YrsEngine;
     use crate::engine::TextCrdt;
-    use crate::{LoroEngine, YrsEngine};
 
     #[test]
     fn plans() {
@@ -86,6 +88,7 @@ mod tests {
     #[test]
     fn identical_seeds_do_not_duplicate() {
         identical_seed_merges_without_duplication::<LoroEngine>();
+        #[cfg(feature = "yrs-engine")]
         identical_seed_merges_without_duplication::<YrsEngine>();
     }
 
@@ -110,6 +113,7 @@ mod tests {
     #[test]
     fn different_seeds_must_never_meet() {
         different_seeds_diverge_silently_at_engine_level::<LoroEngine>();
+        #[cfg(feature = "yrs-engine")]
         different_seeds_diverge_silently_at_engine_level::<YrsEngine>();
     }
 }

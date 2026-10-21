@@ -13,7 +13,7 @@ manang-buffer = { path = "../manang-buffer" }
 ropey = "1.6"
 parking_lot = "0.12"
 loro = "1.16"
-yrs = "0.28"
+yrs = { version = "0.28", optional = true }
 chacha20poly1305 = "0.11"
 hkdf = "0.13"
 sha2 = "0.11"
@@ -21,6 +21,12 @@ postcard = { version = "1.1", default-features = false, features = ["alloc"] }
 serde = { workspace = true }
 thiserror = { workspace = true }
 zeroize = "1"
+
+[features]
+# A second CRDT behind the same `TextCrdt` trait, kept for the engine comparison
+# (benches, `examples/measure`) and the trait's conformance tests. Not used by
+# sessions, so it stays out of the app build.
+yrs-engine = ["dep:yrs"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 getrandom = "0.4"

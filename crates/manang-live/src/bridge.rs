@@ -393,7 +393,9 @@ pub fn map_utf16_offset(mut pos: usize, changes: &[AppliedChange], assoc_after: 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{LoroEngine, YrsEngine};
+    use crate::LoroEngine;
+    #[cfg(feature = "yrs-engine")]
+    use crate::YrsEngine;
 
     fn two_way<E: TextCrdt>() {
         let mut ra = Rope::from_str("héllo 😀 wörld");
@@ -436,6 +438,7 @@ mod tests {
         two_way::<LoroEngine>();
     }
 
+    #[cfg(feature = "yrs-engine")]
     #[test]
     fn two_way_yrs() {
         two_way::<YrsEngine>();
@@ -451,7 +454,7 @@ mod tests {
 
     #[test]
     fn resync_repairs_divergence() {
-        let d = LiveDoc::<YrsEngine>::seeded(5, "hello wörld").expect("d");
+        let d = LiveDoc::<LoroEngine>::seeded(5, "hello wörld").expect("d");
         let mut r = Rope::from_str("hello 😀rld");
         let c = d.resync_target(&mut r).expect("change");
         assert_eq!(r.to_string(), "hello wörld");
