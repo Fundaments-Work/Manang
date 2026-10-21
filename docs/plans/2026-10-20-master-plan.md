@@ -116,6 +116,8 @@ identity, roles, rotation and token code. Plan: `2026-10-20-collab-program.md`.
 
 ## 8. Order of work
 
+Agents: how to work and the numbered work packages are in [the agent brief](2026-10-21-agent-brief.md).
+
 1. Done: push, load generator, the measured 500-user run. Now: the two dashboard steps for the hostname (O1).
 2. Plugin manifest and install checks, then the author tooling and the review engine.
 3. Relay conformance runner, fuzzing, hostile-plus-load suite, automatic update.
