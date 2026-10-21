@@ -43,6 +43,12 @@ You can draw vector figures, render diagrams from plain text, keep versions of y
 - **[Coming from Overleaf](coming-from-overleaf.md)**  
   Bring a LaTeX or Typst project over from Overleaf, see how LaTeX compiles offline, and learn plainly where Manang's collaboration differs and when to stay on Overleaf.
 
+- **[Using Manang as a Local Typst Editor](typst-editor.md)**  
+  Create a Typst project, write with a live preview, jump between source and preview, fix errors, use packages, math, figures and a bibliography, export a PDF, and see what needs the network.
+
+- **[Using Manang as an Offline LaTeX Editor](offline-latex-editor.md)**  
+  Compile LaTeX with the optional built-in engine or your own TeX distribution, set the main file, use SyncTeX and bibliographies, and see what works with no internet.
+
 - **[References and Bibliographies](references.md)**  
   Load bibliography files, choose citation styles, search entries, insert citations into your text, and verify references against online registries.
 
