@@ -12,10 +12,10 @@ tuning, test plans) are kept there; this page states only what the product needs
 | Live editing: one file, whole project, join plan, presence, follow, leave warning, held-change dialog | done, merged to local `main` |
 | Live-session stabilisation (waiting for host, snapshot, re-sync, trailers, guards) and hardening (fuzzed decoders, path policy, a crash found and fixed) | done |
 | Old relay server removed from this repo; the app keeps `manang-relay-client` | done |
-| Private relay (protocol crate, core, WebSocket codec, server): deployed and working end to end through the hosted address | done for the first version; not measured at 500 users |
+| Private relay (protocol crate, core, WebSocket codec, server): deployed and working end to end through the hosted address | done; 500 users measured on the host (see section 3), CI green on Rust 1.99 |
 | Plugin SDK, template and registry repos: created, populated and public | done as a skeleton; the author tooling is not built |
 | Plugin review system, crypto design revision 2, collaboration program | designed, not built |
-| Unpushed work | **Manang `main` is 92 commits ahead of GitHub and nothing is backed up**: push is the owner's call |
+| Backups | Manang `main` pushed on 2026-10-21; the relay repo is private on GitHub |
 
 ## 2. Standards for every package
 
@@ -34,26 +34,27 @@ tuning, test plans) are kept there; this page states only what the product needs
 
 **Decided.** Rust only, separate private repository (backed up privately), no TLS in the process
 (a Cloudflare Tunnel terminates it), single-threaded and memory-bounded. The hostname `relay-test` is the
-relay for now. Cloudflare deployment is a **future expansion goal**; the Cloudflare Worker is paused:
-no maintenance, tests or parity work until then.
+relay for now. Cloudflare deployment is a **future expansion goal**; the Cloudflare Worker was **removed
+from the relay repo on 2026-10-21** (no users, no deployment to protect; recoverable from git history).
 
 | Package | Status |
 | :--- | :--- |
 | Core, codec, server loop, per-address limits, memory watcher, private metrics listener, control-frame rule (contract revision 3) | done, deployed |
 | Conformance runner (native target first) | planned |
-| Load generator and the measured 500-user run (from a desktop through the real path, plus a light run on the host) | planned |
+| Load generator (`tools/loadtest.py`) and the measured 500-user run | done on the host: 500 users, 100% delivery, 8.4 MB RSS, about 15% of a core at 4.7k deliveries/s; 48 users through the tunnel; many-address run through Cloudflare not measured (`docs/2026-10-21-load-test.md` in the relay repo) |
 | Fuzzing of the handshake, frame header and envelope; hostile-client suite beyond N4 | planned |
 | Automatic update on the host (pull-based, verified, health-checked, rollback) | planned |
-| Metrics listener enabled on the host; allocator and memory tuning from measurements | planned |
-| Rename `relay-test` to `relay` (a short announced switch; needs one dashboard step by the owner) | planned, depends on O1 |
+| Metrics listener enabled on the host (loopback only) | done 2026-10-21 |
+| Allocator and memory tuning from measurements | not needed so far: 8.4 MB at 500 connections |
+| Rename `relay-test` to `relay` (the hostname `relay.fundaments.work` already is the app's default) | waiting for two dashboard steps by the owner, see O1 |
 | A second relay for failover (a single host is a single point of failure, and a free-tier host can be reclaimed for low use) | planned, owner decision |
 | Write tokens and durable rooms | planned after identity; durable rooms need a redesign first |
 
 **Cloudflare expansion path (future).** `relay-core`, `relay-ws` and `relay-proto` are sans-IO and
-checked for `wasm32`, so the decision logic can run in a Durable Object. Options: the existing TypeScript
-Worker brought to the current contract, a Rust Worker, or Cloudflare Containers. Estimated request cost at
+checked for `wasm32`, so the decision logic can run in a Durable Object. Options: a new TypeScript
+Worker written to the current contract, a Rust Worker, or Cloudflare Containers. Estimated request cost at
 500 live users is about $7 a month on the paid plan; the free plan cannot carry that load. Preconditions:
-parity with contract revision 3 and a conformance run against the Worker runtime.
+a conformance run against the Worker runtime.
 
 ## 4. What the relay stores (answer to "do we store user data?")
 
@@ -110,14 +111,14 @@ identity, roles, rotation and token code. Plan: `2026-10-20-collab-program.md`.
 * Git collaboration: a merge conflict resolver and review comments through git.
 * Reference library, plugin UI, the web version.
 * Production: signed installers, auto-update, translations, an accessibility pass, the organisation policy layer,
-  Windows and macOS builds of the LaTeX engine, the macOS native menu bar, making `yrs` an optional feature
-  (it is a normal dependency today; no session uses it).
+  Windows and macOS builds of the LaTeX engine, the macOS native menu bar. (`yrs` is now the opt-in
+  `yrs-engine` feature of `manang-live`, out of the app build.)
 
 ## 8. Order of work
 
-1. Now: verify and push (owner), the relay conformance runner and load generator, the measured 500-user run.
+1. Done: push, load generator, the measured 500-user run. Now: the two dashboard steps for the hostname (O1).
 2. Plugin manifest and install checks, then the author tooling and the review engine.
-3. Relay fuzzing, hostile suite, automatic update; the rename to `relay`.
+3. Relay conformance runner, fuzzing, hostile-plus-load suite, automatic update.
 4. Revocation and the registry integration; the pinned interface copy; docs rewrite; first published plugin.
 5. Cryptographic review, then identity and roles, rotation, comments, suggestions.
 6. Visual editor and the rest.
@@ -126,8 +127,8 @@ identity, roles, rotation and token code. Plan: `2026-10-20-collab-program.md`.
 
 | # | Item |
 | :--- | :--- |
-| O1 | The Worker and the app's default address: the default `wss://relay.fundaments.work` is still served by the Worker. Keep it untouched until the rename, delete it now (then the default must point at `relay-test`), or move the default |
-| O2 | Push Manang `main` (92 commits) and decide when CI runs |
+| O1 | **Decided 2026-10-21: remove the Worker, serve `relay.fundaments.work` from the VM relay** (the app default stays `wss://relay.fundaments.work`). Needs the owner, in the Cloudflare dashboard: (1) delete the Worker `fundaments-relay` and its custom domain or route on `relay.fundaments.work`; (2) add a public hostname `relay.fundaments.work` to the existing tunnel, service `http://localhost:8787`. `relay-test` keeps working until then and can be removed afterwards |
+| O2 | ~~Push Manang `main`~~ Done 2026-10-21 |
 | O3 | Plugin policy: closed source (recommended: open source required), licence allow-list, review time target, launch strictness, a security and takedown contact, the registry hostname |
 | O4 | Accounts: a package-registry account and token for publishing the SDK crates; signing-key custody for the registry |
 | O5 | A second relay for failover, and the hosting plan for the free tier |
@@ -140,4 +141,4 @@ A single relay host is a single point of failure. A removed collaborator keeps w
 holds the room key can read: the product must say so. Cryptographic design errors are the main risk of the
 collaboration program, hence design first, adversarial review and an external audit. Revocation is not built:
 until it is, a takedown stops only new plugin installs. The interface is 0.x, so early plugin authors will take
-breaking changes. Ninety-two unpushed commits are one disk failure from being lost.
+breaking changes. The VM is one host: a second relay is undecided (O5).
