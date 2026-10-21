@@ -1,0 +1,31 @@
+# Maintainer: Sabin Pokharel
+#
+# Installs the prebuilt Linux x86_64 release of Manang from GitHub. Manang is
+# in public beta: the tag below is a pre-release. The package version is the
+# app's own version (0.1.0); bump _tag, pkgver and the checksums together when a
+# new release is published.
+pkgname=manang-bin
+_pkgname=manang
+pkgver=0.1.0
+pkgrel=1
+_tag=v0.1.0-beta.1
+pkgdesc="Local-first editor for papers, theses and slides in Typst, LaTeX or Markdown, with a live PDF preview and a figure studio (public beta, prebuilt)"
+arch=('x86_64')
+url="https://manang.fundaments.work"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3')
+optdepends=('texlive: compile LaTeX documents with your own TeX installation'
+            'git: version history and the Source control panel')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+options=('!strip' '!debug')
+source=("Manang_${pkgver}_amd64.tar.xz::https://github.com/Fundaments-Work/Manang/releases/download/${_tag}/Manang_${pkgver}_amd64.tar.xz"
+        "LICENSE-${pkgver}::https://raw.githubusercontent.com/Fundaments-Work/Manang/${_tag}/LICENSE")
+sha256sums=('2cc6253586e6bb5e75862dfed92903c596c15945823a086d6b35bb7c2714601a'
+            'f4b34e2618c2c59815a758f531b24d96e5de1dfabe9e58726480b1265a2729e6')
+
+package() {
+  # The release archive is already laid out as /usr (bin, applications, icons).
+  cp -a "${srcdir}/usr" "${pkgdir}/usr"
+  install -Dm644 "${srcdir}/LICENSE-${pkgver}" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
