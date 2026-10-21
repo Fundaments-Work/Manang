@@ -127,7 +127,7 @@ identity, roles, rotation and token code. Plan: `2026-10-20-collab-program.md`.
 
 | # | Item |
 | :--- | :--- |
-| O1 | **Decided 2026-10-21: remove the Worker, serve `relay.fundaments.work` from the VM relay** (the app default stays `wss://relay.fundaments.work`). Needs the owner, in the Cloudflare dashboard: (1) delete the Worker `fundaments-relay` and its custom domain or route on `relay.fundaments.work`; (2) add a public hostname `relay.fundaments.work` to the existing tunnel, service `http://localhost:8787`. `relay-test` keeps working until then and can be removed afterwards |
+| O1 | **Decided and half done 2026-10-21.** The Worker `manang-relay` is deleted (with its custom domain and DNS record), so `relay.fundaments.work` currently has no DNS. Left, one dashboard step by the owner (wrangler's login has no DNS or tunnel scope, and the automation was blocked): Zero Trust > Networks > Tunnels > `Manang-Relay` > Public hostname > add `relay.fundaments.work`, service `http://localhost:8787` (this also creates the DNS record). Then the app default `wss://relay.fundaments.work` works and `relay-test` can be removed |
 | O2 | ~~Push Manang `main`~~ Done 2026-10-21 |
 | O3 | Plugin policy: closed source (recommended: open source required), licence allow-list, review time target, launch strictness, a security and takedown contact, the registry hostname |
 | O4 | Accounts: a package-registry account and token for publishing the SDK crates; signing-key custody for the registry |
