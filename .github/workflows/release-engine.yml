@@ -233,7 +233,7 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
       - name: Download what the build job produced
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: engine-*
           path: dist
