@@ -123,7 +123,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build and upload the installers
-        uses: tauri-apps/tauri-action@action-v0.6.2
+        uses: tauri-apps/tauri-action@action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
           # Addresses the app embeds (see docs/ops/registry.md). The engine
